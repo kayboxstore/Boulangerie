@@ -1,0 +1,28 @@
+import express from "express";
+import cors from "cors";
+import { authRouter } from "./routes/auth.js";
+import { produitsRouter } from "./routes/produits.js";
+import { rolesRouter } from "./routes/roles.js";
+
+export function createApp() {
+  const app = express();
+
+  app.use(cors());
+  app.use(express.json());
+
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok", app: "Boulangerie Lomoto API" });
+  });
+
+  app.use("/api/auth", authRouter);
+  app.use("/api/produits", produitsRouter);
+  app.use("/api/roles", rolesRouter);
+
+  // Gestion d'erreurs centralisée
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error(err);
+    res.status(500).json({ erreur: "Erreur interne du serveur" });
+  });
+
+  return app;
+}

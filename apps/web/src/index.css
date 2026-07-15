@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+/* Palette de marque Boulangerie Lomoto (section 3.8 de la spec)
+   Marine #0F1923 · Or #DA9F4E · Crème #FAF8F3 · Terracotta #AD5416 · Beige #CBAF91 */
+
+:root {
+  --marine: #0f1923;
+  --or: #da9f4e;
+  --creme: #faf8f3;
+  --terracotta: #ad5416;
+  --beige: #cbaf91;
+
+  --background: #faf8f3;
+  --foreground: #0f1923;
+  --card: #ffffff;
+  --card-foreground: #0f1923;
+  --popover: #ffffff;
+  --popover-foreground: #0f1923;
+  --primary: #0f1923;
+  --primary-foreground: #faf8f3;
+  --secondary: #efe6d8;
+  --secondary-foreground: #0f1923;
+  --muted: #f3eee4;
+  --muted-foreground: #6b6254;
+  --accent: #da9f4e;
+  --accent-foreground: #0f1923;
+  --destructive: #ad5416;
+  --destructive-foreground: #faf8f3;
+  --border: #e5dcc9;
+  --input: #e5dcc9;
+  --ring: #da9f4e;
+  --radius: 0.625rem;
+}
+
+.dark {
+  --background: #0f1923;
+  --foreground: #faf8f3;
+  --card: #16222e;
+  --card-foreground: #faf8f3;
+  --popover: #16222e;
+  --popover-foreground: #faf8f3;
+  --primary: #da9f4e;
+  --primary-foreground: #0f1923;
+  --secondary: #1e2c3a;
+  --secondary-foreground: #faf8f3;
+  --muted: #1e2c3a;
+  --muted-foreground: #cbaf91;
+  --accent: #da9f4e;
+  --accent-foreground: #0f1923;
+  --destructive: #ad5416;
+  --destructive-foreground: #faf8f3;
+  --border: #24344333;
+  --input: #243443;
+  --ring: #da9f4e;
+}
+
+@theme inline {
+  --color-marine: var(--marine);
+  --color-or: var(--or);
+  --color-creme: var(--creme);
+  --color-terracotta: var(--terracotta);
+  --color-beige: var(--beige);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", ui-serif, Georgia, serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+    outline-color: color-mix(in oklab, var(--color-ring) 50%, transparent);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}

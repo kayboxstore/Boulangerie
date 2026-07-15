@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modules fonctionnels de l'application (section 2 & 3 de la spec).
+// La matrice de permissions associe chaque rôle à un niveau d'accès par module.
+enum Module {
+  CAISSE
+  COMMANDES
+  STOCKS
+  PRODUCTION
+  FOURNISSEURS
+  COMMISSIONS
+  PARAMETRES
+  EQUIPE
+  RAPPORTS
+}
+
+enum NiveauAcces {
+  AUCUN
+  LECTURE
+  ECRITURE
+}
+
+// Hiérarchie portée par le rôle (roleParentId) — extensible sans changement de code.
+model Role {
+  id           String           @id @default(cuid())
+  nom          String           @unique
+  roleParentId String?
+  roleParent   Role?            @relation("HierarchieRoles", fields: [roleParentId], references: [id])
+  sousRoles    Role[]           @relation("HierarchieRoles")
+  permissions  RolePermission[]
+  utilisateurs Utilisateur[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}
+
+model RolePermission {
+  id          String      @id @default(cuid())
+  roleId      String
+  role        Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  module      Module
+  niveauAcces NiveauAcces
+
+  @@unique([roleId, module])
+}
+
+model Utilisateur {
+  id            String   @id @default(cuid())
+  nom           String
+  email         String   @unique
+  motDePasseHash String
+  roleId        String
+  role          Role     @relation(fields: [roleId], references: [id])
+  actif         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// Types de clients avec tarification et commission par bac (montants en Fc).
+// Dépositaire (4100, 0), Vente cash (4350, 0), Maman (6000, 1650).
+model TypeClient {
+  id               String   @id @default(cuid())
+  nom              String   @unique
+  prixParBac       Int
+  commissionParBac Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// Catalogue produits. Montants en Fc. Le pain est exonéré de TVA (tauxTaxe = 0) ;
+// le taux reste configurable par produit pour d'éventuels articles hors pain.
+model Produit {
+  id        String   @id @default(cuid())
+  nom       String   @unique
+  prixVente Int
+  tauxTaxe  Float    @default(0)
+  categorie String
+  actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
