@@ -8,34 +8,55 @@ Une application web (responsive mobile) qui centralise toute la gestion quotidie
 
 **Organigramme :**
 ```
-Directeur Général (DG) — lecture seule sur TOUT, aucune modification
-├── Caissier(ère)
-│    └── Chargé des commandes
-├── Responsable de production
-└── Responsable Fournisseurs/achats
-     └── Chargé du stock
+Directeur Général (DG) — lecture seule sur tous les modules MÉTIER
+                           aucun accès aux Réglages/Paramètres (même en lecture)
+├── Caissier(ère) — écriture Caisse ; lecture Commandes, Commissions, Production
+│    └── Chargé des commandes — écriture Commandes ; lecture Commissions
+├── Responsable de production — écriture Production
+├── Responsable Stock/Achats et Fournisseurs — écriture Stocks + Fournisseurs/Achats
+└── Chargé du personnel — écriture Travailleurs
 
-Administrateur — rôle technique séparé de la chaîne opérationnelle
+Administrateur — rôle technique séparé de la hiérarchie métier, jusqu'à 3 comptes
+├── Admin Principal — écriture Paramètres, Équipe, Activation, État système ; approuve les tâches critiques
+└── Admin secondaire (0 à 2) — mêmes droits, mais tâches critiques soumises à l'approbation de l'Admin Principal
 ```
 
-**Règle par défaut** : un supérieur a un accès en lecture seule sur le périmètre de son subordonné direct, en plus de l'écriture sur son propre périmètre. Exceptions explicites à cette règle :
-- Le **DG** déroge à la règle générale : lecture seule partout, y compris sur son propre périmètre — il ne modifie jamais rien directement dans l'application. C'est lui qui décide, mais c'est l'**Administrateur** qui exécute techniquement les changements de paramètres.
-- Le **Caissier(ère)** bénéficie d'un accès en lecture seule supplémentaire sur la **Production**, bien que ce module ne soit pas dans sa chaîne hiérarchique directe.
-- L'**Administrateur** est hors de la hiérarchie opérationnelle : il ne supervise personne et ne reçoit pas les notifications métier, mais dispose des droits d'écriture sur les Paramètres et la gestion des comptes/rôles.
+**Règle par défaut** : un supérieur a un accès en lecture seule sur le périmètre de son subordonné direct, en plus de l'écriture sur son propre périmètre. Exceptions explicites :
+- Le **DG** voit tout en lecture seule, SAUF les Réglages/Paramètres, strictement réservés aux Admins (aucun accès, pas même en lecture). Il ne modifie jamais rien lui-même dans l'application.
+- Le **Caissier(ère)** a un accès en lecture seule supplémentaire sur la **Production**, bien que hors de sa chaîne hiérarchique directe.
+- Le **Chargé des commandes** a un accès en lecture seule sur **Commissions**, en plus de l'écriture sur Commandes.
+- Les **Admins** sont hors hiérarchie métier : aucune permission sur les modules métier, uniquement Paramètres/Équipe/Activation/État système.
+
+**Workflow d'approbation (Admin Principal)** : certaines actions d'un Admin secondaire ne s'exécutent qu'après validation de l'Admin Principal. Liste proposée des tâches critiques *(à confirmer/compléter)* :
+- Supprimer un utilisateur
+- Réinitialiser la base de données
+- Créer ou supprimer un compte Admin
+- Modifier les prix ou commissions par Qualité de client
+- Modifier le taux de taxe
+- Modifier les permissions d'un rôle
+
+Quand un Admin secondaire déclenche une de ces actions, une demande est créée (statut "en attente") et l'Admin Principal reçoit une **notification temps réel instantanée** (réutilise le socle de la section 3.10). Il approuve ou rejette depuis le module Approbations (3.16) ; l'action ne s'exécute qu'après validation.
 
 **Matrice des permissions :**
 
-| Rôle | Rapporte à | Écriture (son périmètre) | Lecture seule (supplémentaire) |
-|---|---|---|---|
-| Directeur Général | — | *(aucune)* | Tous les modules |
-| Administrateur | DG *(organisationnellement)* | Paramètres, Équipe & droits d'accès | — |
-| Caissier(ère) | DG | Caisse / Ventes | Commandes clients, Commissions, Production |
-| Chargé des commandes | Caissier(ère) | Commandes clients | — |
-| Responsable de production | DG | Production & recettes | — |
-| Responsable Fournisseurs/achats | DG | Fournisseurs & achats | Stocks *(son subordonné)* |
-| Chargé du stock | Responsable Fournisseurs/achats | Stocks (matières premières) | — |
+| Rôle | Écriture | Lecture seule (supplémentaire) |
+|---|---|---|
+| Directeur Général | *(aucune)* | Tous les modules métier — PAS Paramètres |
+| Admin Principal | Paramètres, Équipe, Activation, État système | — |
+| Admin secondaire | *(idem, tâches critiques soumises à approbation)* | — |
+| Caissier(ère) | Caisse | Commandes, Commissions, Production |
+| Chargé des commandes | Commandes | Commissions |
+| Responsable de production | Production | — |
+| Responsable Stock/Achats et Fournisseurs | Stocks, Fournisseurs & achats | — |
+| Chargé du personnel | Travailleurs | — |
+
+**À propos et Rapports** (3.12, 3.13) : accessibles à tous, portée par personne (voir 3.13).
+
+**Règle d'interface** : tous les modules apparaissent dans le menu pour tout le monde ; ceux hors du périmètre du rôle connecté restent visibles mais **grisés/non cliquables**, pour que chacun ait une vue d'ensemble du système sans y accéder.
 
 La liste des rôles est conçue pour être extensible (ajout d'un rôle et de ses permissions sans changement de code).
+
+⚠️ **Impact sur l'existant** : les Phases 1 et 2 ont déjà été codées avec l'ancienne liste de rôles (Administrateur unique, Chargé du stock séparé du Responsable Fournisseurs, pas de Chargé du personnel, DG en lecture sur Paramètres). Une session de retrofit sera nécessaire pour aligner le seed de rôles/permissions déjà en base sur cette nouvelle version avant de continuer.
 
 ## 3. Périmètre fonctionnel (v1 — scope complet)
 
@@ -85,6 +106,12 @@ Le solde d'avance est porté par le **client** (pas par la commande) et se repor
 - Filtre/tri par date
 - Bouton "Tout afficher"
 
+**Règlement d'une dette (ajout suite retour d'expérience Phase 3)** : une commande avec Dette > 0 peut recevoir un ou plusieurs paiements ultérieurs. Chaque règlement :
+- Écriture réservée au **Chargé des commandes** (seul rôle en écriture sur Commandes)
+- S'ajoute au Montant reçu de la commande visée ; Dette, Avance disponible et Nouvelle avance sont recalculés avec la même formule qu'à la création (un trop-perçu lors du règlement génère de l'avance, comme pour une commande normale)
+- Chaque règlement est journalisé (montant, date, auteur) pour la traçabilité
+- Déclenche une notification temps réel (même circuit que `NOUVELLE_COMMANDE`)
+
 Couvre aussi les commandes spéciales (gâteaux personnalisés, événements) avec acompte, date de retrait/livraison, statut (en attente/en préparation/prête/livrée).
 
 ### 3.5 Clients & fidélité
@@ -94,10 +121,14 @@ Fiche client, historique d'achats, programme de fidélité (points ou carte tamp
 Fiches fournisseurs, bons de commande, réception de marchandises (met à jour le stock).
 
 ### 3.7 Équipe & droits d'accès
-Comptes utilisateurs rattachés à un rôle, hiérarchie et matrice de permissions lecture/écriture par module (voir section 2).
+Comptes utilisateurs rattachés à un rôle, hiérarchie et matrice de permissions lecture/écriture par module (voir section 2). Le rôle Administrateur supporte jusqu'à 3 comptes (1 Principal + 2 secondaires) ; un seul compte est marqué "Principal" à la fois.
+
+**Délégation temporaire de rôle** *(nouveau)* : un Admin peut accorder à un utilisateur les droits d'écriture d'un module précis pour une période donnée (ex. remplacement du Chargé des commandes absent 3 jours), sans changer son rôle permanent. À l'expiration, les droits reviennent automatiquement à la normale. La vérification de permission devient : *droits du rôle de base* **OU** *délégation active couvrant ce module à la date du jour*.
 
 ### 3.8 Tableau de bord & rapports — ultra moderne & sophistiqué
 CA du jour/semaine/mois, meilleures ventes, marge par produit, export comptable (CSV). Contenu strictement filtré selon le rôle connecté et sa matrice de permissions (section 2) — aucune action de modification visible pour le DG.
+
+**Résumé de clôture quotidien** *(nouveau)* : en fin de journée, un digest auto-généré est disponible pour le DG (et les Admins) — CA du jour, nombre de commandes, dettes en cours, alertes stock actives. Objectif : réduire la dépendance au fil temps réel pour une vue d'ensemble, sans avoir à rejouer toute la journée de notifications.
 
 **Identité visuelle** (extraite du logo Boulangerie Lomoto) :
 - Bleu marine `#0F1923` — texte, éléments structurants, mode sombre
@@ -113,12 +144,19 @@ CA du jour/semaine/mois, meilleures ventes, marge par produit, export comptable 
 - Mode clair / sombre basé sur la palette ci-dessus
 - Logo Boulangerie Lomoto en en-tête (sidebar/topbar) et favicon ; tagline "Pain Lia o Tonda" utilisable en pied de page ou écran de connexion
 - Composants sur-mesure, pas de template admin générique
+- **Bilingue** *(nouveau)* : bascule Français/Lingala pour l'interface (labels uniquement — les données saisies, ex. noms de clients, restent telles quelles)
 
 ### 3.9 Paramètres
 Catalogue produits, prix, taxes, informations boutique, gestion des rôles/hiérarchie, gestion des types de clients (prix et commission par bac). Écriture réservée à l'**Administrateur**.
 
+**Ajouts** *(nouveau)* :
+- Seuil d'alerte transaction élevée (Fc) — déclenche une notification spéciale au DG (voir 3.10)
+- Langue par défaut de l'application (Français / Lingala), modifiable aussi par chaque utilisateur individuellement
+
 ### 3.10 Notifications temps réel
 Quand un événement clé est enregistré (nouvelle commande client, alerte stock bas, nouvelle vente/clôture de caisse, réception fournisseur), une notification s'affiche **instantanément** chez le(s) supérieur(s) hiérarchique(s) concerné(s), sans rechargement de page. Portée : commandes, stock et ventes.
+
+**Alerte transaction inhabituelle** *(nouveau)* : toute vente (Caisse) ou tout règlement (Commandes) dépassant le seuil configuré en Paramètres déclenche une notification dédiée au DG, visuellement distincte (priorité haute) du flux normal.
 
 ### 3.11 Commissions
 Vue dédiée aux commandes de type **Maman** (les seules à générer une commission). Calcul **automatique** — aucune saisie manuelle. Visible en lecture seule par le Caissier(ère) et le DG.
@@ -134,6 +172,29 @@ Vue dédiée aux commandes de type **Maman** (les seules à générer une commis
 | 6 | Commission disponible | `bacs × 1.650 Fc` |
 
 **Filtres & affichage :** tri/filtre par date, bouton "Tout afficher".
+
+### 3.12 À propos
+Page accessible à **tous** les rôles : informations sur Boulangerie Lomoto, logo, tagline "Pain Lia o Tonda", version de l'application, contact.
+
+### 3.13 Rapports
+Journal d'activité **personnel**, distinct du Tableau de bord/KPI (3.8) : chaque utilisateur y voit ses propres enregistrements (ce qu'il a créé/modifié dans les modules auxquels il a accès), par ordre chronologique. Portée élargie pour certains rôles :
+- **DG et Admins** : voient les rapports de tout le monde
+- **Caissier(ère)** : voit ses propres rapports + ceux du Chargé des commandes
+- Les autres rôles ne voient que leurs propres rapports
+
+Le DG peut ainsi suivre l'activité de chacun de deux façons : directement dans chaque module (lecture seule), ou de façon consolidée ici.
+
+### 3.14 Activation *(Admin uniquement)*
+Active/désactive un compte utilisateur sans le supprimer (ex. employé en congé ou départ temporaire) — l'utilisateur désactivé ne peut plus se connecter, mais son historique reste intact.
+
+### 3.15 État système *(Admin uniquement)*
+Statut de la base de données (connectée/déconnectée), version de l'application, nombre d'utilisateurs actifs, dernière sauvegarde *(contenu exact à affiner)*.
+
+### 3.16 Approbations *(Admin Principal uniquement)*
+File d'attente des demandes soumises par les Admins secondaires pour les tâches critiques (voir section 2). Chaque demande : type d'action, demandeur, données de l'action, date, statut. Notification temps réel instantanée à l'Admin Principal dès qu'une demande arrive ; approbation ou rejet en un clic, avec effet immédiat sur l'action en attente.
+
+### 3.17 Journal d'audit *(nouveau — DG et Admins uniquement, lecture seule)*
+Historique **immuable** de toute modification ou suppression (pas seulement les créations, déjà tracées via créePar/enregistrePar) : qui, quoi, quand, valeur avant/après. Protège l'ensemble de l'équipe — y compris les Admins, dont les actions y sont également journalisées. Filtrable par utilisateur, module, période.
 
 ## 4. Hors périmètre (v1)
 
@@ -174,7 +235,10 @@ Vue dédiée aux commandes de type **Maman** (les seules à générer une commis
 ```
 Role (id, nom, roleParentId)                              # hiérarchie portée par le rôle
 RolePermission (id, roleId, module, niveauAcces)          # niveauAcces: aucun | lecture | ecriture
-Utilisateur (id, nom, email, roleId, motDePasseHash)
+Utilisateur (id, nom, email, roleId, motDePasseHash, actif, estAdminPrincipal, languePreferee)
+DemandeApprobation (id, type, demandeParId, donnees, statut, approuveParId, dateDemande, dateDecision)  # statut: en_attente | approuvee | rejetee
+JournalAudit (id, utilisateurId, action, module, entiteType, entiteId, donneesAvant, donneesApres, dateAction)  # action: modification | suppression
+DelegationRole (id, utilisateurDelegantId, utilisateurDelegataireId, module, dateDebut, dateFin, creePar)
 Notification (id, destinataireId, type, événementRef, message, lu, dateCréation)
 TypeClient (id, nom, prixParBac, commissionParBac)        # Dépositaire (4100, 0), Vente cash (4350, 0), Maman (6000, 1650)
 Commission (id, commandeClientId, utilisateurId, montant, dateCalcul)  # généré automatiquement
@@ -188,6 +252,7 @@ CommandeFournisseur (id, fournisseurId, statut, date)
 LigneCommandeFournisseur (commandeId, matierePremiereId, quantité, prixUnitaire)
 Client (id, nom, téléphone, typeClientId, avanceDisponible, pointsFidélité)   # avanceDisponible = solde reporté d'une commande à l'autre
 CommandeClient (id, numero, clientId, quantitéBacs, montantBrut, avanceUtilisee, montantAPercevoir, montantRecu, dette, avanceGeneree, statut, dateRetrait, créePar)
+PaiementCommande (id, commandeClientId, montant, date, enregistrePar)   # règlements successifs d'une dette
 Vente (id, date, vendeurId, total, moyenPaiement)
 LigneVente (venteId, produitId, quantité, prixUnitaire, tauxTaxe)
 ```
@@ -205,6 +270,7 @@ LigneVente (venteId, produitId, quantité, prixUnitaire, tauxTaxe)
 | Temps réel | Socket.io (WebSocket) | Notifications instantanées, s'intègre nativement à Express, gère la reconnexion automatique |
 | Visualisation de données | Recharts | Graphiques interactifs pour un dashboard riche |
 | Animations | Framer Motion | Micro-interactions, feed d'activité animé — look sophistiqué demandé |
+| Internationalisation | react-i18next | Bascule Français/Lingala sur les labels d'interface |
 | Tests | Vitest (unitaires) + Playwright (E2E) | Standard, bien supporté par Claude Code |
 
 **Note technique** : côté serveur, un émetteur d'événements interne (EventEmitter Node) déclenche l'envoi Socket.io vers la ou les "room" correspondant au(x) supérieur(s) hiérarchique(s) concerné(s) à chaque création d'un événement clé (commande, mouvement de stock, vente).
@@ -231,13 +297,19 @@ bakery-app/
 Le périmètre v1 est complet, mais Claude Code construira plus efficacement dans cet ordre logique (dépendances techniques, pas de coupe fonctionnelle) :
 
 1. **Fondations** — auth, rôles hiérarchiques, catalogue produits, structure du projet ✅ *(terminé)*
-2. **Couche temps réel** — WebSocket + système de notifications (socle réutilisé par tous les modules suivants)
-3. **Commandes clients & Commissions** — système d'avance/dette porté par le client, notification instantanée au Caissier(ère)
-4. **Caisse** — vente, clôture journalière, notification au supérieur
+2. **Couche temps réel** — WebSocket + système de notifications (socle réutilisé par tous les modules suivants) ✅ *(terminé)*
+2bis. **Retrofit rôles + règlement de dette** — fusion Stock/Fournisseurs, Chargé du personnel, multi-admin, DG sans accès Paramètres, PaiementCommande *(prompt déjà préparé, à exécuter)*
+3. **Commandes clients & Commissions** — système d'avance/dette porté par le client ✅ *(terminé)*
+4. **Caisse** — vente, clôture journalière, notification au supérieur, alerte transaction inhabituelle (seuil configurable)
 5. **Stocks & production** — matières premières, recettes, alertes temps réel
 6. **Fournisseurs & achats** — notification de réception
-7. **Tableau de bord & rapports** — vue globale (DG) et vue filtrée (autres rôles)
-8. **Travailleurs & Utilisateurs** — *scope à définir avec le gérant, voir Questions ouvertes (chevauche potentiellement la section 3.7 Équipe déjà couverte, et le "Hors périmètre" RH de la section 4)*
+7. **Tableau de bord & rapports** — vue KPI globale (DG), vue filtrée (autres rôles), résumé de clôture quotidien
+8. **Rapports personnels, À propos** — journal d'activité par utilisateur (3.13), page statique (3.12)
+9. **Travailleurs & Utilisateurs** — module du Chargé du personnel *(scope détaillé à définir — voir Questions ouvertes)*
+10. **Admin : Activation, État système, Approbations, Délégation temporaire** — gestion des comptes, statut système, workflow d'approbation multi-admin, délégation de droits
+11. **Journal d'audit** — traçabilité modifications/suppressions, en continu à partir de cette phase ; retrofit des phases 1-3 en option, moins urgent
+
+*Interface bilingue (Français/Lingala, section 3.8/3.9)* : concerne toutes les phases UI. Plus tôt elle est intégrée, moins coûteux sera le retrofit des écrans déjà construits (Commandes/Commissions actuellement en français uniquement) — à prioriser selon vos contraintes de temps.
 
 ## 10. Exemples de critères d'acceptation
 
@@ -296,6 +368,36 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - Quand il consulte l'interface
 - Alors aucune action de création/modification/suppression n'est disponible
 
+**Règlement de dette**
+- Étant donné une commande avec une dette de 1.000 Fc
+- Quand le Chargé des commandes enregistre un règlement de 1.500 Fc
+- Alors la dette repasse à 0, l'excédent de 500 Fc génère une avance de 500 Fc pour le client, et le Caissier(ère)/DG reçoivent une notification temps réel
+
+**Alerte transaction inhabituelle**
+- Étant donné un seuil configuré à 50.000 Fc et une vente de 60.000 Fc encaissée par le Caissier(ère)
+- Quand la vente est validée
+- Alors le DG reçoit une notification temps réel distincte, signalée comme prioritaire
+
+**Journal d'audit**
+- Étant donné un Admin qui modifie le prix par bac d'une Qualité de client
+- Quand la modification est enregistrée
+- Alors le Journal d'audit affiche qui, quand, l'ancienne et la nouvelle valeur — visible par le DG et les autres Admins
+
+**DG — aucun accès aux Paramètres**
+- Étant donné que le DG est connecté
+- Quand il regarde le menu
+- Alors le module Paramètres n'apparaît pas accessible même en lecture (grisé), contrairement aux autres modules qu'il voit en lecture seule
+
+**Approbation — Admin secondaire**
+- Étant donné un Admin secondaire qui tente de supprimer un utilisateur
+- Quand il valide l'action
+- Alors l'action ne s'exécute pas immédiatement ; une demande est créée et l'Admin Principal reçoit une notification temps réel
+
+**Module grisé**
+- Étant donné un Chargé du personnel connecté
+- Quand il consulte le menu
+- Alors il voit tous les modules listés, mais seul "Travailleurs" (et À propos/Rapports) est cliquable — les autres apparaissent grisés
+
 **Visibilité croisée — Caissier**
 - Étant donné qu'un rapport de production est publié par le Responsable de production
 - Quand le Caissier(ère) consulte son dashboard
@@ -311,7 +413,13 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - Le DG doit-il disposer d'une action exceptionnelle malgré l'accès lecture seule (ex. annuler une vente frauduleuse), ou cela doit-il toujours passer par l'Administrateur ? *(métier)*
 - La catégorie **Vente cash (VC)** génère-t-elle bien 0 Fc de commission, comme les Dépositaires ? *(métier — hypothèse actuelle, à confirmer)*
 - Au-delà de ces 3 types (Dépositaires, Vente cash, Mamans), d'autres catégories sont-elles prévues à terme ? *(métier — n'affecte pas l'architecture, juste la configuration)*
-- Le module "Travailleurs" (section 9, phase 8) recoupe-t-il l'Équipe & droits d'accès (3.7) déjà spécifiée, ou couvre-t-il autre chose (ex. suivi RH, présence) ? Le document exclut actuellement la RH complète (section 4) — à clarifier le moment venu.
+- Le module "Travailleurs" (phase 9) : quel contenu exact (fiches employés, présence, paie) ? Le document exclut la RH complète (section 4) — à clarifier au moment de le construire.
+- La liste des "tâches critiques" nécessitant l'approbation de l'Admin Principal (section 2) est une proposition — à valider/compléter.
+- "État système" (3.15) : quelles informations exactes afficher, au-delà du statut base de données ?
+- Un Admin secondaire peut-il lui-même approuver/rejeter une demande d'un autre Admin secondaire, ou seul l'Admin Principal le peut ?
+- Quel seuil (en Fc) déclenche l'alerte transaction inhabituelle (3.10) ? Un seul seuil global, ou différent pour Caisse vs Commandes ?
+- Une délégation temporaire de rôle (3.7) peut-elle chevaucher plusieurs modules à la fois, ou un seul module par délégation ?
+- Le Journal d'audit (3.17) doit-il aussi inclure les tentatives d'accès refusées (403), utile pour la sécurité, ou seulement les actions réussies ?
 
 ## 12. Prochaines étapes
 
