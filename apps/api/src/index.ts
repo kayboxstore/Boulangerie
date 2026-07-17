@@ -1,8 +1,15 @@
 import "dotenv/config";
+import { createServer } from "node:http";
 import { createApp } from "./app.js";
+import { initRealtime } from "./lib/realtime.js";
+import { initNotificationService } from "./services/notifications.js";
 
 const port = Number(process.env.PORT ?? 3001);
 
-createApp().listen(port, () => {
-  console.log(`API Boulangerie Lomoto démarrée sur http://localhost:${port}`);
+const httpServer = createServer(createApp());
+initRealtime(httpServer);
+initNotificationService();
+
+httpServer.listen(port, () => {
+  console.log(`API Boulangerie Lomoto démarrée sur http://localhost:${port} (HTTP + Socket.io)`);
 });

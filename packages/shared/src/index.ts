@@ -94,6 +94,50 @@ export interface LoginResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Notifications temps réel (section 3.10)
+// ---------------------------------------------------------------------------
+
+/** Types d'événements métier — la liste s'étoffera avec les phases suivantes. */
+export const TYPES_EVENEMENT = [
+  "TEST",
+  "NOUVELLE_VENTE",
+  "CLOTURE_CAISSE",
+  "NOUVELLE_COMMANDE",
+  "ALERTE_STOCK",
+  "MOUVEMENT_STOCK",
+  "RECEPTION_FOURNISSEUR",
+  "RAPPORT_PRODUCTION",
+] as const;
+export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
+
+export interface NotificationDTO {
+  id: string;
+  type: TypeEvenement;
+  module: Module;
+  message: string;
+  evenementRef: string | null;
+  donnees: unknown;
+  lu: boolean;
+  dateCreation: string;
+  emetteur: { id: string; nom: string; roleNom: string } | null;
+}
+
+/** Événements Socket.io serveur -> client. */
+export interface ServerToClientEvents {
+  notification: (notification: NotificationDTO) => void;
+}
+// Aucun événement client -> serveur pour l'instant (les actions passent par l'API REST).
+export interface ClientToServerEvents {}
+
+// Route de test temporaire (Phase 2) — à retirer avant la Phase 3.
+export const triggerEventSchema = z.object({
+  module: z.enum(MODULES),
+  type: z.enum(TYPES_EVENEMENT).default("TEST"),
+  message: z.string().trim().min(1).max(300).optional(),
+});
+export type TriggerEventInput = z.infer<typeof triggerEventSchema>;
+
+// ---------------------------------------------------------------------------
 // Utilitaires
 // ---------------------------------------------------------------------------
 

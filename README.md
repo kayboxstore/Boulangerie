@@ -2,7 +2,9 @@
 
 Application web de gestion pour la Boulangerie Lomoto : caisse, stocks, production, commandes clients, fournisseurs et pilotage en temps réel. Spécification complète : [docs/spec.md](docs/spec.md).
 
-**Phase actuelle : 1 — Fondations** (auth JWT, hiérarchie de rôles + matrice de permissions, catalogue produits).
+**Phase actuelle : 2 — Couche temps réel** (Socket.io authentifié par JWT, NotificationService routé par la matrice de permissions + hiérarchie, feed d'activité animé, historique + non-lues).
+
+> Route temporaire de test : `POST /api/test/trigger-event` (`{ module, type?, message? }`) simule un événement métier pour valider le routage — **à retirer avant la Phase 3**.
 
 ## Structure du monorepo
 
@@ -63,3 +65,4 @@ Mot de passe commun : `Lomoto2026!`
 - **Devise** : Franc Congolais (Fc), montants entiers — helper `formatFc()` dans `@lomoto/shared`.
 - **TVA** : le pain est exonéré (`tauxTaxe = 0`) ; le taux reste configurable par produit.
 - **Permissions** : matrice rôle × module (`RolePermission`), niveaux `AUCUN | LECTURE | ECRITURE` ; `ECRITURE` implique `LECTURE`. La hiérarchie est portée par `Role.roleParentId` — extensible sans changement de code.
+- **Notifications temps réel** : Socket.io authentifié par JWT (rooms `user:{id}` et `role:{id}`). Destinataires d'un événement = tous les rôles ayant ≥ `LECTURE` sur le module (la matrice encode déjà « le supérieur lit le périmètre de son subordonné », les exceptions du Caissier et le DG) ∪ supérieur direct de l'émetteur — émetteur exclu, Administrateur exclu (aucune permission métier). Chaque notification est persistée (`Notification`) puis poussée ; l'historique (`GET /api/notifications`) permet le rattrapage après déconnexion.

@@ -1,8 +1,11 @@
 import { MODULE_LABELS, MODULES, type NiveauAcces } from "@lomoto/shared";
 import { useAuth } from "@/lib/auth";
+import { useSocket } from "@/lib/socket";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ActivityFeed } from "@/components/ActivityFeed";
+import { IndicateurConnexion } from "@/components/NotificationBell";
 
 function BadgeAcces({ niveau }: { niveau: NiveauAcces }) {
   if (niveau === "ECRITURE") return <Badge variant="gold">Écriture</Badge>;
@@ -12,12 +15,13 @@ function BadgeAcces({ niveau }: { niveau: NiveauAcces }) {
 
 export function DashboardPage() {
   const { utilisateur } = useAuth();
+  const { notifications, marquerLue } = useSocket();
   if (!utilisateur) return null;
 
   const permissions = new Map(utilisateur.role.permissions.map((p) => [p.module, p.niveauAcces]));
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <div>
         <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">
           Bonjour, {utilisateur.nom}
@@ -27,6 +31,7 @@ export function DashboardPage() {
         </p>
       </div>
 
+      <div className="grid gap-6 lg:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>Vos droits d'accès</CardTitle>
@@ -55,6 +60,26 @@ export function DashboardPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-start justify-between space-y-0">
+          <div className="space-y-1.5">
+            <CardTitle>Feed d'activité</CardTitle>
+            <CardDescription>
+              Les événements de votre périmètre apparaissent ici en temps réel, sans rechargement.
+            </CardDescription>
+          </div>
+          <IndicateurConnexion etendu />
+        </CardHeader>
+        <CardContent>
+          <ActivityFeed
+            notifications={notifications}
+            onMarquerLue={marquerLue}
+            vide="Aucun événement pour le moment — ils apparaîtront ici dès qu'ils seront émis."
+          />
+        </CardContent>
+      </Card>
+      </div>
     </div>
   );
 }

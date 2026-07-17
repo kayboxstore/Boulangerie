@@ -1,0 +1,89 @@
+import { AnimatePresence, motion } from "framer-motion";
+import { BellRing } from "lucide-react";
+import type { NotificationDTO } from "@lomoto/shared";
+import { MODULE_LABELS } from "@lomoto/shared";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+/** "il y a 3 min", "il y a 2 h", "hier"… */
+export function tempsRelatif(dateIso: string): string {
+  const rtf = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
+  const diffSec = Math.round((new Date(dateIso).getTime() - Date.now()) / 1000);
+  const abs = Math.abs(diffSec);
+  if (abs < 60) return "à l'instant";
+  if (abs < 3600) return rtf.format(Math.round(diffSec / 60), "minute");
+  if (abs < 86400) return rtf.format(Math.round(diffSec / 3600), "hour");
+  return rtf.format(Math.round(diffSec / 86400), "day");
+}
+
+interface ActivityFeedProps {
+  notifications: NotificationDTO[];
+  onMarquerLue?: (id: string) => void;
+  vide?: string;
+  compact?: boolean;
+}
+
+/**
+ * Feed d'activité temps réel : chaque nouvelle notification apparaît avec une
+ * animation d'entrée (Framer Motion). Cliquer sur une notification non lue la
+ * marque comme lue.
+ */
+export function ActivityFeed({ notifications, onMarquerLue, vide, compact }: ActivityFeedProps) {
+  if (notifications.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
+        <BellRing className="h-8 w-8 opacity-40" />
+        <p className="text-sm">{vide ?? "Aucune activité pour le moment."}</p>
+      </div>
+    );
+  }
+
+  return (
+    <ul className={cn("flex flex-col", compact ? "gap-1" : "gap-2")}>
+      <AnimatePresence initial={false}>
+        {notifications.map((n) => (
+          <motion.li
+            key={n.id}
+            layout
+            initial={{ opacity: 0, y: -12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+          >
+            <button
+              type="button"
+              onClick={() => !n.lu && onMarquerLue?.(n.id)}
+              className={cn(
+                "w-full rounded-lg border p-3 text-left transition-colors",
+                n.lu
+                  ? "border-transparent bg-transparent hover:bg-secondary/40"
+                  : "border-or/40 bg-or/10 hover:bg-or/15",
+              )}
+            >
+              <div className="flex items-start gap-2">
+                <span
+                  aria-hidden
+                  className={cn(
+                    "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                    n.lu ? "bg-beige" : "bg-terracotta",
+                  )}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className={cn("text-sm leading-snug", !n.lu && "font-medium")}>{n.message}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <Badge variant="secondary" className="font-normal">
+                      {MODULE_LABELS[n.module]}
+                    </Badge>
+                    {n.emetteur && <span>par {n.emetteur.nom}</span>}
+                    <span>·</span>
+                    <time dateTime={n.dateCreation}>{tempsRelatif(n.dateCreation)}</time>
+                  </div>
+                </div>
+              </div>
+            </button>
+          </motion.li>
+        ))}
+      </AnimatePresence>
+    </ul>
+  );
+}

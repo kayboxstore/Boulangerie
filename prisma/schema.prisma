@@ -60,6 +60,29 @@ model Utilisateur {
   actif         Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  notifications Notification[] @relation("NotificationsRecues")
+  notificationsEmises Notification[] @relation("NotificationsEmises")
+}
+
+// Notification métier (section 3.10) : persistée pour le rattrapage hors ligne,
+// poussée en temps réel via Socket.io aux destinataires déterminés par la
+// matrice de permissions + la hiérarchie.
+model Notification {
+  id             String      @id @default(cuid())
+  destinataireId String
+  destinataire   Utilisateur @relation("NotificationsRecues", fields: [destinataireId], references: [id], onDelete: Cascade)
+  emetteurId     String?
+  emetteur       Utilisateur? @relation("NotificationsEmises", fields: [emetteurId], references: [id], onDelete: SetNull)
+  type           String
+  module         Module
+  evenementRef   String?
+  message        String
+  donnees        Json?
+  lu             Boolean     @default(false)
+  dateCreation   DateTime    @default(now())
+
+  @@index([destinataireId, lu])
+  @@index([destinataireId, dateCreation])
 }
 
 // Types de clients avec tarification et commission par bac (montants en Fc).

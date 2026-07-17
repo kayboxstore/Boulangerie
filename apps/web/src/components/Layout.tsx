@@ -3,6 +3,7 @@ import { LayoutDashboard, LogOut, Wheat } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { IndicateurConnexion, NotificationBell } from "@/components/NotificationBell";
 import { cn } from "@/lib/utils";
 
 const navigation = [
@@ -72,9 +73,12 @@ export function Layout() {
             <img src="/logo-lomoto.png" alt="Logo Boulangerie Lomoto" className="h-9 w-9 rounded-full object-contain" />
             <span className="font-serif font-semibold text-or">Boulangerie Lomoto</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={logout} className="text-creme/80 hover:bg-creme/10 hover:text-creme">
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1 [&_button]:text-creme/80 [&_button:hover]:bg-creme/10 [&_button:hover]:text-creme">
+            <NotificationBell />
+            <Button variant="ghost" size="icon" onClick={logout}>
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </header>
 
         {/* Navigation mobile */}
@@ -95,6 +99,12 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
+
+        {/* Barre supérieure (desktop) : statut temps réel + notifications */}
+        <div className="hidden items-center justify-end gap-3 border-b bg-card px-6 py-2 md:flex">
+          <IndicateurConnexion etendu />
+          <NotificationBell />
+        </div>
 
         <main className="flex-1 p-4 md:p-8">
           <Outlet />

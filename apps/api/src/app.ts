@@ -3,6 +3,8 @@ import cors from "cors";
 import { authRouter } from "./routes/auth.js";
 import { produitsRouter } from "./routes/produits.js";
 import { rolesRouter } from "./routes/roles.js";
+import { notificationsRouter } from "./routes/notifications.js";
+import { testRouter } from "./routes/test.js";
 
 export function createApp() {
   const app = express();
@@ -17,6 +19,9 @@ export function createApp() {
   app.use("/api/auth", authRouter);
   app.use("/api/produits", produitsRouter);
   app.use("/api/roles", rolesRouter);
+  app.use("/api/notifications", notificationsRouter);
+  // TEMPORAIRE (Phase 2) — à retirer avant la Phase 3.
+  app.use("/api/test", testRouter);
 
   // Gestion d'erreurs centralisée
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
