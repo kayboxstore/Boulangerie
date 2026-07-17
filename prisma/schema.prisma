@@ -39,6 +39,16 @@ enum PrioriteNotification {
   HAUTE
 }
 
+enum TypeMouvementStock {
+  ENTREE
+  SORTIE
+}
+
+enum StatutPlanning {
+  PREVU
+  FAIT
+}
+
 // Hiérarchie portée par le rôle (roleParentId) — extensible sans changement de code.
 model Role {
   id           String           @id @default(cuid())
@@ -82,6 +92,9 @@ model Utilisateur {
   reglementsEnregistres PaiementCommande[]
   ventes        Vente[]
   clotures      ClotureCaisse[]
+  mouvementsStock MouvementStock[]
+  productions   Production[]
+  planningsCrees PlanningProduction[]
 }
 
 // Notification métier (section 3.10) : persistée pour le rattrapage hors ligne,
@@ -185,6 +198,7 @@ model Produit {
   categorie String
   actif     Boolean  @default(true)
   lignesVente LigneVente[]
+  recette   Recette?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -235,6 +249,105 @@ model ClotureCaisse {
   totalMobileMoney Int
   totalCarte       Int
   ventes           Vente[]
+
+  @@index([date])
+}
+
+// --- Stocks & matières premières (section 3.2) ------------------------------
+
+// Quantités en Decimal(12,3) : les matières se comptent en kg/L fractionnaires
+// et le Decimal évite la dérive des flottants sur les décrémentations répétées.
+model MatierePremiere {
+  id            String   @id @default(cuid())
+  nom           String   @unique
+  unite         String // kg, L, pièce…
+  quantiteStock Decimal  @default(0) @db.Decimal(12, 3)
+  seuilAlerte   Decimal  @db.Decimal(12, 3)
+  mouvements    MouvementStock[]
+  ingredients   IngredientRecette[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// Journal des mouvements de stock — append-only : jamais modifié ni supprimé
+// rétroactivement (aucun endpoint d'update/delete). `reference` relie le
+// mouvement à son origine (ex. « Production n°12 », bon de livraison…).
+model MouvementStock {
+  id                String             @id @default(cuid())
+  matierePremiereId String
+  matierePremiere   MatierePremiere    @relation(fields: [matierePremiereId], references: [id])
+  type              TypeMouvementStock
+  quantite          Decimal            @db.Decimal(12, 3)
+  reference         String?
+  // Renseigné quand le mouvement est généré automatiquement par une production.
+  productionId      String?
+  production        Production?        @relation(fields: [productionId], references: [id])
+  auteurId          String?
+  auteur            Utilisateur?       @relation(fields: [auteurId], references: [id], onDelete: SetNull)
+  date              DateTime           @default(now())
+
+  @@index([matierePremiereId, date])
+}
+
+// --- Production & recettes (section 3.3) ------------------------------------
+
+// Une recette par produit : ingrédients + quantités POUR UNE UNITÉ produite
+// (la production multiplie par la quantité produite).
+model Recette {
+  id           String              @id @default(cuid())
+  produitId    String              @unique
+  produit      Produit             @relation(fields: [produitId], references: [id])
+  instructions String?
+  ingredients  IngredientRecette[]
+  productions  Production[]
+  plannings    PlanningProduction[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model IngredientRecette {
+  id                String          @id @default(cuid())
+  recetteId         String
+  recette           Recette         @relation(fields: [recetteId], references: [id], onDelete: Cascade)
+  matierePremiereId String
+  matierePremiere   MatierePremiere @relation(fields: [matierePremiereId], references: [id])
+  quantite          Decimal         @db.Decimal(12, 3)
+
+  @@unique([recetteId, matierePremiereId])
+}
+
+// Planning de production journalier : quoi produire, quelle quantité, pour quand.
+// Passe à FAIT quand une production enregistrée s'y rattache.
+model PlanningProduction {
+  id             String         @id @default(cuid())
+  datePrevue     DateTime       @db.Date
+  recetteId      String
+  recette        Recette        @relation(fields: [recetteId], references: [id], onDelete: Cascade)
+  quantitePrevue Int
+  statut         StatutPlanning @default(PREVU)
+  creeParId      String?
+  creePar        Utilisateur?   @relation(fields: [creeParId], references: [id], onDelete: SetNull)
+  productions    Production[]
+  createdAt      DateTime       @default(now())
+
+  @@index([datePrevue])
+}
+
+// Production enregistrée (recette × quantité) : décrémente AUTOMATIQUEMENT le
+// stock des matières premières via des MouvementStock SORTIE créés dans la
+// même transaction (référence = cette production, pas de saisie manuelle).
+model Production {
+  id               String              @id @default(cuid())
+  numero           Int                 @unique @default(autoincrement())
+  recetteId        String
+  recette          Recette             @relation(fields: [recetteId], references: [id])
+  quantiteProduite Int
+  planningId       String?
+  planning         PlanningProduction? @relation(fields: [planningId], references: [id])
+  enregistreParId  String?
+  enregistrePar    Utilisateur?        @relation(fields: [enregistreParId], references: [id], onDelete: SetNull)
+  mouvements       MouvementStock[]
+  date             DateTime            @default(now())
 
   @@index([date])
 }

@@ -8,6 +8,8 @@ import { clientsRouter, typeClientsRouter } from "./routes/clients.js";
 import { commandesRouter } from "./routes/commandes.js";
 import { commissionsRouter } from "./routes/commissions.js";
 import { caisseRouter } from "./routes/caisse.js";
+import { stocksRouter } from "./routes/stocks.js";
+import { productionRouter } from "./routes/production.js";
 
 export function createApp() {
   const app = express();
@@ -28,6 +30,8 @@ export function createApp() {
   app.use("/api/commandes", commandesRouter);
   app.use("/api/commissions", commissionsRouter);
   app.use("/api/caisse", caisseRouter);
+  app.use("/api/stocks", stocksRouter);
+  app.use("/api/production", productionRouter);
 
   // Gestion d'erreurs centralisée
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

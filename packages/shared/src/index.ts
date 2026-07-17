@@ -110,6 +110,7 @@ export const TYPES_EVENEMENT = [
   "ALERTE_STOCK",
   "MOUVEMENT_STOCK",
   "RECEPTION_FOURNISSEUR",
+  "PRODUCTION_ENREGISTREE",
   "RAPPORT_PRODUCTION",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
@@ -312,6 +313,139 @@ export interface ClotureCaisseDTO {
   totalEspeces: number;
   totalMobileMoney: number;
   totalCarte: number;
+}
+
+// ---------------------------------------------------------------------------
+// Stocks & matières premières (section 3.2)
+// ---------------------------------------------------------------------------
+
+export const TYPES_MOUVEMENT_STOCK = ["ENTREE", "SORTIE"] as const;
+export type TypeMouvementStock = (typeof TYPES_MOUVEMENT_STOCK)[number];
+
+export const TYPE_MOUVEMENT_LABELS: Record<TypeMouvementStock, string> = {
+  ENTREE: "Entrée",
+  SORTIE: "Sortie",
+};
+
+// Quantités de matières (kg, L…) : positives, au plus 3 décimales.
+const quantiteMatiere = z
+  .number()
+  .refine((q) => Number.isFinite(q) && Math.round(q * 1000) === q * 1000, "Au plus 3 décimales");
+
+export const matiereCreateSchema = z.object({
+  nom: z.string().trim().min(1, "Le nom est requis").max(120),
+  unite: z.string().trim().min(1, "L'unité est requise").max(20),
+  seuilAlerte: quantiteMatiere.refine((q) => q >= 0, "Le seuil doit être positif"),
+  // Stock de départ (optionnel) : enregistré comme mouvement ENTREE « Stock initial ».
+  quantiteInitiale: quantiteMatiere.refine((q) => q >= 0, "La quantité doit être positive").default(0),
+});
+export type MatiereCreateInput = z.infer<typeof matiereCreateSchema>;
+
+export const matiereUpdateSchema = matiereCreateSchema.omit({ quantiteInitiale: true }).partial();
+export type MatiereUpdateInput = z.infer<typeof matiereUpdateSchema>;
+
+export const mouvementCreateSchema = z.object({
+  matierePremiereId: z.string().min(1, "La matière première est requise"),
+  type: z.enum(TYPES_MOUVEMENT_STOCK),
+  quantite: quantiteMatiere.refine((q) => q > 0, "La quantité doit être strictement positive"),
+  reference: z.string().trim().max(160).optional(),
+});
+export type MouvementCreateInput = z.infer<typeof mouvementCreateSchema>;
+
+export interface MatierePremiereDTO {
+  id: string;
+  nom: string;
+  unite: string;
+  quantiteStock: number;
+  seuilAlerte: number;
+  /** true si le stock est strictement sous le seuil d'alerte. */
+  sousSeuil: boolean;
+}
+
+export interface MouvementStockDTO {
+  id: string;
+  matierePremiere: { id: string; nom: string; unite: string };
+  type: TypeMouvementStock;
+  quantite: number;
+  reference: string | null;
+  auteur: { id: string; nom: string } | null;
+  date: string;
+}
+
+// ---------------------------------------------------------------------------
+// Production & recettes (section 3.3)
+// ---------------------------------------------------------------------------
+
+export const recetteCreateSchema = z.object({
+  produitId: z.string().min(1, "Le produit est requis"),
+  instructions: z.string().trim().max(4000).optional(),
+  // Quantités nécessaires POUR UNE UNITÉ produite.
+  ingredients: z
+    .array(
+      z.object({
+        matierePremiereId: z.string().min(1),
+        quantite: quantiteMatiere.refine((q) => q > 0, "Quantité d'ingrédient invalide"),
+      }),
+    )
+    .min(1, "Au moins un ingrédient"),
+});
+export type RecetteCreateInput = z.infer<typeof recetteCreateSchema>;
+
+export const recetteUpdateSchema = recetteCreateSchema.omit({ produitId: true });
+export type RecetteUpdateInput = z.infer<typeof recetteUpdateSchema>;
+
+export const planningCreateSchema = z.object({
+  recetteId: z.string().min(1, "La recette est requise"),
+  quantitePrevue: z.number().int("Quantité entière").min(1, "Au moins 1"),
+  datePrevue: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+});
+export type PlanningCreateInput = z.infer<typeof planningCreateSchema>;
+
+export const productionCreateSchema = z.object({
+  recetteId: z.string().min(1, "La recette est requise"),
+  quantiteProduite: z.number().int("Quantité entière").min(1, "Au moins 1"),
+  planningId: z.string().optional(),
+});
+export type ProductionCreateInput = z.infer<typeof productionCreateSchema>;
+
+export interface IngredientRecetteDTO {
+  id: string;
+  matierePremiere: { id: string; nom: string; unite: string; quantiteStock: number };
+  quantite: number;
+}
+
+export interface RecetteDTO {
+  id: string;
+  produit: { id: string; nom: string };
+  instructions: string | null;
+  ingredients: IngredientRecetteDTO[];
+}
+
+export type StatutPlanning = "PREVU" | "FAIT";
+
+export interface PlanningProductionDTO {
+  id: string;
+  datePrevue: string;
+  recette: { id: string; produitNom: string };
+  quantitePrevue: number;
+  statut: StatutPlanning;
+  creePar: { id: string; nom: string } | null;
+}
+
+export interface ProductionDTO {
+  id: string;
+  numero: number;
+  date: string;
+  recette: { id: string; produitNom: string };
+  quantiteProduite: number;
+  enregistrePar: { id: string; nom: string } | null;
+  /** Matières consommées par la décrémentation automatique. */
+  consommations: { matiereNom: string; unite: string; quantite: number }[];
+}
+
+/** Formate une quantité de matière : 12.5 + "kg" -> "12,5 kg" */
+export function formatQuantite(quantite: number, unite: string): string {
+  return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 3 }).format(quantite)} ${unite}`;
 }
 
 // ---------------------------------------------------------------------------

@@ -213,7 +213,47 @@ async function main() {
     });
   }
 
-  console.log("Seed terminé — 7 rôles, 3 types de clients, 8 utilisateurs, 5 clients, 5 produits.");
+  // --- Matières premières (section 3.2) — stock initial hors journal (seed) ---
+  const matieres = [
+    { nom: "Farine de blé", unite: "kg", quantiteStock: 120, seuilAlerte: 50 },
+    { nom: "Sucre", unite: "kg", quantiteStock: 40, seuilAlerte: 10 },
+    { nom: "Beurre", unite: "kg", quantiteStock: 25, seuilAlerte: 8 },
+    { nom: "Sel", unite: "kg", quantiteStock: 15, seuilAlerte: 5 },
+    { nom: "Levure boulangère", unite: "kg", quantiteStock: 6, seuilAlerte: 2 },
+  ];
+  for (const m of matieres) {
+    await prisma.matierePremiere.upsert({
+      where: { nom: m.nom },
+      update: {},
+      create: m,
+    });
+  }
+
+  // --- Recette de démonstration (section 3.3) — quantités PAR UNITÉ produite ---
+  const baguette = await prisma.produit.findUniqueOrThrow({ where: { nom: "Baguette" } });
+  const recetteExistante = await prisma.recette.findUnique({ where: { produitId: baguette.id } });
+  if (!recetteExistante) {
+    const ingredient = async (nom: string, quantite: number) => ({
+      matierePremiereId: (await prisma.matierePremiere.findUniqueOrThrow({ where: { nom } })).id,
+      quantite,
+    });
+    await prisma.recette.create({
+      data: {
+        produitId: baguette.id,
+        instructions:
+          "Pétrir farine, eau, sel et levure. Pointage 1 h, façonnage, apprêt 45 min, cuisson 20 min à 250 °C.",
+        ingredients: {
+          create: [
+            await ingredient("Farine de blé", 0.25),
+            await ingredient("Sel", 0.005),
+            await ingredient("Levure boulangère", 0.005),
+          ],
+        },
+      },
+    });
+  }
+
+  console.log("Seed terminé — 7 rôles, 3 types de clients, 8 utilisateurs, 5 clients, 5 produits, 5 matières premières, 1 recette.");
   console.log(`Mot de passe de démonstration pour tous les comptes : ${MOT_DE_PASSE_DEMO}`);
 }
 
