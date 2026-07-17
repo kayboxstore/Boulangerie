@@ -1,6 +1,12 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
-import { calculerCommande, commandeCreateSchema, formatFc, type CommandeDTO } from "@lomoto/shared";
+import {
+  calculerCommande,
+  commandeCreateSchema,
+  formatFc,
+  reglementCreateSchema,
+  type CommandeDTO,
+} from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
@@ -13,6 +19,10 @@ type CommandeAvecRelations = Prisma.CommandeClientGetPayload<{
   include: {
     client: { select: { id: true; nom: true; typeClient: { select: { nom: true } } } };
     creePar: { select: { id: true; nom: true } };
+    reglements: {
+      include: { enregistrePar: { select: { id: true; nom: true } } };
+      orderBy: { date: "asc" };
+    };
   };
 }>;
 
@@ -31,11 +41,21 @@ const versCommandeDTO = (c: CommandeAvecRelations): CommandeDTO => ({
   avanceGeneree: c.avanceGeneree,
   nouvelleAvance: c.nouvelleAvance,
   creePar: c.creePar ? { id: c.creePar.id, nom: c.creePar.nom } : null,
+  reglements: c.reglements.map((r) => ({
+    id: r.id,
+    montant: r.montant,
+    date: r.date.toISOString(),
+    enregistrePar: r.enregistrePar ? { id: r.enregistrePar.id, nom: r.enregistrePar.nom } : null,
+  })),
 });
 
 const INCLUDE_RELATIONS = {
   client: { select: { id: true, nom: true, typeClient: { select: { nom: true } } } },
   creePar: { select: { id: true, nom: true } },
+  reglements: {
+    include: { enregistrePar: { select: { id: true, nom: true } } },
+    orderBy: { date: "asc" },
+  },
 } as const;
 
 // Liste avec filtres : ?typeClientId= (Qualité), ?du=AAAA-MM-JJ, ?au=AAAA-MM-JJ.
@@ -134,6 +154,89 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
     if (e instanceof ErreurClientInconnu) {
       return res.status(400).json({ erreur: "Client inconnu" });
     }
+    next(e);
+  }
+});
+
+// Règlement d'une dette (section 3.4) : le montant s'ajoute au montant reçu,
+// puis dette / avance générée / nouvelle avance sont recalculées avec la même
+// fonction que pour une commande. Le trop-versé devient une avance du client.
+commandesRouter.post("/:id/reglements", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
+  try {
+    const parsed = reglementCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const { montant } = parsed.data;
+
+    const resultat = await prisma.$transaction(
+      async (tx) => {
+        const commande = await tx.commandeClient.findUnique({
+          where: { id: req.params.id },
+          include: { client: true },
+        });
+        if (!commande) return { erreur: 404 as const };
+        if (commande.dette <= 0) return { erreur: 409 as const };
+
+        // Recalcul à périmètre constant : mêmes bacs, même avance utilisée à
+        // l'époque (avanceExistante = avanceUtilisee reproduit brut/àPercevoir
+        // à l'identique) — seul le montant reçu cumulé change.
+        const calcul = calculerCommande({
+          quantiteBacs: commande.quantiteBacs,
+          prixParBac: commande.montantBrut / commande.quantiteBacs,
+          avanceExistante: commande.avanceUtilisee,
+          montantRecu: commande.montantRecu + montant,
+        });
+        const deltaAvance = calcul.avanceGeneree - commande.avanceGeneree;
+
+        await tx.paiementCommande.create({
+          data: {
+            commandeClientId: commande.id,
+            montant,
+            enregistreParId: req.utilisateur!.id,
+          },
+        });
+        const maj = await tx.commandeClient.update({
+          where: { id: commande.id },
+          data: {
+            montantRecu: commande.montantRecu + montant,
+            dette: calcul.dette,
+            avanceGeneree: calcul.avanceGeneree,
+            nouvelleAvance: commande.nouvelleAvance + deltaAvance,
+          },
+          include: INCLUDE_RELATIONS,
+        });
+        await tx.client.update({
+          where: { id: commande.clientId },
+          data: { avanceDisponible: commande.client.avanceDisponible + deltaAvance },
+        });
+        return { commande: maj };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    if ("erreur" in resultat) {
+      return resultat.erreur === 404
+        ? res.status(404).json({ erreur: "Commande introuvable" })
+        : res.status(409).json({ erreur: "Cette commande n'a pas de dette à régler" });
+    }
+
+    const dto = versCommandeDTO(resultat.commande);
+
+    busEvenements.emettreEvenement({
+      type: "REGLEMENT_COMMANDE",
+      module: "COMMANDES",
+      emetteurId: req.utilisateur!.id,
+      evenementRef: dto.id,
+      message:
+        `Règlement de ${formatFc(montant)} sur la commande n°${dto.numero} — ${dto.client.nom}` +
+        (dto.dette > 0 ? ` — dette restante ${formatFc(dto.dette)}` : " — dette soldée") +
+        (dto.avanceGeneree > 0 ? ` — avance générée ${formatFc(dto.avanceGeneree)}` : ""),
+      donnees: { commandeId: dto.id, numero: dto.numero, montant },
+    });
+
+    res.status(201).json({ commande: dto });
+  } catch (e) {
     next(e);
   }
 });

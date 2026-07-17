@@ -19,6 +19,7 @@ enum Module {
   PARAMETRES
   EQUIPE
   RAPPORTS
+  TRAVAILLEURS
 }
 
 enum NiveauAcces {
@@ -58,11 +59,16 @@ model Utilisateur {
   roleId        String
   role          Role     @relation(fields: [roleId], references: [id])
   actif         Boolean  @default(true)
+  // Compte Administrateur principal (max 3 comptes admin : 1 principal + 2
+  // secondaires). Unicité du principal garantie par un index partiel en SQL
+  // (voir migration) ; le workflow d'approbation complet arrive en Phase 10.
+  estAdminPrincipal Boolean @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   notifications Notification[] @relation("NotificationsRecues")
   notificationsEmises Notification[] @relation("NotificationsEmises")
   commandesCreees CommandeClient[]
+  reglementsEnregistres PaiementCommande[]
 }
 
 // Notification métier (section 3.10) : persistée pour le rattrapage hors ligne,
@@ -133,9 +139,25 @@ model CommandeClient {
   creeParId         String
   creePar           Utilisateur @relation(fields: [creeParId], references: [id])
   dateCreation      DateTime    @default(now())
+  reglements        PaiementCommande[]
 
   @@index([clientId])
   @@index([dateCreation])
+}
+
+// Règlement ultérieur d'une dette de commande (section 3.4) : le montant
+// s'ajoute au montant reçu de la commande, dette/avance recalculées avec la
+// même logique qu'à l'enregistrement. Journal conservé (montant, date, auteur).
+model PaiementCommande {
+  id               String         @id @default(cuid())
+  commandeClientId String
+  commandeClient   CommandeClient @relation(fields: [commandeClientId], references: [id], onDelete: Cascade)
+  montant          Int
+  date             DateTime       @default(now())
+  enregistreParId  String
+  enregistrePar    Utilisateur    @relation(fields: [enregistreParId], references: [id])
+
+  @@index([commandeClientId])
 }
 
 // Catalogue produits. Montants en Fc. Le pain est exonéré de TVA (tauxTaxe = 0) ;

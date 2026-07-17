@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, RotateCcw, UserPlus } from "lucide-react";
+import { HandCoins, Plus, RotateCcw, UserPlus } from "lucide-react";
 import {
   calculerCommande,
   formatFc,
@@ -115,6 +115,51 @@ export function CommandesPage() {
     const montantRecu = Number(recu) || 0;
     if (!Number.isInteger(montantRecu) || montantRecu < 0) return setErreurCommande("Montant reçu invalide");
     creerCommande.mutate();
+  }
+
+  // --- Dialogue règlement de dette ----------------------------------------
+  const [commandeARegler, setCommandeARegler] = useState<CommandeDTO | null>(null);
+  const [montantReglement, setMontantReglement] = useState("");
+  const [erreurReglement, setErreurReglement] = useState<string | null>(null);
+
+  const apercuReglement = useMemo(() => {
+    const montant = Number(montantReglement);
+    if (!commandeARegler || !Number.isInteger(montant) || montant < 1) return null;
+    return calculerCommande({
+      quantiteBacs: commandeARegler.quantiteBacs,
+      prixParBac: commandeARegler.montantBrut / commandeARegler.quantiteBacs,
+      avanceExistante: commandeARegler.avanceUtilisee,
+      montantRecu: commandeARegler.montantRecu + montant,
+    });
+  }, [commandeARegler, montantReglement]);
+
+  const enregistrerReglement = useMutation({
+    mutationFn: () =>
+      api(`/api/commandes/${commandeARegler!.id}/reglements`, {
+        method: "POST",
+        body: JSON.stringify({ montant: Number(montantReglement) }),
+      }),
+    onSuccess: () => {
+      setCommandeARegler(null);
+      queryClient.invalidateQueries({ queryKey: ["commandes"] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["commissions"] });
+    },
+    onError: (e) => setErreurReglement(e instanceof Error ? e.message : "Enregistrement impossible"),
+  });
+
+  function ouvrirReglement(c: CommandeDTO) {
+    setCommandeARegler(c);
+    setMontantReglement("");
+    setErreurReglement(null);
+  }
+
+  function soumettreReglement(e: FormEvent) {
+    e.preventDefault();
+    setErreurReglement(null);
+    const montant = Number(montantReglement);
+    if (!Number.isInteger(montant) || montant < 1) return setErreurReglement("Montant invalide (Fc entier positif)");
+    enregistrerReglement.mutate();
   }
 
   // --- Dialogue nouveau client --------------------------------------------
@@ -242,6 +287,7 @@ export function CommandesPage() {
                   <TableHead className="text-right">Dette</TableHead>
                   <TableHead className="text-right">Avance générée</TableHead>
                   <TableHead className="text-right">Nouvelle avance</TableHead>
+                  {editable && <TableHead className="w-20 text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -283,11 +329,26 @@ export function CommandesPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right font-medium">{formatFc(c.nouvelleAvance)}</TableCell>
+                    {editable && (
+                      <TableCell className="text-right">
+                        {c.dette > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => ouvrirReglement(c)}
+                            className="gap-1 border-terracotta/40 text-terracotta hover:bg-terracotta/10 hover:text-terracotta"
+                          >
+                            <HandCoins className="h-3.5 w-3.5" />
+                            Régler
+                          </Button>
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
                 {data.commandes.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={12} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={editable ? 13 : 12} className="py-8 text-center text-muted-foreground">
                       Aucune commande pour ces critères.
                     </TableCell>
                   </TableRow>
@@ -425,6 +486,87 @@ export function CommandesPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialogue règlement de dette */}
+      <Dialog open={!!commandeARegler} onOpenChange={(o) => !o && setCommandeARegler(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Régler la commande n°{commandeARegler?.numero} — {commandeARegler?.client.nom}
+            </DialogTitle>
+            <DialogDescription>
+              Le montant s'ajoute au montant reçu ; dette et avance sont recalculées automatiquement.
+            </DialogDescription>
+          </DialogHeader>
+          {commandeARegler && (
+            <form onSubmit={soumettreReglement} className="space-y-4">
+              <div className="flex items-center justify-between rounded-lg bg-terracotta/10 px-3 py-2 text-sm">
+                <span className="font-medium text-terracotta">Dette actuelle</span>
+                <span className="font-bold text-terracotta">{formatFc(commandeARegler.dette)}</span>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reglement-montant">Montant du règlement (Fc)</Label>
+                <Input
+                  id="reglement-montant"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={montantReglement}
+                  onChange={(e) => setMontantReglement(e.target.value)}
+                  placeholder={String(commandeARegler.dette)}
+                  autoFocus
+                  required
+                />
+              </div>
+
+              {apercuReglement && (
+                <div className="rounded-lg border border-or/40 bg-or/5 p-3 text-sm">
+                  <div className="flex justify-between">
+                    <span>Nouvelle dette</span>
+                    <span className={apercuReglement.dette > 0 ? "font-medium text-terracotta" : "font-medium"}>
+                      {apercuReglement.dette > 0 ? formatFc(apercuReglement.dette) : "0 Fc — soldée"}
+                    </span>
+                  </div>
+                  {apercuReglement.avanceGeneree > 0 && (
+                    <div className="flex justify-between font-medium text-or">
+                      <span>Avance générée pour le client</span>
+                      <span>+ {formatFc(apercuReglement.avanceGeneree)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {commandeARegler.reglements.length > 0 && (
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground">Règlements précédents</p>
+                  {commandeARegler.reglements.map((r) => (
+                    <p key={r.id}>
+                      {formatDate(r.date)} — {formatFc(r.montant)}
+                      {r.enregistrePar ? ` (par ${r.enregistrePar.nom})` : ""}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {erreurReglement && (
+                <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
+                  {erreurReglement}
+                </p>
+              )}
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setCommandeARegler(null)}>
+                  Annuler
+                </Button>
+                <Button type="submit" variant="cta" disabled={enregistrerReglement.isPending}>
+                  Enregistrer le règlement
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 

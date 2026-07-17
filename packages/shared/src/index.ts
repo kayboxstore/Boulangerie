@@ -14,6 +14,7 @@ export const MODULES = [
   "PARAMETRES",
   "EQUIPE",
   "RAPPORTS",
+  "TRAVAILLEURS",
 ] as const;
 
 export type Module = (typeof MODULES)[number];
@@ -28,6 +29,7 @@ export const MODULE_LABELS: Record<Module, string> = {
   PARAMETRES: "Paramètres",
   EQUIPE: "Équipe & droits d'accès",
   RAPPORTS: "Tableau de bord & rapports",
+  TRAVAILLEURS: "Travailleurs",
 };
 
 export const NIVEAUX_ACCES = ["AUCUN", "LECTURE", "ECRITURE"] as const;
@@ -103,6 +105,7 @@ export const TYPES_EVENEMENT = [
   "NOUVELLE_VENTE",
   "CLOTURE_CAISSE",
   "NOUVELLE_COMMANDE",
+  "REGLEMENT_COMMANDE",
   "ALERTE_STOCK",
   "MOUVEMENT_STOCK",
   "RECEPTION_FOURNISSEUR",
@@ -192,6 +195,13 @@ export interface ClientDTO {
   avanceDisponible: number;
 }
 
+export interface ReglementDTO {
+  id: string;
+  montant: number;
+  date: string;
+  enregistrePar: { id: string; nom: string } | null;
+}
+
 export interface CommandeDTO {
   id: string;
   numero: number;
@@ -207,7 +217,15 @@ export interface CommandeDTO {
   avanceGeneree: number;
   nouvelleAvance: number;
   creePar: { id: string; nom: string } | null;
+  reglements: ReglementDTO[];
 }
+
+// Règlement ultérieur d'une dette (section 3.4) : le montant s'ajoute au
+// montant reçu, dette et avances recalculées via calculerCommande().
+export const reglementCreateSchema = z.object({
+  montant: z.number().int("Montant en Fc entier").min(1, "Le montant doit être positif"),
+});
+export type ReglementCreateInput = z.infer<typeof reglementCreateSchema>;
 
 /** Ligne du module Commissions (section 3.11) — vue dérivée des commandes Maman. */
 export interface CommissionLigneDTO {
