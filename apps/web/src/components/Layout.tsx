@@ -1,5 +1,17 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { HandCoins, LayoutDashboard, LogOut, ShoppingBasket, Wheat } from "lucide-react";
+import {
+  Factory,
+  HandCoins,
+  LayoutDashboard,
+  LogOut,
+  Package,
+  Settings,
+  ShoppingBasket,
+  ShoppingCart,
+  Truck,
+  Users,
+  Wheat,
+} from "lucide-react";
 import type { Module } from "@lomoto/shared";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -7,16 +19,41 @@ import { Badge } from "@/components/ui/badge";
 import { IndicateurConnexion, NotificationBell } from "@/components/NotificationBell";
 import { cn } from "@/lib/utils";
 
-const navigation: { to: string; label: string; icon: typeof LayoutDashboard; module?: Module }[] = [
+// Règle d'interface (spec section 2) : TOUS les modules apparaissent dans le
+// menu pour tout le monde ; ceux hors du périmètre du rôle connecté (ou pas
+// encore construits) restent visibles mais grisés/non cliquables.
+interface EntreeNav {
+  label: string;
+  icon: typeof LayoutDashboard;
+  module?: Module; // absent = accessible à tous (Tableau de bord, catalogue Produits)
+  to?: string; // absent = module pas encore construit ("à venir")
+}
+
+const navigation: EntreeNav[] = [
   { to: "/", label: "Tableau de bord", icon: LayoutDashboard },
+  { to: "/caisse", label: "Caisse", icon: ShoppingCart, module: "CAISSE" },
   { to: "/commandes", label: "Commandes", icon: ShoppingBasket, module: "COMMANDES" },
   { to: "/commissions", label: "Commissions", icon: HandCoins, module: "COMMISSIONS" },
+  { label: "Stocks", icon: Package, module: "STOCKS" },
+  { label: "Production", icon: Factory, module: "PRODUCTION" },
+  { label: "Fournisseurs", icon: Truck, module: "FOURNISSEURS" },
   { to: "/produits", label: "Produits", icon: Wheat },
+  { label: "Travailleurs", icon: Users, module: "TRAVAILLEURS" },
+  { label: "Paramètres", icon: Settings, module: "PARAMETRES" },
 ];
 
 export function Layout() {
   const { utilisateur, logout, peutLire } = useAuth();
-  const liens = navigation.filter((n) => !n.module || peutLire(n.module));
+
+  const liens = navigation.map((n) => {
+    const aPermission = !n.module || peutLire(n.module);
+    const construit = !!n.to;
+    return {
+      ...n,
+      actif: aPermission && construit,
+      motif: !aPermission ? "Hors de votre périmètre" : !construit ? "Module à venir" : undefined,
+    };
+  });
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -34,25 +71,40 @@ export function Layout() {
           </div>
         </div>
 
-        <nav className="flex-1 space-y-1 px-3 py-4">
-          {liens.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/"}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-or/15 text-or"
-                    : "text-creme/70 hover:bg-creme/5 hover:text-creme",
-                )
-              }
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </NavLink>
-          ))}
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+          {liens.map(({ to, label, icon: Icon, actif, motif }) =>
+            actif ? (
+              <NavLink
+                key={label}
+                to={to!}
+                end={to === "/"}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-or/15 text-or"
+                      : "text-creme/70 hover:bg-creme/5 hover:text-creme",
+                  )
+                }
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </NavLink>
+            ) : (
+              <span
+                key={label}
+                aria-disabled="true"
+                title={motif}
+                className="flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-creme/25"
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+                {motif === "Module à venir" && (
+                  <span className="ml-auto rounded bg-creme/10 px-1.5 py-0.5 text-[10px] text-creme/40">à venir</span>
+                )}
+              </span>
+            ),
+          )}
         </nav>
 
         <div className="border-t border-creme/10 px-5 py-4">
@@ -87,21 +139,32 @@ export function Layout() {
 
         {/* Navigation mobile */}
         <nav className="flex gap-1 overflow-x-auto border-b bg-card px-2 py-1 md:hidden">
-          {liens.map(({ to, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/"}
-              className={({ isActive }) =>
-                cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium",
-                  isActive ? "bg-secondary text-foreground" : "text-muted-foreground",
-                )
-              }
-            >
-              {label}
-            </NavLink>
-          ))}
+          {liens.map(({ to, label, actif, motif }) =>
+            actif ? (
+              <NavLink
+                key={label}
+                to={to!}
+                end={to === "/"}
+                className={({ isActive }) =>
+                  cn(
+                    "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
+                    isActive ? "bg-secondary text-foreground" : "text-muted-foreground",
+                  )
+                }
+              >
+                {label}
+              </NavLink>
+            ) : (
+              <span
+                key={label}
+                aria-disabled="true"
+                title={motif}
+                className="cursor-not-allowed whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground/40"
+              >
+                {label}
+              </span>
+            ),
+          )}
         </nav>
 
         {/* Barre supérieure (desktop) : statut temps réel + notifications */}

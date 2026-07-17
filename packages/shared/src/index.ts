@@ -104,6 +104,7 @@ export const TYPES_EVENEMENT = [
   "TEST",
   "NOUVELLE_VENTE",
   "CLOTURE_CAISSE",
+  "TRANSACTION_INHABITUELLE",
   "NOUVELLE_COMMANDE",
   "REGLEMENT_COMMANDE",
   "ALERTE_STOCK",
@@ -113,6 +114,8 @@ export const TYPES_EVENEMENT = [
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
+export type PrioriteNotification = "NORMALE" | "HAUTE";
+
 export interface NotificationDTO {
   id: string;
   type: TypeEvenement;
@@ -120,6 +123,7 @@ export interface NotificationDTO {
   message: string;
   evenementRef: string | null;
   donnees: unknown;
+  priorite: PrioriteNotification;
   lu: boolean;
   dateCreation: string;
   emetteur: { id: string; nom: string; roleNom: string } | null;
@@ -245,6 +249,69 @@ export interface CommissionLigneDTO {
  */
 export function montantTotalPaye(commande: { dette: number; montantBrut: number; montantRecu: number }): number {
   return commande.dette === 0 ? commande.montantBrut : commande.montantRecu;
+}
+
+// ---------------------------------------------------------------------------
+// Caisse (section 3.1)
+// ---------------------------------------------------------------------------
+
+export const MOYENS_PAIEMENT = ["ESPECES", "MOBILE_MONEY", "CARTE"] as const;
+export type MoyenPaiement = (typeof MOYENS_PAIEMENT)[number];
+
+export const MOYEN_PAIEMENT_LABELS: Record<MoyenPaiement, string> = {
+  ESPECES: "Espèces",
+  MOBILE_MONEY: "Mobile money",
+  CARTE: "Carte bancaire",
+};
+
+// Clé du seuil (en Fc) déclenchant l'alerte transaction inhabituelle (3.10).
+// Stocké dans ParametreBoutique — valeur par défaut 100 000 Fc, modifiable
+// plus tard par l'Admin dans les Paramètres.
+export const CLE_SEUIL_ALERTE_TRANSACTION = "seuil_alerte_transaction";
+
+export const venteCreateSchema = z.object({
+  moyenPaiement: z.enum(MOYENS_PAIEMENT),
+  lignes: z
+    .array(
+      z.object({
+        produitId: z.string().min(1),
+        quantite: z.number().int().min(1, "Quantité invalide"),
+      }),
+    )
+    .min(1, "Le panier est vide"),
+});
+export type VenteCreateInput = z.infer<typeof venteCreateSchema>;
+
+export interface LigneVenteDTO {
+  id: string;
+  produitId: string;
+  produitNom: string;
+  quantite: number;
+  prixUnitaire: number;
+  tauxTaxe: number;
+}
+
+export interface VenteDTO {
+  id: string;
+  numero: number;
+  date: string;
+  vendeur: { id: string; nom: string } | null;
+  total: number;
+  totalTaxe: number;
+  moyenPaiement: MoyenPaiement;
+  clotureId: string | null;
+  lignes: LigneVenteDTO[];
+}
+
+export interface ClotureCaisseDTO {
+  id: string;
+  date: string;
+  caissier: { id: string; nom: string } | null;
+  nombreVentes: number;
+  totalVentes: number;
+  totalEspeces: number;
+  totalMobileMoney: number;
+  totalCarte: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -31,6 +31,7 @@ notificationsRouter.get("/", async (req, res, next) => {
       message: n.message,
       evenementRef: n.evenementRef,
       donnees: n.donnees,
+      priorite: n.priorite,
       lu: n.lu,
       dateCreation: n.dateCreation.toISOString(),
       emetteur: n.emetteur ? { id: n.emetteur.id, nom: n.emetteur.nom, roleNom: n.emetteur.role.nom } : null,

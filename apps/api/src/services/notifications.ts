@@ -46,6 +46,7 @@ function versDTO(n: Notification, emetteur: (Utilisateur & { role: { nom: string
     message: n.message,
     evenementRef: n.evenementRef,
     donnees: n.donnees,
+    priorite: n.priorite,
     lu: n.lu,
     dateCreation: n.dateCreation.toISOString(),
     emetteur: emetteur ? { id: emetteur.id, nom: emetteur.nom, roleNom: emetteur.role.nom } : null,
@@ -70,6 +71,9 @@ export async function publierEvenement(evenement: EvenementMetier): Promise<Noti
       roleId: { in: [...roleIds] },
       actif: true,
       id: { not: emetteur.id },
+      ...(evenement.restreindreAuxRoles
+        ? { role: { nom: { in: evenement.restreindreAuxRoles } } }
+        : {}),
     },
     select: { id: true },
   });
@@ -91,6 +95,7 @@ export async function publierEvenement(evenement: EvenementMetier): Promise<Noti
         evenementRef: evenement.evenementRef ?? null,
         message,
         donnees: evenement.donnees === undefined ? undefined : (evenement.donnees as object),
+        priorite: evenement.priorite ?? "NORMALE",
       },
     });
     const dto = versDTO(notification, emetteur);

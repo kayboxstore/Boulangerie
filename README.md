@@ -2,7 +2,7 @@
 
 Application web de gestion pour la Boulangerie Lomoto : caisse, stocks, production, commandes clients, fournisseurs et pilotage en temps réel. Spécification complète : [docs/spec.md](docs/spec.md).
 
-**Phase actuelle : 3 — Commandes clients & Commissions** (système d'avance/dette porté par le client, calculs automatiques selon la Qualité, module Commissions dérivé des commandes Maman, notifications temps réel branchées sur le socle de la Phase 2).
+**Phase actuelle : 4 — Caisse** (vente au comptoir, pain exonéré de TVA, moyens de paiement espèces/mobile money/carte, clôture journalière, alerte transaction inhabituelle au-dessus du seuil configuré).
 
 ## Structure du monorepo
 
@@ -69,3 +69,6 @@ Le rôle Administrateur peut avoir jusqu'à 3 comptes (1 principal + 2 secondair
 - **Commandes & avances** (section 3.4 de la spec) : à l'enregistrement, `brut = bacs × prix de la Qualité`, l'avance du client est déduite en premier (`montantAPercevoir = brut − avanceUtilisee`), puis `dette = max(0, àPercevoir − reçu)` et `avanceGeneree = max(0, reçu − àPercevoir)` ; le solde d'avance est porté par le **client** et se reporte d'une commande à l'autre. Calcul dans `calculerCommande()` (`@lomoto/shared`), partagé entre l'API (transaction Serializable) et l'aperçu du formulaire. Seul le Chargé des commandes enregistre (matrice stricte) ; Caissière et DG consultent.
 - **Commissions** (section 3.11) : vue dérivée des commandes dont la Qualité a `commissionParBac > 0` (les « Mamans »). `Montant total payé = brut si dette = 0, sinon montant reçu` ; `commission = bacs × 1 650 Fc`. Lecture seule Caissière + DG + Chargé des commandes.
 - **Règlement de dette** : `POST /api/commandes/:id/reglements` (écriture Commandes) — le montant s'ajoute au montant reçu, dette/avance recalculées via `calculerCommande()`, journal dans `PaiementCommande`, notification temps réel `REGLEMENT_COMMANDE`. Un trop-versé devient une avance du client.
+- **Caisse** (section 3.1) : `POST /api/caisse/ventes` (écriture Caisse) — prix et taux de taxe lus en base, jamais depuis le client ; pain exonéré (`tauxTaxe = 0`). `POST /api/caisse/cloture` fige les ventes ouvertes avec totaux par moyen de paiement.
+- **Alerte transaction inhabituelle** (section 3.10) : toute vente ou tout règlement dépassant le seuil (`ParametreBoutique.seuil_alerte_transaction`, 100 000 Fc par défaut, modifiable en base) déclenche une notification `TRANSACTION_INHABITUELLE` **priorité HAUTE**, dédiée au DG, visuellement distincte dans le feed.
+- **Menu** : tous les modules sont listés pour tous les rôles ; ceux hors permission ou pas encore construits apparaissent grisés/non cliquables (règle d'interface, spec section 2).

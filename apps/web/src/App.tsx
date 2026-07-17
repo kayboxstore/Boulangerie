@@ -8,6 +8,7 @@ import { DashboardPage } from "@/pages/Dashboard";
 import { ProduitsPage } from "@/pages/Produits";
 import { CommandesPage } from "@/pages/Commandes";
 import { CommissionsPage } from "@/pages/Commissions";
+import { CaissePage } from "@/pages/Caisse";
 
 /** Garde d'accès : exige au moins la lecture sur `module`, sinon retour à l'accueil. */
 function RequiertLecture({ module, children }: { module: Module; children: ReactNode }) {
@@ -43,6 +44,14 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/produits" element={<ProduitsPage />} />
+        <Route
+          path="/caisse"
+          element={
+            <RequiertLecture module="CAISSE">
+              <CaissePage />
+            </RequiertLecture>
+          }
+        />
         <Route
           path="/commandes"
           element={

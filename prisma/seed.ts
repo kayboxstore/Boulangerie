@@ -188,6 +188,15 @@ async function main() {
     }
   }
 
+  // --- Paramètres de la boutique (section 3.9) ---
+  // Seuil d'alerte transaction inhabituelle (3.10) : 100 000 Fc par défaut,
+  // modifiable ensuite par l'Admin dans les Paramètres.
+  await prisma.parametreBoutique.upsert({
+    where: { cle: "seuil_alerte_transaction" },
+    update: {},
+    create: { cle: "seuil_alerte_transaction", valeur: "100000" },
+  });
+
   // --- Catalogue produits initial (pain — exonéré de TVA, tauxTaxe = 0) ---
   const produits = [
     { nom: "Pain bac (standard)", prixVente: 4100, categorie: "Pain" },

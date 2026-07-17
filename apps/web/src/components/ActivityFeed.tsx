@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { BellRing } from "lucide-react";
+import { AlertTriangle, BellRing } from "lucide-react";
 import type { NotificationDTO } from "@lomoto/shared";
 import { MODULE_LABELS } from "@lomoto/shared";
 import { Badge } from "@/components/ui/badge";
@@ -55,22 +55,39 @@ export function ActivityFeed({ notifications, onMarquerLue, vide, compact }: Act
               onClick={() => !n.lu && onMarquerLue?.(n.id)}
               className={cn(
                 "w-full rounded-lg border p-3 text-left transition-colors",
-                n.lu
-                  ? "border-transparent bg-transparent hover:bg-secondary/40"
-                  : "border-or/40 bg-or/10 hover:bg-or/15",
+                n.priorite === "HAUTE"
+                  ? n.lu
+                    ? "border-terracotta/30 bg-terracotta/5 hover:bg-terracotta/10"
+                    : "border-terracotta bg-terracotta/15 shadow-sm hover:bg-terracotta/20"
+                  : n.lu
+                    ? "border-transparent bg-transparent hover:bg-secondary/40"
+                    : "border-or/40 bg-or/10 hover:bg-or/15",
               )}
             >
               <div className="flex items-start gap-2">
-                <span
-                  aria-hidden
-                  className={cn(
-                    "mt-1.5 h-2 w-2 shrink-0 rounded-full",
-                    n.lu ? "bg-beige" : "bg-terracotta",
-                  )}
-                />
+                {n.priorite === "HAUTE" ? (
+                  <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-terracotta" />
+                ) : (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                      n.lu ? "bg-beige" : "bg-terracotta",
+                    )}
+                  />
+                )}
                 <div className="min-w-0 flex-1">
-                  <p className={cn("text-sm leading-snug", !n.lu && "font-medium")}>{n.message}</p>
+                  <p
+                    className={cn(
+                      "text-sm leading-snug",
+                      !n.lu && "font-medium",
+                      n.priorite === "HAUTE" && "text-terracotta dark:text-creme",
+                    )}
+                  >
+                    {n.message}
+                  </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    {n.priorite === "HAUTE" && <Badge variant="destructive">Priorité haute</Badge>}
                     <Badge variant="secondary" className="font-normal">
                       {MODULE_LABELS[n.module]}
                     </Badge>

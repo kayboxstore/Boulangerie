@@ -7,6 +7,7 @@ import { notificationsRouter } from "./routes/notifications.js";
 import { clientsRouter, typeClientsRouter } from "./routes/clients.js";
 import { commandesRouter } from "./routes/commandes.js";
 import { commissionsRouter } from "./routes/commissions.js";
+import { caisseRouter } from "./routes/caisse.js";
 
 export function createApp() {
   const app = express();
@@ -26,6 +27,7 @@ export function createApp() {
   app.use("/api/type-clients", typeClientsRouter);
   app.use("/api/commandes", commandesRouter);
   app.use("/api/commissions", commissionsRouter);
+  app.use("/api/caisse", caisseRouter);
 
   // Gestion d'erreurs centralisée
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -81,6 +81,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ["commissions"] });
         queryClient.invalidateQueries({ queryKey: ["clients"] });
       }
+      if (notification.module === "CAISSE") {
+        queryClient.invalidateQueries({ queryKey: ["ventes"] });
+        queryClient.invalidateQueries({ queryKey: ["clotures"] });
+      }
     });
 
     return () => {

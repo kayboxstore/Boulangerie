@@ -10,6 +10,7 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
+import { seuilAlerteTransaction } from "../lib/parametres.js";
 
 export const commandesRouter = Router();
 
@@ -234,6 +235,22 @@ commandesRouter.post("/:id/reglements", requirePermission("COMMANDES", "ECRITURE
         (dto.avanceGeneree > 0 ? ` — avance générée ${formatFc(dto.avanceGeneree)}` : ""),
       donnees: { commandeId: dto.id, numero: dto.numero, montant },
     });
+
+    // Alerte transaction inhabituelle (3.10) : un règlement au-dessus du
+    // seuil déclenche l'alerte dédiée au DG, comme une vente en caisse.
+    const seuil = await seuilAlerteTransaction();
+    if (montant > seuil) {
+      busEvenements.emettreEvenement({
+        type: "TRANSACTION_INHABITUELLE",
+        module: "COMMANDES",
+        emetteurId: req.utilisateur!.id,
+        evenementRef: dto.id,
+        priorite: "HAUTE",
+        restreindreAuxRoles: ["Directeur Général"],
+        message: `⚠ Transaction inhabituelle : règlement de ${formatFc(montant)} sur la commande n°${dto.numero} — au-dessus du seuil de ${formatFc(seuil)}`,
+        donnees: { commandeId: dto.id, numero: dto.numero, montant, seuil },
+      });
+    }
 
     res.status(201).json({ commande: dto });
   } catch (e) {
