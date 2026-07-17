@@ -213,7 +213,7 @@ Historique **immuable** de toute modification ou suppression (pas seulement les 
 - En tant que Caissier(ère), je veux que la TVA soit calculée automatiquement selon le type de vente (sur place/à emporter).
 
 **Stocks**
-- En tant que Chargé du stock, je veux être alerté quand une matière première passe sous le seuil critique pour anticiper la commande fournisseur.
+- En tant que Responsable Stock/Achats et Fournisseurs, je veux être alerté quand une matière première passe sous le seuil critique pour anticiper la commande fournisseur.
 
 **Production**
 - En tant que Responsable de production, je veux voir le planning de production du jour basé sur les commandes et l'historique de vente.
@@ -230,7 +230,7 @@ Historique **immuable** de toute modification ou suppression (pas seulement les 
 **Hiérarchie & temps réel**
 - En tant que Chargé des commandes, je veux voir apparaître instantanément une commande enregistrée par un Caissier(ère) pour la valider sans délai.
 - En tant que Directeur Général, je veux voir en temps réel tous les événements clés (commandes, stock, ventes) sans avoir à rafraîchir la page.
-- En tant que Chargé du stock, je veux que mon supérieur soit notifié immédiatement quand je signale une rupture pour qu'il puisse arbitrer rapidement.
+- En tant que Responsable Stock/Achats et Fournisseurs, je veux que le DG soit notifié immédiatement quand je signale une rupture pour qu'il puisse arbitrer rapidement.
 
 ## 6. Modèle de données (entités principales)
 
@@ -359,7 +359,7 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 **Alerte stock**
 - Étant donné une matière première dont le stock passe sous le seuil défini
 - Quand le stock est mis à jour
-- Alors une alerte apparaît en temps réel chez le Chargé du stock et le Responsable Fournisseurs/achats
+- Alors une alerte apparaît en temps réel chez le DG (supérieur direct du Responsable Stock/Achats et Fournisseurs, qui a émis l'événement et est donc exclu de sa propre notification)
 
 **Notification temps réel — nouvelle commande**
 - Étant donné qu'un Caissier(ère) enregistre une nouvelle commande client
