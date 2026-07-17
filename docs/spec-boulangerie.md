@@ -49,12 +49,41 @@ Suivi des quantités (farine, beurre, sucre, etc.), mouvements de stock (entrée
 Fiches recettes (ingrédients + quantités), planning de production journalier, décrémentation automatique du stock de matières premières à la production.
 
 ### 3.4 Commandes clients
-Trois catégories de clients avec tarification et commission propres, configurées dans les Paramètres :
+
+**Types de clients** ("Qualité" dans l'app), configurés dans les Paramètres :
 - **Dépositaires** : prix par bac 4.100 Fc, pas de commission
-- **Vente cash (VC)** : prix par bac 4.350 Fc, pas de commission *(à confirmer — voir Questions ouvertes)*
+- **Vente cash (VC)** : prix par bac 4.350 Fc, pas de commission *(hypothèse — voir Questions ouvertes)*
 - **Mamans** : prix par bac 6.000 Fc, commission de 1.650 Fc/bac (27,5 %)
 
-À l'enregistrement d'une commande, le prix total et la commission éventuelle sont **calculés automatiquement** selon le type du client et le nombre de bacs — aucune saisie manuelle. La liste des types de clients (prix/commission) est extensible pour ajouter d'autres catégories plus tard.
+**Champs d'une commande** (numérotation automatique, date) :
+
+| # | Champ | Calcul |
+|---|---|---|
+| 1 | N° commande | Auto-incrémenté |
+| 2 | Date | — |
+| 3 | Nom du client | — |
+| 4 | Qualité | Dépositaire / Maman / VC |
+| 5 | Nombre de bacs reçus | Saisi |
+| 6 | **Montant à percevoir** | `(bacs × prix unitaire) − Avance utilisée` *(l'avance du client est déduite automatiquement AVANT affichage — voir exemple)* |
+| 7 | Montant reçu | Saisi |
+| 8 | **Dette** | `max(0, Montant à percevoir − Montant reçu)` |
+| 9 | **Avance disponible** (générée par cette commande) | `max(0, Montant reçu − Montant à percevoir)` |
+| 10 | **Avance utilisée** | `min(avance existante du client, bacs × prix unitaire)` — déduite en premier, avant le champ 6 |
+| 11 | **Nouvelle avance** (balance client) | `(avance existante − Avance utilisée) + Avance disponible` |
+
+**Exemple confirmé (client Maman, 6.000 Fc/bac) :**
+
+| | Bacs | Brut (bacs×prix) | Avance utilisée | Montant à percevoir | Reçu | Dette | Avance générée | Nouvelle avance |
+|---|---|---|---|---|---|---|---|---|
+| Commande #1 | 3 | 18.000 | 0 | 18.000 | 20.000 | 0 | 2.000 | **2.000** |
+| Commande #2 (lendemain) | 5 | 30.000 | 2.000 | **28.000** | 28.000 | 0 | 0 | **0** |
+
+Le solde d'avance est porté par le **client** (pas par la commande) et se reporte automatiquement d'une commande à l'autre.
+
+**Filtres & affichage :**
+- Filtre par Qualité (Dépositaire / Maman / VC)
+- Filtre/tri par date
+- Bouton "Tout afficher"
 
 Couvre aussi les commandes spéciales (gâteaux personnalisés, événements) avec acompte, date de retrait/livraison, statut (en attente/en préparation/prête/livrée).
 
@@ -92,7 +121,19 @@ Catalogue produits, prix, taxes, informations boutique, gestion des rôles/hiér
 Quand un événement clé est enregistré (nouvelle commande client, alerte stock bas, nouvelle vente/clôture de caisse, réception fournisseur), une notification s'affiche **instantanément** chez le(s) supérieur(s) hiérarchique(s) concerné(s), sans rechargement de page. Portée : commandes, stock et ventes.
 
 ### 3.11 Commissions
-Calcul **automatique** à l'enregistrement de chaque commande, selon le type de client (section 3.4) — aucune saisie manuelle. Exemple (Boulangerie Lomoto) : commande d'une Maman → commission de 1.650 Fc/bac générée automatiquement ; commande d'un Dépositaire → 0 Fc. Visible en lecture seule par le Caissier(ère) et le DG.
+Vue dédiée aux commandes de type **Maman** (les seules à générer une commission). Calcul **automatique** — aucune saisie manuelle. Visible en lecture seule par le Caissier(ère) et le DG.
+
+**Champs :**
+| # | Champ | Calcul |
+|---|---|---|
+| 1 | N° | Auto-incrémenté |
+| 2 | Date | — |
+| 3 | Nom du client | — |
+| 4 | Nombre de bacs reçus | — |
+| 5 | Montant total payé | Si Dette de la commande = 0 → `bacs × prix unitaire` (brut, considéré payé à 100% même si une partie vient de l'avance) ; sinon → `Montant reçu` (le montant partiel effectivement remis) |
+| 6 | Commission disponible | `bacs × 1.650 Fc` |
+
+**Filtres & affichage :** tri/filtre par date, bouton "Tout afficher".
 
 ## 4. Hors périmètre (v1)
 
@@ -145,8 +186,8 @@ MouvementStock (id, matierePremiereId, type, quantité, date, référence)
 Fournisseur (id, nom, contact)
 CommandeFournisseur (id, fournisseurId, statut, date)
 LigneCommandeFournisseur (commandeId, matierePremiereId, quantité, prixUnitaire)
-Client (id, nom, téléphone, typeClientId, pointsFidélité)
-CommandeClient (id, clientId, quantitéBacs, montantTotal, statut, dateRetrait, acompte, créePar)
+Client (id, nom, téléphone, typeClientId, avanceDisponible, pointsFidélité)   # avanceDisponible = solde reporté d'une commande à l'autre
+CommandeClient (id, numero, clientId, quantitéBacs, montantBrut, avanceUtilisee, montantAPercevoir, montantRecu, dette, avanceGeneree, statut, dateRetrait, créePar)
 Vente (id, date, vendeurId, total, moyenPaiement)
 LigneVente (venteId, produitId, quantité, prixUnitaire, tauxTaxe)
 ```
@@ -189,13 +230,14 @@ bakery-app/
 
 Le périmètre v1 est complet, mais Claude Code construira plus efficacement dans cet ordre logique (dépendances techniques, pas de coupe fonctionnelle) :
 
-1. **Fondations** — auth, rôles hiérarchiques, catalogue produits, structure du projet
+1. **Fondations** — auth, rôles hiérarchiques, catalogue produits, structure du projet ✅ *(terminé)*
 2. **Couche temps réel** — WebSocket + système de notifications (socle réutilisé par tous les modules suivants)
-3. **Caisse** — vente, calcul TVA, clôture journalière, notification au supérieur
-4. **Stocks & production** — matières premières, recettes, alertes temps réel
-5. **Clients & commandes spéciales** — notification instantanée au Chargé des commandes
+3. **Commandes clients & Commissions** — système d'avance/dette porté par le client, notification instantanée au Caissier(ère)
+4. **Caisse** — vente, clôture journalière, notification au supérieur
+5. **Stocks & production** — matières premières, recettes, alertes temps réel
 6. **Fournisseurs & achats** — notification de réception
 7. **Tableau de bord & rapports** — vue globale (DG) et vue filtrée (autres rôles)
+8. **Travailleurs & Utilisateurs** — *scope à définir avec le gérant, voir Questions ouvertes (chevauche potentiellement la section 3.7 Équipe déjà couverte, et le "Hors périmètre" RH de la section 4)*
 
 ## 10. Exemples de critères d'acceptation
 
@@ -218,6 +260,26 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - Étant donné une commande pour un client de type Vente cash (4.350 Fc/bac)
 - Quand la commande est enregistrée
 - Alors la commission générée est de 0 Fc *(hypothèse à confirmer)*
+
+**Avance générée — premier trop-perçu**
+- Étant donné un client Maman sans avance qui commande 3 bacs (18.000 Fc) et paie 20.000 Fc
+- Quand la commande est enregistrée
+- Alors Dette = 0, Avance disponible générée = 2.000 Fc, Nouvelle avance du client = 2.000 Fc
+
+**Avance utilisée — commande suivante**
+- Étant donné ce même client (avance de 2.000 Fc) qui commande ensuite 5 bacs (30.000 Fc brut)
+- Quand la commande est enregistrée
+- Alors l'avance de 2.000 Fc est déduite automatiquement en premier, le Montant à percevoir affiché est 28.000 Fc (pas 30.000)
+
+**Commission — Montant payé, commande soldée**
+- Étant donné une commande Maman de 5 bacs (30.000 Fc brut) où le client n'a plus de dette (payée via avance + cash)
+- Quand on consulte le module Commissions
+- Alors "Montant total payé" affiche 30.000 Fc (le brut), pas le montant reçu lors de cette transaction
+
+**Commission — Montant payé, commande partielle**
+- Étant donné une commande Maman où le client devait 30.000 Fc et n'a payé que 25.000 Fc (dette de 5.000 Fc)
+- Quand on consulte le module Commissions
+- Alors "Montant total payé" affiche 25.000 Fc (le montant réellement reçu), et la dette de 5.000 Fc reste visible côté Commandes
 
 **Alerte stock**
 - Étant donné une matière première dont le stock passe sous le seuil défini
@@ -249,6 +311,7 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - Le DG doit-il disposer d'une action exceptionnelle malgré l'accès lecture seule (ex. annuler une vente frauduleuse), ou cela doit-il toujours passer par l'Administrateur ? *(métier)*
 - La catégorie **Vente cash (VC)** génère-t-elle bien 0 Fc de commission, comme les Dépositaires ? *(métier — hypothèse actuelle, à confirmer)*
 - Au-delà de ces 3 types (Dépositaires, Vente cash, Mamans), d'autres catégories sont-elles prévues à terme ? *(métier — n'affecte pas l'architecture, juste la configuration)*
+- Le module "Travailleurs" (section 9, phase 8) recoupe-t-il l'Équipe & droits d'accès (3.7) déjà spécifiée, ou couvre-t-il autre chose (ex. suivi RH, présence) ? Le document exclut actuellement la RH complète (section 4) — à clarifier le moment venu.
 
 ## 12. Prochaines étapes
 

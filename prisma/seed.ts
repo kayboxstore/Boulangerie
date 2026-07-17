@@ -108,6 +108,24 @@ async function main() {
   await upsertUtilisateur("Responsable Fournisseurs", "achats@lomoto.cd", "Responsable Fournisseurs/achats");
   await upsertUtilisateur("Chargé du stock", "stock@lomoto.cd", "Chargé du stock");
 
+  // --- Clients de démonstration (le solde d'avance démarre à 0) ---
+  const clients = [
+    { nom: "Maman Micheline", telephone: "+243 810 000 001", typeClientNom: "Maman" },
+    { nom: "Maman Chantal", telephone: "+243 810 000 002", typeClientNom: "Maman" },
+    { nom: "Dépôt Matonge", telephone: "+243 810 000 003", typeClientNom: "Dépositaire" },
+    { nom: "Dépôt Victoire", telephone: null, typeClientNom: "Dépositaire" },
+    { nom: "Client comptoir", telephone: null, typeClientNom: "Vente cash (VC)" },
+  ];
+  for (const c of clients) {
+    const typeClient = await prisma.typeClient.findUniqueOrThrow({ where: { nom: c.typeClientNom } });
+    const existant = await prisma.client.findFirst({ where: { nom: c.nom } });
+    if (!existant) {
+      await prisma.client.create({
+        data: { nom: c.nom, telephone: c.telephone, typeClientId: typeClient.id },
+      });
+    }
+  }
+
   // --- Catalogue produits initial (pain — exonéré de TVA, tauxTaxe = 0) ---
   const produits = [
     { nom: "Pain bac (standard)", prixVente: 4100, categorie: "Pain" },
@@ -124,7 +142,7 @@ async function main() {
     });
   }
 
-  console.log("Seed terminé — 7 rôles, 3 types de clients, 7 utilisateurs, 5 produits.");
+  console.log("Seed terminé — 7 rôles, 3 types de clients, 7 utilisateurs, 5 clients, 5 produits.");
   console.log(`Mot de passe de démonstration pour tous les comptes : ${MOT_DE_PASSE_DEMO}`);
 }
 

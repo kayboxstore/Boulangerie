@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { io, type Socket } from "socket.io-client";
+import { useQueryClient } from "@tanstack/react-query";
 import type { NotificationDTO, ServerToClientEvents, ClientToServerEvents } from "@lomoto/shared";
 import { api, getToken } from "./api";
 import { useAuth } from "./auth";
@@ -28,6 +29,7 @@ const MAX_FEED = 100;
 
 export function SocketProvider({ children }: { children: ReactNode }) {
   const { utilisateur } = useAuth();
+  const queryClient = useQueryClient();
   const [statut, setStatut] = useState<StatutConnexion>("deconnecte");
   const [notifications, setNotifications] = useState<NotificationDTO[]>([]);
   const [nonLues, setNonLues] = useState(0);
@@ -73,6 +75,12 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       if (!actif) return;
       setNotifications((prev) => [notification, ...prev].slice(0, MAX_FEED));
       setNonLues((prev) => prev + 1);
+      // Rafraîchit les listes concernées par l'événement, sans rechargement.
+      if (notification.module === "COMMANDES") {
+        queryClient.invalidateQueries({ queryKey: ["commandes"] });
+        queryClient.invalidateQueries({ queryKey: ["commissions"] });
+        queryClient.invalidateQueries({ queryKey: ["clients"] });
+      }
     });
 
     return () => {

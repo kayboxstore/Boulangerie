@@ -2,9 +2,7 @@
 
 Application web de gestion pour la Boulangerie Lomoto : caisse, stocks, production, commandes clients, fournisseurs et pilotage en temps réel. Spécification complète : [docs/spec.md](docs/spec.md).
 
-**Phase actuelle : 2 — Couche temps réel** (Socket.io authentifié par JWT, NotificationService routé par la matrice de permissions + hiérarchie, feed d'activité animé, historique + non-lues).
-
-> Route temporaire de test : `POST /api/test/trigger-event` (`{ module, type?, message? }`) simule un événement métier pour valider le routage — **à retirer avant la Phase 3**.
+**Phase actuelle : 3 — Commandes clients & Commissions** (système d'avance/dette porté par le client, calculs automatiques selon la Qualité, module Commissions dérivé des commandes Maman, notifications temps réel branchées sur le socle de la Phase 2).
 
 ## Structure du monorepo
 
@@ -66,3 +64,5 @@ Mot de passe commun : `Lomoto2026!`
 - **TVA** : le pain est exonéré (`tauxTaxe = 0`) ; le taux reste configurable par produit.
 - **Permissions** : matrice rôle × module (`RolePermission`), niveaux `AUCUN | LECTURE | ECRITURE` ; `ECRITURE` implique `LECTURE`. La hiérarchie est portée par `Role.roleParentId` — extensible sans changement de code.
 - **Notifications temps réel** : Socket.io authentifié par JWT (rooms `user:{id}` et `role:{id}`). Destinataires d'un événement = tous les rôles ayant ≥ `LECTURE` sur le module (la matrice encode déjà « le supérieur lit le périmètre de son subordonné », les exceptions du Caissier et le DG) ∪ supérieur direct de l'émetteur — émetteur exclu, Administrateur exclu (aucune permission métier). Chaque notification est persistée (`Notification`) puis poussée ; l'historique (`GET /api/notifications`) permet le rattrapage après déconnexion.
+- **Commandes & avances** (section 3.4 de la spec) : à l'enregistrement, `brut = bacs × prix de la Qualité`, l'avance du client est déduite en premier (`montantAPercevoir = brut − avanceUtilisee`), puis `dette = max(0, àPercevoir − reçu)` et `avanceGeneree = max(0, reçu − àPercevoir)` ; le solde d'avance est porté par le **client** et se reporte d'une commande à l'autre. Calcul dans `calculerCommande()` (`@lomoto/shared`), partagé entre l'API (transaction Serializable) et l'aperçu du formulaire. Seul le Chargé des commandes enregistre (matrice stricte) ; Caissière et DG consultent.
+- **Commissions** (section 3.11) : vue dérivée des commandes dont la Qualité a `commissionParBac > 0` (les « Mamans »). `Montant total payé = brut si dette = 0, sinon montant reçu` ; `commission = bacs × 1 650 Fc`. Lecture seule Caissière + DG.

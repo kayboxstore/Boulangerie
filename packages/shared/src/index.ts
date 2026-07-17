@@ -129,13 +129,105 @@ export interface ServerToClientEvents {
 // Aucun événement client -> serveur pour l'instant (les actions passent par l'API REST).
 export interface ClientToServerEvents {}
 
-// Route de test temporaire (Phase 2) — à retirer avant la Phase 3.
-export const triggerEventSchema = z.object({
-  module: z.enum(MODULES),
-  type: z.enum(TYPES_EVENEMENT).default("TEST"),
-  message: z.string().trim().min(1).max(300).optional(),
+// ---------------------------------------------------------------------------
+// Commandes clients & avances (section 3.4)
+// ---------------------------------------------------------------------------
+
+export const clientCreateSchema = z.object({
+  nom: z.string().trim().min(1, "Le nom est requis").max(120),
+  telephone: z.string().trim().max(30).optional(),
+  typeClientId: z.string().min(1, "La qualité est requise"),
 });
-export type TriggerEventInput = z.infer<typeof triggerEventSchema>;
+export type ClientCreateInput = z.infer<typeof clientCreateSchema>;
+
+export const commandeCreateSchema = z.object({
+  clientId: z.string().min(1, "Le client est requis"),
+  quantiteBacs: z.number().int("Nombre de bacs entier").min(1, "Au moins 1 bac"),
+  montantRecu: z.number().int("Montant en Fc entier").min(0, "Le montant reçu doit être positif"),
+});
+export type CommandeCreateInput = z.infer<typeof commandeCreateSchema>;
+
+export interface CalculCommande {
+  montantBrut: number;
+  avanceUtilisee: number;
+  montantAPercevoir: number;
+  dette: number;
+  avanceGeneree: number;
+  nouvelleAvance: number;
+}
+
+/**
+ * Calcul automatique d'une commande (champs 6, 8, 9, 10, 11 de la section 3.4).
+ * L'avance existante du client est déduite AVANT affichage du montant à
+ * percevoir ; le trop-perçu devient une nouvelle avance portée par le client.
+ */
+export function calculerCommande(params: {
+  quantiteBacs: number;
+  prixParBac: number;
+  avanceExistante: number;
+  montantRecu: number;
+}): CalculCommande {
+  const { quantiteBacs, prixParBac, avanceExistante, montantRecu } = params;
+  const montantBrut = quantiteBacs * prixParBac;
+  const avanceUtilisee = Math.min(avanceExistante, montantBrut);
+  const montantAPercevoir = montantBrut - avanceUtilisee;
+  const dette = Math.max(0, montantAPercevoir - montantRecu);
+  const avanceGeneree = Math.max(0, montantRecu - montantAPercevoir);
+  const nouvelleAvance = avanceExistante - avanceUtilisee + avanceGeneree;
+  return { montantBrut, avanceUtilisee, montantAPercevoir, dette, avanceGeneree, nouvelleAvance };
+}
+
+export interface TypeClientDTO {
+  id: string;
+  nom: string;
+  prixParBac: number;
+  commissionParBac: number;
+}
+
+export interface ClientDTO {
+  id: string;
+  nom: string;
+  telephone: string | null;
+  typeClient: TypeClientDTO;
+  avanceDisponible: number;
+}
+
+export interface CommandeDTO {
+  id: string;
+  numero: number;
+  dateCreation: string;
+  client: { id: string; nom: string };
+  qualite: string;
+  quantiteBacs: number;
+  montantBrut: number;
+  avanceUtilisee: number;
+  montantAPercevoir: number;
+  montantRecu: number;
+  dette: number;
+  avanceGeneree: number;
+  nouvelleAvance: number;
+  creePar: { id: string; nom: string } | null;
+}
+
+/** Ligne du module Commissions (section 3.11) — vue dérivée des commandes Maman. */
+export interface CommissionLigneDTO {
+  commandeId: string;
+  numero: number;
+  dateCreation: string;
+  clientNom: string;
+  quantiteBacs: number;
+  montantTotalPaye: number;
+  commission: number;
+}
+
+/**
+ * « Montant total payé » du module Commissions : si la commande est soldée
+ * (dette = 0), on affiche le brut — payé à 100 % même si une partie vient de
+ * l'avance ; sinon le montant partiel effectivement remis.
+ */
+export function montantTotalPaye(commande: { dette: number; montantBrut: number; montantRecu: number }): number {
+  return commande.dette === 0 ? commande.montantBrut : commande.montantRecu;
+}
 
 // ---------------------------------------------------------------------------
 // Utilitaires

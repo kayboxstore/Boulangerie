@@ -1,18 +1,22 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, LogOut, Wheat } from "lucide-react";
+import { HandCoins, LayoutDashboard, LogOut, ShoppingBasket, Wheat } from "lucide-react";
+import type { Module } from "@lomoto/shared";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { IndicateurConnexion, NotificationBell } from "@/components/NotificationBell";
 import { cn } from "@/lib/utils";
 
-const navigation = [
+const navigation: { to: string; label: string; icon: typeof LayoutDashboard; module?: Module }[] = [
   { to: "/", label: "Tableau de bord", icon: LayoutDashboard },
+  { to: "/commandes", label: "Commandes", icon: ShoppingBasket, module: "COMMANDES" },
+  { to: "/commissions", label: "Commissions", icon: HandCoins, module: "COMMISSIONS" },
   { to: "/produits", label: "Produits", icon: Wheat },
 ];
 
 export function Layout() {
-  const { utilisateur, logout } = useAuth();
+  const { utilisateur, logout, peutLire } = useAuth();
+  const liens = navigation.filter((n) => !n.module || peutLire(n.module));
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -31,7 +35,7 @@ export function Layout() {
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {navigation.map(({ to, label, icon: Icon }) => (
+          {liens.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -82,8 +86,8 @@ export function Layout() {
         </header>
 
         {/* Navigation mobile */}
-        <nav className="flex gap-1 border-b bg-card px-2 py-1 md:hidden">
-          {navigation.map(({ to, label }) => (
+        <nav className="flex gap-1 overflow-x-auto border-b bg-card px-2 py-1 md:hidden">
+          {liens.map(({ to, label }) => (
             <NavLink
               key={to}
               to={to}

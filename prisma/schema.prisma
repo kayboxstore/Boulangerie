@@ -62,6 +62,7 @@ model Utilisateur {
   updatedAt     DateTime @updatedAt
   notifications Notification[] @relation("NotificationsRecues")
   notificationsEmises Notification[] @relation("NotificationsEmises")
+  commandesCreees CommandeClient[]
 }
 
 // Notification métier (section 3.10) : persistée pour le rattrapage hors ligne,
@@ -85,15 +86,56 @@ model Notification {
   @@index([destinataireId, dateCreation])
 }
 
-// Types de clients avec tarification et commission par bac (montants en Fc).
+// Types de clients — la « Qualité » dans l'app (section 3.4) — avec
+// tarification et commission par bac (montants en Fc).
 // Dépositaire (4100, 0), Vente cash (4350, 0), Maman (6000, 1650).
 model TypeClient {
   id               String   @id @default(cuid())
   nom              String   @unique
   prixParBac       Int
   commissionParBac Int      @default(0)
+  clients          Client[]
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+// Le solde d'avance est porté par le client (pas par la commande) et se
+// reporte automatiquement d'une commande à l'autre (section 3.4).
+model Client {
+  id               String           @id @default(cuid())
+  nom              String
+  telephone        String?
+  typeClientId     String
+  typeClient       TypeClient       @relation(fields: [typeClientId], references: [id])
+  avanceDisponible Int              @default(0)
+  pointsFidelite   Int              @default(0)
+  commandes        CommandeClient[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+// Commande client (section 3.4). Tous les montants sont figés à
+// l'enregistrement (en Fc) ; nouvelleAvance est le solde du client juste
+// après cette commande (photographie, pour afficher le champ 11 de la spec).
+model CommandeClient {
+  id                String      @id @default(cuid())
+  numero            Int         @unique @default(autoincrement())
+  clientId          String
+  client            Client      @relation(fields: [clientId], references: [id])
+  quantiteBacs      Int
+  montantBrut       Int
+  avanceUtilisee    Int
+  montantAPercevoir Int
+  montantRecu       Int
+  dette             Int
+  avanceGeneree     Int
+  nouvelleAvance    Int
+  creeParId         String
+  creePar           Utilisateur @relation(fields: [creeParId], references: [id])
+  dateCreation      DateTime    @default(now())
+
+  @@index([clientId])
+  @@index([dateCreation])
 }
 
 // Catalogue produits. Montants en Fc. Le pain est exonéré de TVA (tauxTaxe = 0) ;
