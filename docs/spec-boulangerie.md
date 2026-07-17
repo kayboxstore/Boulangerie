@@ -22,10 +22,10 @@ Administrateur — rôle technique séparé de la hiérarchie métier, jusqu'à 
 ```
 
 **Règle par défaut** : un supérieur a un accès en lecture seule sur le périmètre de son subordonné direct, en plus de l'écriture sur son propre périmètre. Exceptions explicites :
-- Le **DG** voit tout en lecture seule, SAUF les Réglages/Paramètres, strictement réservés aux Admins (aucun accès, pas même en lecture). Il ne modifie jamais rien lui-même dans l'application.
+- Le **DG** voit tout en lecture seule, SAUF **l'édition** des Réglages/Paramètres (taxes, seuils, types de clients, infos boutique, langue par défaut), strictement réservée aux Admins. Il ne modifie jamais rien lui-même dans l'application. *Précision (suite audit Claude Code)* : la **consultation** du catalogue produits (prix) et de l'Équipe (qui, quel rôle, actif/inactif) reste accessible au DG en lecture seule — seule l'**édition** de ces données (créer/modifier un produit, un compte, une permission) est bloquée, via Paramètres.
 - Le **Caissier(ère)** a un accès en lecture seule supplémentaire sur la **Production**, bien que hors de sa chaîne hiérarchique directe.
 - Le **Chargé des commandes** a un accès en lecture seule sur **Commissions**, en plus de l'écriture sur Commandes.
-- Les **Admins** sont hors hiérarchie métier : aucune permission sur les modules métier, uniquement Paramètres/Équipe/Activation/État système.
+- Les **Admins** sont hors hiérarchie métier : aucune permission sur les modules métier, uniquement l'édition de Paramètres/Équipe/Activation/État système.
 
 **Workflow d'approbation (Admin Principal)** : certaines actions d'un Admin secondaire ne s'exécutent qu'après validation de l'Admin Principal. Liste proposée des tâches critiques *(à confirmer/compléter)* :
 - Supprimer un utilisateur
@@ -159,7 +159,7 @@ Quand un événement clé est enregistré (nouvelle commande client, alerte stoc
 **Alerte transaction inhabituelle** *(nouveau)* : toute vente (Caisse) ou tout règlement (Commandes) dépassant le seuil configuré en Paramètres déclenche une notification dédiée au DG, visuellement distincte (priorité haute) du flux normal.
 
 ### 3.11 Commissions
-Vue dédiée aux commandes de type **Maman** (les seules à générer une commission). Calcul **automatique** — aucune saisie manuelle. Visible en lecture seule par le Caissier(ère) et le DG.
+Vue dédiée aux commandes de type **Maman** (les seules à générer une commission). Calcul **automatique** — aucune saisie manuelle. Visible en lecture seule par le Caissier(ère), le Chargé des commandes et le DG.
 
 **Champs :**
 | # | Champ | Calcul |
@@ -183,6 +183,8 @@ Journal d'activité **personnel**, distinct du Tableau de bord/KPI (3.8) : chaqu
 - Les autres rôles ne voient que leurs propres rapports
 
 Le DG peut ainsi suivre l'activité de chacun de deux façons : directement dans chaque module (lecture seule), ou de façon consolidée ici.
+
+*Note d'implémentation* : la portée de ce module (par personne + exceptions nommées) ne se réduit pas à une entrée standard dans `RolePermission` — prévoir un mécanisme dédié (filtre par `créePar`/`enregistrePar` + liste d'exceptions), distinct de la matrice de permissions habituelle. Module technique séparé de 3.8 (Tableau de bord), qui lui reste piloté par la matrice standard.
 
 ### 3.14 Activation *(Admin uniquement)*
 Active/désactive un compte utilisateur sans le supprimer (ex. employé en congé ou départ temporaire) — l'utilisateur désactivé ne peut plus se connecter, mais son historique reste intact.
@@ -298,9 +300,10 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 
 1. **Fondations** — auth, rôles hiérarchiques, catalogue produits, structure du projet ✅ *(terminé)*
 2. **Couche temps réel** — WebSocket + système de notifications (socle réutilisé par tous les modules suivants) ✅ *(terminé)*
-2bis. **Retrofit rôles + règlement de dette** — fusion Stock/Fournisseurs, Chargé du personnel, multi-admin, DG sans accès Paramètres, PaiementCommande *(prompt déjà préparé, à exécuter)*
+2bis. **Retrofit rôles + règlement de dette** — fusion Stock/Fournisseurs, Chargé du personnel, multi-admin, DG sans édition Paramètres, PaiementCommande ✅ *(terminé)*
+2ter. **Retrofit UI "modules grisés"** — le menu doit afficher tous les modules pour tout le monde, grisés/non cliquables hors permission (actuellement les entrées non accessibles sont cachées, pas grisées) — *à faire avant la Phase 4*
 3. **Commandes clients & Commissions** — système d'avance/dette porté par le client ✅ *(terminé)*
-4. **Caisse** — vente, clôture journalière, notification au supérieur, alerte transaction inhabituelle (seuil configurable)
+4. **Caisse** — vente, clôture journalière, notification au supérieur, alerte transaction inhabituelle (seuil : **100.000 Fc**, configurable ensuite dans Paramètres)
 5. **Stocks & production** — matières premières, recettes, alertes temps réel
 6. **Fournisseurs & achats** — notification de réception
 7. **Tableau de bord & rapports** — vue KPI globale (DG), vue filtrée (autres rôles), résumé de clôture quotidien
@@ -417,9 +420,10 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - La liste des "tâches critiques" nécessitant l'approbation de l'Admin Principal (section 2) est une proposition — à valider/compléter.
 - "État système" (3.15) : quelles informations exactes afficher, au-delà du statut base de données ?
 - Un Admin secondaire peut-il lui-même approuver/rejeter une demande d'un autre Admin secondaire, ou seul l'Admin Principal le peut ?
-- Quel seuil (en Fc) déclenche l'alerte transaction inhabituelle (3.10) ? Un seul seuil global, ou différent pour Caisse vs Commandes ?
+- Quel seuil (en Fc) déclenche l'alerte transaction inhabituelle (3.10) ? **Résolu : 100.000 Fc**, valeur par défaut modifiable ensuite dans Paramètres.
 - Une délégation temporaire de rôle (3.7) peut-elle chevaucher plusieurs modules à la fois, ou un seul module par délégation ?
 - Le Journal d'audit (3.17) doit-il aussi inclure les tentatives d'accès refusées (403), utile pour la sécurité, ou seulement les actions réussies ?
+- Les "commandes spéciales" (gâteaux personnalisés, événements — fin de la section 3.4) n'ont pas encore de statut/dateRetrait en base (omis volontairement en Phase 3, qui couvrait les commandes en bacs). À quel moment les construire ? Pas encore placé dans l'ordre des phases (section 9).
 
 ## 12. Prochaines étapes
 
