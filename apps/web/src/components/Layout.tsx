@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import {
+  CircleUserRound,
   Factory,
   HandCoins,
   LayoutDashboard,
@@ -9,6 +10,7 @@ import {
   ShoppingBasket,
   ShoppingCart,
   Truck,
+  UserCog,
   Users,
   Wheat,
 } from "lucide-react";
@@ -38,6 +40,7 @@ const navigation: EntreeNav[] = [
   { to: "/production", label: "Production", icon: Factory, module: "PRODUCTION" },
   { to: "/fournisseurs", label: "Fournisseurs", icon: Truck, module: "FOURNISSEURS" },
   { to: "/produits", label: "Produits", icon: Wheat },
+  { to: "/equipe", label: "Équipe", icon: UserCog, module: "EQUIPE" },
   { label: "Travailleurs", icon: Users, module: "TRAVAILLEURS" },
   { label: "Paramètres", icon: Settings, module: "PARAMETRES" },
 ];
@@ -108,8 +111,22 @@ export function Layout() {
         </nav>
 
         <div className="border-t border-creme/10 px-5 py-4">
-          <p className="truncate text-sm font-medium">{utilisateur?.nom}</p>
-          <Badge variant="gold" className="mt-1">{utilisateur?.role.nom}</Badge>
+          <NavLink
+            to="/profil"
+            className={({ isActive }) =>
+              cn(
+                "-mx-2 block rounded-md px-2 py-1 transition-colors hover:bg-creme/5",
+                isActive && "bg-creme/5",
+              )
+            }
+            title="Mon profil"
+          >
+            <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+              <CircleUserRound className="h-4 w-4 shrink-0 text-creme/60" />
+              {utilisateur?.nom}
+            </p>
+            <Badge variant="gold" className="mt-1">{utilisateur?.role.nom}</Badge>
+          </NavLink>
           <Button
             variant="ghost"
             size="sm"
@@ -131,6 +148,9 @@ export function Layout() {
           </div>
           <div className="flex items-center gap-1 [&_button]:text-creme/80 [&_button:hover]:bg-creme/10 [&_button:hover]:text-creme">
             <NotificationBell />
+            <NavLink to="/profil" aria-label="Mon profil" className="rounded-md p-2 text-creme/80 hover:bg-creme/10 hover:text-creme">
+              <CircleUserRound className="h-4 w-4" />
+            </NavLink>
             <Button variant="ghost" size="icon" onClick={logout}>
               <LogOut className="h-4 w-4" />
             </Button>

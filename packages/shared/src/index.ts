@@ -444,6 +444,51 @@ export interface ProductionDTO {
 }
 
 // ---------------------------------------------------------------------------
+// Équipe & droits d'accès (section 3.7) — gestion des comptes
+// ---------------------------------------------------------------------------
+
+/** Jusqu'à 3 comptes Administrateur : 1 Principal + 2 secondaires (section 3.7). */
+export const MAX_COMPTES_ADMIN = 3;
+export const ROLE_ADMINISTRATEUR = "Administrateur";
+
+export const compteCreateSchema = z.object({
+  nom: z.string().trim().min(1, "Le nom est requis").max(120),
+  email: z.string().email("Adresse e-mail invalide").max(160),
+  roleId: z.string().min(1, "Le rôle est requis"),
+  // Mot de passe initial défini par l'Admin, changé ensuite par l'employé
+  // depuis « Mon profil ».
+  motDePasse: z.string().min(8, "Le mot de passe initial doit faire au moins 8 caractères").max(100),
+});
+export type CompteCreateInput = z.infer<typeof compteCreateSchema>;
+
+export const compteUpdateSchema = z.object({
+  nom: z.string().trim().min(1, "Le nom est requis").max(120).optional(),
+  email: z.string().email("Adresse e-mail invalide").max(160).optional(),
+  roleId: z.string().min(1).optional(),
+});
+export type CompteUpdateInput = z.infer<typeof compteUpdateSchema>;
+
+export const motDePasseUpdateSchema = z.object({
+  motDePasseActuel: z.string().min(1, "Le mot de passe actuel est requis"),
+  nouveauMotDePasse: z
+    .string()
+    .min(8, "Le nouveau mot de passe doit faire au moins 8 caractères")
+    .max(100),
+});
+export type MotDePasseUpdateInput = z.infer<typeof motDePasseUpdateSchema>;
+
+/** Ligne du roster Équipe (liste des comptes, section 3.7). */
+export interface CompteDTO {
+  id: string;
+  nom: string;
+  email: string;
+  actif: boolean;
+  estAdminPrincipal: boolean;
+  role: { id: string; nom: string };
+  dateCreation: string;
+}
+
+// ---------------------------------------------------------------------------
 // Fournisseurs & achats (section 3.6)
 // ---------------------------------------------------------------------------
 

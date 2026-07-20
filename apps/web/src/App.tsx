@@ -12,6 +12,8 @@ import { CaissePage } from "@/pages/Caisse";
 import { StocksPage } from "@/pages/Stocks";
 import { ProductionPage } from "@/pages/Production";
 import { FournisseursPage } from "@/pages/Fournisseurs";
+import { EquipePage } from "@/pages/Equipe";
+import { ProfilPage } from "@/pages/Profil";
 
 /** Garde d'accès : exige au moins la lecture sur `module`, sinon retour à l'accueil. */
 function RequiertLecture({ module, children }: { module: Module; children: ReactNode }) {
@@ -87,6 +89,15 @@ export default function App() {
             </RequiertLecture>
           }
         />
+        <Route
+          path="/equipe"
+          element={
+            <RequiertLecture module="EQUIPE">
+              <EquipePage />
+            </RequiertLecture>
+          }
+        />
+        <Route path="/profil" element={<ProfilPage />} />
         <Route
           path="/commissions"
           element={
