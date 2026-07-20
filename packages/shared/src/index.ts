@@ -623,6 +623,74 @@ export interface PresenceDTO {
 }
 
 // ---------------------------------------------------------------------------
+// Tableau de bord & rapports (section 3.8) — un DTO par widget, chaque widget
+// étant conditionné à la lecture du module correspondant.
+// ---------------------------------------------------------------------------
+
+export interface RapportCaisseDTO {
+  caJour: number;
+  ca7Jours: number;
+  ca30Jours: number;
+  nbVentesJour: number;
+  /** CA par jour sur 30 jours, pour la courbe (dates AAAA-MM-JJ, total en Fc). */
+  serie30Jours: { date: string; total: number }[];
+  /**
+   * Meilleures ventes (30 jours) par volume, avec le CA encaissé par produit.
+   * Pas de marge : le coût de revient n'est pas calculable tant que les prix
+   * d'achat des matières ne sont pas systématiquement renseignés.
+   */
+  meilleuresVentes: { produitNom: string; quantite: number; ca: number }[];
+}
+
+export interface RapportCommandesDTO {
+  nbCommandes30Jours: number;
+  montantBrut30Jours: number;
+  montantRecu30Jours: number;
+  /** Agrégat de toutes les CommandeClient.dette > 0 (toutes périodes). */
+  dettesEnCours: { nombre: number; total: number };
+}
+
+export interface RapportCommissionsDTO {
+  totalCommissions30Jours: number;
+  nbCommandesACommission30Jours: number;
+}
+
+export interface RapportStockDTO {
+  /** Matières strictement sous leur seuil d'alerte. */
+  alertes: { id: string; nom: string; unite: string; quantiteStock: number; seuilAlerte: number }[];
+  nbMatieres: number;
+}
+
+export interface RapportProductionDTO {
+  nbProductions30Jours: number;
+  dernieres: { numero: number; produitNom: string; quantiteProduite: number; date: string }[];
+}
+
+export interface RapportFournisseursDTO {
+  totalRecu30Jours: number;
+  enAttente: number;
+  achatsRecents: { numero: number; fournisseurNom: string; statut: StatutCommandeFournisseur; total: number; date: string }[];
+}
+
+export interface RapportTravailleursDTO {
+  attendus: number;
+  presents: number;
+  retards: number;
+  absents: number;
+  nonPointes: number;
+}
+
+/** Résumé de clôture quotidien (3.8) — DG uniquement via la matrice (RAPPORTS). */
+export interface ResumeClotureDTO {
+  date: string;
+  caJour: number;
+  nbVentesJour: number;
+  nbCommandesJour: number;
+  dettesEnCours: { nombre: number; total: number };
+  alertesStock: { nom: string; unite: string; quantiteStock: number; seuilAlerte: number }[];
+}
+
+// ---------------------------------------------------------------------------
 // Utilitaires
 // ---------------------------------------------------------------------------
 
