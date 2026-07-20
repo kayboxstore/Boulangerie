@@ -128,7 +128,9 @@ Comptes utilisateurs rattachés à un rôle, hiérarchie et matrice de permissio
 ### 3.8 Tableau de bord & rapports — ultra moderne & sophistiqué
 CA du jour/semaine/mois, meilleures ventes, marge par produit, export comptable (CSV). Contenu strictement filtré selon le rôle connecté et sa matrice de permissions (section 2) — aucune action de modification visible pour le DG.
 
-**Résumé de clôture quotidien** *(nouveau)* : en fin de journée, un digest auto-généré est disponible pour le DG (et les Admins) — CA du jour, nombre de commandes, dettes en cours, alertes stock actives. Objectif : réduire la dépendance au fil temps réel pour une vue d'ensemble, sans avoir à rejouer toute la journée de notifications.
+Composition par rôle : chaque widget (CA/Caisse, Commandes, Commissions, Stock, Production, Fournisseurs, Travailleurs/Présence) n'apparaît que si le rôle connecté a au moins la lecture sur le module correspondant — le DG les voit tous, un Admin n'en voit aucun (par design) et devrait plutôt être orienté vers Paramètres/Équipe/État système.
+
+**Résumé de clôture quotidien** *(nouveau)* : en fin de journée, un digest auto-généré est disponible pour le DG uniquement — CA du jour, nombre de commandes, dettes en cours, alertes stock actives. Objectif : réduire la dépendance au fil temps réel pour une vue d'ensemble, sans avoir à rejouer toute la journée de notifications. *(L'équivalent Admin reste l'État système, 3.15 — technique et non business, conformément à la règle « aucune permission métier » des Admins posée en section 2.)*
 
 **Identité visuelle** (extraite du logo Boulangerie Lomoto) :
 - Bleu marine `#0F1923` — texte, éléments structurants, mode sombre
