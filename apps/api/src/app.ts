@@ -14,6 +14,7 @@ import { fournisseursRouter } from "./routes/fournisseurs.js";
 import { equipeRouter } from "./routes/equipe.js";
 import { travailleursRouter } from "./routes/travailleurs.js";
 import { rapportsRouter } from "./routes/rapports.js";
+import { rapportsPersonnelsRouter } from "./routes/rapports-personnels.js";
 
 export function createApp() {
   const app = express();
@@ -40,6 +41,7 @@ export function createApp() {
   app.use("/api/equipe", equipeRouter);
   app.use("/api/travailleurs", travailleursRouter);
   app.use("/api/rapports", rapportsRouter);
+  app.use("/api/rapports-personnels", rapportsPersonnelsRouter);
 
   // Gestion d'erreurs centralisée
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

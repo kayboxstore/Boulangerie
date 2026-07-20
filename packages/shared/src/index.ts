@@ -691,6 +691,58 @@ export interface ResumeClotureDTO {
 }
 
 // ---------------------------------------------------------------------------
+// À propos (section 3.12) & Rapports personnels (section 3.13)
+// ---------------------------------------------------------------------------
+
+export const VERSION_APP = "0.1.0";
+export const TAGLINE = "Pain Lia o Tonda";
+
+/** Types d'action du journal d'activité personnel (3.13). */
+export const TYPES_ACTIVITE = [
+  "COMMANDE_CLIENT",
+  "REGLEMENT",
+  "VENTE",
+  "CLOTURE_CAISSE",
+  "PRODUCTION",
+  "MOUVEMENT_STOCK",
+  "COMMANDE_FOURNISSEUR",
+  "RECEPTION_FOURNISSEUR",
+  "POINTAGE",
+] as const;
+export type TypeActivite = (typeof TYPES_ACTIVITE)[number];
+
+export const TYPE_ACTIVITE_LABELS: Record<TypeActivite, string> = {
+  COMMANDE_CLIENT: "Commande client",
+  REGLEMENT: "Règlement de dette",
+  VENTE: "Vente",
+  CLOTURE_CAISSE: "Clôture de caisse",
+  PRODUCTION: "Production",
+  MOUVEMENT_STOCK: "Mouvement de stock",
+  COMMANDE_FOURNISSEUR: "Commande fournisseur",
+  RECEPTION_FOURNISSEUR: "Réception fournisseur",
+  POINTAGE: "Pointage",
+};
+
+export interface ActiviteDTO {
+  id: string;
+  type: TypeActivite;
+  date: string;
+  resume: string;
+  utilisateur: { id: string; nom: string; roleNom: string };
+}
+
+/**
+ * Portée du journal (3.13) — mécanisme dédié, PAS la matrice de permissions :
+ * `tous` = portée globale (DG, Admins) ; sinon `utilisateurs` liste les
+ * personnes visibles (soi-même + exceptions nommées, ex. Caissier(ère) →
+ * Chargé des commandes).
+ */
+export interface PorteeRapportsDTO {
+  tous: boolean;
+  utilisateurs: { id: string; nom: string; roleNom: string }[];
+}
+
+// ---------------------------------------------------------------------------
 // Utilitaires
 // ---------------------------------------------------------------------------
 

@@ -3,9 +3,11 @@ import {
   CircleUserRound,
   Factory,
   HandCoins,
+  Info,
   LayoutDashboard,
   LogOut,
   Package,
+  ScrollText,
   Settings,
   ShoppingBasket,
   ShoppingCart,
@@ -42,7 +44,11 @@ const navigation: EntreeNav[] = [
   { to: "/produits", label: "Produits", icon: Wheat },
   { to: "/equipe", label: "Équipe", icon: UserCog, module: "EQUIPE" },
   { to: "/travailleurs", label: "Travailleurs", icon: Users, module: "TRAVAILLEURS" },
+  // Rapports personnels (3.13) : accessibles à tous, portée résolue côté serveur.
+  { to: "/rapports", label: "Rapports", icon: ScrollText },
   { label: "Paramètres", icon: Settings, module: "PARAMETRES" },
+  // À propos (3.12) : accessible à tous.
+  { to: "/a-propos", label: "À propos", icon: Info },
 ];
 
 export function Layout() {
