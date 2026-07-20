@@ -198,6 +198,14 @@ File d'attente des demandes soumises par les Admins secondaires pour les tâches
 ### 3.17 Journal d'audit *(nouveau — DG et Admins uniquement, lecture seule)*
 Historique **immuable** de toute modification ou suppression (pas seulement les créations, déjà tracées via créePar/enregistrePar) : qui, quoi, quand, valeur avant/après. Protège l'ensemble de l'équipe — y compris les Admins, dont les actions y sont également journalisées. Filtrable par utilisateur, module, période.
 
+### 3.18 Travailleurs (Chargé du personnel, écriture — scope résolu)
+Roster du personnel, plus large que les seuls comptes Utilisateur : couvre aussi le personnel sans accès à l'application (ex. livreur, agent d'entretien).
+- Fiche : nom, téléphone, poste, date d'embauche, lien optionnel vers un compte Utilisateur (si la personne a aussi un accès à l'app)
+- Présence/pointage quotidien : par travailleur et par date — statut (présent/absent/retard), heure d'arrivée/départ (optionnelles)
+
+Filtres & affichage : par travailleur, par date, bouton "Tout afficher".
+DG : lecture seule, comme tous les modules métier.
+
 ## 4. Hors périmètre (v1)
 
 - Gestion multi-boutiques (plusieurs points de vente) — à revoir en v2
@@ -257,6 +265,8 @@ CommandeClient (id, numero, clientId, quantitéBacs, montantBrut, avanceUtilisee
 PaiementCommande (id, commandeClientId, montant, date, enregistrePar)   # règlements successifs d'une dette
 Vente (id, date, vendeurId, total, moyenPaiement)
 LigneVente (venteId, produitId, quantité, prixUnitaire, tauxTaxe)
+Travailleur (id, nom, téléphone, poste, dateEmbauche, utilisateurId)   # utilisateurId nullable
+Presence (id, travailleurId, date, statut, heureArrivee, heureDepart, enregistrePar)   # statut: present | absent | retard
 ```
 
 ## 7. Stack technique recommandée
@@ -416,7 +426,7 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - Le DG doit-il disposer d'une action exceptionnelle malgré l'accès lecture seule (ex. annuler une vente frauduleuse), ou cela doit-il toujours passer par l'Administrateur ? *(métier)*
 - La catégorie **Vente cash (VC)** génère-t-elle bien 0 Fc de commission, comme les Dépositaires ? *(métier — hypothèse actuelle, à confirmer)*
 - Au-delà de ces 3 types (Dépositaires, Vente cash, Mamans), d'autres catégories sont-elles prévues à terme ? *(métier — n'affecte pas l'architecture, juste la configuration)*
-- Le module "Travailleurs" (phase 9) : quel contenu exact (fiches employés, présence, paie) ? Le document exclut la RH complète (section 4) — à clarifier au moment de le construire.
+- Le module Travailleurs (3.18) : Résolu — fiches employés + présence/pointage quotidien, sans paie.
 - La liste des "tâches critiques" nécessitant l'approbation de l'Admin Principal (section 2) est une proposition — à valider/compléter.
 - "État système" (3.15) : quelles informations exactes afficher, au-delà du statut base de données ?
 - Un Admin secondaire peut-il lui-même approuver/rejeter une demande d'un autre Admin secondaire, ou seul l'Admin Principal le peut ?
