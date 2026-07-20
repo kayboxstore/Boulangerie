@@ -11,6 +11,7 @@ import { CommissionsPage } from "@/pages/Commissions";
 import { CaissePage } from "@/pages/Caisse";
 import { StocksPage } from "@/pages/Stocks";
 import { ProductionPage } from "@/pages/Production";
+import { FournisseursPage } from "@/pages/Fournisseurs";
 
 /** Garde d'accès : exige au moins la lecture sur `module`, sinon retour à l'accueil. */
 function RequiertLecture({ module, children }: { module: Module; children: ReactNode }) {
@@ -75,6 +76,14 @@ export default function App() {
           element={
             <RequiertLecture module="PRODUCTION">
               <ProductionPage />
+            </RequiertLecture>
+          }
+        />
+        <Route
+          path="/fournisseurs"
+          element={
+            <RequiertLecture module="FOURNISSEURS">
+              <FournisseursPage />
             </RequiertLecture>
           }
         />

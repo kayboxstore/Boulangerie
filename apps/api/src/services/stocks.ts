@@ -33,6 +33,7 @@ export async function appliquerMouvement(
     quantite: number;
     reference?: string;
     productionId?: string;
+    commandeFournisseurId?: string;
     auteurId: string;
   },
 ): Promise<ResultatMouvement> {
@@ -56,6 +57,7 @@ export async function appliquerMouvement(
       quantite: params.quantite,
       reference: params.reference ?? null,
       productionId: params.productionId ?? null,
+      commandeFournisseurId: params.commandeFournisseurId ?? null,
       auteurId: params.auteurId,
     },
   });

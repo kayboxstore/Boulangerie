@@ -36,7 +36,7 @@ const navigation: EntreeNav[] = [
   { to: "/commissions", label: "Commissions", icon: HandCoins, module: "COMMISSIONS" },
   { to: "/stocks", label: "Stocks", icon: Package, module: "STOCKS" },
   { to: "/production", label: "Production", icon: Factory, module: "PRODUCTION" },
-  { label: "Fournisseurs", icon: Truck, module: "FOURNISSEURS" },
+  { to: "/fournisseurs", label: "Fournisseurs", icon: Truck, module: "FOURNISSEURS" },
   { to: "/produits", label: "Produits", icon: Wheat },
   { label: "Travailleurs", icon: Users, module: "TRAVAILLEURS" },
   { label: "Paramètres", icon: Settings, module: "PARAMETRES" },

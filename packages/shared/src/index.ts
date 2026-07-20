@@ -443,6 +443,74 @@ export interface ProductionDTO {
   consommations: { matiereNom: string; unite: string; quantite: number }[];
 }
 
+// ---------------------------------------------------------------------------
+// Fournisseurs & achats (section 3.6)
+// ---------------------------------------------------------------------------
+
+export const STATUTS_COMMANDE_FOURNISSEUR = ["EN_ATTENTE", "RECUE"] as const;
+export type StatutCommandeFournisseur = (typeof STATUTS_COMMANDE_FOURNISSEUR)[number];
+
+export const STATUT_COMMANDE_FOURNISSEUR_LABELS: Record<StatutCommandeFournisseur, string> = {
+  EN_ATTENTE: "En attente",
+  RECUE: "Reçue",
+};
+
+export const fournisseurCreateSchema = z.object({
+  nom: z.string().trim().min(1, "Le nom est requis").max(120),
+  contact: z.string().trim().max(300).optional(),
+});
+export type FournisseurCreateInput = z.infer<typeof fournisseurCreateSchema>;
+
+export const fournisseurUpdateSchema = fournisseurCreateSchema.partial();
+export type FournisseurUpdateInput = z.infer<typeof fournisseurUpdateSchema>;
+
+export const commandeFournisseurCreateSchema = z.object({
+  fournisseurId: z.string().min(1, "Le fournisseur est requis"),
+  lignes: z
+    .array(
+      z.object({
+        matierePremiereId: z.string().min(1),
+        quantite: z
+          .number()
+          .refine((q) => Number.isFinite(q) && Math.round(q * 1000) === q * 1000, "Au plus 3 décimales")
+          .refine((q) => q > 0, "La quantité doit être strictement positive"),
+        prixUnitaire: z.number().int("Montant en Fc entier").min(0, "Le prix doit être positif"),
+      }),
+    )
+    .min(1, "Au moins une ligne"),
+});
+export type CommandeFournisseurCreateInput = z.infer<typeof commandeFournisseurCreateSchema>;
+
+export interface FournisseurDTO {
+  id: string;
+  nom: string;
+  contact: string | null;
+  /** Nombre de commandes passées à ce fournisseur (tous statuts). */
+  nombreCommandes: number;
+}
+
+export interface LigneCommandeFournisseurDTO {
+  id: string;
+  matierePremiere: { id: string; nom: string; unite: string };
+  quantite: number;
+  prixUnitaire: number;
+  /** quantite × prixUnitaire, arrondi au Fc. */
+  sousTotal: number;
+}
+
+export interface CommandeFournisseurDTO {
+  id: string;
+  numero: number;
+  fournisseur: { id: string; nom: string };
+  statut: StatutCommandeFournisseur;
+  date: string;
+  dateReception: string | null;
+  creePar: { id: string; nom: string } | null;
+  recuePar: { id: string; nom: string } | null;
+  lignes: LigneCommandeFournisseurDTO[];
+  total: number;
+}
+
 /** Formate une quantité de matière : 12.5 + "kg" -> "12,5 kg" */
 export function formatQuantite(quantite: number, unite: string): string {
   return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 3 }).format(quantite)} ${unite}`;

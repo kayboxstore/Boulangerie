@@ -49,6 +49,11 @@ enum StatutPlanning {
   FAIT
 }
 
+enum StatutCommandeFournisseur {
+  EN_ATTENTE
+  RECUE
+}
+
 // Hiérarchie portée par le rôle (roleParentId) — extensible sans changement de code.
 model Role {
   id           String           @id @default(cuid())
@@ -95,6 +100,8 @@ model Utilisateur {
   mouvementsStock MouvementStock[]
   productions   Production[]
   planningsCrees PlanningProduction[]
+  commandesFournisseurCreees CommandeFournisseur[] @relation("CommandesFournisseurCreees")
+  commandesFournisseurRecues CommandeFournisseur[] @relation("CommandesFournisseurRecues")
 }
 
 // Notification métier (section 3.10) : persistée pour le rattrapage hors ligne,
@@ -265,6 +272,7 @@ model MatierePremiere {
   seuilAlerte   Decimal  @db.Decimal(12, 3)
   mouvements    MouvementStock[]
   ingredients   IngredientRecette[]
+  lignesCommandeFournisseur LigneCommandeFournisseur[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -279,14 +287,62 @@ model MouvementStock {
   type              TypeMouvementStock
   quantite          Decimal            @db.Decimal(12, 3)
   reference         String?
-  // Renseigné quand le mouvement est généré automatiquement par une production.
+  // Renseigné quand le mouvement est généré automatiquement par une production
+  // (SORTIE) ou par la réception d'une commande fournisseur (ENTREE).
   productionId      String?
   production        Production?        @relation(fields: [productionId], references: [id])
+  commandeFournisseurId String?
+  commandeFournisseur   CommandeFournisseur? @relation(fields: [commandeFournisseurId], references: [id])
   auteurId          String?
   auteur            Utilisateur?       @relation(fields: [auteurId], references: [id], onDelete: SetNull)
   date              DateTime           @default(now())
 
   @@index([matierePremiereId, date])
+}
+
+// --- Fournisseurs & achats (section 3.6) ------------------------------------
+
+model Fournisseur {
+  id        String                @id @default(cuid())
+  nom       String                @unique
+  contact   String? // téléphone, e-mail, adresse — champ libre
+  commandes CommandeFournisseur[]
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+}
+
+// Bon de commande fournisseur : EN_ATTENTE puis RECUE. La réception crée les
+// MouvementStock ENTREE (référence = cette commande) et incrémente le stock —
+// même mécanisme transactionnel que la production (Phase 5), en sens inverse.
+model CommandeFournisseur {
+  id            String                     @id @default(cuid())
+  numero        Int                        @unique @default(autoincrement())
+  fournisseurId String
+  fournisseur   Fournisseur                @relation(fields: [fournisseurId], references: [id])
+  statut        StatutCommandeFournisseur  @default(EN_ATTENTE)
+  date          DateTime                   @default(now())
+  dateReception DateTime?
+  creeParId     String?
+  creePar       Utilisateur?               @relation("CommandesFournisseurCreees", fields: [creeParId], references: [id], onDelete: SetNull)
+  recueParId    String?
+  recuePar      Utilisateur?               @relation("CommandesFournisseurRecues", fields: [recueParId], references: [id], onDelete: SetNull)
+  lignes        LigneCommandeFournisseur[]
+  mouvements    MouvementStock[]
+
+  @@index([statut])
+  @@index([date])
+}
+
+model LigneCommandeFournisseur {
+  id                    String              @id @default(cuid())
+  commandeFournisseurId String
+  commandeFournisseur   CommandeFournisseur @relation(fields: [commandeFournisseurId], references: [id], onDelete: Cascade)
+  matierePremiereId     String
+  matierePremiere       MatierePremiere     @relation(fields: [matierePremiereId], references: [id])
+  quantite              Decimal             @db.Decimal(12, 3)
+  prixUnitaire          Int // Fc par unité de la matière (kg, L…)
+
+  @@unique([commandeFournisseurId, matierePremiereId])
 }
 
 // --- Production & recettes (section 3.3) ------------------------------------

@@ -253,7 +253,20 @@ async function main() {
     });
   }
 
-  console.log("Seed terminé — 7 rôles, 3 types de clients, 8 utilisateurs, 5 clients, 5 produits, 5 matières premières, 1 recette.");
+  // --- Fournisseurs de démonstration (section 3.6) ---
+  const fournisseurs = [
+    { nom: "Minoterie du Congo", contact: "+243 820 000 010 — Av. des Moulins, Kinshasa" },
+    { nom: "Ets Kivu Distribution", contact: "+243 820 000 011" },
+  ];
+  for (const f of fournisseurs) {
+    await prisma.fournisseur.upsert({
+      where: { nom: f.nom },
+      update: {},
+      create: f,
+    });
+  }
+
+  console.log("Seed terminé — 7 rôles, 3 types de clients, 8 utilisateurs, 5 clients, 5 produits, 5 matières premières, 1 recette, 2 fournisseurs.");
   console.log(`Mot de passe de démonstration pour tous les comptes : ${MOT_DE_PASSE_DEMO}`);
 }
 
