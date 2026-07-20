@@ -562,6 +562,67 @@ export function formatQuantite(quantite: number, unite: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Travailleurs & présence (section 3.18)
+// ---------------------------------------------------------------------------
+
+export const STATUTS_PRESENCE = ["PRESENT", "ABSENT", "RETARD"] as const;
+export type StatutPresence = (typeof STATUTS_PRESENCE)[number];
+
+export const STATUT_PRESENCE_LABELS: Record<StatutPresence, string> = {
+  PRESENT: "Présent",
+  ABSENT: "Absent",
+  RETARD: "Retard",
+};
+
+const dateISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)");
+const heureHHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide (HH:MM)");
+
+export const travailleurCreateSchema = z.object({
+  nom: z.string().trim().min(1, "Le nom est requis").max(120),
+  telephone: z.string().trim().max(30).optional(),
+  poste: z.string().trim().min(1, "Le poste est requis").max(80),
+  dateEmbauche: dateISO,
+  // Lien optionnel vers un compte Utilisateur (si la personne a un accès à l'app).
+  utilisateurId: z.string().optional(),
+});
+export type TravailleurCreateInput = z.infer<typeof travailleurCreateSchema>;
+
+export const travailleurUpdateSchema = travailleurCreateSchema.partial().extend({
+  // null = délier explicitement le compte.
+  utilisateurId: z.string().nullable().optional(),
+});
+export type TravailleurUpdateInput = z.infer<typeof travailleurUpdateSchema>;
+
+// Pointage quotidien : re-pointer le même jour corrige la ligne existante.
+export const presencePointageSchema = z.object({
+  travailleurId: z.string().min(1, "Le travailleur est requis"),
+  date: dateISO,
+  statut: z.enum(STATUTS_PRESENCE),
+  heureArrivee: heureHHMM.optional(),
+  heureDepart: heureHHMM.optional(),
+});
+export type PresencePointageInput = z.infer<typeof presencePointageSchema>;
+
+export interface TravailleurDTO {
+  id: string;
+  nom: string;
+  telephone: string | null;
+  poste: string;
+  dateEmbauche: string;
+  compte: { id: string; nom: string; email: string } | null;
+}
+
+export interface PresenceDTO {
+  id: string;
+  travailleur: { id: string; nom: string; poste: string };
+  date: string;
+  statut: StatutPresence;
+  heureArrivee: string | null;
+  heureDepart: string | null;
+  enregistrePar: { id: string; nom: string } | null;
+}
+
+// ---------------------------------------------------------------------------
 // Utilitaires
 // ---------------------------------------------------------------------------
 

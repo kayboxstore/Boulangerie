@@ -41,7 +41,7 @@ const navigation: EntreeNav[] = [
   { to: "/fournisseurs", label: "Fournisseurs", icon: Truck, module: "FOURNISSEURS" },
   { to: "/produits", label: "Produits", icon: Wheat },
   { to: "/equipe", label: "Équipe", icon: UserCog, module: "EQUIPE" },
-  { label: "Travailleurs", icon: Users, module: "TRAVAILLEURS" },
+  { to: "/travailleurs", label: "Travailleurs", icon: Users, module: "TRAVAILLEURS" },
   { label: "Paramètres", icon: Settings, module: "PARAMETRES" },
 ];
 

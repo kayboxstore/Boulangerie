@@ -54,6 +54,12 @@ enum StatutCommandeFournisseur {
   RECUE
 }
 
+enum StatutPresence {
+  PRESENT
+  ABSENT
+  RETARD
+}
+
 // Hiérarchie portée par le rôle (roleParentId) — extensible sans changement de code.
 model Role {
   id           String           @id @default(cuid())
@@ -102,6 +108,8 @@ model Utilisateur {
   planningsCrees PlanningProduction[]
   commandesFournisseurCreees CommandeFournisseur[] @relation("CommandesFournisseurCreees")
   commandesFournisseurRecues CommandeFournisseur[] @relation("CommandesFournisseurRecues")
+  ficheTravailleur Travailleur?
+  presencesEnregistrees Presence[]
 }
 
 // Notification métier (section 3.10) : persistée pour le rattrapage hors ligne,
@@ -405,6 +413,43 @@ model Production {
   mouvements       MouvementStock[]
   date             DateTime            @default(now())
 
+  @@index([date])
+}
+
+// --- Travailleurs (section 3.18) --------------------------------------------
+
+// Roster du personnel, plus large que les comptes Utilisateur : couvre aussi
+// le personnel sans accès à l'application (livreur, agent d'entretien…).
+// `utilisateurId` relie optionnellement la fiche à un compte de l'app.
+model Travailleur {
+  id            String       @id @default(cuid())
+  nom           String
+  telephone     String?
+  poste         String
+  dateEmbauche  DateTime     @db.Date
+  utilisateurId String?      @unique
+  utilisateur   Utilisateur? @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
+  presences     Presence[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+// Pointage quotidien : une ligne par travailleur et par jour (re-pointer le
+// même jour corrige la ligne). Heures « HH:MM », optionnelles.
+model Presence {
+  id              String         @id @default(cuid())
+  travailleurId   String
+  travailleur     Travailleur    @relation(fields: [travailleurId], references: [id], onDelete: Cascade)
+  date            DateTime       @db.Date
+  statut          StatutPresence
+  heureArrivee    String?
+  heureDepart     String?
+  enregistreParId String?
+  enregistrePar   Utilisateur?   @relation(fields: [enregistreParId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([travailleurId, date])
   @@index([date])
 }
 
