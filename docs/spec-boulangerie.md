@@ -130,6 +130,8 @@ CA du jour/semaine/mois, meilleures ventes, marge par produit, export comptable 
 
 Composition par rôle : chaque widget (CA/Caisse, Commandes, Commissions, Stock, Production, Fournisseurs, Travailleurs/Présence) n'apparaît que si le rôle connecté a au moins la lecture sur le module correspondant — le DG les voit tous, un Admin n'en voit aucun (par design) et devrait plutôt être orienté vers Paramètres/Équipe/État système.
 
+Marge par produit (état actuel et décision) : non calculable proprement aujourd'hui (recettes incomplètes sur le catalogue, pas de coût systématique par matière première) — le widget affiche volume + CA par produit en attendant, limitation explicite dans l'UI et l'export. Décision pour plus tard : le coût utilisé sera un Coût Moyen Pondéré (CUMP) dérivé des réceptions fournisseurs réelles (LigneCommandeFournisseur), pas un coût de référence saisi à la main. Prérequis avant de construire ça : compléter les recettes pour les produits vendus qui n'en ont pas encore.
+
 **Résumé de clôture quotidien** *(nouveau)* : en fin de journée, un digest auto-généré est disponible pour le DG uniquement — CA du jour, nombre de commandes, dettes en cours, alertes stock actives. Objectif : réduire la dépendance au fil temps réel pour une vue d'ensemble, sans avoir à rejouer toute la journée de notifications. *(L'équivalent Admin reste l'État système, 3.15 — technique et non business, conformément à la règle « aucune permission métier » des Admins posée en section 2.)*
 
 **Identité visuelle** (extraite du logo Boulangerie Lomoto) :
