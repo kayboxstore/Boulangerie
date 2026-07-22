@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Pencil, Plus, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   formatQuantite,
-  TYPE_MOUVEMENT_LABELS,
   type MatierePremiereDTO,
   type MouvementStockDTO,
   type TypeMouvementStock,
@@ -32,6 +32,7 @@ function formatDateHeure(iso: string): string {
 
 export function StocksPage() {
   const { peutEcrire } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const editable = peutEcrire("STOCKS");
 
@@ -89,13 +90,13 @@ export function StocksPage() {
       setDialogMatiere(false);
       rafraichir();
     },
-    onError: (e) => setErreurMatiere(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => setErreurMatiere(e instanceof Error ? e.message : t("stocks.saveError")),
   });
 
   const supprimerMatiere = useMutation({
     mutationFn: (id: string) => api(`/api/stocks/matieres/${id}`, { method: "DELETE" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : "Suppression impossible"),
+    onError: (e) => alert(e instanceof Error ? e.message : t("stocks.deleteError")),
   });
 
   // --- Dialog mouvement ------------------------------------------------------
@@ -130,7 +131,7 @@ export function StocksPage() {
       setDialogMouvement(false);
       rafraichir();
     },
-    onError: (e) => setErreurMouvement(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => setErreurMouvement(e instanceof Error ? e.message : t("stocks.saveError")),
   });
 
   const matiereMouvement = matieres.find((m) => m.id === mvtMatiereId);
@@ -139,24 +140,22 @@ export function StocksPage() {
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Stocks</h1>
-          <p className="mt-1 text-muted-foreground">
-            Matières premières, mouvements et seuils d'alerte — l'historique n'est jamais modifié.
-          </p>
+          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("stocks.title")}</h1>
+          <p className="mt-1 text-muted-foreground">{t("stocks.subtitle")}</p>
         </div>
         {editable && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => ouvrirMouvement("ENTREE")} disabled={matieres.length === 0}>
               <ArrowDownToLine className="h-4 w-4" />
-              Entrée
+              {t("mouvement.ENTREE")}
             </Button>
             <Button variant="outline" onClick={() => ouvrirMouvement("SORTIE")} disabled={matieres.length === 0}>
               <ArrowUpFromLine className="h-4 w-4" />
-              Sortie
+              {t("mouvement.SORTIE")}
             </Button>
             <Button variant="cta" onClick={() => ouvrirMatiere(null)}>
               <Plus className="h-4 w-4" />
-              Matière première
+              {t("stocks.matiere")}
             </Button>
           </div>
         )}
@@ -169,30 +168,36 @@ export function StocksPage() {
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-terracotta" />
           <p>
-            <span className="font-semibold text-terracotta">Stock critique :</span>{" "}
+            <span className="font-semibold text-terracotta">{t("stocks.criticalStock")}</span>{" "}
             {sousSeuil
-              .map((m) => `${m.nom} (${formatQuantite(m.quantiteStock, m.unite)} / seuil ${formatQuantite(m.seuilAlerte, m.unite)})`)
+              .map((m) =>
+                t("stocks.criticalItem", {
+                  nom: m.nom,
+                  stock: formatQuantite(m.quantiteStock, m.unite),
+                  seuil: formatQuantite(m.seuilAlerte, m.unite),
+                }),
+              )
               .join(", ")}{" "}
-            — commande fournisseur à anticiper.
+            {t("stocks.anticipate")}
           </p>
         </div>
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Matières premières</CardTitle>
-          <CardDescription>{matieres.length} matière(s) suivie(s).</CardDescription>
+          <CardTitle>{t("stocks.matieresTitle")}</CardTitle>
+          <CardDescription>{t("stocks.matieresDesc", { count: matieres.length })}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Matière</TableHead>
-                <TableHead>Unité</TableHead>
-                <TableHead className="text-right">En stock</TableHead>
-                <TableHead className="text-right">Seuil d'alerte</TableHead>
-                <TableHead>État</TableHead>
-                {editable && <TableHead className="text-right">Actions</TableHead>}
+                <TableHead>{t("stocks.colMatiere")}</TableHead>
+                <TableHead>{t("stocks.colUnit")}</TableHead>
+                <TableHead className="text-right">{t("stocks.colInStock")}</TableHead>
+                <TableHead className="text-right">{t("stocks.colThreshold")}</TableHead>
+                <TableHead>{t("stocks.colState")}</TableHead>
+                {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -208,22 +213,22 @@ export function StocksPage() {
                   </TableCell>
                   <TableCell>
                     {m.sousSeuil ? (
-                      <Badge className="border-transparent bg-terracotta text-creme">Sous le seuil</Badge>
+                      <Badge className="border-transparent bg-terracotta text-creme">{t("stocks.belowThreshold")}</Badge>
                     ) : (
-                      <Badge variant="secondary">OK</Badge>
+                      <Badge variant="secondary">{t("stocks.ok")}</Badge>
                     )}
                   </TableCell>
                   {editable && (
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirMatiere(m)} aria-label={`Modifier ${m.nom}`}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirMatiere(m)} aria-label={t("stocks.ariaEdit", { nom: m.nom })}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(`Supprimer ${m.nom} ?`) && supprimerMatiere.mutate(m.id)}
-                        aria-label={`Supprimer ${m.nom}`}
+                        onClick={() => confirm(t("stocks.confirmDelete", { nom: m.nom })) && supprimerMatiere.mutate(m.id)}
+                        aria-label={t("stocks.ariaDelete", { nom: m.nom })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -234,7 +239,7 @@ export function StocksPage() {
               {matieres.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={editable ? 6 : 5} className="py-8 text-center text-muted-foreground">
-                    Aucune matière première enregistrée.
+                    {t("stocks.noMatiere")}
                   </TableCell>
                 </TableRow>
               )}
@@ -246,13 +251,13 @@ export function StocksPage() {
       <Card>
         <CardHeader className="flex-row items-end justify-between space-y-0">
           <div className="space-y-1.5">
-            <CardTitle>Historique des mouvements</CardTitle>
-            <CardDescription>Journal chronologique — entrées et sorties, jamais modifiées.</CardDescription>
+            <CardTitle>{t("stocks.historyTitle")}</CardTitle>
+            <CardDescription>{t("stocks.historyDesc")}</CardDescription>
           </div>
           <div className="w-56">
-            <Label htmlFor="filtre-matiere">Matière</Label>
+            <Label htmlFor="filtre-matiere">{t("stocks.colMatiere")}</Label>
             <NativeSelect id="filtre-matiere" value={filtreMatiere} onChange={(e) => setFiltreMatiere(e.target.value)}>
-              <option value="">Toutes</option>
+              <option value="">{t("stocks.filterAll")}</option>
               {matieres.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.nom}
@@ -265,12 +270,12 @@ export function StocksPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Matière</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead className="text-right">Quantité</TableHead>
-                <TableHead>Référence</TableHead>
-                <TableHead>Auteur</TableHead>
+                <TableHead>{t("common.date")}</TableHead>
+                <TableHead>{t("stocks.colMatiere")}</TableHead>
+                <TableHead>{t("stocks.colType")}</TableHead>
+                <TableHead className="text-right">{t("stocks.colQuantity")}</TableHead>
+                <TableHead>{t("stocks.colReference")}</TableHead>
+                <TableHead>{t("stocks.colAuthor")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -279,9 +284,7 @@ export function StocksPage() {
                   <TableCell className="whitespace-nowrap text-muted-foreground">{formatDateHeure(mv.date)}</TableCell>
                   <TableCell className="font-medium">{mv.matierePremiere.nom}</TableCell>
                   <TableCell>
-                    <Badge variant={mv.type === "ENTREE" ? "secondary" : "gold"}>
-                      {TYPE_MOUVEMENT_LABELS[mv.type]}
-                    </Badge>
+                    <Badge variant={mv.type === "ENTREE" ? "secondary" : "gold"}>{t(`mouvement.${mv.type}`)}</Badge>
                   </TableCell>
                   <TableCell className="text-right font-semibold">
                     {mv.type === "ENTREE" ? "+" : "−"}
@@ -294,7 +297,7 @@ export function StocksPage() {
               {(mouvementsData?.mouvements ?? []).length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    Aucun mouvement enregistré.
+                    {t("stocks.noMovement")}
                   </TableCell>
                 </TableRow>
               )}
@@ -314,24 +317,22 @@ export function StocksPage() {
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>{matiereEditee ? `Modifier ${matiereEditee.nom}` : "Nouvelle matière première"}</DialogTitle>
+              <DialogTitle>{matiereEditee ? t("stocks.matiereDialogEdit", { nom: matiereEditee.nom }) : t("stocks.matiereDialogNew")}</DialogTitle>
               <DialogDescription>
-                {matiereEditee
-                  ? "Le stock ne se modifie pas ici : utilisez les mouvements d'entrée/sortie."
-                  : "Le stock de départ sera journalisé comme mouvement « Stock initial »."}
+                {matiereEditee ? t("stocks.matiereEditDesc") : t("stocks.matiereNewDesc")}
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 space-y-1.5">
-                <Label htmlFor="matiere-nom">Nom</Label>
+                <Label htmlFor="matiere-nom">{t("common.name")}</Label>
                 <Input id="matiere-nom" value={nom} onChange={(e) => setNom(e.target.value)} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="matiere-unite">Unité</Label>
-                <Input id="matiere-unite" value={unite} onChange={(e) => setUnite(e.target.value)} placeholder="kg, L…" required />
+                <Label htmlFor="matiere-unite">{t("stocks.unit")}</Label>
+                <Input id="matiere-unite" value={unite} onChange={(e) => setUnite(e.target.value)} placeholder={t("stocks.unitPlaceholder")} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="matiere-seuil">Seuil d'alerte</Label>
+                <Label htmlFor="matiere-seuil">{t("stocks.threshold")}</Label>
                 <Input
                   id="matiere-seuil"
                   type="number"
@@ -344,7 +345,7 @@ export function StocksPage() {
               </div>
               {!matiereEditee && (
                 <div className="col-span-2 space-y-1.5">
-                  <Label htmlFor="matiere-initiale">Stock de départ (optionnel)</Label>
+                  <Label htmlFor="matiere-initiale">{t("stocks.initialStock")}</Label>
                   <Input
                     id="matiere-initiale"
                     type="number"
@@ -363,10 +364,10 @@ export function StocksPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogMatiere(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={sauverMatiere.isPending}>
-                Enregistrer
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </form>
@@ -384,16 +385,16 @@ export function StocksPage() {
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>{mvtType === "ENTREE" ? "Entrée de stock" : "Sortie de stock"}</DialogTitle>
+              <DialogTitle>{mvtType === "ENTREE" ? t("stocks.mvtEntryTitle") : t("stocks.mvtExitTitle")}</DialogTitle>
               <DialogDescription>
                 {matiereMouvement
-                  ? `Stock actuel : ${formatQuantite(matiereMouvement.quantiteStock, matiereMouvement.unite)}`
-                  : "Choisissez une matière première."}
+                  ? t("stocks.currentStock", { stock: formatQuantite(matiereMouvement.quantiteStock, matiereMouvement.unite) })
+                  : t("stocks.chooseMatiere")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="mvt-matiere">Matière première</Label>
+                <Label htmlFor="mvt-matiere">{t("stocks.matiereLabel")}</Label>
                 <NativeSelect id="mvt-matiere" value={mvtMatiereId} onChange={(e) => setMvtMatiereId(e.target.value)} required>
                   {matieres.map((m) => (
                     <option key={m.id} value={m.id}>
@@ -404,14 +405,16 @@ export function StocksPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="mvt-type">Type</Label>
+                  <Label htmlFor="mvt-type">{t("stocks.type")}</Label>
                   <NativeSelect id="mvt-type" value={mvtType} onChange={(e) => setMvtType(e.target.value as TypeMouvementStock)}>
-                    <option value="ENTREE">Entrée</option>
-                    <option value="SORTIE">Sortie</option>
+                    <option value="ENTREE">{t("mouvement.ENTREE")}</option>
+                    <option value="SORTIE">{t("mouvement.SORTIE")}</option>
                   </NativeSelect>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="mvt-quantite">Quantité{matiereMouvement ? ` (${matiereMouvement.unite})` : ""}</Label>
+                  <Label htmlFor="mvt-quantite">
+                    {matiereMouvement ? t("stocks.quantityWithUnit", { unite: matiereMouvement.unite }) : t("stocks.quantity")}
+                  </Label>
                   <Input
                     id="mvt-quantite"
                     type="number"
@@ -424,12 +427,12 @@ export function StocksPage() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="mvt-reference">Référence (optionnel)</Label>
+                <Label htmlFor="mvt-reference">{t("stocks.referenceOptional")}</Label>
                 <Input
                   id="mvt-reference"
                   value={mvtReference}
                   onChange={(e) => setMvtReference(e.target.value)}
-                  placeholder="Bon de livraison, casse, inventaire…"
+                  placeholder={t("stocks.referencePlaceholder")}
                 />
               </div>
             </div>
@@ -440,10 +443,10 @@ export function StocksPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogMouvement(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={enregistrerMouvement.isPending}>
-                Enregistrer le mouvement
+                {t("stocks.saveMovement")}
               </Button>
             </DialogFooter>
           </form>

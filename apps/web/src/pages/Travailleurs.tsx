@@ -1,13 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarCheck, Link2, Pencil, Trash2, UserPlus } from "lucide-react";
-import {
-  STATUT_PRESENCE_LABELS,
-  STATUTS_PRESENCE,
-  type PresenceDTO,
-  type StatutPresence,
-  type TravailleurDTO,
-} from "@lomoto/shared";
+import { useTranslation } from "react-i18next";
+import { STATUTS_PRESENCE, type PresenceDTO, type StatutPresence, type TravailleurDTO } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -49,6 +44,7 @@ interface CompteLiable {
 
 export function TravailleursPage() {
   const { peutEcrire } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const editable = peutEcrire("TRAVAILLEURS");
 
@@ -98,13 +94,13 @@ export function TravailleursPage() {
   const [compteLie, setCompteLie] = useState("");
   const [erreurFiche, setErreurFiche] = useState<string | null>(null);
 
-  function ouvrirFiche(t: TravailleurDTO | null) {
-    setFicheEditee(t);
-    setNom(t?.nom ?? "");
-    setTelephone(t?.telephone ?? "");
-    setPoste(t?.poste ?? "");
-    setDateEmbauche(t?.dateEmbauche ?? aujourdhui());
-    setCompteLie(t?.compte?.id ?? "");
+  function ouvrirFiche(trav: TravailleurDTO | null) {
+    setFicheEditee(trav);
+    setNom(trav?.nom ?? "");
+    setTelephone(trav?.telephone ?? "");
+    setPoste(trav?.poste ?? "");
+    setDateEmbauche(trav?.dateEmbauche ?? aujourdhui());
+    setCompteLie(trav?.compte?.id ?? "");
     setErreurFiche(null);
     setDialogFiche(true);
   }
@@ -131,13 +127,13 @@ export function TravailleursPage() {
       setDialogFiche(false);
       rafraichir();
     },
-    onError: (e) => setErreurFiche(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => setErreurFiche(e instanceof Error ? e.message : t("travailleurs.saveError")),
   });
 
   const supprimerFiche = useMutation({
     mutationFn: (id: string) => api(`/api/travailleurs/${id}`, { method: "DELETE" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : "Suppression impossible"),
+    onError: (e) => alert(e instanceof Error ? e.message : t("travailleurs.deleteError")),
   });
 
   // --- Dialog pointage -------------------------------------------------------
@@ -175,27 +171,25 @@ export function TravailleursPage() {
       setDialogPointage(false);
       rafraichir();
     },
-    onError: (e) => setErreurPointage(e instanceof Error ? e.message : "Pointage impossible"),
+    onError: (e) => setErreurPointage(e instanceof Error ? e.message : t("travailleurs.clockInError")),
   });
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Travailleurs</h1>
-          <p className="mt-1 text-muted-foreground">
-            Roster du personnel et pointage quotidien — y compris le personnel sans accès à l'application.
-          </p>
+          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("travailleurs.title")}</h1>
+          <p className="mt-1 text-muted-foreground">{t("travailleurs.subtitle")}</p>
         </div>
         {editable && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => ouvrirPointage()} disabled={travailleurs.length === 0}>
               <CalendarCheck className="h-4 w-4" />
-              Pointer
+              {t("travailleurs.clockIn")}
             </Button>
             <Button variant="cta" onClick={() => ouvrirFiche(null)}>
               <UserPlus className="h-4 w-4" />
-              Nouveau travailleur
+              {t("travailleurs.newWorker")}
             </Button>
           </div>
         )}
@@ -204,53 +198,53 @@ export function TravailleursPage() {
       {/* Roster */}
       <Card>
         <CardHeader>
-          <CardTitle>Fiches du personnel</CardTitle>
-          <CardDescription>{travailleurs.length} travailleur(s).</CardDescription>
+          <CardTitle>{t("travailleurs.rosterTitle")}</CardTitle>
+          <CardDescription>{t("travailleurs.rosterDesc", { count: travailleurs.length })}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nom</TableHead>
-                <TableHead>Poste</TableHead>
-                <TableHead>Téléphone</TableHead>
-                <TableHead>Embauché le</TableHead>
-                <TableHead>Compte app</TableHead>
-                {editable && <TableHead className="text-right">Actions</TableHead>}
+                <TableHead>{t("common.name")}</TableHead>
+                <TableHead>{t("travailleurs.post")}</TableHead>
+                <TableHead>{t("common.phone")}</TableHead>
+                <TableHead>{t("travailleurs.colHiredOn")}</TableHead>
+                <TableHead>{t("travailleurs.colAppAccount")}</TableHead>
+                {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {travailleurs.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell className="font-medium">{t.nom}</TableCell>
-                  <TableCell>{t.poste}</TableCell>
-                  <TableCell className="text-muted-foreground">{t.telephone ?? "—"}</TableCell>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(t.dateEmbauche)}</TableCell>
+              {travailleurs.map((trav) => (
+                <TableRow key={trav.id}>
+                  <TableCell className="font-medium">{trav.nom}</TableCell>
+                  <TableCell>{trav.poste}</TableCell>
+                  <TableCell className="text-muted-foreground">{trav.telephone ?? "—"}</TableCell>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(trav.dateEmbauche)}</TableCell>
                   <TableCell>
-                    {t.compte ? (
+                    {trav.compte ? (
                       <Badge variant="gold">
                         <Link2 className="mr-1 h-3 w-3" />
-                        {t.compte.email}
+                        {trav.compte.email}
                       </Badge>
                     ) : (
-                      <span className="text-sm text-muted-foreground">Sans accès</span>
+                      <span className="text-sm text-muted-foreground">{t("travailleurs.noAccess")}</span>
                     )}
                   </TableCell>
                   {editable && (
                     <TableCell className="text-right">
-                      <Button variant="outline" size="sm" className="mr-1" onClick={() => ouvrirPointage(t.id)}>
+                      <Button variant="outline" size="sm" className="mr-1" onClick={() => ouvrirPointage(trav.id)}>
                         <CalendarCheck className="h-3.5 w-3.5" />
-                        Pointer
+                        {t("travailleurs.clockIn")}
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirFiche(t)} aria-label={`Modifier ${t.nom}`}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirFiche(trav)} aria-label={t("travailleurs.ariaEdit", { nom: trav.nom })}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(`Supprimer la fiche de ${t.nom} (et ses pointages) ?`) && supprimerFiche.mutate(t.id)}
-                        aria-label={`Supprimer ${t.nom}`}
+                        onClick={() => confirm(t("travailleurs.confirmDelete", { nom: trav.nom })) && supprimerFiche.mutate(trav.id)}
+                        aria-label={t("travailleurs.ariaDelete", { nom: trav.nom })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -261,7 +255,7 @@ export function TravailleursPage() {
               {travailleurs.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={editable ? 6 : 5} className="py-8 text-center text-muted-foreground">
-                    Aucun travailleur enregistré.
+                    {t("travailleurs.noWorker")}
                   </TableCell>
                 </TableRow>
               )}
@@ -273,28 +267,28 @@ export function TravailleursPage() {
       {/* Présences */}
       <Card>
         <CardHeader>
-          <CardTitle>Présence / pointage</CardTitle>
-          <CardDescription>Une ligne par travailleur et par jour — re-pointer un jour corrige la ligne.</CardDescription>
+          <CardTitle>{t("travailleurs.presenceTitle")}</CardTitle>
+          <CardDescription>{t("travailleurs.presenceDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="w-56">
-              <Label htmlFor="filtre-travailleur">Travailleur</Label>
+              <Label htmlFor="filtre-travailleur">{t("travailleurs.worker")}</Label>
               <NativeSelect id="filtre-travailleur" value={filtreTravailleur} onChange={(e) => setFiltreTravailleur(e.target.value)}>
-                <option value="">Tous</option>
-                {travailleurs.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.nom}
+                <option value="">{t("travailleurs.filterAll")}</option>
+                {travailleurs.map((trav) => (
+                  <option key={trav.id} value={trav.id}>
+                    {trav.nom}
                   </option>
                 ))}
               </NativeSelect>
             </div>
             <div>
-              <Label htmlFor="filtre-du">Du</Label>
+              <Label htmlFor="filtre-du">{t("common.from")}</Label>
               <Input id="filtre-du" type="date" value={filtreDu} onChange={(e) => setFiltreDu(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="filtre-au">Au</Label>
+              <Label htmlFor="filtre-au">{t("common.to")}</Label>
               <Input id="filtre-au" type="date" value={filtreAu} onChange={(e) => setFiltreAu(e.target.value)} />
             </div>
             {filtresActifs && (
@@ -306,7 +300,7 @@ export function TravailleursPage() {
                   setFiltreAu("");
                 }}
               >
-                Tout afficher
+                {t("common.showAll")}
               </Button>
             )}
           </div>
@@ -314,13 +308,13 @@ export function TravailleursPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Travailleur</TableHead>
-                <TableHead>Poste</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Arrivée</TableHead>
-                <TableHead>Départ</TableHead>
-                <TableHead>Enregistré par</TableHead>
+                <TableHead>{t("common.date")}</TableHead>
+                <TableHead>{t("travailleurs.worker")}</TableHead>
+                <TableHead>{t("travailleurs.post")}</TableHead>
+                <TableHead>{t("travailleurs.status")}</TableHead>
+                <TableHead>{t("travailleurs.colArrival")}</TableHead>
+                <TableHead>{t("travailleurs.colDeparture")}</TableHead>
+                <TableHead>{t("travailleurs.colRecordedBy")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -330,7 +324,7 @@ export function TravailleursPage() {
                   <TableCell className="font-medium">{p.travailleur.nom}</TableCell>
                   <TableCell className="text-muted-foreground">{p.travailleur.poste}</TableCell>
                   <TableCell>
-                    <Badge className={cn(BADGE_STATUT[p.statut])}>{STATUT_PRESENCE_LABELS[p.statut]}</Badge>
+                    <Badge className={cn(BADGE_STATUT[p.statut])}>{t(`presence.${p.statut}`)}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{p.heureArrivee ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{p.heureDepart ?? "—"}</TableCell>
@@ -340,7 +334,7 @@ export function TravailleursPage() {
               {presences.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    {filtresActifs ? "Aucun pointage pour ces filtres." : "Aucun pointage enregistré."}
+                    {filtresActifs ? t("travailleurs.emptyFiltered") : t("travailleurs.empty")}
                   </TableCell>
                 </TableRow>
               )}
@@ -360,32 +354,30 @@ export function TravailleursPage() {
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>{ficheEditee ? `Modifier ${ficheEditee.nom}` : "Nouveau travailleur"}</DialogTitle>
-              <DialogDescription>
-                Le lien vers un compte est optionnel — le personnel sans accès à l'app a aussi sa fiche.
-              </DialogDescription>
+              <DialogTitle>{ficheEditee ? t("travailleurs.ficheDialogEdit", { nom: ficheEditee.nom }) : t("travailleurs.ficheDialogNew")}</DialogTitle>
+              <DialogDescription>{t("travailleurs.ficheDesc")}</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="fiche-nom">Nom</Label>
+                <Label htmlFor="fiche-nom">{t("common.name")}</Label>
                 <Input id="fiche-nom" value={nom} onChange={(e) => setNom(e.target.value)} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="fiche-poste">Poste</Label>
-                <Input id="fiche-poste" value={poste} onChange={(e) => setPoste(e.target.value)} placeholder="Livreur, boulanger…" required />
+                <Label htmlFor="fiche-poste">{t("travailleurs.post")}</Label>
+                <Input id="fiche-poste" value={poste} onChange={(e) => setPoste(e.target.value)} placeholder={t("travailleurs.postPlaceholder")} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="fiche-tel">Téléphone (optionnel)</Label>
+                <Label htmlFor="fiche-tel">{t("travailleurs.phoneOptional")}</Label>
                 <Input id="fiche-tel" value={telephone} onChange={(e) => setTelephone(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="fiche-embauche">Date d'embauche</Label>
+                <Label htmlFor="fiche-embauche">{t("travailleurs.hireDate")}</Label>
                 <Input id="fiche-embauche" type="date" value={dateEmbauche} onChange={(e) => setDateEmbauche(e.target.value)} required />
               </div>
               <div className="col-span-2 space-y-1.5">
-                <Label htmlFor="fiche-compte">Compte de l'application (optionnel)</Label>
+                <Label htmlFor="fiche-compte">{t("travailleurs.appAccountOptional")}</Label>
                 <NativeSelect id="fiche-compte" value={compteLie} onChange={(e) => setCompteLie(e.target.value)}>
-                  <option value="">— Aucun (pas d'accès à l'app) —</option>
+                  <option value="">{t("travailleurs.noAccountOption")}</option>
                   {comptes.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.nom} ({c.email})
@@ -401,10 +393,10 @@ export function TravailleursPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogFiche(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={sauverFiche.isPending}>
-                Enregistrer
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </form>
@@ -422,28 +414,28 @@ export function TravailleursPage() {
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>Pointage</DialogTitle>
-              <DialogDescription>Statut du jour pour un travailleur — heures optionnelles.</DialogDescription>
+              <DialogTitle>{t("travailleurs.clockInTitle")}</DialogTitle>
+              <DialogDescription>{t("travailleurs.clockInDesc")}</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="pt-travailleur">Travailleur</Label>
+                  <Label htmlFor="pt-travailleur">{t("travailleurs.worker")}</Label>
                   <NativeSelect id="pt-travailleur" value={ptTravailleurId} onChange={(e) => setPtTravailleurId(e.target.value)} required>
-                    {travailleurs.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.nom}
+                    {travailleurs.map((trav) => (
+                      <option key={trav.id} value={trav.id}>
+                        {trav.nom}
                       </option>
                     ))}
                   </NativeSelect>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pt-date">Date</Label>
+                  <Label htmlFor="pt-date">{t("common.date")}</Label>
                   <Input id="pt-date" type="date" value={ptDate} onChange={(e) => setPtDate(e.target.value)} required />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label>Statut</Label>
+                <Label>{t("travailleurs.status")}</Label>
                 <div className="grid grid-cols-3 gap-2">
                   {STATUTS_PRESENCE.map((s) => (
                     <button
@@ -457,7 +449,7 @@ export function TravailleursPage() {
                           : "border-input text-muted-foreground hover:bg-secondary",
                       )}
                     >
-                      {STATUT_PRESENCE_LABELS[s]}
+                      {t(`presence.${s}`)}
                     </button>
                   ))}
                 </div>
@@ -465,11 +457,11 @@ export function TravailleursPage() {
               {ptStatut !== "ABSENT" && (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="pt-arrivee">Heure d'arrivée (optionnel)</Label>
+                    <Label htmlFor="pt-arrivee">{t("travailleurs.arrivalOptional")}</Label>
                     <Input id="pt-arrivee" type="time" value={ptArrivee} onChange={(e) => setPtArrivee(e.target.value)} />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="pt-depart">Heure de départ (optionnel)</Label>
+                    <Label htmlFor="pt-depart">{t("travailleurs.departureOptional")}</Label>
                     <Input id="pt-depart" type="time" value={ptDepart} onChange={(e) => setPtDepart(e.target.value)} />
                   </div>
                 </div>
@@ -482,11 +474,11 @@ export function TravailleursPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogPointage(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={pointer.isPending}>
                 <CalendarCheck className="h-4 w-4" />
-                Enregistrer le pointage
+                {t("travailleurs.saveClockIn")}
               </Button>
             </DialogFooter>
           </form>

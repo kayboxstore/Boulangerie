@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PackageCheck, Pencil, Plus, Trash2, Truck } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   formatFc,
   formatQuantite,
-  STATUT_COMMANDE_FOURNISSEUR_LABELS,
   type CommandeFournisseurDTO,
   type FournisseurDTO,
   type MatierePremiereDTO,
@@ -39,6 +39,7 @@ interface LigneAchat {
 
 export function FournisseursPage() {
   const { peutEcrire } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const editable = peutEcrire("FOURNISSEURS");
 
@@ -94,13 +95,13 @@ export function FournisseursPage() {
       setDialogFournisseur(false);
       rafraichir();
     },
-    onError: (e) => setErreurFournisseur(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => setErreurFournisseur(e instanceof Error ? e.message : t("fournisseurs.saveError")),
   });
 
   const supprimerFournisseur = useMutation({
     mutationFn: (id: string) => api(`/api/fournisseurs/${id}`, { method: "DELETE" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : "Suppression impossible"),
+    onError: (e) => alert(e instanceof Error ? e.message : t("fournisseurs.deleteError")),
   });
 
   // --- Dialog bon de commande ------------------------------------------------
@@ -138,13 +139,13 @@ export function FournisseursPage() {
       setDialogCommande(false);
       rafraichir();
     },
-    onError: (e) => setErreurCommande(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => setErreurCommande(e instanceof Error ? e.message : t("fournisseurs.saveError")),
   });
 
   const supprimerCommande = useMutation({
     mutationFn: (id: string) => api(`/api/fournisseurs/commandes/${id}`, { method: "DELETE" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : "Annulation impossible"),
+    onError: (e) => alert(e instanceof Error ? e.message : t("fournisseurs.cancelError")),
   });
 
   // --- Réception -------------------------------------------------------------
@@ -157,27 +158,25 @@ export function FournisseursPage() {
       setErreurReception(null);
       rafraichir();
     },
-    onError: (e) => setErreurReception(e instanceof Error ? e.message : "Réception impossible"),
+    onError: (e) => setErreurReception(e instanceof Error ? e.message : t("fournisseurs.receptionError")),
   });
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Fournisseurs</h1>
-          <p className="mt-1 text-muted-foreground">
-            Fiches fournisseurs et bons de commande — la réception met à jour le stock automatiquement.
-          </p>
+          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("fournisseurs.title")}</h1>
+          <p className="mt-1 text-muted-foreground">{t("fournisseurs.subtitle")}</p>
         </div>
         {editable && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => ouvrirFournisseur(null)}>
               <Truck className="h-4 w-4" />
-              Fournisseur
+              {t("fournisseurs.supplier")}
             </Button>
             <Button variant="cta" onClick={ouvrirCommande} disabled={fournisseurs.length === 0 || matieres.length === 0}>
               <Plus className="h-4 w-4" />
-              Bon de commande
+              {t("fournisseurs.purchaseOrder")}
             </Button>
           </div>
         )}
@@ -187,17 +186,17 @@ export function FournisseursPage() {
         {/* Fournisseurs */}
         <Card>
           <CardHeader>
-            <CardTitle>Fiches fournisseurs</CardTitle>
-            <CardDescription>{fournisseurs.length} fournisseur(s).</CardDescription>
+            <CardTitle>{t("fournisseurs.suppliersTitle")}</CardTitle>
+            <CardDescription>{t("fournisseurs.suppliersDesc", { count: fournisseurs.length })}</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nom</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead className="text-right">Commandes</TableHead>
-                  {editable && <TableHead className="text-right">Actions</TableHead>}
+                  <TableHead>{t("common.name")}</TableHead>
+                  <TableHead>{t("fournisseurs.contact")}</TableHead>
+                  <TableHead className="text-right">{t("fournisseurs.colOrders")}</TableHead>
+                  {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -208,15 +207,15 @@ export function FournisseursPage() {
                     <TableCell className="text-right">{f.nombreCommandes}</TableCell>
                     {editable && (
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirFournisseur(f)} aria-label={`Modifier ${f.nom}`}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirFournisseur(f)} aria-label={t("fournisseurs.ariaEdit", { nom: f.nom })}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-terracotta hover:text-terracotta"
-                          onClick={() => confirm(`Supprimer ${f.nom} ?`) && supprimerFournisseur.mutate(f.id)}
-                          aria-label={`Supprimer ${f.nom}`}
+                          onClick={() => confirm(t("fournisseurs.confirmDelete", { nom: f.nom })) && supprimerFournisseur.mutate(f.id)}
+                          aria-label={t("fournisseurs.ariaDelete", { nom: f.nom })}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -227,7 +226,7 @@ export function FournisseursPage() {
                 {fournisseurs.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={editable ? 4 : 3} className="py-8 text-center text-muted-foreground">
-                      Aucun fournisseur enregistré.
+                      {t("fournisseurs.noSupplier")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -239,10 +238,8 @@ export function FournisseursPage() {
         {/* Commandes en attente */}
         <Card className={enAttente.length > 0 ? "border-or/40" : undefined}>
           <CardHeader>
-            <CardTitle>Commandes en attente</CardTitle>
-            <CardDescription>
-              {enAttente.length} bon(s) de commande à réceptionner — la réception incrémente le stock.
-            </CardDescription>
+            <CardTitle>{t("fournisseurs.pendingTitle")}</CardTitle>
+            <CardDescription>{t("fournisseurs.pendingDesc", { count: enAttente.length })}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {enAttente.map((c) => (
@@ -250,25 +247,25 @@ export function FournisseursPage() {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold text-marine dark:text-creme">
-                      Commande n°{c.numero} — {c.fournisseur.nom}
+                      {t("fournisseurs.orderLine", { numero: c.numero, fournisseur: c.fournisseur.nom })}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Passée le {formatDateHeure(c.date)}
-                      {c.creePar ? ` par ${c.creePar.nom}` : ""}
+                      {t("fournisseurs.placedOn", { date: formatDateHeure(c.date) })}
+                      {c.creePar ? t("fournisseurs.placedBy", { nom: c.creePar.nom }) : ""}
                     </p>
                   </div>
                   {editable && (
                     <div className="flex shrink-0 gap-1">
                       <Button variant="cta" size="sm" onClick={() => { setErreurReception(null); setCommandeAReceptionner(c); }}>
                         <PackageCheck className="h-3.5 w-3.5" />
-                        Marquer reçue
+                        {t("fournisseurs.markReceived")}
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(`Annuler la commande n°${c.numero} ?`) && supprimerCommande.mutate(c.id)}
-                        aria-label={`Annuler la commande n°${c.numero}`}
+                        onClick={() => confirm(t("fournisseurs.confirmCancel", { numero: c.numero })) && supprimerCommande.mutate(c.id)}
+                        aria-label={t("fournisseurs.ariaCancel", { numero: c.numero })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -286,14 +283,14 @@ export function FournisseursPage() {
                     </li>
                   ))}
                   <li className="flex justify-between border-t pt-1 font-semibold text-foreground">
-                    <span>Total</span>
+                    <span>{t("common.total")}</span>
                     <span className="text-marine dark:text-or">{formatFc(c.total)}</span>
                   </li>
                 </ul>
               </div>
             ))}
             {enAttente.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">Aucune commande en attente.</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("fournisseurs.noPending")}</p>
             )}
           </CardContent>
         </Card>
@@ -302,20 +299,20 @@ export function FournisseursPage() {
       {/* Historique */}
       <Card>
         <CardHeader>
-          <CardTitle>Historique des commandes</CardTitle>
-          <CardDescription>Bons de commande passés et réceptions.</CardDescription>
+          <CardTitle>{t("fournisseurs.historyTitle")}</CardTitle>
+          <CardDescription>{t("fournisseurs.historyDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>N°</TableHead>
-                <TableHead>Fournisseur</TableHead>
-                <TableHead>Passée le</TableHead>
-                <TableHead>Lignes</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Reçue le</TableHead>
-                <TableHead className="text-right">Total</TableHead>
+                <TableHead>{t("fournisseurs.colSupplier")}</TableHead>
+                <TableHead>{t("fournisseurs.colPlacedOn")}</TableHead>
+                <TableHead>{t("fournisseurs.colLines")}</TableHead>
+                <TableHead>{t("common.status")}</TableHead>
+                <TableHead>{t("fournisseurs.colReceivedOn")}</TableHead>
+                <TableHead className="text-right">{t("common.total")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -328,9 +325,7 @@ export function FournisseursPage() {
                     {c.lignes.map((l) => `${formatQuantite(l.quantite, l.matierePremiere.unite)} ${l.matierePremiere.nom}`).join(", ")}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={c.statut === "RECUE" ? "gold" : "secondary"}>
-                      {STATUT_COMMANDE_FOURNISSEUR_LABELS[c.statut]}
-                    </Badge>
+                    <Badge variant={c.statut === "RECUE" ? "gold" : "secondary"}>{t(`statutFournisseur.${c.statut}`)}</Badge>
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {c.dateReception ? formatDateHeure(c.dateReception) : "—"}
@@ -341,7 +336,7 @@ export function FournisseursPage() {
               {commandes.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Aucune commande fournisseur.
+                    {t("fournisseurs.noOrder")}
                   </TableCell>
                 </TableRow>
               )}
@@ -361,21 +356,21 @@ export function FournisseursPage() {
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>{fournisseurEdite ? `Modifier ${fournisseurEdite.nom}` : "Nouveau fournisseur"}</DialogTitle>
-              <DialogDescription>Fiche fournisseur : nom et contact.</DialogDescription>
+              <DialogTitle>{fournisseurEdite ? t("fournisseurs.supplierDialogEdit", { nom: fournisseurEdite.nom }) : t("fournisseurs.supplierDialogNew")}</DialogTitle>
+              <DialogDescription>{t("fournisseurs.supplierDialogDesc")}</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="fournisseur-nom">Nom</Label>
+                <Label htmlFor="fournisseur-nom">{t("common.name")}</Label>
                 <Input id="fournisseur-nom" value={nom} onChange={(e) => setNom(e.target.value)} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="fournisseur-contact">Contact (optionnel)</Label>
+                <Label htmlFor="fournisseur-contact">{t("fournisseurs.contactOptional")}</Label>
                 <Input
                   id="fournisseur-contact"
                   value={contact}
                   onChange={(e) => setContact(e.target.value)}
-                  placeholder="Téléphone, e-mail, adresse…"
+                  placeholder={t("fournisseurs.contactPlaceholder")}
                 />
               </div>
             </div>
@@ -386,10 +381,10 @@ export function FournisseursPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogFournisseur(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={sauverFournisseur.isPending}>
-                Enregistrer
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </form>
@@ -407,12 +402,12 @@ export function FournisseursPage() {
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>Nouveau bon de commande</DialogTitle>
-              <DialogDescription>La commande reste « En attente » jusqu'à la réception.</DialogDescription>
+              <DialogTitle>{t("fournisseurs.orderDialogTitle")}</DialogTitle>
+              <DialogDescription>{t("fournisseurs.orderDialogDesc")}</DialogDescription>
             </DialogHeader>
 
             <div className="space-y-1.5">
-              <Label htmlFor="cmd-fournisseur">Fournisseur</Label>
+              <Label htmlFor="cmd-fournisseur">{t("fournisseurs.supplier")}</Label>
               <NativeSelect id="cmd-fournisseur" value={cmdFournisseurId} onChange={(e) => setCmdFournisseurId(e.target.value)} required>
                 {fournisseurs.map((f) => (
                   <option key={f.id} value={f.id}>
@@ -423,7 +418,7 @@ export function FournisseursPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Lignes (matière, quantité, prix unitaire en Fc)</Label>
+              <Label>{t("fournisseurs.linesLabel")}</Label>
               {lignes.map((l, index) => {
                 const matiere = matieres.find((m) => m.id === l.matierePremiereId);
                 return (
@@ -434,9 +429,9 @@ export function FournisseursPage() {
                         setLignes((prev) => prev.map((x, i) => (i === index ? { ...x, matierePremiereId: e.target.value } : x)))
                       }
                       required
-                      aria-label={`Matière de la ligne ${index + 1}`}
+                      aria-label={t("fournisseurs.ariaLineMatiere", { n: index + 1 })}
                     >
-                      <option value="">— Matière —</option>
+                      <option value="">{t("fournisseurs.chooseMatiere")}</option>
                       {matieres.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.nom}
@@ -448,26 +443,26 @@ export function FournisseursPage() {
                       min="0.001"
                       step="0.001"
                       className="w-24 shrink-0"
-                      placeholder={matiere ? matiere.unite : "qté"}
+                      placeholder={matiere ? matiere.unite : t("fournisseurs.qtyPlaceholder")}
                       value={l.quantite}
                       onChange={(e) =>
                         setLignes((prev) => prev.map((x, i) => (i === index ? { ...x, quantite: e.target.value } : x)))
                       }
                       required
-                      aria-label={`Quantité de la ligne ${index + 1}`}
+                      aria-label={t("fournisseurs.ariaLineQty", { n: index + 1 })}
                     />
                     <Input
                       type="number"
                       min="0"
                       step="1"
                       className="w-28 shrink-0"
-                      placeholder="Fc/unité"
+                      placeholder={t("fournisseurs.pricePlaceholder")}
                       value={l.prixUnitaire}
                       onChange={(e) =>
                         setLignes((prev) => prev.map((x, i) => (i === index ? { ...x, prixUnitaire: e.target.value } : x)))
                       }
                       required
-                      aria-label={`Prix unitaire de la ligne ${index + 1}`}
+                      aria-label={t("fournisseurs.ariaLinePrice", { n: index + 1 })}
                     />
                     <Button
                       type="button"
@@ -476,7 +471,7 @@ export function FournisseursPage() {
                       className="h-8 w-8 shrink-0 text-terracotta hover:text-terracotta"
                       onClick={() => setLignes((prev) => prev.filter((_, i) => i !== index))}
                       disabled={lignes.length === 1}
-                      aria-label={`Retirer la ligne ${index + 1}`}
+                      aria-label={t("fournisseurs.ariaRemoveLine", { n: index + 1 })}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -491,10 +486,10 @@ export function FournisseursPage() {
                   onClick={() => setLignes((prev) => [...prev, { matierePremiereId: "", quantite: "", prixUnitaire: "" }])}
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  Ajouter une ligne
+                  {t("fournisseurs.addLine")}
                 </Button>
                 <p className="text-sm font-semibold">
-                  Total : <span className="text-marine dark:text-or">{formatFc(totalCommande)}</span>
+                  {t("common.total")} : <span className="text-marine dark:text-or">{formatFc(totalCommande)}</span>
                 </p>
               </div>
             </div>
@@ -506,10 +501,10 @@ export function FournisseursPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogCommande(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={creerCommande.isPending}>
-                Passer la commande
+                {t("fournisseurs.placeOrder")}
               </Button>
             </DialogFooter>
           </form>
@@ -520,11 +515,8 @@ export function FournisseursPage() {
       <Dialog open={!!commandeAReceptionner} onOpenChange={(open) => !open && setCommandeAReceptionner(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Réceptionner la commande n°{commandeAReceptionner?.numero} ?</DialogTitle>
-            <DialogDescription>
-              Le stock des matières premières sera incrémenté (mouvements d'entrée, référence = la commande).
-              Cette action est définitive.
-            </DialogDescription>
+            <DialogTitle>{t("fournisseurs.receptionTitle", { numero: commandeAReceptionner?.numero })}</DialogTitle>
+            <DialogDescription>{t("fournisseurs.receptionDesc")}</DialogDescription>
           </DialogHeader>
           <ul className="space-y-1 text-sm text-muted-foreground">
             {commandeAReceptionner?.lignes.map((l) => (
@@ -543,7 +535,7 @@ export function FournisseursPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setCommandeAReceptionner(null)}>
-              Annuler
+              {t("common.cancel")}
             </Button>
             <Button
               variant="cta"
@@ -551,7 +543,7 @@ export function FournisseursPage() {
               onClick={() => commandeAReceptionner && receptionner.mutate(commandeAReceptionner.id)}
             >
               <PackageCheck className="h-4 w-4" />
-              Confirmer la réception
+              {t("fournisseurs.confirmReception")}
             </Button>
           </DialogFooter>
         </DialogContent>
