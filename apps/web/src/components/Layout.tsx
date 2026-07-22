@@ -46,7 +46,7 @@ const navigation: EntreeNav[] = [
   { to: "/travailleurs", label: "Travailleurs", icon: Users, module: "TRAVAILLEURS" },
   // Rapports personnels (3.13) : accessibles à tous, portée résolue côté serveur.
   { to: "/rapports", label: "Rapports", icon: ScrollText },
-  { label: "Paramètres", icon: Settings, module: "PARAMETRES" },
+  { to: "/parametres", label: "Paramètres", icon: Settings, module: "PARAMETRES" },
   // À propos (3.12) : accessible à tous.
   { to: "/a-propos", label: "À propos", icon: Info },
 ];

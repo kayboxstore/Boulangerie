@@ -192,6 +192,18 @@ export interface TypeClientDTO {
   commissionParBac: number;
 }
 
+// Types de clients (« Qualité ») — édités dans les Paramètres (section 3.9),
+// écriture réservée à l'Administrateur. Les montants sont en Fc.
+export const typeClientCreateSchema = z.object({
+  nom: z.string().trim().min(1, "Le nom est requis").max(60),
+  prixParBac: z.number().int("Montant en Fc entier").min(0, "Le prix doit être positif"),
+  commissionParBac: z.number().int("Montant en Fc entier").min(0, "La commission doit être positive").default(0),
+});
+export type TypeClientCreateInput = z.infer<typeof typeClientCreateSchema>;
+
+export const typeClientUpdateSchema = typeClientCreateSchema.partial();
+export type TypeClientUpdateInput = z.infer<typeof typeClientUpdateSchema>;
+
 export interface ClientDTO {
   id: string;
   nom: string;
@@ -265,10 +277,14 @@ export const MOYEN_PAIEMENT_LABELS: Record<MoyenPaiement, string> = {
   CARTE: "Carte bancaire",
 };
 
-// Clé du seuil (en Fc) déclenchant l'alerte transaction inhabituelle (3.10).
-// Stocké dans ParametreBoutique — valeur par défaut 100 000 Fc, modifiable
-// plus tard par l'Admin dans les Paramètres.
+// Clés du magasin clé/valeur ParametreBoutique (section 3.9), éditées par l'Admin.
 export const CLE_SEUIL_ALERTE_TRANSACTION = "seuil_alerte_transaction";
+export const CLE_BOUTIQUE_NOM = "boutique_nom";
+export const CLE_BOUTIQUE_ADRESSE = "boutique_adresse";
+export const CLE_BOUTIQUE_CONTACT = "boutique_contact";
+export const CLE_LANGUE_DEFAUT = "langue_defaut";
+
+export const SEUIL_ALERTE_TRANSACTION_DEFAUT = 100_000; // Fc (3.10)
 
 export const venteCreateSchema = z.object({
   moyenPaiement: z.enum(MOYENS_PAIEMENT),
@@ -740,6 +756,42 @@ export interface ActiviteDTO {
 export interface PorteeRapportsDTO {
   tous: boolean;
   utilisateurs: { id: string; nom: string; roleNom: string }[];
+}
+
+// ---------------------------------------------------------------------------
+// Paramètres de la boutique (section 3.9) — Administrateur uniquement
+// ---------------------------------------------------------------------------
+
+// Langue de l'interface (3.9). La traduction effective des libellés arrive en
+// phase 9ter ; ici, seul le point de configuration est posé.
+export const LANGUES = ["FR", "LN"] as const;
+export type Langue = (typeof LANGUES)[number];
+
+export const LANGUE_LABELS: Record<Langue, string> = {
+  FR: "Français",
+  LN: "Lingala",
+};
+
+export const LANGUE_DEFAUT_PAR_DEFAUT: Langue = "FR";
+
+export const parametresBoutiqueSchema = z.object({
+  seuilAlerteTransaction: z
+    .number()
+    .int("Montant en Fc entier")
+    .min(1, "Le seuil doit être strictement positif"),
+  boutiqueNom: z.string().trim().max(120).default(""),
+  boutiqueAdresse: z.string().trim().max(300).default(""),
+  boutiqueContact: z.string().trim().max(200).default(""),
+  langueDefaut: z.enum(LANGUES),
+});
+export type ParametresBoutiqueInput = z.infer<typeof parametresBoutiqueSchema>;
+
+export interface ParametresBoutiqueDTO {
+  seuilAlerteTransaction: number;
+  boutiqueNom: string;
+  boutiqueAdresse: string;
+  boutiqueContact: string;
+  langueDefaut: Langue;
 }
 
 // ---------------------------------------------------------------------------

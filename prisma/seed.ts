@@ -188,14 +188,19 @@ async function main() {
     }
   }
 
-  // --- Paramètres de la boutique (section 3.9) ---
-  // Seuil d'alerte transaction inhabituelle (3.10) : 100 000 Fc par défaut,
-  // modifiable ensuite par l'Admin dans les Paramètres.
-  await prisma.parametreBoutique.upsert({
-    where: { cle: "seuil_alerte_transaction" },
-    update: {},
-    create: { cle: "seuil_alerte_transaction", valeur: "100000" },
-  });
+  // --- Paramètres de la boutique (section 3.9) — magasin clé/valeur ---
+  // Modifiables par l'Admin dans les Paramètres ; on ne réécrit pas une valeur
+  // déjà présente (update: {}), pour ne pas écraser une saisie existante.
+  const parametresBoutique = [
+    { cle: "seuil_alerte_transaction", valeur: "100000" }, // Fc (3.10)
+    { cle: "boutique_nom", valeur: "Boulangerie Lomoto" },
+    { cle: "boutique_adresse", valeur: "Kinshasa, République démocratique du Congo" },
+    { cle: "boutique_contact", valeur: "+243 810 000 000 · contact@lomoto.cd" },
+    { cle: "langue_defaut", valeur: "FR" },
+  ];
+  for (const p of parametresBoutique) {
+    await prisma.parametreBoutique.upsert({ where: { cle: p.cle }, update: {}, create: p });
+  }
 
   // --- Catalogue produits initial (pain — exonéré de TVA, tauxTaxe = 0) ---
   const produits = [

@@ -17,6 +17,7 @@ import { ProfilPage } from "@/pages/Profil";
 import { TravailleursPage } from "@/pages/Travailleurs";
 import { RapportsPersonnelsPage } from "@/pages/RapportsPersonnels";
 import { AProposPage } from "@/pages/APropos";
+import { ParametresPage } from "@/pages/Parametres";
 
 /** Garde d'accès : exige au moins la lecture sur `module`, sinon retour à l'accueil. */
 function RequiertLecture({ module, children }: { module: Module; children: ReactNode }) {
@@ -105,6 +106,14 @@ export default function App() {
         <Route path="/rapports" element={<RapportsPersonnelsPage />} />
         {/* À propos (3.12) : accessible à tous. */}
         <Route path="/a-propos" element={<AProposPage />} />
+        <Route
+          path="/parametres"
+          element={
+            <RequiertLecture module="PARAMETRES">
+              <ParametresPage />
+            </RequiertLecture>
+          }
+        />
         <Route
           path="/travailleurs"
           element={
