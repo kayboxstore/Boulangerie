@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
   Banknote,
@@ -18,7 +19,6 @@ import {
 import {
   formatFc,
   formatQuantite,
-  STATUT_COMMANDE_FOURNISSEUR_LABELS,
   type RapportCaisseDTO,
   type RapportCommandesDTO,
   type RapportCommissionsDTO,
@@ -70,8 +70,8 @@ function Compteur({ valeur, format }: { valeur: number; format: (n: number) => s
     const duree = 600;
     const debut = performance.now();
     let anim: number;
-    const pas = (t: number) => {
-      const progression = Math.min(1, (t - debut) / duree);
+    const pas = (maintenant: number) => {
+      const progression = Math.min(1, (maintenant - debut) / duree);
       const facteur = 1 - Math.pow(1 - progression, 3); // ease-out cubic
       setAffiche(Math.round(depart + (valeur - depart) * facteur));
       if (progression < 1) anim = requestAnimationFrame(pas);
@@ -123,6 +123,7 @@ function TitreWidget({ icone: Icone, children }: { icone: typeof Banknote; child
 
 export function DashboardPage() {
   const { utilisateur, peutLire } = useAuth();
+  const { t } = useTranslation();
   const { notifications, marquerLue } = useSocket();
 
   const litCaisse = peutLire("CAISSE");
@@ -192,74 +193,75 @@ export function DashboardPage() {
   }, [caisse]);
 
   function exporterCSV() {
+    const c = (k: string) => t(`dashboard.csv.${k}`);
     const sections: SectionCSV[] = [];
     if (caisse) {
       sections.push({
-        titre: "CA / Caisse",
-        entetes: ["Indicateur", "Valeur (Fc)"],
+        titre: c("caTitle"),
+        entetes: [c("indicator"), c("valueFc")],
         lignes: [
-          ["CA du jour", caisse.caJour],
-          ["CA 7 derniers jours", caisse.ca7Jours],
-          ["CA 30 derniers jours", caisse.ca30Jours],
-          ["Ventes du jour", caisse.nbVentesJour],
+          [c("caDay"), caisse.caJour],
+          [c("ca7"), caisse.ca7Jours],
+          [c("ca30"), caisse.ca30Jours],
+          [c("salesDay"), caisse.nbVentesJour],
         ],
       });
       sections.push({
-        titre: "CA par jour (30 jours)",
-        entetes: ["Date", "CA (Fc)"],
+        titre: c("caPerDayTitle"),
+        entetes: [c("colDate"), c("caFc")],
         lignes: serieCA.map((p) => [p.date, p.total]),
       });
       sections.push({
-        titre: "Meilleures ventes (30 jours) — volume et CA (marge non calculable : prix d'achat des matières non systématiques)",
-        entetes: ["Produit", "Quantité vendue", "CA (Fc)"],
+        titre: c("bestSellersTitle"),
+        entetes: [c("colProduct"), c("colQtySold"), c("caFc")],
         lignes: caisse.meilleuresVentes.map((v) => [v.produitNom, v.quantite, v.ca]),
       });
     }
     if (commandes) {
       sections.push({
-        titre: "Commandes clients (30 jours)",
-        entetes: ["Indicateur", "Valeur"],
+        titre: c("ordersTitle"),
+        entetes: [c("indicator"), c("value")],
         lignes: [
-          ["Nombre de commandes", commandes.nbCommandes30Jours],
-          ["Montant brut (Fc)", commandes.montantBrut30Jours],
-          ["Montant reçu (Fc)", commandes.montantRecu30Jours],
-          ["Dettes en cours — nombre", commandes.dettesEnCours.nombre],
-          ["Dettes en cours — total (Fc)", commandes.dettesEnCours.total],
+          [c("nbOrders"), commandes.nbCommandes30Jours],
+          [c("grossFc"), commandes.montantBrut30Jours],
+          [c("receivedFc"), commandes.montantRecu30Jours],
+          [c("debtsNb"), commandes.dettesEnCours.nombre],
+          [c("debtsTotalFc"), commandes.dettesEnCours.total],
         ],
       });
     }
     if (commissions) {
       sections.push({
-        titre: "Commissions (30 jours)",
-        entetes: ["Indicateur", "Valeur"],
+        titre: c("commissionsTitle"),
+        entetes: [c("indicator"), c("value")],
         lignes: [
-          ["Total commissions (Fc)", commissions.totalCommissions30Jours],
-          ["Commandes à commission", commissions.nbCommandesACommission30Jours],
+          [c("totalCommissionsFc"), commissions.totalCommissions30Jours],
+          [c("ordersWithCommission"), commissions.nbCommandesACommission30Jours],
         ],
       });
     }
     if (stock) {
       sections.push({
-        titre: "Alertes stock actives",
-        entetes: ["Matière", "En stock", "Seuil", "Unité"],
+        titre: c("stockAlertsTitle"),
+        entetes: [c("colMatiere"), c("colInStock"), c("colThreshold"), c("colUnit")],
         lignes: stock.alertes.map((a) => [a.nom, a.quantiteStock, a.seuilAlerte, a.unite]),
       });
     }
     if (production) {
       sections.push({
-        titre: "Dernières productions",
-        entetes: ["N°", "Produit", "Quantité", "Date"],
+        titre: c("lastProductionsTitle"),
+        entetes: ["N°", c("colProduct"), c("colQty"), c("colDate")],
         lignes: production.dernieres.map((p) => [p.numero, p.produitNom, p.quantiteProduite, p.date.slice(0, 10)]),
       });
     }
     if (fournisseurs) {
       sections.push({
-        titre: "Achats fournisseurs récents",
-        entetes: ["N°", "Fournisseur", "Statut", "Total (Fc)", "Date"],
+        titre: c("suppliersTitle"),
+        entetes: ["N°", c("colSupplier"), t("common.status"), c("colTotalFc"), c("colDate")],
         lignes: fournisseurs.achatsRecents.map((a) => [
           a.numero,
           a.fournisseurNom,
-          STATUT_COMMANDE_FOURNISSEUR_LABELS[a.statut],
+          t(`statutFournisseur.${a.statut}`),
           a.total,
           a.date.slice(0, 10),
         ]),
@@ -267,14 +269,14 @@ export function DashboardPage() {
     }
     if (travailleurs) {
       sections.push({
-        titre: "Présence du jour",
-        entetes: ["Indicateur", "Valeur"],
+        titre: c("presenceTitle"),
+        entetes: [c("indicator"), c("value")],
         lignes: [
-          ["Attendus", travailleurs.attendus],
-          ["Présents", travailleurs.presents],
-          ["Retards", travailleurs.retards],
-          ["Absents", travailleurs.absents],
-          ["Non pointés", travailleurs.nonPointes],
+          [c("expected"), travailleurs.attendus],
+          [c("present"), travailleurs.presents],
+          [c("late"), travailleurs.retards],
+          [c("absent"), travailleurs.absents],
+          [c("notClocked"), travailleurs.nonPointes],
         ],
       });
     }
@@ -287,9 +289,9 @@ export function DashboardPage() {
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Bonjour, {utilisateur.nom}</h1>
+          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("dashboard.greeting", { nom: utilisateur.nom })}</h1>
           <p className="mt-1 text-muted-foreground">
-            Connecté(e) en tant que <span className="font-medium text-foreground">{utilisateur.role.nom}</span>
+            {t("dashboard.connectedAs")} <span className="font-medium text-foreground">{utilisateur.role.nom}</span>
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -297,7 +299,7 @@ export function DashboardPage() {
           {!aucunWidget && (
             <Button variant="outline" onClick={exporterCSV}>
               <Download className="h-4 w-4" />
-              Exporter CSV
+              {t("dashboard.exportCSV")}
             </Button>
           )}
         </div>
@@ -309,25 +311,24 @@ export function DashboardPage() {
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
             <FileBarChart className="h-10 w-10 text-muted-foreground/50" />
             <div>
-              <p className="font-medium">Aucune donnée métier à afficher pour votre rôle.</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Les widgets du tableau de bord suivent la matrice de permissions — le rôle Administrateur n'a
-                aucune permission métier, par design. Consultez plutôt vos modules :
-              </p>
+              <p className="font-medium">{t("dashboard.emptyTitle")}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{t("dashboard.emptyText")}</p>
             </div>
             <div className="flex flex-wrap justify-center gap-2">
               <Button asChild variant="outline">
                 <Link to="/equipe">
                   <UserCog className="h-4 w-4" />
-                  Équipe
+                  {t("nav.equipe")}
                 </Link>
               </Button>
-              <Button variant="outline" disabled title="Module à venir">
-                <Settings className="h-4 w-4" />
-                Paramètres (à venir)
+              <Button asChild variant="outline">
+                <Link to="/parametres">
+                  <Settings className="h-4 w-4" />
+                  {t("nav.parametres")}
+                </Link>
               </Button>
-              <Button variant="outline" disabled title="Module à venir (3.15)">
-                État système (à venir)
+              <Button variant="outline" disabled title={t("nav.moduleComingSoon")}>
+                {t("dashboard.systemStateComingSoon")}
               </Button>
             </div>
           </CardContent>
@@ -338,14 +339,14 @@ export function DashboardPage() {
       {cloture && (
         <Card className="border-or/40">
           <CardHeader>
-            <TitreWidget icone={FileBarChart}>Résumé de clôture — {formatDateCourte(cloture.date)}</TitreWidget>
-            <CardDescription>Vue de synthèse du jour, en plus des widgets temps réel.</CardDescription>
+            <TitreWidget icone={FileBarChart}>{t("dashboard.closureSummary", { date: formatDateCourte(cloture.date) })}</TitreWidget>
+            <CardDescription>{t("dashboard.closureSummaryDesc")}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <CarteKPI titre="CA du jour" valeur={cloture.caJour} format={formatFc} accent />
-            <CarteKPI titre="Ventes du jour" valeur={cloture.nbVentesJour} detail={`${cloture.nbCommandesJour} commande(s) client`} />
-            <CarteKPI titre="Dettes en cours" valeur={cloture.dettesEnCours.total} format={formatFc} detail={`${cloture.dettesEnCours.nombre} commande(s) concernée(s)`} />
-            <CarteKPI titre="Alertes stock actives" valeur={cloture.alertesStock.length} detail={cloture.alertesStock.map((a) => a.nom).join(", ") || "Aucune"} />
+            <CarteKPI titre={t("dashboard.kpiCaDay")} valeur={cloture.caJour} format={formatFc} accent />
+            <CarteKPI titre={t("dashboard.kpiSalesDay")} valeur={cloture.nbVentesJour} detail={t("dashboard.ordersClientDetail", { count: cloture.nbCommandesJour })} />
+            <CarteKPI titre={t("dashboard.kpiDebts")} valeur={cloture.dettesEnCours.total} format={formatFc} detail={t("dashboard.debtsDetail", { count: cloture.dettesEnCours.nombre })} />
+            <CarteKPI titre={t("dashboard.kpiStockAlerts")} valeur={cloture.alertesStock.length} detail={cloture.alertesStock.map((a) => a.nom).join(", ") || t("dashboard.none")} />
           </CardContent>
         </Card>
       )}
@@ -354,16 +355,16 @@ export function DashboardPage() {
       {litCaisse && caisse && (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <CarteKPI titre="CA du jour" valeur={caisse.caJour} format={formatFc} accent />
-            <CarteKPI titre="CA — 7 derniers jours" valeur={caisse.ca7Jours} format={formatFc} />
-            <CarteKPI titre="CA — 30 derniers jours" valeur={caisse.ca30Jours} format={formatFc} />
-            <CarteKPI titre="Ventes du jour" valeur={caisse.nbVentesJour} />
+            <CarteKPI titre={t("dashboard.kpiCaDay")} valeur={caisse.caJour} format={formatFc} accent />
+            <CarteKPI titre={t("dashboard.kpiCa7")} valeur={caisse.ca7Jours} format={formatFc} />
+            <CarteKPI titre={t("dashboard.kpiCa30")} valeur={caisse.ca30Jours} format={formatFc} />
+            <CarteKPI titre={t("dashboard.kpiSalesDay")} valeur={caisse.nbVentesJour} />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
             <Card>
               <CardHeader>
-                <TitreWidget icone={Banknote}>Courbe du chiffre d'affaires (30 jours)</TitreWidget>
+                <TitreWidget icone={Banknote}>{t("dashboard.caCurveTitle")}</TitreWidget>
               </CardHeader>
               <CardContent className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
@@ -378,7 +379,7 @@ export function DashboardPage() {
                     <XAxis dataKey="date" tickFormatter={formatDateCourte} tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.6} interval={6} />
                     <YAxis tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.6} width={70} tickFormatter={(v: number) => new Intl.NumberFormat("fr-FR", { notation: "compact" }).format(v)} />
                     <Tooltip
-                      formatter={(v) => [formatFc(Number(v)), "CA"]}
+                      formatter={(v) => [formatFc(Number(v)), t("dashboard.caTooltip")]}
                       labelFormatter={(l) => formatDateCourte(String(l))}
                       contentStyle={{ borderRadius: 8, border: "1px solid rgba(0,0,0,0.1)" }}
                     />
@@ -390,15 +391,12 @@ export function DashboardPage() {
 
             <Card>
               <CardHeader>
-                <TitreWidget icone={Banknote}>Meilleures ventes (30 jours)</TitreWidget>
-                <CardDescription>
-                  Par volume, avec le CA par produit. La marge n'est pas affichée : le coût de revient n'est
-                  pas calculable tant que les prix d'achat des matières ne sont pas systématiquement renseignés.
-                </CardDescription>
+                <TitreWidget icone={Banknote}>{t("dashboard.bestSellersTitle")}</TitreWidget>
+                <CardDescription>{t("dashboard.bestSellersDesc")}</CardDescription>
               </CardHeader>
               <CardContent className="h-56">
                 {caisse.meilleuresVentes.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">Aucune vente sur la période.</p>
+                  <p className="py-8 text-center text-sm text-muted-foreground">{t("dashboard.noSalePeriod")}</p>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={caisse.meilleuresVentes} layout="vertical" margin={{ top: 0, right: 8, left: 8, bottom: 0 }}>
@@ -408,7 +406,7 @@ export function DashboardPage() {
                       <Tooltip
                         formatter={(v, nom, item) =>
                           nom === "quantite"
-                            ? [`${v} vendu(s) — CA ${formatFc(item.payload.ca)}`, item.payload.produitNom]
+                            ? [t("dashboard.bestSellersTooltip", { count: v, ca: formatFc(item.payload.ca) }), item.payload.produitNom]
                             : [String(v), String(nom)]
                         }
                       />
@@ -427,12 +425,12 @@ export function DashboardPage() {
         {litCommandes && commandes && (
           <Card>
             <CardHeader>
-              <TitreWidget icone={ShoppingBasket}>Commandes clients (30 jours)</TitreWidget>
+              <TitreWidget icone={ShoppingBasket}>{t("dashboard.ordersTitle")}</TitreWidget>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <CarteKPI titre="Commandes" valeur={commandes.nbCommandes30Jours} />
-                <CarteKPI titre="Montant reçu" valeur={commandes.montantRecu30Jours} format={formatFc} />
+                <CarteKPI titre={t("dashboard.kpiOrders")} valeur={commandes.nbCommandes30Jours} />
+                <CarteKPI titre={t("dashboard.kpiReceived")} valeur={commandes.montantRecu30Jours} format={formatFc} />
               </div>
               <div
                 className={cn(
@@ -443,12 +441,12 @@ export function DashboardPage() {
                 {commandes.dettesEnCours.nombre > 0 ? (
                   <>
                     <span className="font-semibold">
-                      {commandes.dettesEnCours.nombre} dette(s) en cours — {formatFc(commandes.dettesEnCours.total)}
+                      {t("dashboard.debtsInProgress", { count: commandes.dettesEnCours.nombre, montant: formatFc(commandes.dettesEnCours.total) })}
                     </span>{" "}
-                    (toutes périodes)
+                    {t("dashboard.allPeriods")}
                   </>
                 ) : (
-                  "Aucune dette en cours."
+                  t("dashboard.noDebt")
                 )}
               </div>
             </CardContent>
@@ -458,14 +456,14 @@ export function DashboardPage() {
         {litCommissions && commissions && (
           <Card>
             <CardHeader>
-              <TitreWidget icone={HandCoins}>Commissions (30 jours)</TitreWidget>
+              <TitreWidget icone={HandCoins}>{t("dashboard.commissionsTitle")}</TitreWidget>
             </CardHeader>
             <CardContent>
               <CarteKPI
-                titre="Total des commissions"
+                titre={t("dashboard.kpiTotalCommissions")}
                 valeur={commissions.totalCommissions30Jours}
                 format={formatFc}
-                detail={`${commissions.nbCommandesACommission30Jours} commande(s) Maman`}
+                detail={t("dashboard.commissionsDetail", { count: commissions.nbCommandesACommission30Jours })}
                 accent
               />
             </CardContent>
@@ -475,14 +473,12 @@ export function DashboardPage() {
         {litStocks && stock && (
           <Card className={stock.alertes.length > 0 ? "border-terracotta/40" : undefined}>
             <CardHeader>
-              <TitreWidget icone={Package}>Alertes stock</TitreWidget>
-              <CardDescription>
-                {stock.alertes.length} matière(s) sous le seuil sur {stock.nbMatieres}.
-              </CardDescription>
+              <TitreWidget icone={Package}>{t("dashboard.stockAlertsTitle")}</TitreWidget>
+              <CardDescription>{t("dashboard.stockAlertsDesc", { count: stock.alertes.length, total: stock.nbMatieres })}</CardDescription>
             </CardHeader>
             <CardContent>
               {stock.alertes.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Tous les stocks sont au-dessus de leur seuil.</p>
+                <p className="text-sm text-muted-foreground">{t("dashboard.allStocksOk")}</p>
               ) : (
                 <ul className="space-y-2 text-sm">
                   {stock.alertes.map((a) => (
@@ -492,7 +488,7 @@ export function DashboardPage() {
                         {a.nom}
                       </span>
                       <span className="text-muted-foreground">
-                        {formatQuantite(a.quantiteStock, a.unite)} / seuil {formatQuantite(a.seuilAlerte, a.unite)}
+                        {t("dashboard.stockThreshold", { stock: formatQuantite(a.quantiteStock, a.unite), seuil: formatQuantite(a.seuilAlerte, a.unite) })}
                       </span>
                     </li>
                   ))}
@@ -505,12 +501,12 @@ export function DashboardPage() {
         {litProduction && production && (
           <Card>
             <CardHeader>
-              <TitreWidget icone={Factory}>Dernières productions</TitreWidget>
-              <CardDescription>{production.nbProductions30Jours} production(s) sur 30 jours.</CardDescription>
+              <TitreWidget icone={Factory}>{t("dashboard.lastProductionsTitle")}</TitreWidget>
+              <CardDescription>{t("dashboard.productionsDesc", { count: production.nbProductions30Jours })}</CardDescription>
             </CardHeader>
             <CardContent>
               {production.dernieres.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Aucune production enregistrée.</p>
+                <p className="text-sm text-muted-foreground">{t("dashboard.noProduction")}</p>
               ) : (
                 <ul className="space-y-1.5 text-sm">
                   {production.dernieres.map((p) => (
@@ -531,14 +527,12 @@ export function DashboardPage() {
         {litFournisseurs && fournisseurs && (
           <Card>
             <CardHeader>
-              <TitreWidget icone={Truck}>Achats fournisseurs</TitreWidget>
-              <CardDescription>
-                {formatFc(fournisseurs.totalRecu30Jours)} reçus sur 30 jours — {fournisseurs.enAttente} commande(s) en attente.
-              </CardDescription>
+              <TitreWidget icone={Truck}>{t("dashboard.suppliersTitle")}</TitreWidget>
+              <CardDescription>{t("dashboard.suppliersDesc", { montant: formatFc(fournisseurs.totalRecu30Jours), count: fournisseurs.enAttente })}</CardDescription>
             </CardHeader>
             <CardContent>
               {fournisseurs.achatsRecents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Aucune commande fournisseur.</p>
+                <p className="text-sm text-muted-foreground">{t("dashboard.noSupplierOrder")}</p>
               ) : (
                 <ul className="space-y-1.5 text-sm">
                   {fournisseurs.achatsRecents.slice(0, 6).map((a) => (
@@ -548,9 +542,7 @@ export function DashboardPage() {
                         <span className="font-medium">{a.fournisseurNom}</span>
                       </span>
                       <span className="flex shrink-0 items-center gap-2">
-                        <Badge variant={a.statut === "RECUE" ? "gold" : "secondary"}>
-                          {STATUT_COMMANDE_FOURNISSEUR_LABELS[a.statut]}
-                        </Badge>
+                        <Badge variant={a.statut === "RECUE" ? "gold" : "secondary"}>{t(`statutFournisseur.${a.statut}`)}</Badge>
                         <span className="whitespace-nowrap font-medium">{formatFc(a.total)}</span>
                       </span>
                     </li>
@@ -564,16 +556,14 @@ export function DashboardPage() {
         {litTravailleurs && travailleurs && (
           <Card>
             <CardHeader>
-              <TitreWidget icone={CalendarCheck}>Présence du jour</TitreWidget>
-              <CardDescription>
-                {travailleurs.presents + travailleurs.retards} présent(s) / {travailleurs.attendus} attendu(s)
-              </CardDescription>
+              <TitreWidget icone={CalendarCheck}>{t("dashboard.presenceTitle")}</TitreWidget>
+              <CardDescription>{t("dashboard.presenceDesc", { count: travailleurs.presents + travailleurs.retards, total: travailleurs.attendus })}</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-3">
-              <CarteKPI titre="Présents" valeur={travailleurs.presents} accent />
-              <CarteKPI titre="Retards" valeur={travailleurs.retards} />
-              <CarteKPI titre="Absents" valeur={travailleurs.absents} />
-              <CarteKPI titre="Non pointés" valeur={travailleurs.nonPointes} />
+              <CarteKPI titre={t("dashboard.kpiPresent")} valeur={travailleurs.presents} accent />
+              <CarteKPI titre={t("dashboard.kpiLate")} valeur={travailleurs.retards} />
+              <CarteKPI titre={t("dashboard.kpiAbsent")} valeur={travailleurs.absents} />
+              <CarteKPI titre={t("dashboard.kpiNotClocked")} valeur={travailleurs.nonPointes} />
             </CardContent>
           </Card>
         )}
@@ -582,15 +572,11 @@ export function DashboardPage() {
       {/* Feed temps réel */}
       <Card>
         <CardHeader>
-          <CardTitle>Feed d'activité</CardTitle>
-          <CardDescription>Les événements de votre périmètre, en temps réel.</CardDescription>
+          <CardTitle>{t("activity.title")}</CardTitle>
+          <CardDescription>{t("activity.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <ActivityFeed
-            notifications={notifications}
-            onMarquerLue={marquerLue}
-            vide="Aucun événement pour le moment — ils apparaîtront ici dès qu'ils seront émis."
-          />
+          <ActivityFeed notifications={notifications} onMarquerLue={marquerLue} vide={t("activity.empty")} />
         </CardContent>
       </Card>
     </div>

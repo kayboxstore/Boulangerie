@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, Globe, Pencil, Plus, Store, Trash2, Wheat } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   formatFc,
   LANGUE_LABELS,
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 
 export function ParametresPage() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   // --- Types de clients (Qualité) -------------------------------------------
@@ -43,11 +45,11 @@ export function ParametresPage() {
   const [commissionParBac, setCommissionParBac] = useState("");
   const [erreurQualite, setErreurQualite] = useState<string | null>(null);
 
-  function ouvrirQualite(t: TypeClientDTO | null) {
-    setQualiteEditee(t);
-    setNomQualite(t?.nom ?? "");
-    setPrixParBac(t ? String(t.prixParBac) : "");
-    setCommissionParBac(t ? String(t.commissionParBac) : "0");
+  function ouvrirQualite(tc: TypeClientDTO | null) {
+    setQualiteEditee(tc);
+    setNomQualite(tc?.nom ?? "");
+    setPrixParBac(tc ? String(tc.prixParBac) : "");
+    setCommissionParBac(tc ? String(tc.commissionParBac) : "0");
     setErreurQualite(null);
     setDialogQualite(true);
   }
@@ -67,13 +69,13 @@ export function ParametresPage() {
       setDialogQualite(false);
       queryClient.invalidateQueries({ queryKey: ["type-clients"] });
     },
-    onError: (e) => setErreurQualite(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => setErreurQualite(e instanceof Error ? e.message : t("parametres.saveError")),
   });
 
   const supprimerQualite = useMutation({
     mutationFn: (id: string) => api(`/api/type-clients/${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["type-clients"] }),
-    onError: (e) => alert(e instanceof Error ? e.message : "Suppression impossible"),
+    onError: (e) => alert(e instanceof Error ? e.message : t("parametres.deleteError")),
   });
 
   // --- Paramètres boutique + seuil + langue ---------------------------------
@@ -119,60 +121,55 @@ export function ParametresPage() {
     },
     onError: (e) => {
       setSuccesParams(false);
-      setErreurParams(e instanceof Error ? e.message : "Enregistrement impossible");
+      setErreurParams(e instanceof Error ? e.message : t("parametres.saveError"));
     },
   });
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
-        <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Paramètres</h1>
-        <p className="mt-1 text-muted-foreground">
-          Réglages de la boutique — réservés à l'Administrateur.
-        </p>
+        <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("parametres.title")}</h1>
+        <p className="mt-1 text-muted-foreground">{t("parametres.subtitle")}</p>
       </div>
 
       {/* Types de clients / Qualités */}
       <Card>
         <CardHeader className="flex-row items-start justify-between space-y-0">
           <div className="space-y-1.5">
-            <CardTitle>Types de clients (Qualité)</CardTitle>
-            <CardDescription>
-              Prix et commission par bac (en Fc). Une modification s'applique aux commandes futures — les
-              commandes existantes gardent leurs montants figés.
-            </CardDescription>
+            <CardTitle>{t("parametres.typeClientsTitle")}</CardTitle>
+            <CardDescription>{t("parametres.typeClientsSub")}</CardDescription>
           </div>
           <Button variant="cta" onClick={() => ouvrirQualite(null)}>
             <Plus className="h-4 w-4" />
-            Qualité
+            {t("parametres.quality")}
           </Button>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nom</TableHead>
-                <TableHead className="text-right">Prix / bac</TableHead>
-                <TableHead className="text-right">Commission / bac</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t("common.name")}</TableHead>
+                <TableHead className="text-right">{t("parametres.pricePerBac")}</TableHead>
+                <TableHead className="text-right">{t("parametres.commissionPerBac")}</TableHead>
+                <TableHead className="text-right">{t("common.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {typeClients.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell className="font-medium">{t.nom}</TableCell>
-                  <TableCell className="text-right font-semibold text-marine dark:text-or">{formatFc(t.prixParBac)}</TableCell>
-                  <TableCell className="text-right">{t.commissionParBac > 0 ? formatFc(t.commissionParBac) : "—"}</TableCell>
+              {typeClients.map((tc) => (
+                <TableRow key={tc.id}>
+                  <TableCell className="font-medium">{tc.nom}</TableCell>
+                  <TableCell className="text-right font-semibold text-marine dark:text-or">{formatFc(tc.prixParBac)}</TableCell>
+                  <TableCell className="text-right">{tc.commissionParBac > 0 ? formatFc(tc.commissionParBac) : "—"}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirQualite(t)} aria-label={`Modifier ${t.nom}`}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirQualite(tc)} aria-label={t("parametres.editQuality", { nom: tc.nom })}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-terracotta hover:text-terracotta"
-                      onClick={() => confirm(`Supprimer la qualité ${t.nom} ?`) && supprimerQualite.mutate(t.id)}
-                      aria-label={`Supprimer ${t.nom}`}
+                      onClick={() => confirm(t("parametres.confirmDeleteQuality", { nom: tc.nom })) && supprimerQualite.mutate(tc.id)}
+                      aria-label={t("parametres.ariaDelete", { nom: tc.nom })}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -182,7 +179,7 @@ export function ParametresPage() {
               {typeClients.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                    Aucune qualité définie.
+                    {t("parametres.noQuality")}
                   </TableCell>
                 </TableRow>
               )}
@@ -194,8 +191,8 @@ export function ParametresPage() {
       {/* Réglages boutique */}
       <Card>
         <CardHeader>
-          <CardTitle>Boutique & alertes</CardTitle>
-          <CardDescription>Informations de la boutique, seuil d'alerte et langue par défaut.</CardDescription>
+          <CardTitle>{t("parametres.boutiqueTitle")}</CardTitle>
+          <CardDescription>{t("parametres.boutiqueSub")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form
@@ -209,19 +206,19 @@ export function ParametresPage() {
             <div className="space-y-3">
               <p className="flex items-center gap-2 text-sm font-semibold text-marine dark:text-creme">
                 <Store className="h-4 w-4 text-or" />
-                Informations boutique
+                {t("parametres.boutiqueInfos")}
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="boutique-nom">Nom</Label>
+                  <Label htmlFor="boutique-nom">{t("parametres.boutiqueName")}</Label>
                   <Input id="boutique-nom" value={boutiqueNom} onChange={(e) => setBoutiqueNom(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="boutique-contact">Contact</Label>
-                  <Input id="boutique-contact" value={boutiqueContact} onChange={(e) => setBoutiqueContact(e.target.value)} placeholder="Téléphone, e-mail…" />
+                  <Label htmlFor="boutique-contact">{t("parametres.boutiqueContact")}</Label>
+                  <Input id="boutique-contact" value={boutiqueContact} onChange={(e) => setBoutiqueContact(e.target.value)} placeholder={t("parametres.contactPlaceholder")} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="boutique-adresse">Adresse</Label>
+                  <Label htmlFor="boutique-adresse">{t("parametres.boutiqueAddress")}</Label>
                   <Input id="boutique-adresse" value={boutiqueAdresse} onChange={(e) => setBoutiqueAdresse(e.target.value)} />
                 </div>
               </div>
@@ -231,18 +228,15 @@ export function ParametresPage() {
               <div className="space-y-1.5">
                 <Label htmlFor="seuil" className="flex items-center gap-2">
                   <Bell className="h-4 w-4 text-or" />
-                  Seuil d'alerte transaction (Fc)
+                  {t("parametres.alertThreshold")}
                 </Label>
                 <Input id="seuil" type="number" min="1" step="1" value={seuil} onChange={(e) => setSeuil(e.target.value)} required />
-                <p className="text-xs text-muted-foreground">
-                  Au-delà de ce montant, une vente ou un règlement notifie le DG (pris en compte dès la
-                  transaction suivante).
-                </p>
+                <p className="text-xs text-muted-foreground">{t("parametres.alertThresholdHelp")}</p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="langue" className="flex items-center gap-2">
                   <Globe className="h-4 w-4 text-or" />
-                  Langue par défaut
+                  {t("parametres.defaultLanguage")}
                 </Label>
                 <NativeSelect id="langue" value={langueDefaut} onChange={(e) => setLangueDefaut(e.target.value as Langue)}>
                   {LANGUES.map((l) => (
@@ -251,9 +245,7 @@ export function ParametresPage() {
                     </option>
                   ))}
                 </NativeSelect>
-                <p className="text-xs text-muted-foreground">
-                  Point de configuration — la traduction des libellés arrive dans une prochaine version.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("parametres.defaultLanguageHelp")}</p>
               </div>
             </div>
 
@@ -264,11 +256,11 @@ export function ParametresPage() {
             )}
             {succesParams && (
               <p className="rounded-md bg-or/10 px-3 py-2 text-sm font-medium text-terracotta dark:text-or">
-                ✓ Paramètres enregistrés.
+                ✓ {t("parametres.paramsSaved")}
               </p>
             )}
             <Button type="submit" variant="cta" disabled={enregistrerParams.isPending}>
-              Enregistrer les paramètres
+              {t("parametres.saveParams")}
             </Button>
           </form>
         </CardContent>
@@ -279,17 +271,15 @@ export function ParametresPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Wheat className="h-4 w-4 text-or" />
-            Catalogue produits
+            {t("parametres.catalogTitle")}
           </CardTitle>
-          <CardDescription>
-            Les prix et taxes des produits se gèrent sur la page Produits (accessible aussi au DG en lecture).
-          </CardDescription>
+          <CardDescription>{t("parametres.catalogSub")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild variant="outline">
             <Link to="/produits">
               <Wheat className="h-4 w-4" />
-              Ouvrir le catalogue produits
+              {t("parametres.openCatalog")}
             </Link>
           </Button>
         </CardContent>
@@ -306,21 +296,21 @@ export function ParametresPage() {
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>{qualiteEditee ? `Modifier ${qualiteEditee.nom}` : "Nouvelle qualité"}</DialogTitle>
-              <DialogDescription>Prix et commission par bac, en Francs Congolais.</DialogDescription>
+              <DialogTitle>{qualiteEditee ? t("parametres.editQuality", { nom: qualiteEditee.nom }) : t("parametres.newQuality")}</DialogTitle>
+              <DialogDescription>{t("parametres.qualityHelp")}</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="qualite-nom">Nom</Label>
-                <Input id="qualite-nom" value={nomQualite} onChange={(e) => setNomQualite(e.target.value)} placeholder="Dépositaire, Maman…" required />
+                <Label htmlFor="qualite-nom">{t("common.name")}</Label>
+                <Input id="qualite-nom" value={nomQualite} onChange={(e) => setNomQualite(e.target.value)} placeholder={t("parametres.qualityNamePlaceholder")} required />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="qualite-prix">Prix / bac (Fc)</Label>
+                  <Label htmlFor="qualite-prix">{t("parametres.pricePerBacFc")}</Label>
                   <Input id="qualite-prix" type="number" min="0" step="1" value={prixParBac} onChange={(e) => setPrixParBac(e.target.value)} required />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="qualite-commission">Commission / bac (Fc)</Label>
+                  <Label htmlFor="qualite-commission">{t("parametres.commissionPerBacFc")}</Label>
                   <Input id="qualite-commission" type="number" min="0" step="1" value={commissionParBac} onChange={(e) => setCommissionParBac(e.target.value)} />
                 </div>
               </div>
@@ -332,10 +322,10 @@ export function ParametresPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogQualite(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={sauverQualite.isPending}>
-                Enregistrer
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </form>

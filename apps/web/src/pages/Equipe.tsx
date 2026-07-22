@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Crown, Pencil, Trash2, UserPlus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { ROLE_ADMINISTRATEUR, type CompteDTO } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -28,6 +29,7 @@ interface RoleListe {
 
 export function EquipePage() {
   const { utilisateur, peutEcrire } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const editable = peutEcrire("EQUIPE");
 
@@ -79,52 +81,50 @@ export function EquipePage() {
       setDialogCompte(false);
       rafraichir();
     },
-    onError: (e) => setErreur(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => setErreur(e instanceof Error ? e.message : t("parametres.saveError")),
   });
 
   const supprimerCompte = useMutation({
     mutationFn: (id: string) => api(`/api/equipe/${id}`, { method: "DELETE" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : "Suppression impossible"),
+    onError: (e) => alert(e instanceof Error ? e.message : t("parametres.deleteError")),
   });
 
   const transfererPrincipal = useMutation({
     mutationFn: (id: string) => api(`/api/equipe/${id}/principal`, { method: "POST" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : "Transfert impossible"),
+    onError: (e) => alert(e instanceof Error ? e.message : t("parametres.saveError")),
   });
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Équipe</h1>
-          <p className="mt-1 text-muted-foreground">
-            Comptes utilisateurs et rôles — jusqu'à 3 comptes Administrateur (1 Principal + 2 secondaires).
-          </p>
+          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("equipe.title")}</h1>
+          <p className="mt-1 text-muted-foreground">{t("equipe.subtitle")}</p>
         </div>
         {editable && (
           <Button variant="cta" onClick={() => ouvrirCompte(null)}>
             <UserPlus className="h-4 w-4" />
-            Nouveau compte
+            {t("equipe.newAccount")}
           </Button>
         )}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Comptes</CardTitle>
-          <CardDescription>{comptes.length} compte(s) — chacun rattaché à un rôle de la matrice.</CardDescription>
+          <CardTitle>{t("equipe.accounts")}</CardTitle>
+          <CardDescription>{t("equipe.accountsSub", { count: comptes.length })}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nom</TableHead>
-                <TableHead>E-mail</TableHead>
-                <TableHead>Rôle</TableHead>
-                <TableHead>Statut</TableHead>
-                {editable && <TableHead className="text-right">Actions</TableHead>}
+                <TableHead>{t("common.name")}</TableHead>
+                <TableHead>{t("common.email")}</TableHead>
+                <TableHead>{t("common.role")}</TableHead>
+                <TableHead>{t("common.status")}</TableHead>
+                {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -132,7 +132,7 @@ export function EquipePage() {
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">
                     {c.nom}
-                    {c.id === utilisateur?.id && <span className="ml-2 text-xs text-muted-foreground">(vous)</span>}
+                    {c.id === utilisateur?.id && <span className="ml-2 text-xs text-muted-foreground">({t("equipe.you")})</span>}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{c.email}</TableCell>
                   <TableCell>
@@ -141,16 +141,16 @@ export function EquipePage() {
                       {c.estAdminPrincipal && (
                         <Badge variant="gold">
                           <Crown className="mr-1 h-3 w-3" />
-                          Principal
+                          {t("equipe.principal")}
                         </Badge>
                       )}
                     </div>
                   </TableCell>
                   <TableCell>
                     {c.actif ? (
-                      <Badge variant="secondary">Actif</Badge>
+                      <Badge variant="secondary">{t("equipe.active")}</Badge>
                     ) : (
-                      <Badge className="border-transparent bg-terracotta text-creme">Désactivé</Badge>
+                      <Badge className="border-transparent bg-terracotta text-creme">{t("equipe.disabled")}</Badge>
                     )}
                   </TableCell>
                   {editable && (
@@ -161,23 +161,23 @@ export function EquipePage() {
                           size="sm"
                           className="mr-1"
                           onClick={() =>
-                            confirm(`Faire de ${c.nom} l'Administrateur principal ?`) && transfererPrincipal.mutate(c.id)
+                            confirm(t("equipe.confirmMakePrincipal", { nom: c.nom })) && transfererPrincipal.mutate(c.id)
                           }
                         >
                           <Crown className="h-3.5 w-3.5" />
-                          Rendre Principal
+                          {t("equipe.makePrincipal")}
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirCompte(c)} aria-label={`Modifier ${c.nom}`}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirCompte(c)} aria-label={t("equipe.editAccount", { nom: c.nom })}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(`Supprimer le compte de ${c.nom} ?`) && supprimerCompte.mutate(c.id)}
+                        onClick={() => confirm(t("equipe.confirmDelete", { nom: c.nom })) && supprimerCompte.mutate(c.id)}
                         disabled={c.id === utilisateur?.id}
-                        aria-label={`Supprimer ${c.nom}`}
+                        aria-label={t("equipe.ariaDelete", { nom: c.nom })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -188,7 +188,7 @@ export function EquipePage() {
               {comptes.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={editable ? 5 : 4} className="py-8 text-center text-muted-foreground">
-                    Aucun compte.
+                    {t("equipe.empty")}
                   </TableCell>
                 </TableRow>
               )}
@@ -208,37 +208,33 @@ export function EquipePage() {
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>{compteEdite ? `Modifier ${compteEdite.nom}` : "Nouveau compte"}</DialogTitle>
-              <DialogDescription>
-                {compteEdite
-                  ? "Nom, e-mail et rôle. Le mot de passe se change depuis « Mon profil » de l'employé."
-                  : "L'employé se connectera avec ce mot de passe initial, puis pourra le changer depuis « Mon profil »."}
-              </DialogDescription>
+              <DialogTitle>{compteEdite ? t("equipe.editAccount", { nom: compteEdite.nom }) : t("equipe.createTitle")}</DialogTitle>
+              <DialogDescription>{compteEdite ? t("equipe.editHelp") : t("equipe.createHelp")}</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="compte-nom">Nom</Label>
+                <Label htmlFor="compte-nom">{t("common.name")}</Label>
                 <Input id="compte-nom" value={nom} onChange={(e) => setNom(e.target.value)} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="compte-email">E-mail</Label>
+                <Label htmlFor="compte-email">{t("common.email")}</Label>
                 <Input id="compte-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="compte-role">Rôle</Label>
+                <Label htmlFor="compte-role">{t("common.role")}</Label>
                 <NativeSelect id="compte-role" value={roleId} onChange={(e) => setRoleId(e.target.value)} required>
-                  <option value="">— Choisir un rôle —</option>
+                  <option value="">{t("equipe.chooseRole")}</option>
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.nom}
-                      {r.roleParentNom ? ` (rattaché : ${r.roleParentNom})` : ""}
+                      {r.roleParentNom ? ` (${t("equipe.attachedTo", { role: r.roleParentNom })})` : ""}
                     </option>
                   ))}
                 </NativeSelect>
               </div>
               {!compteEdite && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="compte-mdp">Mot de passe initial</Label>
+                  <Label htmlFor="compte-mdp">{t("equipe.initialPassword")}</Label>
                   <Input
                     id="compte-mdp"
                     type="password"
@@ -258,10 +254,10 @@ export function EquipePage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogCompte(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={sauverCompte.isPending}>
-                Enregistrer
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </form>
