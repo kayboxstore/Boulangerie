@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Banknote, CreditCard, Lock, Minus, Plus, Smartphone, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   formatFc,
-  MOYEN_PAIEMENT_LABELS,
   MOYENS_PAIEMENT,
   type ClotureCaisseDTO,
   type MoyenPaiement,
@@ -43,6 +43,7 @@ interface LignePanier {
 
 export function CaissePage() {
   const { peutEcrire } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const editable = peutEcrire("CAISSE");
 
@@ -105,10 +106,10 @@ export function CaissePage() {
     onSuccess: (r) => {
       setPanier([]);
       setErreur(null);
-      setConfirmationVente(`Vente n°${r.vente.numero} encaissée — ${formatFc(r.vente.total)}`);
+      setConfirmationVente(t("caisse.saleConfirmed", { numero: r.vente.numero, montant: formatFc(r.vente.total) }));
       queryClient.invalidateQueries({ queryKey: ["ventes"] });
     },
-    onError: (e) => setErreur(e instanceof Error ? e.message : "Encaissement impossible"),
+    onError: (e) => setErreur(e instanceof Error ? e.message : t("caisse.checkoutError")),
   });
 
   // --- Clôture -------------------------------------------------------------
@@ -120,7 +121,7 @@ export function CaissePage() {
       queryClient.invalidateQueries({ queryKey: ["ventes"] });
       queryClient.invalidateQueries({ queryKey: ["clotures"] });
     },
-    onError: (e) => setErreur(e instanceof Error ? e.message : "Clôture impossible"),
+    onError: (e) => setErreur(e instanceof Error ? e.message : t("caisse.closeError")),
   });
 
   const ventesOuvertes = ventesData?.ventes ?? [];
@@ -130,10 +131,8 @@ export function CaissePage() {
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Caisse</h1>
-          <p className="mt-1 text-muted-foreground">
-            Vente au comptoir — le pain est exonéré de TVA, montants en Fc.
-          </p>
+          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("caisse.title")}</h1>
+          <p className="mt-1 text-muted-foreground">{t("caisse.subtitle")}</p>
         </div>
         {editable && (
           <Button
@@ -142,7 +141,7 @@ export function CaissePage() {
             disabled={ventesOuvertes.length === 0}
           >
             <Lock className="h-4 w-4" />
-            Clôturer la caisse
+            {t("caisse.closeRegister")}
           </Button>
         )}
       </div>
@@ -152,8 +151,8 @@ export function CaissePage() {
           {/* Produits */}
           <Card>
             <CardHeader>
-              <CardTitle>Produits</CardTitle>
-              <CardDescription>Touchez un produit pour l'ajouter au panier.</CardDescription>
+              <CardTitle>{t("caisse.products")}</CardTitle>
+              <CardDescription>{t("caisse.productsHelp")}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -177,11 +176,11 @@ export function CaissePage() {
           {/* Panier */}
           <Card className="border-or/40">
             <CardHeader>
-              <CardTitle>Panier</CardTitle>
+              <CardTitle>{t("caisse.cart")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {panier.length === 0 && !confirmationVente && (
-                <p className="py-6 text-center text-sm text-muted-foreground">Panier vide.</p>
+                <p className="py-6 text-center text-sm text-muted-foreground">{t("caisse.cartEmpty")}</p>
               )}
               {confirmationVente && panier.length === 0 && (
                 <p className="rounded-md bg-or/10 px-3 py-2 text-center text-sm font-medium text-terracotta dark:text-or">
@@ -196,11 +195,11 @@ export function CaissePage() {
                       {formatFc(l.produit.prixVente)} × {l.quantite} = {formatFc(l.produit.prixVente * l.quantite)}
                     </p>
                   </div>
-                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => changerQuantite(l.produit.id, -1)} aria-label="Diminuer">
+                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => changerQuantite(l.produit.id, -1)} aria-label={t("caisse.ariaDecrease")}>
                     <Minus className="h-3 w-3" />
                   </Button>
                   <span className="w-6 text-center text-sm font-semibold">{l.quantite}</span>
-                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => changerQuantite(l.produit.id, 1)} aria-label="Augmenter">
+                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => changerQuantite(l.produit.id, 1)} aria-label={t("caisse.ariaIncrease")}>
                     <Plus className="h-3 w-3" />
                   </Button>
                   <Button
@@ -208,7 +207,7 @@ export function CaissePage() {
                     size="icon"
                     className="h-7 w-7 text-terracotta hover:text-terracotta"
                     onClick={() => changerQuantite(l.produit.id, -l.quantite)}
-                    aria-label={`Retirer ${l.produit.nom}`}
+                    aria-label={t("caisse.ariaRemove", { nom: l.produit.nom })}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -220,12 +219,12 @@ export function CaissePage() {
                   <div className="space-y-1 border-t pt-3">
                     {totaux.taxe > 0 && (
                       <div className="flex justify-between text-sm text-muted-foreground">
-                        <span>dont taxes (hors pain)</span>
+                        <span>{t("caisse.taxesLabel")}</span>
                         <span>{formatFc(totaux.taxe)}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-lg font-bold">
-                      <span>Total</span>
+                      <span>{t("common.total")}</span>
                       <span className="text-marine dark:text-or">{formatFc(totaux.total)}</span>
                     </div>
                   </div>
@@ -246,7 +245,7 @@ export function CaissePage() {
                           )}
                         >
                           <Icone className="h-4 w-4" />
-                          {MOYEN_PAIEMENT_LABELS[m]}
+                          {t(`moyenPaiement.${m}`)}
                         </button>
                       );
                     })}
@@ -265,7 +264,7 @@ export function CaissePage() {
                     disabled={encaisser.isPending}
                     onClick={() => encaisser.mutate()}
                   >
-                    Encaisser {formatFc(totaux.total)}
+                    {t("caisse.checkout", { montant: formatFc(totaux.total) })}
                   </Button>
                 </>
               )}
@@ -278,9 +277,9 @@ export function CaissePage() {
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div className="space-y-1.5">
-            <CardTitle>Journée en cours</CardTitle>
+            <CardTitle>{t("caisse.currentDay")}</CardTitle>
             <CardDescription>
-              {ventesOuvertes.length} vente(s) non clôturée(s) — total{" "}
+              {t("caisse.openSales", { count: ventesOuvertes.length })}{" "}
               <span className="font-semibold text-foreground">{formatFc(totalJournee)}</span>
             </CardDescription>
           </div>
@@ -290,10 +289,10 @@ export function CaissePage() {
             <TableHeader>
               <TableRow>
                 <TableHead>N°</TableHead>
-                <TableHead>Heure</TableHead>
-                <TableHead>Articles</TableHead>
-                <TableHead>Paiement</TableHead>
-                <TableHead className="text-right">Total</TableHead>
+                <TableHead>{t("caisse.colTime")}</TableHead>
+                <TableHead>{t("caisse.colArticles")}</TableHead>
+                <TableHead>{t("caisse.colPayment")}</TableHead>
+                <TableHead className="text-right">{t("common.total")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -305,7 +304,7 @@ export function CaissePage() {
                     {v.lignes.map((l) => `${l.quantite}× ${l.produitNom}`).join(", ")}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{MOYEN_PAIEMENT_LABELS[v.moyenPaiement]}</Badge>
+                    <Badge variant="secondary">{t(`moyenPaiement.${v.moyenPaiement}`)}</Badge>
                   </TableCell>
                   <TableCell className="text-right font-semibold text-marine dark:text-or">
                     {formatFc(v.total)}
@@ -315,7 +314,7 @@ export function CaissePage() {
               {ventesOuvertes.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                    Aucune vente depuis la dernière clôture.
+                    {t("caisse.noSaleSinceClose")}
                   </TableCell>
                 </TableRow>
               )}
@@ -327,20 +326,20 @@ export function CaissePage() {
       {/* Clôtures passées */}
       <Card>
         <CardHeader>
-          <CardTitle>Clôtures de caisse</CardTitle>
-          <CardDescription>Totaux journaliers figés, par moyen de paiement.</CardDescription>
+          <CardTitle>{t("caisse.closures")}</CardTitle>
+          <CardDescription>{t("caisse.closuresDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Caissier(ère)</TableHead>
-                <TableHead className="text-right">Ventes</TableHead>
-                <TableHead className="text-right">Espèces</TableHead>
-                <TableHead className="text-right">Mobile money</TableHead>
-                <TableHead className="text-right">Carte</TableHead>
-                <TableHead className="text-right">Total</TableHead>
+                <TableHead>{t("common.date")}</TableHead>
+                <TableHead>{t("caisse.colCashier")}</TableHead>
+                <TableHead className="text-right">{t("caisse.colSales")}</TableHead>
+                <TableHead className="text-right">{t("caisse.colCash")}</TableHead>
+                <TableHead className="text-right">{t("caisse.colMobile")}</TableHead>
+                <TableHead className="text-right">{t("caisse.colCard")}</TableHead>
+                <TableHead className="text-right">{t("common.total")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -362,7 +361,7 @@ export function CaissePage() {
               {(cloturesData?.clotures ?? []).length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Aucune clôture enregistrée.
+                    {t("caisse.noClosure")}
                   </TableCell>
                 </TableRow>
               )}
@@ -375,19 +374,18 @@ export function CaissePage() {
       <Dialog open={dialogCloture} onOpenChange={setDialogCloture}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Clôturer la caisse ?</DialogTitle>
+            <DialogTitle>{t("caisse.closeTitle")}</DialogTitle>
             <DialogDescription>
-              {ventesOuvertes.length} vente(s) pour un total de {formatFc(totalJournee)} seront figées dans
-              cette clôture. Cette action est définitive.
+              {t("caisse.closeConfirmDesc", { count: ventesOuvertes.length, montant: formatFc(totalJournee) })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogCloture(false)}>
-              Annuler
+              {t("common.cancel")}
             </Button>
             <Button variant="cta" disabled={cloturer.isPending} onClick={() => cloturer.mutate()}>
               <Lock className="h-4 w-4" />
-              Clôturer
+              {t("caisse.close")}
             </Button>
           </DialogFooter>
         </DialogContent>

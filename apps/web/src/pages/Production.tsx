@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, ChefHat, Factory, Plus, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   formatQuantite,
   type MatierePremiereDTO,
@@ -42,6 +43,7 @@ interface LigneIngredient {
 
 export function ProductionPage() {
   const { peutEcrire, peutLire } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const editable = peutEcrire("PRODUCTION");
   const voitStocks = peutLire("STOCKS");
@@ -132,13 +134,13 @@ export function ProductionPage() {
       setDialogRecette(false);
       rafraichir();
     },
-    onError: (e) => setErreurRecette(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => setErreurRecette(e instanceof Error ? e.message : t("production.saveError")),
   });
 
   const supprimerRecette = useMutation({
     mutationFn: (id: string) => api(`/api/production/recettes/${id}`, { method: "DELETE" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : "Suppression impossible"),
+    onError: (e) => alert(e instanceof Error ? e.message : t("production.deleteError")),
   });
 
   // --- Dialog planning -------------------------------------------------------
@@ -162,13 +164,13 @@ export function ProductionPage() {
       setDialogPlanning(false);
       rafraichir();
     },
-    onError: (e) => setErreurPlanning(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => setErreurPlanning(e instanceof Error ? e.message : t("production.saveError")),
   });
 
   const supprimerPlanning = useMutation({
     mutationFn: (id: string) => api(`/api/production/planning/${id}`, { method: "DELETE" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : "Suppression impossible"),
+    onError: (e) => alert(e instanceof Error ? e.message : t("production.deleteError")),
   });
 
   // --- Dialog production -----------------------------------------------------
@@ -200,7 +202,7 @@ export function ProductionPage() {
       setDialogProduction(false);
       rafraichir();
     },
-    onError: (e) => setErreurProduction(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => setErreurProduction(e instanceof Error ? e.message : t("production.saveError")),
   });
 
   const recetteProduction = recettes.find((r) => r.id === prodRecetteId);
@@ -211,24 +213,22 @@ export function ProductionPage() {
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Production</h1>
-          <p className="mt-1 text-muted-foreground">
-            Recettes, planning journalier — chaque production décrémente automatiquement le stock.
-          </p>
+          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("production.title")}</h1>
+          <p className="mt-1 text-muted-foreground">{t("production.subtitle")}</p>
         </div>
         {editable && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setDialogPlanning(true)} disabled={recettes.length === 0}>
               <CalendarDays className="h-4 w-4" />
-              Planifier
+              {t("production.plan")}
             </Button>
             <Button variant="outline" onClick={() => ouvrirRecette(null)}>
               <ChefHat className="h-4 w-4" />
-              Recette
+              {t("production.recipe")}
             </Button>
             <Button variant="cta" onClick={() => ouvrirProduction()} disabled={recettes.length === 0}>
               <Factory className="h-4 w-4" />
-              Enregistrer une production
+              {t("production.recordProduction")}
             </Button>
           </div>
         )}
@@ -238,8 +238,8 @@ export function ProductionPage() {
         {/* Recettes */}
         <Card>
           <CardHeader>
-            <CardTitle>Recettes</CardTitle>
-            <CardDescription>Ingrédients et quantités pour une unité produite.</CardDescription>
+            <CardTitle>{t("production.recipes")}</CardTitle>
+            <CardDescription>{t("production.recipesDesc")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {recettes.map((r) => (
@@ -249,14 +249,14 @@ export function ProductionPage() {
                   {editable && (
                     <div className="flex shrink-0 gap-1">
                       <Button variant="outline" size="sm" onClick={() => ouvrirRecette(r)}>
-                        Modifier
+                        {t("common.edit")}
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(`Supprimer la recette de ${r.produit.nom} ?`) && supprimerRecette.mutate(r.id)}
-                        aria-label={`Supprimer la recette de ${r.produit.nom}`}
+                        onClick={() => confirm(t("production.confirmDeleteRecipe", { nom: r.produit.nom })) && supprimerRecette.mutate(r.id)}
+                        aria-label={t("production.ariaDeleteRecipe", { nom: r.produit.nom })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -277,7 +277,7 @@ export function ProductionPage() {
               </div>
             ))}
             {recettes.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">Aucune recette enregistrée.</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("production.noRecipe")}</p>
             )}
           </CardContent>
         </Card>
@@ -285,18 +285,18 @@ export function ProductionPage() {
         {/* Planning */}
         <Card>
           <CardHeader>
-            <CardTitle>Planning de production</CardTitle>
-            <CardDescription>Quoi produire, quelle quantité, pour quand.</CardDescription>
+            <CardTitle>{t("production.planningTitle")}</CardTitle>
+            <CardDescription>{t("production.planningDesc")}</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Pour le</TableHead>
-                  <TableHead>Produit</TableHead>
-                  <TableHead className="text-right">Quantité</TableHead>
-                  <TableHead>Statut</TableHead>
-                  {editable && <TableHead className="text-right">Actions</TableHead>}
+                  <TableHead>{t("production.colForDate")}</TableHead>
+                  <TableHead>{t("production.colProduct")}</TableHead>
+                  <TableHead className="text-right">{t("production.colQuantity")}</TableHead>
+                  <TableHead>{t("production.colStatus")}</TableHead>
+                  {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -307,9 +307,9 @@ export function ProductionPage() {
                     <TableCell className="text-right">{p.quantitePrevue}</TableCell>
                     <TableCell>
                       {p.statut === "FAIT" ? (
-                        <Badge variant="gold">Fait</Badge>
+                        <Badge variant="gold">{t("production.statutFait")}</Badge>
                       ) : (
-                        <Badge variant="secondary">Prévu</Badge>
+                        <Badge variant="secondary">{t("production.statutPrevu")}</Badge>
                       )}
                     </TableCell>
                     {editable && (
@@ -317,14 +317,14 @@ export function ProductionPage() {
                         {p.statut === "PREVU" && (
                           <>
                             <Button variant="outline" size="sm" onClick={() => ouvrirProduction(p)}>
-                              Produire
+                              {t("production.produce")}
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
                               className="ml-1 h-8 w-8 text-terracotta hover:text-terracotta"
                               onClick={() => supprimerPlanning.mutate(p.id)}
-                              aria-label="Supprimer la planification"
+                              aria-label={t("production.ariaDeletePlanning")}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
@@ -337,7 +337,7 @@ export function ProductionPage() {
                 {plannings.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={editable ? 5 : 4} className="py-8 text-center text-muted-foreground">
-                      Rien de planifié.
+                      {t("production.nothingPlanned")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -350,21 +350,19 @@ export function ProductionPage() {
       {/* Historique des productions */}
       <Card>
         <CardHeader>
-          <CardTitle>Productions enregistrées</CardTitle>
-          <CardDescription>
-            Chaque production a décrémenté le stock des matières premières (mouvements de sortie automatiques).
-          </CardDescription>
+          <CardTitle>{t("production.recordedTitle")}</CardTitle>
+          <CardDescription>{t("production.recordedDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>N°</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Produit</TableHead>
-                <TableHead className="text-right">Quantité</TableHead>
-                <TableHead>Matières consommées</TableHead>
-                <TableHead>Enregistré par</TableHead>
+                <TableHead>{t("common.date")}</TableHead>
+                <TableHead>{t("production.colProduct")}</TableHead>
+                <TableHead className="text-right">{t("production.colQuantity")}</TableHead>
+                <TableHead>{t("production.colConsumed")}</TableHead>
+                <TableHead>{t("production.colRecordedBy")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -385,7 +383,7 @@ export function ProductionPage() {
               {productions.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    Aucune production enregistrée.
+                    {t("production.noProduction")}
                   </TableCell>
                 </TableRow>
               )}
@@ -405,15 +403,15 @@ export function ProductionPage() {
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>{recetteEditee ? `Recette — ${recetteEditee.produit.nom}` : "Nouvelle recette"}</DialogTitle>
-              <DialogDescription>Quantités d'ingrédients pour UNE unité produite.</DialogDescription>
+              <DialogTitle>{recetteEditee ? t("production.recipeDialogTitleEdit", { nom: recetteEditee.produit.nom }) : t("production.recipeDialogTitleNew")}</DialogTitle>
+              <DialogDescription>{t("production.recipeDialogDesc")}</DialogDescription>
             </DialogHeader>
 
             {!recetteEditee && (
               <div className="space-y-1.5">
-                <Label htmlFor="recette-produit">Produit</Label>
+                <Label htmlFor="recette-produit">{t("production.product")}</Label>
                 <NativeSelect id="recette-produit" value={produitId} onChange={(e) => setProduitId(e.target.value)} required>
-                  <option value="">— Choisir un produit —</option>
+                  <option value="">{t("production.chooseProduct")}</option>
                   {(produitsData?.produits ?? [])
                     .filter((p) => p.actif && !recettes.some((r) => r.produit.id === p.id))
                     .map((p) => (
@@ -426,7 +424,7 @@ export function ProductionPage() {
             )}
 
             <div className="space-y-2">
-              <Label>Ingrédients</Label>
+              <Label>{t("production.ingredients")}</Label>
               {lignes.map((l, index) => {
                 const matiere = matieresConnues.find((m) => m.id === l.matierePremiereId);
                 return (
@@ -437,9 +435,9 @@ export function ProductionPage() {
                         setLignes((prev) => prev.map((x, i) => (i === index ? { ...x, matierePremiereId: e.target.value } : x)))
                       }
                       required
-                      aria-label={`Ingrédient ${index + 1}`}
+                      aria-label={t("production.ariaIngredient", { n: index + 1 })}
                     >
-                      <option value="">— Matière —</option>
+                      <option value="">{t("production.chooseMatiere")}</option>
                       {matieresConnues.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.nom}
@@ -451,13 +449,13 @@ export function ProductionPage() {
                       min="0.001"
                       step="0.001"
                       className="w-28 shrink-0"
-                      placeholder={matiere ? matiere.unite : "qté"}
+                      placeholder={matiere ? matiere.unite : t("production.qtyPlaceholder")}
                       value={l.quantite}
                       onChange={(e) =>
                         setLignes((prev) => prev.map((x, i) => (i === index ? { ...x, quantite: e.target.value } : x)))
                       }
                       required
-                      aria-label={`Quantité de l'ingrédient ${index + 1}`}
+                      aria-label={t("production.ariaIngredientQty", { n: index + 1 })}
                     />
                     <Button
                       type="button"
@@ -466,7 +464,7 @@ export function ProductionPage() {
                       className="h-8 w-8 shrink-0 text-terracotta hover:text-terracotta"
                       onClick={() => setLignes((prev) => prev.filter((_, i) => i !== index))}
                       disabled={lignes.length === 1}
-                      aria-label={`Retirer l'ingrédient ${index + 1}`}
+                      aria-label={t("production.ariaRemoveIngredient", { n: index + 1 })}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -480,12 +478,12 @@ export function ProductionPage() {
                 onClick={() => setLignes((prev) => [...prev, { matierePremiereId: "", quantite: "" }])}
               >
                 <Plus className="h-3.5 w-3.5" />
-                Ajouter un ingrédient
+                {t("production.addIngredient")}
               </Button>
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="recette-instructions">Instructions (optionnel)</Label>
+              <Label htmlFor="recette-instructions">{t("production.instructionsOptional")}</Label>
               <textarea
                 id="recette-instructions"
                 value={instructions}
@@ -502,10 +500,10 @@ export function ProductionPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogRecette(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={sauverRecette.isPending}>
-                Enregistrer
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </form>
@@ -523,14 +521,14 @@ export function ProductionPage() {
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>Planifier une production</DialogTitle>
-              <DialogDescription>Quoi produire, quelle quantité, pour quand.</DialogDescription>
+              <DialogTitle>{t("production.planDialogTitle")}</DialogTitle>
+              <DialogDescription>{t("production.planningDesc")}</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="plan-recette">Recette</Label>
+                <Label htmlFor="plan-recette">{t("production.recipeLabel")}</Label>
                 <NativeSelect id="plan-recette" value={planRecetteId} onChange={(e) => setPlanRecetteId(e.target.value)} required>
-                  <option value="">— Choisir —</option>
+                  <option value="">{t("production.choose")}</option>
                   {recettes.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.produit.nom}
@@ -540,7 +538,7 @@ export function ProductionPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="plan-quantite">Quantité</Label>
+                  <Label htmlFor="plan-quantite">{t("production.colQuantity")}</Label>
                   <Input
                     id="plan-quantite"
                     type="number"
@@ -552,7 +550,7 @@ export function ProductionPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="plan-date">Pour le</Label>
+                  <Label htmlFor="plan-date">{t("production.forDate")}</Label>
                   <Input id="plan-date" type="date" value={planDate} onChange={(e) => setPlanDate(e.target.value)} required />
                 </div>
               </div>
@@ -564,10 +562,10 @@ export function ProductionPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogPlanning(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={creerPlanning.isPending}>
-                Planifier
+                {t("production.planButton")}
               </Button>
             </DialogFooter>
           </form>
@@ -585,14 +583,12 @@ export function ProductionPage() {
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>Enregistrer une production</DialogTitle>
-              <DialogDescription>
-                Le stock des matières premières sera décrémenté automatiquement (mouvements de sortie).
-              </DialogDescription>
+              <DialogTitle>{t("production.prodDialogTitle")}</DialogTitle>
+              <DialogDescription>{t("production.prodDialogDesc")}</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="prod-recette">Recette</Label>
+                <Label htmlFor="prod-recette">{t("production.recipeLabel")}</Label>
                 <NativeSelect
                   id="prod-recette"
                   value={prodRecetteId}
@@ -610,7 +606,7 @@ export function ProductionPage() {
                 </NativeSelect>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="prod-quantite">Quantité produite</Label>
+                <Label htmlFor="prod-quantite">{t("production.quantityProduced")}</Label>
                 <Input
                   id="prod-quantite"
                   type="number"
@@ -623,12 +619,12 @@ export function ProductionPage() {
               </div>
               {planningsOuverts.length > 0 && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="prod-planning">Rattacher à une planification (optionnel)</Label>
+                  <Label htmlFor="prod-planning">{t("production.attachPlanning")}</Label>
                   <NativeSelect id="prod-planning" value={prodPlanningId} onChange={(e) => setProdPlanningId(e.target.value)}>
-                    <option value="">— Aucune —</option>
+                    <option value="">{t("production.none")}</option>
                     {planningsOuverts.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {formatDate(p.datePrevue)} — {p.quantitePrevue} unité(s)
+                        {t("production.planningOption", { date: formatDate(p.datePrevue), qty: p.quantitePrevue })}
                       </option>
                     ))}
                   </NativeSelect>
@@ -637,7 +633,7 @@ export function ProductionPage() {
 
               {recetteProduction && quantiteProduction > 0 && (
                 <div className="rounded-md bg-secondary/60 px-3 py-2 text-sm">
-                  <p className="font-medium">Consommation prévue :</p>
+                  <p className="font-medium">{t("production.plannedConsumption")}</p>
                   <ul className="mt-1 space-y-0.5 text-muted-foreground">
                     {recetteProduction.ingredients.map((i) => (
                       <li key={i.id} className="flex justify-between">
@@ -658,11 +654,11 @@ export function ProductionPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogProduction(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={enregistrerProduction.isPending}>
                 <Factory className="h-4 w-4" />
-                Enregistrer
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </form>
