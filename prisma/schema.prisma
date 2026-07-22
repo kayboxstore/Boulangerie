@@ -95,6 +95,10 @@ model Utilisateur {
   // secondaires). Unicité du principal garantie par un index partiel en SQL
   // (voir migration) ; le workflow d'approbation complet arrive en Phase 10.
   estAdminPrincipal Boolean @default(false)
+  // Langue d'interface préférée (section 3.9) : "FR" | "LN". Nul = suivre la
+  // langue par défaut de la boutique (ParametreBoutique). Choisie par l'employé
+  // dans « Mon profil ».
+  languePreferee String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   notifications Notification[] @relation("NotificationsRecues")

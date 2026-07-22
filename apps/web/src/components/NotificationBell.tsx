@@ -1,22 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, CheckCheck } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useSocket, type StatutConnexion } from "@/lib/socket";
 import { Button } from "@/components/ui/button";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { cn } from "@/lib/utils";
 
-const STATUT_LIBELLE: Record<StatutConnexion, string> = {
-  connecte: "Temps réel actif",
-  reconnexion: "Reconnexion…",
-  deconnecte: "Hors ligne",
+const STATUT_CLE: Record<StatutConnexion, string> = {
+  connecte: "notif.statutConnecte",
+  reconnexion: "notif.statutReconnexion",
+  deconnecte: "notif.statutDeconnecte",
 };
 
 /** Pastille de statut de connexion temps réel (or = OK, terracotta = souci). */
 export function IndicateurConnexion({ etendu }: { etendu?: boolean }) {
   const { statut } = useSocket();
+  const { t } = useTranslation();
+  const libelle = t(STATUT_CLE[statut]);
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" title={STATUT_LIBELLE[statut]}>
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" title={libelle}>
       <span
         className={cn(
           "h-2 w-2 rounded-full",
@@ -25,7 +28,7 @@ export function IndicateurConnexion({ etendu }: { etendu?: boolean }) {
           statut === "deconnecte" && "bg-beige",
         )}
       />
-      {etendu && STATUT_LIBELLE[statut]}
+      {etendu && libelle}
     </span>
   );
 }
@@ -33,6 +36,7 @@ export function IndicateurConnexion({ etendu }: { etendu?: boolean }) {
 /** Cloche + badge non-lues + panneau de feed temps réel. */
 export function NotificationBell() {
   const { notifications, nonLues, marquerLue, toutMarquerLu } = useSocket();
+  const { t } = useTranslation();
   const [ouvert, setOuvert] = useState(false);
   const conteneur = useRef<HTMLDivElement>(null);
 
@@ -58,7 +62,7 @@ export function NotificationBell() {
       <Button
         variant="ghost"
         size="icon"
-        aria-label={`Notifications${nonLues > 0 ? ` (${nonLues} non lues)` : ""}`}
+        aria-label={nonLues > 0 ? t("notif.ariaWithCount", { count: nonLues }) : t("notif.aria")}
         aria-expanded={ouvert}
         onClick={() => setOuvert((o) => !o)}
         className="relative"
@@ -87,13 +91,13 @@ export function NotificationBell() {
             className="absolute right-0 z-50 mt-2 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl border bg-card shadow-xl"
           >
             <div className="flex items-center justify-between border-b px-4 py-2.5">
-              <p className="text-sm font-semibold">Notifications</p>
+              <p className="text-sm font-semibold">{t("notif.title")}</p>
               <div className="flex items-center gap-3">
                 <IndicateurConnexion etendu />
                 {nonLues > 0 && (
                   <Button variant="ghost" size="sm" onClick={toutMarquerLu} className="h-7 gap-1 px-2 text-xs">
                     <CheckCheck className="h-3.5 w-3.5" />
-                    Tout lire
+                    {t("notif.markAll")}
                   </Button>
                 )}
               </div>
@@ -102,7 +106,7 @@ export function NotificationBell() {
               <ActivityFeed
                 notifications={notifications.slice(0, 20)}
                 onMarquerLue={marquerLue}
-                vide="Rien à signaler — les événements apparaîtront ici en temps réel."
+                vide={t("notif.empty")}
                 compact
               />
             </div>

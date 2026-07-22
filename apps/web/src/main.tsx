@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/lib/auth";
 import { SocketProvider } from "@/lib/socket";
 import App from "@/App";
+import "@/i18n"; // initialise react-i18next avant le rendu
 import "@/index.css";
 
 const queryClient = new QueryClient({

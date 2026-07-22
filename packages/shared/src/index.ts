@@ -79,6 +79,9 @@ export interface UtilisateurDTO {
   nom: string;
   email: string;
   role: RoleDTO;
+  // Langue d'interface préférée (section 3.9) ; null = suivre la langue par
+  // défaut de la boutique. `Langue` est défini plus bas dans ce fichier.
+  languePreferee: Langue | null;
 }
 
 export interface ProduitDTO {
@@ -93,6 +96,9 @@ export interface ProduitDTO {
 export interface LoginResponse {
   token: string;
   utilisateur: UtilisateurDTO;
+  // Langue par défaut de la boutique — sert de repli quand l'utilisateur n'a
+  // pas de préférence (languePreferee = null).
+  langueDefautBoutique: Langue;
 }
 
 // ---------------------------------------------------------------------------
@@ -773,6 +779,18 @@ export const LANGUE_LABELS: Record<Langue, string> = {
 };
 
 export const LANGUE_DEFAUT_PAR_DEFAUT: Langue = "FR";
+
+// Changement de sa propre langue d'interface (« Mon profil ») : une des langues
+// ou null pour revenir à la langue par défaut de la boutique.
+export const languePrefereeSchema = z.object({
+  languePreferee: z.enum(LANGUES).nullable(),
+});
+export type LanguePrefereeInput = z.infer<typeof languePrefereeSchema>;
+
+/** Langue effective : la préférence de l'utilisateur, sinon celle de la boutique. */
+export function langueEffective(preferee: Langue | null, defautBoutique: Langue): Langue {
+  return preferee ?? defautBoutique;
+}
 
 export const parametresBoutiqueSchema = z.object({
   seuilAlerteTransaction: z

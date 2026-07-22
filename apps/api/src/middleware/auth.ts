@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
-import type { Module, NiveauAcces, PermissionDTO, UtilisateurDTO } from "@lomoto/shared";
+import type { Langue, Module, NiveauAcces, PermissionDTO, UtilisateurDTO } from "@lomoto/shared";
+import { LANGUES } from "@lomoto/shared";
 import { aAcces } from "@lomoto/shared";
 import { verifyToken } from "../lib/jwt.js";
 import { prisma } from "../lib/prisma.js";
@@ -20,6 +21,10 @@ export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | n
     include: { role: { include: { permissions: true } } },
   });
   if (!u || !u.actif) return null;
+  const languePreferee =
+    u.languePreferee && (LANGUES as readonly string[]).includes(u.languePreferee)
+      ? (u.languePreferee as Langue)
+      : null;
   return {
     id: u.id,
     nom: u.nom,
@@ -33,6 +38,7 @@ export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | n
         niveauAcces: p.niveauAcces as NiveauAcces,
       })),
     },
+    languePreferee,
   };
 }
 

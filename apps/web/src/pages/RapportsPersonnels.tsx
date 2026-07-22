@@ -1,12 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ScrollText } from "lucide-react";
-import {
-  TYPE_ACTIVITE_LABELS,
-  TYPES_ACTIVITE,
-  type ActiviteDTO,
-  type PorteeRapportsDTO,
-} from "@lomoto/shared";
+import { useTranslation } from "react-i18next";
+import { TYPES_ACTIVITE, type ActiviteDTO, type PorteeRapportsDTO } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -26,6 +22,7 @@ function formatDateHeure(iso: string): string {
 // résolue côté serveur par un mécanisme dédié, hors matrice de permissions.
 export function RapportsPersonnelsPage() {
   const { utilisateur } = useAuth();
+  const { t } = useTranslation();
 
   const { data: portee } = useQuery({
     queryKey: ["rapports-personnels", "portee"],
@@ -57,13 +54,13 @@ export function RapportsPersonnelsPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
-        <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Rapports</h1>
+        <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("rapports.title")}</h1>
         <p className="mt-1 text-muted-foreground">
           {portee?.tous
-            ? "Journal d'activité consolidé — vous voyez les enregistrements de toute l'équipe."
+            ? t("rapports.subtitleAll")
             : porteeElargie
-              ? "Votre journal d'activité, élargi aux rôles de votre périmètre."
-              : "Votre journal d'activité personnel — ce que vous avez enregistré dans l'application."}
+              ? t("rapports.subtitleExtended")
+              : t("rapports.subtitleSelf")}
         </p>
       </div>
 
@@ -71,44 +68,47 @@ export function RapportsPersonnelsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <ScrollText className="h-4 w-4 text-or" />
-            Journal d'activité
+            {t("rapports.journalTitle")}
           </CardTitle>
           <CardDescription>
-            {activites.length} enregistrement(s){filtresActifs ? " (filtres actifs)" : ""} — par ordre chronologique.
+            {filtresActifs
+              ? t("rapports.countFiltered", { count: activites.length })
+              : t("rapports.count", { count: activites.length })}{" "}
+            — {t("rapports.chronological")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             {porteeElargie && (
               <div className="w-56">
-                <Label htmlFor="filtre-qui">Qui</Label>
+                <Label htmlFor="filtre-qui">{t("rapports.who")}</Label>
                 <NativeSelect id="filtre-qui" value={filtreQui} onChange={(e) => setFiltreQui(e.target.value)}>
-                  <option value="">{portee?.tous ? "Toute l'équipe" : "Toute ma portée"}</option>
+                  <option value="">{portee?.tous ? t("rapports.allTeam") : t("rapports.allScope")}</option>
                   {portee?.utilisateurs.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.nom} ({u.roleNom}){u.id === utilisateur?.id ? " — moi" : ""}
+                      {u.nom} ({u.roleNom}){u.id === utilisateur?.id ? ` — ${t("common.me")}` : ""}
                     </option>
                   ))}
                 </NativeSelect>
               </div>
             )}
             <div className="w-52">
-              <Label htmlFor="filtre-type">Type d'action</Label>
+              <Label htmlFor="filtre-type">{t("rapports.actionType")}</Label>
               <NativeSelect id="filtre-type" value={filtreType} onChange={(e) => setFiltreType(e.target.value)}>
-                <option value="">Tous</option>
-                {TYPES_ACTIVITE.map((t) => (
-                  <option key={t} value={t}>
-                    {TYPE_ACTIVITE_LABELS[t]}
+                <option value="">{t("rapports.allTypes")}</option>
+                {TYPES_ACTIVITE.map((type) => (
+                  <option key={type} value={type}>
+                    {t(`activiteType.${type}`)}
                   </option>
                 ))}
               </NativeSelect>
             </div>
             <div>
-              <Label htmlFor="filtre-du">Du</Label>
+              <Label htmlFor="filtre-du">{t("common.from")}</Label>
               <Input id="filtre-du" type="date" value={filtreDu} onChange={(e) => setFiltreDu(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="filtre-au">Au</Label>
+              <Label htmlFor="filtre-au">{t("common.to")}</Label>
               <Input id="filtre-au" type="date" value={filtreAu} onChange={(e) => setFiltreAu(e.target.value)} />
             </div>
             {filtresActifs && (
@@ -121,7 +121,7 @@ export function RapportsPersonnelsPage() {
                   setFiltreType("");
                 }}
               >
-                Tout afficher
+                {t("common.showAll")}
               </Button>
             )}
           </div>
@@ -129,10 +129,10 @@ export function RapportsPersonnelsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                {porteeElargie && <TableHead>Par</TableHead>}
-                <TableHead>Type</TableHead>
-                <TableHead>Résumé</TableHead>
+                <TableHead>{t("common.date")}</TableHead>
+                {porteeElargie && <TableHead>{t("common.by")}</TableHead>}
+                <TableHead>{t("rapports.colType")}</TableHead>
+                <TableHead>{t("rapports.summary")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -143,12 +143,12 @@ export function RapportsPersonnelsPage() {
                     <TableCell className="whitespace-nowrap">
                       <span className="font-medium">{a.utilisateur.nom}</span>
                       {a.utilisateur.id === utilisateur?.id && (
-                        <span className="ml-1 text-xs text-muted-foreground">(moi)</span>
+                        <span className="ml-1 text-xs text-muted-foreground">({t("common.me")})</span>
                       )}
                     </TableCell>
                   )}
                   <TableCell>
-                    <Badge variant="secondary">{TYPE_ACTIVITE_LABELS[a.type]}</Badge>
+                    <Badge variant="secondary">{t(`activiteType.${a.type}`)}</Badge>
                   </TableCell>
                   <TableCell className="text-sm">{a.resume}</TableCell>
                 </TableRow>
@@ -156,7 +156,7 @@ export function RapportsPersonnelsPage() {
               {activites.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={porteeElargie ? 4 : 3} className="py-8 text-center text-muted-foreground">
-                    {filtresActifs ? "Aucun enregistrement pour ces filtres." : "Aucun enregistrement pour le moment."}
+                    {filtresActifs ? t("rapports.emptyFiltered") : t("rapports.empty")}
                   </TableCell>
                 </TableRow>
               )}

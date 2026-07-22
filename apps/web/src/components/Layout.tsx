@@ -16,6 +16,7 @@ import {
   Users,
   Wheat,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Module } from "@lomoto/shared";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -27,40 +28,42 @@ import { cn } from "@/lib/utils";
 // menu pour tout le monde ; ceux hors du périmètre du rôle connecté (ou pas
 // encore construits) restent visibles mais grisés/non cliquables.
 interface EntreeNav {
-  label: string;
+  labelKey: string; // clé i18n (nav.*)
   icon: typeof LayoutDashboard;
   module?: Module; // absent = accessible à tous (Tableau de bord, catalogue Produits)
   to?: string; // absent = module pas encore construit ("à venir")
 }
 
 const navigation: EntreeNav[] = [
-  { to: "/", label: "Tableau de bord", icon: LayoutDashboard },
-  { to: "/caisse", label: "Caisse", icon: ShoppingCart, module: "CAISSE" },
-  { to: "/commandes", label: "Commandes", icon: ShoppingBasket, module: "COMMANDES" },
-  { to: "/commissions", label: "Commissions", icon: HandCoins, module: "COMMISSIONS" },
-  { to: "/stocks", label: "Stocks", icon: Package, module: "STOCKS" },
-  { to: "/production", label: "Production", icon: Factory, module: "PRODUCTION" },
-  { to: "/fournisseurs", label: "Fournisseurs", icon: Truck, module: "FOURNISSEURS" },
-  { to: "/produits", label: "Produits", icon: Wheat },
-  { to: "/equipe", label: "Équipe", icon: UserCog, module: "EQUIPE" },
-  { to: "/travailleurs", label: "Travailleurs", icon: Users, module: "TRAVAILLEURS" },
+  { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard },
+  { to: "/caisse", labelKey: "nav.caisse", icon: ShoppingCart, module: "CAISSE" },
+  { to: "/commandes", labelKey: "nav.commandes", icon: ShoppingBasket, module: "COMMANDES" },
+  { to: "/commissions", labelKey: "nav.commissions", icon: HandCoins, module: "COMMISSIONS" },
+  { to: "/stocks", labelKey: "nav.stocks", icon: Package, module: "STOCKS" },
+  { to: "/production", labelKey: "nav.production", icon: Factory, module: "PRODUCTION" },
+  { to: "/fournisseurs", labelKey: "nav.fournisseurs", icon: Truck, module: "FOURNISSEURS" },
+  { to: "/produits", labelKey: "nav.produits", icon: Wheat },
+  { to: "/equipe", labelKey: "nav.equipe", icon: UserCog, module: "EQUIPE" },
+  { to: "/travailleurs", labelKey: "nav.travailleurs", icon: Users, module: "TRAVAILLEURS" },
   // Rapports personnels (3.13) : accessibles à tous, portée résolue côté serveur.
-  { to: "/rapports", label: "Rapports", icon: ScrollText },
-  { to: "/parametres", label: "Paramètres", icon: Settings, module: "PARAMETRES" },
+  { to: "/rapports", labelKey: "nav.rapports", icon: ScrollText },
+  { to: "/parametres", labelKey: "nav.parametres", icon: Settings, module: "PARAMETRES" },
   // À propos (3.12) : accessible à tous.
-  { to: "/a-propos", label: "À propos", icon: Info },
+  { to: "/a-propos", labelKey: "nav.apropos", icon: Info },
 ];
 
 export function Layout() {
   const { utilisateur, logout, peutLire } = useAuth();
+  const { t } = useTranslation();
 
   const liens = navigation.map((n) => {
     const aPermission = !n.module || peutLire(n.module);
     const construit = !!n.to;
     return {
       ...n,
+      label: t(n.labelKey),
       actif: aPermission && construit,
-      motif: !aPermission ? "Hors de votre périmètre" : !construit ? "Module à venir" : undefined,
+      motif: !aPermission ? t("nav.outOfScope") : !construit ? t("nav.moduleComingSoon") : undefined,
     };
   });
 
@@ -76,7 +79,7 @@ export function Layout() {
           />
           <div>
             <p className="font-serif text-lg font-semibold leading-tight text-or">Boulangerie Lomoto</p>
-            <p className="text-[11px] tracking-wide text-creme/60">Gestion commerciale</p>
+            <p className="text-[11px] tracking-wide text-creme/60">{t("nav.gestionCommerciale")}</p>
           </div>
         </div>
 
@@ -108,8 +111,8 @@ export function Layout() {
               >
                 <Icon className="h-4 w-4" />
                 {label}
-                {motif === "Module à venir" && (
-                  <span className="ml-auto rounded bg-creme/10 px-1.5 py-0.5 text-[10px] text-creme/40">à venir</span>
+                {motif === t("nav.moduleComingSoon") && (
+                  <span className="ml-auto rounded bg-creme/10 px-1.5 py-0.5 text-[10px] text-creme/40">{t("nav.comingSoon")}</span>
                 )}
               </span>
             ),
@@ -125,7 +128,7 @@ export function Layout() {
                 isActive && "bg-creme/5",
               )
             }
-            title="Mon profil"
+            title={t("nav.myProfile")}
           >
             <p className="flex items-center gap-1.5 truncate text-sm font-medium">
               <CircleUserRound className="h-4 w-4 shrink-0 text-creme/60" />
@@ -140,7 +143,7 @@ export function Layout() {
             className="mt-3 w-full justify-start gap-2 text-creme/70 hover:bg-creme/5 hover:text-creme"
           >
             <LogOut className="h-4 w-4" />
-            Se déconnecter
+            {t("nav.logout")}
           </Button>
         </div>
       </aside>
@@ -154,7 +157,7 @@ export function Layout() {
           </div>
           <div className="flex items-center gap-1 [&_button]:text-creme/80 [&_button:hover]:bg-creme/10 [&_button:hover]:text-creme">
             <NotificationBell />
-            <NavLink to="/profil" aria-label="Mon profil" className="rounded-md p-2 text-creme/80 hover:bg-creme/10 hover:text-creme">
+            <NavLink to="/profil" aria-label={t("nav.myProfile")} className="rounded-md p-2 text-creme/80 hover:bg-creme/10 hover:text-creme">
               <CircleUserRound className="h-4 w-4" />
             </NavLink>
             <Button variant="ghost" size="icon" onClick={logout}>

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 export function LoginPage() {
   const { login } = useAuth();
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
@@ -20,7 +22,7 @@ export function LoginPage() {
     try {
       await login(email, motDePasse);
     } catch (err) {
-      setErreur(err instanceof Error ? err.message : "Connexion impossible");
+      setErreur(err instanceof Error ? err.message : t("login.error"));
     } finally {
       setEnCours(false);
     }
@@ -50,7 +52,7 @@ export function LoginPage() {
         <p className="relative mt-3 text-lg italic text-beige">« Pain Lia o Tonda »</p>
         <div className="relative mt-6 h-px w-24 bg-or/50" />
         <p className="relative mt-6 max-w-sm text-center text-sm leading-relaxed text-creme/60">
-          Caisse, stocks, production, commandes et fournisseurs — toute la boulangerie, en temps réel.
+          {t("login.tagline")}
         </p>
       </div>
 
@@ -70,13 +72,13 @@ export function LoginPage() {
 
           <Card className="border-beige/60 shadow-lg">
             <CardHeader>
-              <CardTitle className="font-serif text-2xl text-marine dark:text-creme">Connexion</CardTitle>
-              <CardDescription>Accédez à votre espace de gestion</CardDescription>
+              <CardTitle className="font-serif text-2xl text-marine dark:text-creme">{t("login.title")}</CardTitle>
+              <CardDescription>{t("login.subtitle")}</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={onSubmit} className="space-y-4" noValidate>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Adresse e-mail</Label>
+                  <Label htmlFor="email">{t("login.email")}</Label>
                   <Input
                     id="email"
                     type="email"
@@ -88,7 +90,7 @@ export function LoginPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="motDePasse">Mot de passe</Label>
+                  <Label htmlFor="motDePasse">{t("login.password")}</Label>
                   <Input
                     id="motDePasse"
                     type="password"
@@ -108,14 +110,14 @@ export function LoginPage() {
 
                 <Button type="submit" variant="cta" className="w-full" disabled={enCours}>
                   {enCours && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Se connecter
+                  {t("login.submit")}
                 </Button>
               </form>
             </CardContent>
           </Card>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            Boulangerie Lomoto — gestion commerciale · Devise : Franc Congolais (Fc)
+            {t("login.footer")}
           </p>
         </div>
       </div>

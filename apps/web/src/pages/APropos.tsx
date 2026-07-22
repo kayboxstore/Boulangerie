@@ -1,10 +1,12 @@
 import { Mail, MapPin, Phone } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { TAGLINE, VERSION_APP } from "@lomoto/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Page À propos (section 3.12) — accessible à tous les rôles.
 export function AProposPage() {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex flex-col items-center gap-3 py-6 text-center">
@@ -17,31 +19,23 @@ export function AProposPage() {
           <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Boulangerie Lomoto</h1>
           <p className="mt-1 font-serif text-lg italic text-terracotta dark:text-or">« {TAGLINE} »</p>
         </div>
-        <Badge variant="secondary">Application de gestion commerciale — v{VERSION_APP}</Badge>
+        <Badge variant="secondary">{t("apropos.subtitle", { version: VERSION_APP })}</Badge>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>La boulangerie</CardTitle>
+          <CardTitle>{t("apropos.bakery")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm leading-relaxed text-muted-foreground">
-          <p>
-            La Boulangerie Lomoto produit et distribue du pain frais chaque jour : vente au comptoir,
-            dépositaires et clientes « Mamans » revendeuses. Cette application couvre la caisse, les
-            commandes clients et commissions, les stocks et la production, les achats fournisseurs et
-            l'équipe — avec des notifications en temps réel selon le rôle de chacun.
-          </p>
-          <p>
-            Devise : <span className="font-medium text-foreground">Franc Congolais (Fc)</span> — le pain
-            est exonéré de TVA.
-          </p>
+          <p>{t("apropos.bakeryText")}</p>
+          <p>{t("apropos.currency")}</p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Contact</CardTitle>
-          <CardDescription>Pour toute question sur la boutique ou l'application.</CardDescription>
+          <CardTitle>{t("apropos.contact")}</CardTitle>
+          <CardDescription>{t("apropos.contactSub")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <p className="flex items-center gap-2">

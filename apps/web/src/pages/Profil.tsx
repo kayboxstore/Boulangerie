@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { KeyRound } from "lucide-react";
+import { Globe, KeyRound } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { LANGUE_LABELS, LANGUES, type Langue } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -8,15 +10,27 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/select";
 
 export function ProfilPage() {
-  const { utilisateur } = useAuth();
+  const { utilisateur, langueDefautBoutique, changerLangue } = useAuth();
+  const { t } = useTranslation();
 
   const [motDePasseActuel, setMotDePasseActuel] = useState("");
   const [nouveauMotDePasse, setNouveauMotDePasse] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
   const [succes, setSucces] = useState(false);
+
+  // Sélecteur de langue : "" = suivre la boutique (languePreferee null).
+  const [langueMaj, setLangueMaj] = useState(false);
+  const changerLangueMut = useMutation({
+    mutationFn: (valeur: string) => changerLangue(valeur === "" ? null : (valeur as Langue)),
+    onSuccess: () => {
+      setLangueMaj(true);
+      setTimeout(() => setLangueMaj(false), 2500);
+    },
+  });
 
   const changerMotDePasse = useMutation({
     mutationFn: () =>
@@ -33,7 +47,7 @@ export function ProfilPage() {
     },
     onError: (e) => {
       setSucces(false);
-      setErreur(e instanceof Error ? e.message : "Changement impossible");
+      setErreur(e instanceof Error ? e.message : t("profil.changeImpossible"));
     },
   });
 
@@ -41,7 +55,7 @@ export function ProfilPage() {
     e.preventDefault();
     setSucces(false);
     if (nouveauMotDePasse !== confirmation) {
-      setErreur("La confirmation ne correspond pas au nouveau mot de passe");
+      setErreur(t("profil.passwordMismatch"));
       return;
     }
     setErreur(null);
@@ -51,42 +65,70 @@ export function ProfilPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Mon profil</h1>
-        <p className="mt-1 text-muted-foreground">Vos informations de compte et votre mot de passe.</p>
+        <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("profil.title")}</h1>
+        <p className="mt-1 text-muted-foreground">{t("profil.subtitle")}</p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Informations</CardTitle>
+          <CardTitle>{t("profil.infos")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <p>
-            <span className="text-muted-foreground">Nom : </span>
+            <span className="text-muted-foreground">{t("common.name")} : </span>
             <span className="font-medium">{utilisateur?.nom}</span>
           </p>
           <p>
-            <span className="text-muted-foreground">E-mail : </span>
+            <span className="text-muted-foreground">{t("common.email")} : </span>
             <span className="font-medium">{utilisateur?.email}</span>
           </p>
           <p className="flex items-center gap-2">
-            <span className="text-muted-foreground">Rôle :</span>
+            <span className="text-muted-foreground">{t("common.role")} :</span>
             <Badge variant="gold">{utilisateur?.role.nom}</Badge>
           </p>
-          <p className="text-xs text-muted-foreground">
-            Le nom, l'e-mail et le rôle sont gérés par l'Administrateur (module Équipe).
-          </p>
+          <p className="text-xs text-muted-foreground">{t("profil.managedByAdmin")}</p>
+        </CardContent>
+      </Card>
+
+      {/* Sélecteur de langue (section 3.9) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="h-4 w-4 text-or" />
+            {t("profil.language")}
+          </CardTitle>
+          <CardDescription>{t("profil.languageHelp")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <NativeSelect
+            aria-label={t("profil.language")}
+            value={utilisateur?.languePreferee ?? ""}
+            onChange={(e) => changerLangueMut.mutate(e.target.value)}
+            disabled={changerLangueMut.isPending}
+            className="max-w-xs"
+          >
+            <option value="">{t("profil.languageDefault", { langue: LANGUE_LABELS[langueDefautBoutique] })}</option>
+            {LANGUES.map((l) => (
+              <option key={l} value={l}>
+                {LANGUE_LABELS[l]}
+              </option>
+            ))}
+          </NativeSelect>
+          {langueMaj && (
+            <p className="text-sm font-medium text-terracotta dark:text-or">✓ {t("profil.languageSaved")}</p>
+          )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Changer mon mot de passe</CardTitle>
-          <CardDescription>Au moins 8 caractères. Votre mot de passe actuel fait foi.</CardDescription>
+          <CardTitle>{t("profil.changePassword")}</CardTitle>
+          <CardDescription>{t("profil.changePasswordHelp")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={soumettre} className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="mdp-actuel">Mot de passe actuel</Label>
+              <Label htmlFor="mdp-actuel">{t("profil.currentPassword")}</Label>
               <Input
                 id="mdp-actuel"
                 type="password"
@@ -98,7 +140,7 @@ export function ProfilPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="mdp-nouveau">Nouveau mot de passe</Label>
+                <Label htmlFor="mdp-nouveau">{t("profil.newPassword")}</Label>
                 <Input
                   id="mdp-nouveau"
                   type="password"
@@ -110,7 +152,7 @@ export function ProfilPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="mdp-confirmation">Confirmation</Label>
+                <Label htmlFor="mdp-confirmation">{t("profil.confirmPassword")}</Label>
                 <Input
                   id="mdp-confirmation"
                   type="password"
@@ -129,12 +171,12 @@ export function ProfilPage() {
             )}
             {succes && (
               <p className="rounded-md bg-or/10 px-3 py-2 text-sm font-medium text-terracotta dark:text-or">
-                ✓ Mot de passe changé.
+                ✓ {t("profil.passwordChanged")}
               </p>
             )}
             <Button type="submit" variant="cta" disabled={changerMotDePasse.isPending}>
               <KeyRound className="h-4 w-4" />
-              Changer le mot de passe
+              {t("profil.changePasswordButton")}
             </Button>
           </form>
         </CardContent>
