@@ -325,7 +325,7 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 8. **Rapports personnels, À propos** — journal d'activité par utilisateur (3.13), page statique (3.12)
 9. **Travailleurs & Utilisateurs** — module du Chargé du personnel *(scope détaillé à définir — voir Questions ouvertes)*
 10. **Admin : Activation, État système, Approbations, Délégation temporaire** — gestion des comptes, statut système, workflow d'approbation multi-admin, délégation de droits
-11. **Journal d'audit** — traçabilité modifications/suppressions, en continu à partir de cette phase ; retrofit des phases 1-3 en option, moins urgent
+11. **Journal d'audit** — traçabilité des modifications/suppressions réussies ; couverture complète de l'application existante (toutes les phases sont désormais construites : les ~13 modules Commandes, Commissions, Caisse, Stocks, Production, Fournisseurs, Équipe, Travailleurs, Paramètres, Activation, Approbations, Délégation sont tous couverts)
 
 *Interface bilingue (Français/Lingala, section 3.8/3.9)* : concerne toutes les phases UI. Plus tôt elle est intégrée, moins coûteux sera le retrofit des écrans déjà construits (Commandes/Commissions actuellement en français uniquement) — à prioriser selon vos contraintes de temps.
 
@@ -437,7 +437,7 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - Un Admin secondaire peut-il lui-même approuver/rejeter une demande d'un autre Admin secondaire, ou seul l'Admin Principal le peut ? **Résolu : seul l'Admin Principal approuve/rejette** — un Admin secondaire ne peut jamais approuver, même une demande émise par un autre Admin secondaire.
 - Quel seuil (en Fc) déclenche l'alerte transaction inhabituelle (3.10) ? **Résolu : 100.000 Fc**, valeur par défaut modifiable ensuite dans Paramètres.
 - Une délégation temporaire de rôle (3.7) peut-elle chevaucher plusieurs modules à la fois, ou un seul module par délégation ?
-- Le Journal d'audit (3.17) doit-il aussi inclure les tentatives d'accès refusées (403), utile pour la sécurité, ou seulement les actions réussies ?
+- Le Journal d'audit (3.17) doit-il aussi inclure les tentatives d'accès refusées (403), utile pour la sécurité, ou seulement les actions réussies ? **Résolu : uniquement les actions réussies** (modifications et suppressions effectivement appliquées) — les tentatives refusées (403) ne sont pas journalisées.
 - Les "commandes spéciales" (gâteaux personnalisés, événements — fin de la section 3.4) n'ont pas encore de statut/dateRetrait en base (omis volontairement en Phase 3, qui couvrait les commandes en bacs). À quel moment les construire ? Pas encore placé dans l'ordre des phases (section 9).
 
 ## 12. Prochaines étapes
