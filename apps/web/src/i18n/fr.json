@@ -46,7 +46,9 @@
     "moduleComingSoon": "Module à venir",
     "gestionCommerciale": "Gestion commerciale",
     "logout": "Se déconnecter",
-    "myProfile": "Mon profil"
+    "myProfile": "Mon profil",
+    "approbations": "Approbations",
+    "etatSysteme": "État système"
   },
   "login": {
     "title": "Connexion",
@@ -220,7 +222,12 @@
     "attachedTo": "rattaché : {{role}}",
     "initialPassword": "Mot de passe initial",
     "you": "vous",
-    "ariaDelete": "Supprimer {{nom}}"
+    "ariaDelete": "Supprimer {{nom}}",
+    "approvalPendingTitle": "Demande soumise :",
+    "confirmDeactivate": "Désactiver le compte de {{nom}} ? Il ne pourra plus se connecter (son historique reste intact).",
+    "confirmActivate": "Réactiver le compte de {{nom}} ?",
+    "deactivate": "Désactiver {{nom}}",
+    "activate": "Réactiver {{nom}}"
   },
   "parametres": {
     "title": "Paramètres",
@@ -668,5 +675,54 @@
   "langue": {
     "FR": "Français",
     "LN": "Lingala"
+  },
+  "delegations": {
+    "title": "Délégations temporaires",
+    "subtitle": "Accorder à un utilisateur les droits d'écriture d'un module sur une période. La délégation expire automatiquement à la date de fin.",
+    "new": "Nouvelle délégation",
+    "user": "Utilisateur",
+    "module": "Module",
+    "period": "Période",
+    "active": "Active",
+    "inactive": "Inactive",
+    "confirmRevoke": "Révoquer cette délégation ?",
+    "revoke": "Révoquer",
+    "empty": "Aucune délégation.",
+    "createTitle": "Nouvelle délégation temporaire",
+    "createHelp": "L'utilisateur obtient l'écriture sur le module choisi, uniquement entre les deux dates.",
+    "chooseUser": "— Choisir un utilisateur —",
+    "grant": "Accorder"
+  },
+  "etatSysteme": {
+    "title": "État système",
+    "subtitle": "Diagnostic technique de l'application — réservé à l'Administrateur.",
+    "refresh": "Rafraîchir",
+    "database": "Base de données",
+    "connected": "Connectée",
+    "disconnected": "Déconnectée",
+    "latency": "{{ms}} ms",
+    "version": "Version de l'application",
+    "activeUsers": "Utilisateurs actifs",
+    "backup": "Dernière sauvegarde",
+    "backupNotConfigured": "Non configuré",
+    "backupHelp": "Aucun mécanisme de sauvegarde automatique n'est configuré dans le projet.",
+    "measuredAt": "Mesuré à {{time}}"
+  },
+  "approbations": {
+    "title": "Approbations",
+    "subtitlePrincipal": "Tâches critiques en attente de votre validation (Administrateur principal).",
+    "subtitleSecondary": "Suivi de vos demandes de tâches critiques soumises à l'Administrateur principal.",
+    "pending": "En attente",
+    "pendingSub": "{{count}} demande(s) en attente de décision.",
+    "emptyPending": "Aucune demande en attente.",
+    "history": "Historique",
+    "historySub": "Demandes déjà approuvées ou rejetées.",
+    "requestedBy": "Demandé par {{nom}} — {{date}}",
+    "decidedBy": "Décidé par {{nom}} — {{date}}",
+    "execError": "Échec d'exécution : {{erreur}}",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "confirmReject": "Rejeter cette demande ? L'action ne sera pas exécutée.",
+    "actionError": "L'action a échoué."
   }
 }

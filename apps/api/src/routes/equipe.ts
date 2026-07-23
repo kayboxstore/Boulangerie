@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 import {
+  activationSchema,
   compteCreateSchema,
   compteUpdateSchema,
   MAX_COMPTES_ADMIN,
@@ -10,6 +11,7 @@ import {
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { traiterActionCritique } from "../services/actionsCritiques.js";
 
 export const equipeRouter = Router();
 
@@ -74,14 +76,57 @@ equipeRouter.post("/", requirePermission("EQUIPE", "ECRITURE"), async (req, res,
     const existant = await prisma.utilisateur.findUnique({ where: { email } });
     if (existant) return res.status(409).json({ erreur: "Un compte utilise déjà cette adresse e-mail" });
 
-    const quota = await verifierQuotaAdmins(roleId);
-    if (quota) return res.status(quota === "Rôle introuvable" ? 404 : 409).json({ erreur: quota });
+    const role = await prisma.role.findUnique({ where: { id: roleId } });
+    if (!role) return res.status(404).json({ erreur: "Rôle introuvable" });
+
+    const motDePasseHash = await bcrypt.hash(motDePasse, 10);
+
+    // Créer un compte Administrateur est une tâche critique (section 2) :
+    // différée si l'auteur est un Admin secondaire. Un compte non-admin est créé
+    // directement.
+    if (role.nom === ROLE_ADMINISTRATEUR) {
+      const quota = await verifierQuotaAdmins(roleId);
+      if (quota) return res.status(409).json({ erreur: quota });
+      const r = await traiterActionCritique(
+        req,
+        "CREER_COMPTE_ADMIN",
+        { nom, email, roleId, motDePasseHash },
+        `créer le compte Administrateur « ${nom} » (${email})`,
+      );
+      return res.status(r.http).json(r.body);
+    }
 
     const compte = await prisma.utilisateur.create({
-      data: { nom, email, roleId, motDePasseHash: await bcrypt.hash(motDePasse, 10) },
+      data: { nom, email, roleId, motDePasseHash },
       include: INCLUDE_COMPTE,
     });
     res.status(201).json({ compte: versCompteDTO(compte) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Activation / désactivation d'un compte (section 3.14) — action directe (pas
+// critique), tout Admin. Un compte inactif ne peut plus se connecter (login
+// renvoie un 401 explicite) mais son historique reste intact. On ne peut pas se
+// désactiver soi-même.
+equipeRouter.put("/:id/activation", requirePermission("EQUIPE", "ECRITURE"), async (req, res, next) => {
+  try {
+    const parsed = activationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const compte = await prisma.utilisateur.findUnique({ where: { id: req.params.id }, include: INCLUDE_COMPTE });
+    if (!compte) return res.status(404).json({ erreur: "Compte introuvable" });
+    if (compte.id === req.utilisateur!.id && !parsed.data.actif) {
+      return res.status(409).json({ erreur: "Impossible de désactiver votre propre compte" });
+    }
+    const maj = await prisma.utilisateur.update({
+      where: { id: compte.id },
+      data: { actif: parsed.data.actif },
+      include: INCLUDE_COMPTE,
+    });
+    res.json({ compte: versCompteDTO(maj) });
   } catch (e) {
     next(e);
   }
@@ -155,10 +200,10 @@ equipeRouter.post("/:id/principal", requirePermission("EQUIPE", "ECRITURE"), asy
   }
 });
 
-// Suppression directe (le workflow d'approbation pour les Admins secondaires
-// arrive en Phase 10). Un compte lié à de l'activité (ventes, commandes,
-// clôtures…) ne peut pas être supprimé : la désactivation arrive avec le
-// module Activation (3.14, Phase 10).
+// Supprimer un utilisateur est une tâche critique (section 2) : exécutée
+// directement par l'Admin Principal, différée en demande d'approbation pour un
+// Admin secondaire. Les garde-fous immédiats (soi-même, Admin Principal) sont
+// vérifiés avant l'aiguillage.
 equipeRouter.delete("/:id", requirePermission("EQUIPE", "ECRITURE"), async (req, res, next) => {
   try {
     const compte = await prisma.utilisateur.findUnique({ where: { id: req.params.id } });
@@ -170,15 +215,14 @@ equipeRouter.delete("/:id", requirePermission("EQUIPE", "ECRITURE"), async (req,
       return res.status(409).json({ erreur: "Transférez d'abord le statut d'Administrateur principal" });
     }
 
-    await prisma.utilisateur.delete({ where: { id: compte.id } });
-    res.status(204).end();
+    const r = await traiterActionCritique(
+      req,
+      "SUPPRIMER_UTILISATEUR",
+      { utilisateurId: compte.id },
+      `supprimer le compte « ${compte.nom} »`,
+    );
+    res.status(r.http).json(r.body);
   } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
-      return res.status(409).json({
-        erreur:
-          "Suppression impossible : ce compte a de l'activité enregistrée (ventes, commandes…). La désactivation de compte arrive avec le module Activation.",
-      });
-    }
     next(e);
   }
 });

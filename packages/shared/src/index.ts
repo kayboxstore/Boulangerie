@@ -79,6 +79,9 @@ export interface UtilisateurDTO {
   nom: string;
   email: string;
   role: RoleDTO;
+  // Compte Administrateur principal (section 2) — décide de l'exécution directe
+  // vs différée des tâches critiques, et de l'accès aux approbations.
+  estAdminPrincipal: boolean;
   // Langue d'interface préférée (section 3.9) ; null = suivre la langue par
   // défaut de la boutique. `Langue` est défini plus bas dans ce fichier.
   languePreferee: Langue | null;
@@ -118,6 +121,7 @@ export const TYPES_EVENEMENT = [
   "RECEPTION_FOURNISSEUR",
   "PRODUCTION_ENREGISTREE",
   "RAPPORT_PRODUCTION",
+  "DEMANDE_APPROBATION",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -810,6 +814,102 @@ export interface ParametresBoutiqueDTO {
   boutiqueAdresse: string;
   boutiqueContact: string;
   langueDefaut: Langue;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 10 — Activation (3.14), État système (3.15), Approbations (3.16),
+// Délégation temporaire (3.7)
+// ---------------------------------------------------------------------------
+
+export const activationSchema = z.object({ actif: z.boolean() });
+export type ActivationInput = z.infer<typeof activationSchema>;
+
+// Modification des permissions d'un rôle (tâche critique). Liste complète des
+// entrées module→niveau qui REMPLACE la matrice du rôle.
+export const rolePermissionsSchema = z.object({
+  permissions: z
+    .array(z.object({ module: z.enum(MODULES), niveauAcces: z.enum(NIVEAUX_ACCES) }))
+    .max(MODULES.length),
+});
+export type RolePermissionsInput = z.infer<typeof rolePermissionsSchema>;
+
+export const STATUTS_DEMANDE = ["EN_ATTENTE", "APPROUVEE", "REJETEE"] as const;
+export type StatutDemande = (typeof STATUTS_DEMANDE)[number];
+
+export const STATUT_DEMANDE_LABELS: Record<StatutDemande, string> = {
+  EN_ATTENTE: "En attente",
+  APPROUVEE: "Approuvée",
+  REJETEE: "Rejetée",
+};
+
+export const TYPES_ACTION_CRITIQUE = [
+  "SUPPRIMER_UTILISATEUR",
+  "CREER_COMPTE_ADMIN",
+  "MODIFIER_TYPE_CLIENT",
+  "MODIFIER_TAUX_TAXE",
+  "MODIFIER_PERMISSIONS_ROLE",
+] as const;
+export type TypeActionCritique = (typeof TYPES_ACTION_CRITIQUE)[number];
+
+export const TYPE_ACTION_CRITIQUE_LABELS: Record<TypeActionCritique, string> = {
+  SUPPRIMER_UTILISATEUR: "Supprimer un utilisateur",
+  CREER_COMPTE_ADMIN: "Créer un compte Administrateur",
+  MODIFIER_TYPE_CLIENT: "Modifier une qualité (prix / commission)",
+  MODIFIER_TAUX_TAXE: "Modifier le taux de taxe d'un produit",
+  MODIFIER_PERMISSIONS_ROLE: "Modifier les permissions d'un rôle",
+};
+
+export interface DemandeApprobationDTO {
+  id: string;
+  type: TypeActionCritique;
+  resume: string;
+  statut: StatutDemande;
+  demandePar: { id: string; nom: string } | null;
+  approuvePar: { id: string; nom: string } | null;
+  erreur: string | null;
+  dateDemande: string;
+  dateDecision: string | null;
+}
+
+/**
+ * Réponse d'une action critique : soit exécutée directement (Admin Principal),
+ * soit différée en demande d'approbation (Admin secondaire).
+ */
+export interface ResultatActionCritique {
+  statut: "execute" | "en_attente_approbation";
+  message: string;
+}
+
+export const delegationCreateSchema = z
+  .object({
+    utilisateurId: z.string().min(1, "L'utilisateur est requis"),
+    module: z.enum(MODULES),
+    dateDebut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date de début invalide (AAAA-MM-JJ)"),
+    dateFin: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date de fin invalide (AAAA-MM-JJ)"),
+  })
+  .refine((d) => d.dateFin >= d.dateDebut, {
+    message: "La date de fin doit être postérieure ou égale à la date de début",
+    path: ["dateFin"],
+  });
+export type DelegationCreateInput = z.infer<typeof delegationCreateSchema>;
+
+export interface DelegationDTO {
+  id: string;
+  utilisateur: { id: string; nom: string; roleNom: string };
+  module: Module;
+  dateDebut: string;
+  dateFin: string;
+  active: boolean;
+  creePar: { id: string; nom: string } | null;
+}
+
+export interface EtatSystemeDTO {
+  baseDeDonnees: { connectee: boolean; latenceMs: number | null };
+  version: string;
+  utilisateursActifs: number;
+  // Aucun mécanisme de sauvegarde n'existe dans le projet : champ non configuré.
+  derniereSauvegarde: null;
+  horodatage: string;
 }
 
 // ---------------------------------------------------------------------------

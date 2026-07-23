@@ -8,6 +8,7 @@ import {
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { traiterActionCritique } from "../services/actionsCritiques.js";
 
 export const clientsRouter = Router();
 export const typeClientsRouter = Router();
@@ -87,8 +88,14 @@ typeClientsRouter.put("/:id", ecritureParametres, async (req, res, next) => {
       if (doublon) return res.status(409).json({ erreur: "Une qualité porte déjà ce nom" });
     }
 
-    const typeClient = await prisma.typeClient.update({ where: { id: existant.id }, data: parsed.data });
-    res.json({ typeClient: versTypeClientDTO(typeClient) });
+    // Modifier prix/commission d'une qualité est une tâche critique (section 2).
+    const r = await traiterActionCritique(
+      req,
+      "MODIFIER_TYPE_CLIENT",
+      { typeClientId: existant.id, data: parsed.data },
+      `modifier la qualité « ${existant.nom} » (prix/commission)`,
+    );
+    res.status(r.http).json(r.body);
   } catch (e) {
     next(e);
   }

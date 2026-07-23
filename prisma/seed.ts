@@ -153,6 +153,9 @@ async function main() {
   // --- Utilisateurs de démonstration (un par rôle) ---
   await upsertUtilisateur("Directeur Général", "dg@lomoto.cd", "Directeur Général");
   await upsertUtilisateur("Administrateur", "admin@lomoto.cd", "Administrateur");
+  // Admin secondaire (démo Phase 10) : ses tâches critiques passent par une
+  // demande d'approbation à l'Admin Principal, il n'exécute jamais directement.
+  await upsertUtilisateur("Administrateur secondaire", "admin2@lomoto.cd", "Administrateur");
   await upsertUtilisateur("Caissière", "caisse@lomoto.cd", "Caissier(ère)");
   await upsertUtilisateur("Chargé des commandes", "commandes@lomoto.cd", "Chargé des commandes");
   await upsertUtilisateur("Responsable de production", "production@lomoto.cd", "Responsable de production");
@@ -271,7 +274,7 @@ async function main() {
     });
   }
 
-  console.log("Seed terminé — 7 rôles, 3 types de clients, 8 utilisateurs, 5 clients, 5 produits, 5 matières premières, 1 recette, 2 fournisseurs.");
+  console.log("Seed terminé — 7 rôles, 3 types de clients, 9 utilisateurs, 5 clients, 5 produits, 5 matières premières, 1 recette, 2 fournisseurs.");
   console.log(`Mot de passe de démonstration pour tous les comptes : ${MOT_DE_PASSE_DEMO}`);
 }
 

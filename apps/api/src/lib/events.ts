@@ -21,6 +21,11 @@ export interface EvenementMetier {
    * inhabituelle dédiée au DG (spec 3.10).
    */
   restreindreAuxRoles?: string[];
+  /**
+   * Si présent, IGNORE la matrice et cible directement ces utilisateurs. Ex. :
+   * une demande d'approbation notifiée à l'Admin Principal (spec 3.16).
+   */
+  destinataireIdsDirects?: string[];
 }
 
 class BusEvenements extends EventEmitter {

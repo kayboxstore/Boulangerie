@@ -3,6 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import {
   Bell,
   CircleUserRound,
+  ClipboardCheck,
   Factory,
   HandCoins,
   Info,
@@ -10,6 +11,7 @@ import {
   LogOut,
   Package,
   ScrollText,
+  ServerCog,
   Settings,
   ShoppingBasket,
   ShoppingCart,
@@ -48,6 +50,7 @@ interface EntreeNav {
   icon: typeof LayoutDashboard;
   module?: Module; // absent = accessible à tous (Tableau de bord, catalogue Produits)
   to?: string; // absent = module pas encore construit ("à venir")
+  ecriture?: boolean; // exige l'ÉCRITURE sur le module (réservé Admin), pas la simple lecture
 }
 
 const navigation: EntreeNav[] = [
@@ -60,6 +63,9 @@ const navigation: EntreeNav[] = [
   { to: "/fournisseurs", labelKey: "nav.fournisseurs", icon: Truck, module: "FOURNISSEURS" },
   { to: "/produits", labelKey: "nav.produits", icon: Wheat },
   { to: "/equipe", labelKey: "nav.equipe", icon: UserCog, module: "EQUIPE" },
+  // Approbations (3.16) & État système (3.15) : réservés aux Admins (écriture Équipe).
+  { to: "/approbations", labelKey: "nav.approbations", icon: ClipboardCheck, module: "EQUIPE", ecriture: true },
+  { to: "/etat-systeme", labelKey: "nav.etatSysteme", icon: ServerCog, module: "EQUIPE", ecriture: true },
   { to: "/travailleurs", labelKey: "nav.travailleurs", icon: Users, module: "TRAVAILLEURS" },
   // Rapports personnels (3.13) : accessibles à tous, portée résolue côté serveur.
   { to: "/rapports", labelKey: "nav.rapports", icon: ScrollText },
@@ -69,11 +75,11 @@ const navigation: EntreeNav[] = [
 ];
 
 export function Layout() {
-  const { utilisateur, logout, peutLire } = useAuth();
+  const { utilisateur, logout, peutLire, peutEcrire } = useAuth();
   const { t } = useTranslation();
 
   const liens = navigation.map((n) => {
-    const aPermission = !n.module || peutLire(n.module);
+    const aPermission = !n.module || (n.ecriture ? peutEcrire(n.module) : peutLire(n.module));
     const construit = !!n.to;
     return {
       ...n,

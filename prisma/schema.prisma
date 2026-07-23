@@ -60,6 +60,22 @@ enum StatutPresence {
   RETARD
 }
 
+enum StatutDemande {
+  EN_ATTENTE
+  APPROUVEE
+  REJETEE
+}
+
+// Tâches critiques (section 2) : quand un Admin secondaire les déclenche,
+// l'action est différée en attente de l'Admin Principal.
+enum TypeActionCritique {
+  SUPPRIMER_UTILISATEUR
+  CREER_COMPTE_ADMIN
+  MODIFIER_TYPE_CLIENT
+  MODIFIER_TAUX_TAXE
+  MODIFIER_PERMISSIONS_ROLE
+}
+
 // Hiérarchie portée par le rôle (roleParentId) — extensible sans changement de code.
 model Role {
   id           String           @id @default(cuid())
@@ -114,6 +130,10 @@ model Utilisateur {
   commandesFournisseurRecues CommandeFournisseur[] @relation("CommandesFournisseurRecues")
   ficheTravailleur Travailleur?
   presencesEnregistrees Presence[]
+  demandesEmises   DemandeApprobation[] @relation("DemandesEmises")
+  demandesDecidees DemandeApprobation[] @relation("DemandesDecidees")
+  delegationsRecues DelegationRole[]    @relation("DelegationsRecues")
+  delegationsCreees DelegationRole[]    @relation("DelegationsCreees")
 }
 
 // Notification métier (section 3.10) : persistée pour le rattrapage hors ligne,
@@ -455,6 +475,44 @@ model Presence {
 
   @@unique([travailleurId, date])
   @@index([date])
+}
+
+// --- Approbations (section 3.16) & délégation (section 3.7), Phase 10 ---------
+
+// Demande d'exécution d'une tâche critique, en attente de l'Admin Principal.
+// `donnees` porte le payload de l'action à rejouer telle quelle à l'approbation.
+model DemandeApprobation {
+  id            String             @id @default(cuid())
+  type          TypeActionCritique
+  donnees       Json
+  resume        String // description lisible (qui/quoi) figée à la création
+  statut        StatutDemande      @default(EN_ATTENTE)
+  demandeParId  String
+  demandePar    Utilisateur        @relation("DemandesEmises", fields: [demandeParId], references: [id])
+  approuveParId String?
+  approuvePar   Utilisateur?       @relation("DemandesDecidees", fields: [approuveParId], references: [id], onDelete: SetNull)
+  erreur        String? // renseigné si l'exécution a échoué à l'approbation
+  dateDemande   DateTime           @default(now())
+  dateDecision  DateTime?
+
+  @@index([statut, dateDemande])
+}
+
+// Délégation temporaire d'un droit d'écriture sur un module (section 3.7).
+// Active si dateDebut <= aujourd'hui <= dateFin — évaluée par date à chaque
+// requête, aucune tâche planifiée nécessaire.
+model DelegationRole {
+  id            String       @id @default(cuid())
+  utilisateurId String
+  utilisateur   Utilisateur  @relation("DelegationsRecues", fields: [utilisateurId], references: [id], onDelete: Cascade)
+  module        Module
+  dateDebut     DateTime     @db.Date
+  dateFin       DateTime     @db.Date
+  creeParId     String?
+  creePar       Utilisateur? @relation("DelegationsCreees", fields: [creeParId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
+
+  @@index([utilisateurId, dateFin])
 }
 
 // Paramètres de la boutique (section 3.9) — clé/valeur, édités par l'Admin.

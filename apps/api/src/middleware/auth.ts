@@ -14,7 +14,15 @@ declare global {
   }
 }
 
-/** Construit le DTO utilisateur (avec rôle + permissions) renvoyé par l'API. */
+const RANG_NIVEAU: Record<NiveauAcces, number> = { AUCUN: 0, LECTURE: 1, ECRITURE: 2 };
+
+/**
+ * Construit le DTO utilisateur (rôle + permissions) renvoyé par l'API. Les
+ * permissions effectives = matrice du rôle FUSIONNÉE avec les délégations
+ * temporaires actives à la date du jour (section 3.7) : chaque délégation
+ * accorde ECRITURE sur son module. L'évaluation par date se fait ici, à chaque
+ * requête authentifiée, donc l'expiration est automatique (aucune tâche cron).
+ */
 export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | null> {
   const u = await prisma.utilisateur.findUnique({
     where: { id },
@@ -25,18 +33,32 @@ export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | n
     u.languePreferee && (LANGUES as readonly string[]).includes(u.languePreferee)
       ? (u.languePreferee as Langue)
       : null;
+
+  // Fusion base + délégations : on garde le niveau le plus élevé par module.
+  const niveaux = new Map<Module, NiveauAcces>();
+  for (const p of u.role.permissions) niveaux.set(p.module as Module, p.niveauAcces as NiveauAcces);
+
+  const aujourdhui = new Date(new Date().toISOString().slice(0, 10)); // minuit UTC
+  const delegations = await prisma.delegationRole.findMany({
+    where: { utilisateurId: u.id, dateDebut: { lte: aujourdhui }, dateFin: { gte: aujourdhui } },
+    select: { module: true },
+  });
+  for (const d of delegations) {
+    const module = d.module as Module;
+    const actuel = niveaux.get(module) ?? "AUCUN";
+    if (RANG_NIVEAU["ECRITURE"] > RANG_NIVEAU[actuel]) niveaux.set(module, "ECRITURE");
+  }
+
   return {
     id: u.id,
     nom: u.nom,
     email: u.email,
+    estAdminPrincipal: u.estAdminPrincipal,
     role: {
       id: u.role.id,
       nom: u.role.nom,
       roleParentId: u.role.roleParentId,
-      permissions: u.role.permissions.map((p) => ({
-        module: p.module as Module,
-        niveauAcces: p.niveauAcces as NiveauAcces,
-      })),
+      permissions: [...niveaux.entries()].map(([module, niveauAcces]) => ({ module, niveauAcces })),
     },
     languePreferee,
   };

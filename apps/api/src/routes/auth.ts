@@ -34,9 +34,15 @@ authRouter.post("/login", async (req, res, next) => {
     const identifiantsInvalides = () =>
       res.status(401).json({ erreur: "E-mail ou mot de passe incorrect" });
 
-    if (!u || !u.actif) return identifiantsInvalides();
+    if (!u) return identifiantsInvalides();
     const ok = await bcrypt.compare(motDePasse, u.motDePasseHash);
     if (!ok) return identifiantsInvalides();
+
+    // Identifiants corrects mais compte désactivé (section 3.14) : refus
+    // EXPLICITE, distinct d'un mot de passe erroné, une fois l'identité prouvée.
+    if (!u.actif) {
+      return res.status(401).json({ erreur: "Compte désactivé — contactez un administrateur." });
+    }
 
     const utilisateur = await chargerUtilisateur(u.id);
     if (!utilisateur) return identifiantsInvalides();

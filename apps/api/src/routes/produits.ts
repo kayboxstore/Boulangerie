@@ -2,6 +2,7 @@ import { Router } from "express";
 import { produitCreateSchema, produitUpdateSchema } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { traiterActionCritique } from "../services/actionsCritiques.js";
 
 export const produitsRouter = Router();
 
@@ -55,6 +56,20 @@ produitsRouter.put("/:id", ecritureParametres, async (req, res, next) => {
     }
     const existant = await prisma.produit.findUnique({ where: { id: req.params.id } });
     if (!existant) return res.status(404).json({ erreur: "Produit introuvable" });
+
+    // Modifier le taux de taxe est une tâche critique (section 2) : différée pour
+    // un Admin secondaire. Une modification qui ne touche PAS le taux (nom, prix,
+    // catégorie…) reste une action directe.
+    const changeTaux = parsed.data.tauxTaxe !== undefined && parsed.data.tauxTaxe !== existant.tauxTaxe;
+    if (changeTaux) {
+      const r = await traiterActionCritique(
+        req,
+        "MODIFIER_TAUX_TAXE",
+        { produitId: existant.id, data: parsed.data },
+        `modifier le taux de taxe de « ${existant.nom} » (${existant.tauxTaxe} % → ${parsed.data.tauxTaxe} %)`,
+      );
+      return res.status(r.http).json(r.body);
+    }
 
     const produit = await prisma.produit.update({ where: { id: req.params.id }, data: parsed.data });
     res.json({ produit });

@@ -47,7 +47,9 @@
     "moduleComingSoon": "Eteni ekoya",
     "gestionCommerciale": "Bokambi ya mombongo",
     "logout": "Kobima",
-    "myProfile": "Profil na ngai"
+    "myProfile": "Profil na ngai",
+    "approbations": "Bandimibi",
+    "etatSysteme": "Ezaleli ya sistɛmɛ"
   },
   "login": {
     "title": "Kokota",
@@ -221,7 +223,12 @@
     "attachedTo": "na se ya : {{role}}",
     "initialPassword": "Mot ya koleka ya ebandeli",
     "you": "yo",
-    "ariaDelete": "Kolongola {{nom}}"
+    "ariaDelete": "Kolongola {{nom}}",
+    "approvalPendingTitle": "Bosɛngi botindami :",
+    "confirmDeactivate": "Kokanga kɔnti ya {{nom}} ? Akokoka lisusu kokɔta te (mikanda na ye etikali).",
+    "confirmActivate": "Kofungola lisusu kɔnti ya {{nom}} ?",
+    "deactivate": "Kokanga {{nom}}",
+    "activate": "Kofungola {{nom}}"
   },
   "parametres": {
     "title": "Ebongiseli",
@@ -669,5 +676,54 @@
   "langue": {
     "FR": "Français",
     "LN": "Lingala"
+  },
+  "delegations": {
+    "title": "Bopesi mikumba ya ntango moke",
+    "subtitle": "Kopesa mosaleli makoki ya kokoma na module moko na ntango moko. Bopesi esili yango moko na mokolo ya nsuka.",
+    "new": "Bopesi ya sika",
+    "user": "Mosaleli",
+    "module": "Module",
+    "period": "Ntango",
+    "active": "Ezali kosala",
+    "inactive": "Ezali kosala te",
+    "confirmRevoke": "Kolongola bopesi oyo ?",
+    "revoke": "Kolongola",
+    "empty": "Bopesi ezali te.",
+    "createTitle": "Bopesi ya sika ya ntango moke",
+    "createHelp": "Mosaleli akozwa makoki ya kokoma na module oyo, kaka kati na mikolo mibale.",
+    "chooseUser": "— Pona mosaleli —",
+    "grant": "Kopesa"
+  },
+  "etatSysteme": {
+    "title": "Ezaleli ya sistɛmɛ",
+    "subtitle": "Botali ya tekiniki ya application — kaka mpo na Administrateur.",
+    "refresh": "Kobongisa",
+    "database": "Ebombelo ya ba-données",
+    "connected": "Ekangami",
+    "disconnected": "Ekangami te",
+    "latency": "{{ms}} ms",
+    "version": "Version ya application",
+    "activeUsers": "Basaleli bazali kosala",
+    "backup": "Bobateli ya nsuka",
+    "backupNotConfigured": "Ebongisami te",
+    "backupHelp": "Ezali na sistɛmɛ ya bobateli ya yango moko te na projet.",
+    "measuredAt": "Emekami na {{time}}"
+  },
+  "approbations": {
+    "title": "Bandimibi",
+    "subtitlePrincipal": "Misala ya ntina ezali kozela bondimi na yo (Administrateur mokonzi).",
+    "subtitleSecondary": "Botali ya bosɛngi na yo ya misala ya ntina etindami epai ya Administrateur mokonzi.",
+    "pending": "Ezali kozela",
+    "pendingSub": "Bosɛngi {{count}} ezali kozela mokano.",
+    "emptyPending": "Bosɛngi ya kozela ezali te.",
+    "history": "Lisolo",
+    "historySub": "Bosɛngi oyo endimami to eboyami.",
+    "requestedBy": "Esɛngami na {{nom}} — {{date}}",
+    "decidedBy": "Ekatami na {{nom}} — {{date}}",
+    "execError": "Kosala elongi te : {{erreur}}",
+    "approve": "Kondima",
+    "reject": "Koboya",
+    "confirmReject": "Koboya bosɛngi oyo ? Ekosalema te.",
+    "actionError": "Ekosalema te."
   }
 }

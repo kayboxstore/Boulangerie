@@ -64,19 +64,24 @@ export async function publierEvenement(evenement: EvenementMetier): Promise<Noti
   });
   if (!emetteur) return [];
 
-  const roleIds = await rolesDestinataires(evenement.module, emetteur.role.id);
-
-  const destinataires = await prisma.utilisateur.findMany({
-    where: {
-      roleId: { in: [...roleIds] },
-      actif: true,
-      id: { not: emetteur.id },
-      ...(evenement.restreindreAuxRoles
-        ? { role: { nom: { in: evenement.restreindreAuxRoles } } }
-        : {}),
-    },
-    select: { id: true },
-  });
+  // Ciblage direct (ex. approbation → Admin Principal) : court-circuite la
+  // matrice. Sinon, destinataires déduits de la matrice + hiérarchie.
+  const destinataires = evenement.destinataireIdsDirects
+    ? await prisma.utilisateur.findMany({
+        where: { id: { in: evenement.destinataireIdsDirects, not: emetteur.id }, actif: true },
+        select: { id: true },
+      })
+    : await prisma.utilisateur.findMany({
+        where: {
+          roleId: { in: [...(await rolesDestinataires(evenement.module, emetteur.role.id))] },
+          actif: true,
+          id: { not: emetteur.id },
+          ...(evenement.restreindreAuxRoles
+            ? { role: { nom: { in: evenement.restreindreAuxRoles } } }
+            : {}),
+        },
+        select: { id: true },
+      });
   if (destinataires.length === 0) return [];
 
   const message =

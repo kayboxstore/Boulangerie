@@ -27,11 +27,20 @@ const TravailleursPage = lazy(() => import("@/pages/Travailleurs").then((m) => (
 const RapportsPersonnelsPage = lazy(() => import("@/pages/RapportsPersonnels").then((m) => ({ default: m.RapportsPersonnelsPage })));
 const AProposPage = lazy(() => import("@/pages/APropos").then((m) => ({ default: m.AProposPage })));
 const ParametresPage = lazy(() => import("@/pages/Parametres").then((m) => ({ default: m.ParametresPage })));
+const EtatSystemePage = lazy(() => import("@/pages/EtatSysteme").then((m) => ({ default: m.EtatSystemePage })));
+const ApprobationsPage = lazy(() => import("@/pages/Approbations").then((m) => ({ default: m.ApprobationsPage })));
 
 /** Garde d'accès : exige au moins la lecture sur `module`, sinon retour à l'accueil. */
 function RequiertLecture({ module, children }: { module: Module; children: ReactNode }) {
   const { peutLire } = useAuth();
   if (!peutLire(module)) return <Navigate to="/" replace />;
+  return children;
+}
+
+/** Garde d'accès : exige l'écriture sur `module` (réservé aux Admins pour Équipe). */
+function RequiertEcriture({ module, children }: { module: Module; children: ReactNode }) {
+  const { peutEcrire } = useAuth();
+  if (!peutEcrire(module)) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -113,6 +122,22 @@ export default function App() {
             <RequiertLecture module="PARAMETRES">
               <ParametresPage />
             </RequiertLecture>
+          }
+        />
+        <Route
+          path="/approbations"
+          element={
+            <RequiertEcriture module="EQUIPE">
+              <ApprobationsPage />
+            </RequiertEcriture>
+          }
+        />
+        <Route
+          path="/etat-systeme"
+          element={
+            <RequiertEcriture module="EQUIPE">
+              <EtatSystemePage />
+            </RequiertEcriture>
           }
         />
         <Route
