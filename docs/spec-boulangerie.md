@@ -27,15 +27,16 @@ Administrateur — rôle technique séparé de la hiérarchie métier, jusqu'à 
 - Le **Chargé des commandes** a un accès en lecture seule sur **Commissions**, en plus de l'écriture sur Commandes.
 - Les **Admins** sont hors hiérarchie métier : aucune permission sur les modules métier, uniquement l'édition de Paramètres/Équipe/Activation/État système.
 
-**Workflow d'approbation (Admin Principal)** : certaines actions d'un Admin secondaire ne s'exécutent qu'après validation de l'Admin Principal. Liste proposée des tâches critiques *(à confirmer/compléter)* :
+**Workflow d'approbation (Admin Principal)** : certaines actions d'un Admin secondaire ne s'exécutent qu'après validation de l'Admin Principal. Tâches critiques (liste figée — 5 items) :
 - Supprimer un utilisateur
-- Réinitialiser la base de données
 - Créer ou supprimer un compte Admin
 - Modifier les prix ou commissions par Qualité de client
 - Modifier le taux de taxe
 - Modifier les permissions d'un rôle
 
-Quand un Admin secondaire déclenche une de ces actions, une demande est créée (statut "en attente") et l'Admin Principal reçoit une **notification temps réel instantanée** (réutilise le socle de la section 3.10). Il approuve ou rejette depuis le module Approbations (3.16) ; l'action ne s'exécute qu'après validation.
+*La « réinitialisation de la base de données » ne figure PAS dans cette liste : c'est une procédure manuelle côté infrastructure, jamais un bouton dans l'application, même gardé par approbation.*
+
+Quand un Admin secondaire déclenche une de ces actions, une demande est créée (statut "en attente") et l'Admin Principal reçoit une **notification temps réel instantanée** (réutilise le socle de la section 3.10). Il approuve ou rejette depuis le module Approbations (3.16) ; l'action ne s'exécute qu'après validation. **Seul l'Admin Principal peut approuver ou rejeter une demande** — un Admin secondaire ne peut jamais approuver, même une demande émise par un autre Admin secondaire. Quand l'Admin Principal déclenche lui-même une de ces actions, elle s'exécute directement, sans passer par une demande (il n'a pas à s'auto-approuver).
 
 **Matrice des permissions :**
 
@@ -431,9 +432,9 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - La catégorie **Vente cash (VC)** génère-t-elle bien 0 Fc de commission, comme les Dépositaires ? *(métier — hypothèse actuelle, à confirmer)*
 - Au-delà de ces 3 types (Dépositaires, Vente cash, Mamans), d'autres catégories sont-elles prévues à terme ? *(métier — n'affecte pas l'architecture, juste la configuration)*
 - Le module Travailleurs (3.18) : Résolu — fiches employés + présence/pointage quotidien, sans paie.
-- La liste des "tâches critiques" nécessitant l'approbation de l'Admin Principal (section 2) est une proposition — à valider/compléter.
+- La liste des "tâches critiques" nécessitant l'approbation de l'Admin Principal (section 2) : **Résolu — liste figée à 5 items** (suppression d'un utilisateur, création/suppression d'un compte Admin, modification prix/commissions par Qualité, modification du taux de taxe, modification des permissions d'un rôle). La réinitialisation de la base de données en est explicitement exclue (procédure d'infrastructure, hors application).
 - "État système" (3.15) : quelles informations exactes afficher, au-delà du statut base de données ?
-- Un Admin secondaire peut-il lui-même approuver/rejeter une demande d'un autre Admin secondaire, ou seul l'Admin Principal le peut ?
+- Un Admin secondaire peut-il lui-même approuver/rejeter une demande d'un autre Admin secondaire, ou seul l'Admin Principal le peut ? **Résolu : seul l'Admin Principal approuve/rejette** — un Admin secondaire ne peut jamais approuver, même une demande émise par un autre Admin secondaire.
 - Quel seuil (en Fc) déclenche l'alerte transaction inhabituelle (3.10) ? **Résolu : 100.000 Fc**, valeur par défaut modifiable ensuite dans Paramètres.
 - Une délégation temporaire de rôle (3.7) peut-elle chevaucher plusieurs modules à la fois, ou un seul module par délégation ?
 - Le Journal d'audit (3.17) doit-il aussi inclure les tentatives d'accès refusées (403), utile pour la sécurité, ou seulement les actions réussies ?
