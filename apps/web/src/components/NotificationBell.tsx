@@ -2,39 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, CheckCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useSocket, type StatutConnexion } from "@/lib/socket";
+import { useSocket } from "@/lib/socket";
 import { Button } from "@/components/ui/button";
 import { ActivityFeed } from "@/components/ActivityFeed";
-import { cn } from "@/lib/utils";
+import { IndicateurConnexion } from "@/components/IndicateurConnexion";
 
-const STATUT_CLE: Record<StatutConnexion, string> = {
-  connecte: "notif.statutConnecte",
-  reconnexion: "notif.statutReconnexion",
-  deconnecte: "notif.statutDeconnecte",
-};
-
-/** Pastille de statut de connexion temps réel (or = OK, terracotta = souci). */
-export function IndicateurConnexion({ etendu }: { etendu?: boolean }) {
-  const { statut } = useSocket();
-  const { t } = useTranslation();
-  const libelle = t(STATUT_CLE[statut]);
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" title={libelle}>
-      <span
-        className={cn(
-          "h-2 w-2 rounded-full",
-          statut === "connecte" && "bg-or",
-          statut === "reconnexion" && "animate-pulse bg-terracotta",
-          statut === "deconnecte" && "bg-beige",
-        )}
-      />
-      {etendu && libelle}
-    </span>
-  );
-}
-
-/** Cloche + badge non-lues + panneau de feed temps réel. */
-export function NotificationBell() {
+/**
+ * Cloche + badge non-lues + panneau de feed temps réel. Ce composant tire
+ * framer-motion : il est chargé en lazy depuis le Layout pour que la lib
+ * d'animation n'entre pas dans le chunk initial. Export par défaut pour
+ * React.lazy().
+ */
+export default function NotificationBell() {
   const { notifications, nonLues, marquerLue, toutMarquerLu } = useSocket();
   const { t } = useTranslation();
   const [ouvert, setOuvert] = useState(false);

@@ -47,7 +47,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActivityFeed } from "@/components/ActivityFeed";
-import { IndicateurConnexion } from "@/components/NotificationBell";
+import { IndicateurConnexion } from "@/components/IndicateurConnexion";
 import { cn } from "@/lib/utils";
 
 // Couleurs de marque (section 3.8) utilisées par les graphiques Recharts.

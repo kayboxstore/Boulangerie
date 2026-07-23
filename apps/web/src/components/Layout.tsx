@@ -1,5 +1,7 @@
+import { lazy, Suspense } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
+  Bell,
   CircleUserRound,
   Factory,
   HandCoins,
@@ -21,7 +23,21 @@ import type { Module } from "@lomoto/shared";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { IndicateurConnexion, NotificationBell } from "@/components/NotificationBell";
+import { IndicateurConnexion } from "@/components/IndicateurConnexion";
+import { ChargementModule } from "@/components/ChargementModule";
+
+// La cloche de notifications tire framer-motion : chargée en lazy pour garder
+// cette lib hors du chunk initial. Une cloche statique occupe la place le temps
+// du chargement (imperceptible, sans à-coup de mise en page).
+const NotificationBell = lazy(() => import("@/components/NotificationBell"));
+
+function ClocheStatique() {
+  return (
+    <span className="inline-flex h-9 w-9 items-center justify-center text-muted-foreground" aria-hidden>
+      <Bell className="h-5 w-5" />
+    </span>
+  );
+}
 import { cn } from "@/lib/utils";
 
 // Règle d'interface (spec section 2) : TOUS les modules apparaissent dans le
@@ -156,7 +172,9 @@ export function Layout() {
             <span className="font-serif font-semibold text-or">Boulangerie Lomoto</span>
           </div>
           <div className="flex items-center gap-1 [&_button]:text-creme/80 [&_button:hover]:bg-creme/10 [&_button:hover]:text-creme">
-            <NotificationBell />
+            <Suspense fallback={<ClocheStatique />}>
+              <NotificationBell />
+            </Suspense>
             <NavLink to="/profil" aria-label={t("nav.myProfile")} className="rounded-md p-2 text-creme/80 hover:bg-creme/10 hover:text-creme">
               <CircleUserRound className="h-4 w-4" />
             </NavLink>
@@ -199,11 +217,17 @@ export function Layout() {
         {/* Barre supérieure (desktop) : statut temps réel + notifications */}
         <div className="hidden items-center justify-end gap-3 border-b bg-card px-6 py-2 md:flex">
           <IndicateurConnexion etendu />
-          <NotificationBell />
+          <Suspense fallback={<ClocheStatique />}>
+            <NotificationBell />
+          </Suspense>
         </div>
 
         <main className="flex-1 p-4 md:p-8">
-          <Outlet />
+          {/* Chaque module est chargé à la demande (React.lazy) ; la navigation
+              reste affichée, seul le contenu montre le fallback de marque. */}
+          <Suspense fallback={<ChargementModule />}>
+            <Outlet />
+          </Suspense>
         </main>
 
         <footer className="px-4 pb-4 text-center text-xs text-muted-foreground">

@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { io, type Socket } from "socket.io-client";
+import type { Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
 import type { NotificationDTO, ServerToClientEvents, ClientToServerEvents } from "@lomoto/shared";
 import { api, getToken } from "./api";
@@ -59,37 +59,42 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     chargerHistorique();
 
-    const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io({
-      auth: { token: getToken() },
-    });
-
-    socket.on("connect", () => {
-      setStatut("connecte");
-      chargerHistorique(); // rattrapage après (re)connexion
-    });
-    socket.io.on("reconnect_attempt", () => setStatut("reconnexion"));
-    socket.on("disconnect", () => setStatut("reconnexion"));
-    socket.on("connect_error", () => setStatut("reconnexion"));
-
-    socket.on("notification", (notification) => {
+    // socket.io-client est chargé en import dynamique : la lib (~volumineuse)
+    // n'entre pas dans le chunk initial et n'est récupérée qu'une fois
+    // l'utilisateur connecté — jamais sur l'écran de connexion.
+    let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
+    void import("socket.io-client").then(({ io }) => {
       if (!actif) return;
-      setNotifications((prev) => [notification, ...prev].slice(0, MAX_FEED));
-      setNonLues((prev) => prev + 1);
-      // Rafraîchit les listes concernées par l'événement, sans rechargement.
-      if (notification.module === "COMMANDES") {
-        queryClient.invalidateQueries({ queryKey: ["commandes"] });
-        queryClient.invalidateQueries({ queryKey: ["commissions"] });
-        queryClient.invalidateQueries({ queryKey: ["clients"] });
-      }
-      if (notification.module === "CAISSE") {
-        queryClient.invalidateQueries({ queryKey: ["ventes"] });
-        queryClient.invalidateQueries({ queryKey: ["clotures"] });
-      }
+      socket = io({ auth: { token: getToken() } });
+
+      socket.on("connect", () => {
+        setStatut("connecte");
+        chargerHistorique(); // rattrapage après (re)connexion
+      });
+      socket.io.on("reconnect_attempt", () => setStatut("reconnexion"));
+      socket.on("disconnect", () => setStatut("reconnexion"));
+      socket.on("connect_error", () => setStatut("reconnexion"));
+
+      socket.on("notification", (notification) => {
+        if (!actif) return;
+        setNotifications((prev) => [notification, ...prev].slice(0, MAX_FEED));
+        setNonLues((prev) => prev + 1);
+        // Rafraîchit les listes concernées par l'événement, sans rechargement.
+        if (notification.module === "COMMANDES") {
+          queryClient.invalidateQueries({ queryKey: ["commandes"] });
+          queryClient.invalidateQueries({ queryKey: ["commissions"] });
+          queryClient.invalidateQueries({ queryKey: ["clients"] });
+        }
+        if (notification.module === "CAISSE") {
+          queryClient.invalidateQueries({ queryKey: ["ventes"] });
+          queryClient.invalidateQueries({ queryKey: ["clotures"] });
+        }
+      });
     });
 
     return () => {
       actif = false;
-      socket.disconnect();
+      socket?.disconnect();
       setStatut("deconnecte");
     };
   }, [utilisateur?.id]);

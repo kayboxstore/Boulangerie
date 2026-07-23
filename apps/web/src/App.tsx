@@ -1,23 +1,32 @@
+import { lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 import type { Module } from "@lomoto/shared";
 import { useAuth } from "@/lib/auth";
 import { Layout } from "@/components/Layout";
+import { ChargementModule } from "@/components/ChargementModule";
+// La page de connexion reste dans le bundle principal : c'est l'écran d'entrée
+// (pré-authentification), la charger en lazy ajouterait un délai au tout premier
+// affichage. Tous les modules métier sont chargés à la demande via React.lazy —
+// leur code (et les grosses libs qu'ils tirent, ex. Recharts pour le Dashboard)
+// n'entre pas dans le chunk initial et n'est récupéré qu'à la navigation.
 import { LoginPage } from "@/pages/Login";
-import { DashboardPage } from "@/pages/Dashboard";
-import { ProduitsPage } from "@/pages/Produits";
-import { CommandesPage } from "@/pages/Commandes";
-import { CommissionsPage } from "@/pages/Commissions";
-import { CaissePage } from "@/pages/Caisse";
-import { StocksPage } from "@/pages/Stocks";
-import { ProductionPage } from "@/pages/Production";
-import { FournisseursPage } from "@/pages/Fournisseurs";
-import { EquipePage } from "@/pages/Equipe";
-import { ProfilPage } from "@/pages/Profil";
-import { TravailleursPage } from "@/pages/Travailleurs";
-import { RapportsPersonnelsPage } from "@/pages/RapportsPersonnels";
-import { AProposPage } from "@/pages/APropos";
-import { ParametresPage } from "@/pages/Parametres";
+
+// `.then(...)` : les pages exportent des composants nommés, pas un export default.
+const DashboardPage = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.DashboardPage })));
+const ProduitsPage = lazy(() => import("@/pages/Produits").then((m) => ({ default: m.ProduitsPage })));
+const CommandesPage = lazy(() => import("@/pages/Commandes").then((m) => ({ default: m.CommandesPage })));
+const CommissionsPage = lazy(() => import("@/pages/Commissions").then((m) => ({ default: m.CommissionsPage })));
+const CaissePage = lazy(() => import("@/pages/Caisse").then((m) => ({ default: m.CaissePage })));
+const StocksPage = lazy(() => import("@/pages/Stocks").then((m) => ({ default: m.StocksPage })));
+const ProductionPage = lazy(() => import("@/pages/Production").then((m) => ({ default: m.ProductionPage })));
+const FournisseursPage = lazy(() => import("@/pages/Fournisseurs").then((m) => ({ default: m.FournisseursPage })));
+const EquipePage = lazy(() => import("@/pages/Equipe").then((m) => ({ default: m.EquipePage })));
+const ProfilPage = lazy(() => import("@/pages/Profil").then((m) => ({ default: m.ProfilPage })));
+const TravailleursPage = lazy(() => import("@/pages/Travailleurs").then((m) => ({ default: m.TravailleursPage })));
+const RapportsPersonnelsPage = lazy(() => import("@/pages/RapportsPersonnels").then((m) => ({ default: m.RapportsPersonnelsPage })));
+const AProposPage = lazy(() => import("@/pages/APropos").then((m) => ({ default: m.AProposPage })));
+const ParametresPage = lazy(() => import("@/pages/Parametres").then((m) => ({ default: m.ParametresPage })));
 
 /** Garde d'accès : exige au moins la lecture sur `module`, sinon retour à l'accueil. */
 function RequiertLecture({ module, children }: { module: Module; children: ReactNode }) {
@@ -26,18 +35,10 @@ function RequiertLecture({ module, children }: { module: Module; children: React
   return children;
 }
 
-function EcranChargement() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-creme">
-      <img src="/logo-lomoto.png" alt="Boulangerie Lomoto" className="h-24 w-24 animate-pulse rounded-full object-contain" />
-    </div>
-  );
-}
-
 export default function App() {
   const { utilisateur, chargement } = useAuth();
 
-  if (chargement) return <EcranChargement />;
+  if (chargement) return <ChargementModule plein />;
 
   if (!utilisateur) {
     return (
