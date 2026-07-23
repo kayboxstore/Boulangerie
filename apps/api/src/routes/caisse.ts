@@ -1,8 +1,18 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
-import { formatFc, venteCreateSchema, type ClotureCaisseDTO, type VenteDTO } from "@lomoto/shared";
+import {
+  formatFc,
+  ROLE_ADMINISTRATEUR,
+  ROLE_DIRECTEUR_GENERAL,
+  venteAnnulationSchema,
+  venteCreateSchema,
+  type ClotureCaisseDTO,
+  type StatutVente,
+  type VenteDTO,
+} from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
+import type { Request, Response, NextFunction } from "express";
 import { busEvenements } from "../lib/events.js";
 import { seuilAlerteTransaction } from "../lib/parametres.js";
 
@@ -10,15 +20,26 @@ export const caisseRouter = Router();
 
 caisseRouter.use(requireAuth);
 
+// Garde dédiée à l'unique action d'écriture jamais accordée au DG : annuler une
+// vente frauduleuse (section 3.1). Réservée au SEUL rôle DG — pas même l'Admin.
+function exigerDG(req: Request, res: Response, next: NextFunction) {
+  if (req.utilisateur?.role.nom !== ROLE_DIRECTEUR_GENERAL) {
+    return res.status(403).json({ erreur: "Seul le Directeur Général peut annuler une vente" });
+  }
+  next();
+}
+
 type VenteAvecRelations = Prisma.VenteGetPayload<{
   include: {
     vendeur: { select: { id: true; nom: true } };
+    annuleePar: { select: { id: true; nom: true } };
     lignes: { include: { produit: { select: { nom: true } } } };
   };
 }>;
 
 const INCLUDE_VENTE = {
   vendeur: { select: { id: true, nom: true } },
+  annuleePar: { select: { id: true, nom: true } },
   lignes: { include: { produit: { select: { nom: true } } } },
 } as const;
 
@@ -31,6 +52,10 @@ const versVenteDTO = (v: VenteAvecRelations): VenteDTO => ({
   totalTaxe: v.totalTaxe,
   moyenPaiement: v.moyenPaiement,
   clotureId: v.clotureId,
+  statut: v.statut as StatutVente,
+  annuleePar: v.annuleePar ? { id: v.annuleePar.id, nom: v.annuleePar.nom } : null,
+  motifAnnulation: v.motifAnnulation,
+  dateAnnulation: v.dateAnnulation?.toISOString() ?? null,
   lignes: v.lignes.map((l) => ({
     id: l.id,
     produitId: l.produitId,
@@ -165,7 +190,8 @@ caisseRouter.post("/cloture", requirePermission("CAISSE", "ECRITURE"), async (re
   try {
     const resultat = await prisma.$transaction(
       async (tx) => {
-        const ouvertes = await tx.vente.findMany({ where: { clotureId: null } });
+        // Les ventes annulées (3.1) sont exclues de la clôture et du CA.
+        const ouvertes = await tx.vente.findMany({ where: { clotureId: null, statut: "ACTIVE" } });
         if (ouvertes.length === 0) return null;
 
         const totalPar = (moyen: string) =>
@@ -206,6 +232,57 @@ caisseRouter.post("/cloture", requirePermission("CAISSE", "ECRITURE"), async (re
     });
 
     res.status(201).json({ cloture: dto });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Annulation d'une vente frauduleuse (section 3.1) — SEULE action d'écriture du
+// DG dans toute l'application, et pour lui seul. Justification obligatoire ; la
+// vente passe à ANNULEE (pas de suppression) ; les Admins sont notifiés en temps
+// réel ; l'UPDATE est capté par l'extension d'audit (motif dans les données).
+caisseRouter.post("/ventes/:id/annulation", exigerDG, async (req, res, next) => {
+  try {
+    const parsed = venteAnnulationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const vente = await prisma.vente.findUnique({ where: { id: req.params.id } });
+    if (!vente) return res.status(404).json({ erreur: "Vente introuvable" });
+    if (vente.statut === "ANNULEE") {
+      return res.status(409).json({ erreur: "Cette vente est déjà annulée" });
+    }
+
+    const maj = await prisma.vente.update({
+      where: { id: vente.id },
+      data: {
+        statut: "ANNULEE",
+        annuleeParId: req.utilisateur!.id,
+        motifAnnulation: parsed.data.motif,
+        dateAnnulation: new Date(),
+      },
+      include: INCLUDE_VENTE,
+    });
+    const dto = versVenteDTO(maj);
+
+    // Action exceptionnelle : notifier directement tous les Admins (Principal +
+    // secondaires), hors matrice (ils n'ont pas de permission Caisse).
+    const admins = await prisma.utilisateur.findMany({
+      where: { role: { nom: ROLE_ADMINISTRATEUR }, actif: true },
+      select: { id: true },
+    });
+    busEvenements.emettreEvenement({
+      type: "VENTE_ANNULEE",
+      module: "CAISSE",
+      emetteurId: req.utilisateur!.id,
+      evenementRef: dto.id,
+      priorite: "HAUTE",
+      destinataireIdsDirects: admins.map((a) => a.id),
+      message: `⚠ Vente n°${dto.numero} (${formatFc(dto.total)}) annulée par le Directeur Général — motif : ${parsed.data.motif}`,
+      donnees: { venteId: dto.id, numero: dto.numero, total: dto.total, motif: parsed.data.motif },
+    });
+
+    res.json({ vente: dto });
   } catch (e) {
     next(e);
   }

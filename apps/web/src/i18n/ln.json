@@ -304,7 +304,17 @@
     "close": "Kokanga",
     "ariaDecrease": "Kokitisa",
     "ariaIncrease": "Kobakisa",
-    "ariaRemove": "Kolongola {{nom}}"
+    "ariaRemove": "Kolongola {{nom}}",
+    "cashOnly": "Kofuta na mbongo ya makasi",
+    "active": "Ezali malamu",
+    "cancelled": "Elongwe",
+    "cancelSale": "Kolongola",
+    "cancelError": "Bolongoli elongi te.",
+    "cancelTitle": "Kolongola boteki n°{{numero}}",
+    "cancelDesc": "Boteki oyo ya {{montant}} ekokoma elongwe mpe ekozala na kati ya mbongo ya mombongo te. Ekela ezali kaka mpo na Mokambi Monene, ekomami na buku ya bolandeli.",
+    "cancelReason": "Ntina (esengeli)",
+    "cancelReasonPlaceholder": "Ntina ya bolongoli (ndakisa : boteki ya bokosi)",
+    "confirmCancel": "Kondima bolongoli"
   },
   "commandes": {
     "title": "Bakomande ya bakiliya",

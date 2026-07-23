@@ -56,7 +56,7 @@ async function alertesStock() {
 rapportsRouter.get("/caisse", requirePermission("CAISSE", "LECTURE"), async (_req, res, next) => {
   try {
     const caDepuis = async (depuis: Date) => {
-      const agg = await prisma.vente.aggregate({ where: { date: { gte: depuis } }, _sum: { total: true }, _count: { _all: true } });
+      const agg = await prisma.vente.aggregate({ where: { date: { gte: depuis }, statut: "ACTIVE" }, _sum: { total: true }, _count: { _all: true } });
       return { total: agg._sum.total ?? 0, nombre: agg._count._all };
     };
     const jour = await caDepuis(debutJour());
@@ -67,7 +67,7 @@ rapportsRouter.get("/caisse", requirePermission("CAISSE", "LECTURE"), async (_re
     // front comble les trous à zéro pour la courbe).
     const lignesSerie = await prisma.$queryRaw<{ jour: Date; total: bigint }[]>`
       SELECT date_trunc('day', "date") AS jour, SUM("total")::bigint AS total
-      FROM "Vente" WHERE "date" >= ${ilYAJours(29)}
+      FROM "Vente" WHERE "date" >= ${ilYAJours(29)} AND "statut" = 'ACTIVE'
       GROUP BY 1 ORDER BY 1`;
     const serie30Jours = lignesSerie.map((l) => ({
       date: l.jour.toISOString().slice(0, 10),
@@ -76,7 +76,7 @@ rapportsRouter.get("/caisse", requirePermission("CAISSE", "LECTURE"), async (_re
 
     const parProduit = await prisma.ligneVente.groupBy({
       by: ["produitId"],
-      where: { vente: { date: { gte: ilYAJours(29) } } },
+      where: { vente: { date: { gte: ilYAJours(29) }, statut: "ACTIVE" } },
       _sum: { quantite: true },
     });
     const produits = await prisma.produit.findMany({
@@ -270,7 +270,7 @@ rapportsRouter.get("/travailleurs", requirePermission("TRAVAILLEURS", "LECTURE")
 rapportsRouter.get("/cloture-quotidienne", requirePermission("RAPPORTS", "LECTURE"), async (_req, res, next) => {
   try {
     const aggVentes = await prisma.vente.aggregate({
-      where: { date: { gte: debutJour() } },
+      where: { date: { gte: debutJour() }, statut: "ACTIVE" },
       _sum: { total: true },
       _count: { _all: true },
     });

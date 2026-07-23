@@ -303,7 +303,17 @@
     "close": "Clôturer",
     "ariaDecrease": "Diminuer",
     "ariaIncrease": "Augmenter",
-    "ariaRemove": "Retirer {{nom}}"
+    "ariaRemove": "Retirer {{nom}}",
+    "cashOnly": "Paiement en espèces",
+    "active": "Active",
+    "cancelled": "Annulée",
+    "cancelSale": "Annuler",
+    "cancelError": "L'annulation a échoué.",
+    "cancelTitle": "Annuler la vente n°{{numero}}",
+    "cancelDesc": "Cette vente de {{montant}} sera marquée annulée et exclue du chiffre d'affaires. Action réservée au Directeur Général, tracée au journal d'audit.",
+    "cancelReason": "Justification (obligatoire)",
+    "cancelReasonPlaceholder": "Motif de l'annulation (ex. vente frauduleuse)",
+    "confirmCancel": "Confirmer l'annulation"
   },
   "commandes": {
     "title": "Commandes clients",

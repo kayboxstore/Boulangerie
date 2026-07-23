@@ -121,7 +121,8 @@ model Utilisateur {
   notificationsEmises Notification[] @relation("NotificationsEmises")
   commandesCreees CommandeClient[]
   reglementsEnregistres PaiementCommande[]
-  ventes        Vente[]
+  ventes        Vente[]              @relation("VentesEffectuees")
+  ventesAnnulees Vente[]             @relation("VentesAnnulees")
   clotures      ClotureCaisse[]
   mouvementsStock MouvementStock[]
   productions   Production[]
@@ -247,12 +248,17 @@ model Produit {
 
 // Vente au comptoir. Montants en Fc, figés à l'encaissement ; le pain est
 // exonéré (tauxTaxe = 0), la taxe éventuelle vient des produits hors pain.
+enum StatutVente {
+  ACTIVE
+  ANNULEE
+}
+
 model Vente {
   id            String        @id @default(cuid())
   numero        Int           @unique @default(autoincrement())
   date          DateTime      @default(now())
   vendeurId     String
-  vendeur       Utilisateur   @relation(fields: [vendeurId], references: [id])
+  vendeur       Utilisateur   @relation("VentesEffectuees", fields: [vendeurId], references: [id])
   total         Int
   totalTaxe     Int           @default(0)
   moyenPaiement MoyenPaiement
@@ -260,9 +266,18 @@ model Vente {
   // Renseigné par la clôture de caisse journalière qui englobe cette vente.
   clotureId     String?
   cloture       ClotureCaisse? @relation(fields: [clotureId], references: [id])
+  // Annulation exceptionnelle par le DG (section 3.1) : la vente ANNULEE reste
+  // en base (historique) mais sort du CA et de la clôture. onDelete: SetNull
+  // pour ne pas bloquer la suppression d'un compte DG.
+  statut          StatutVente  @default(ACTIVE)
+  annuleeParId    String?
+  annuleePar      Utilisateur? @relation("VentesAnnulees", fields: [annuleeParId], references: [id], onDelete: SetNull)
+  motifAnnulation String?
+  dateAnnulation  DateTime?
 
   @@index([date])
   @@index([clotureId])
+  @@index([statut])
 }
 
 model LigneVente {

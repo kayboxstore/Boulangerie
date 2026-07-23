@@ -122,6 +122,7 @@ export const TYPES_EVENEMENT = [
   "PRODUCTION_ENREGISTREE",
   "RAPPORT_PRODUCTION",
   "DEMANDE_APPROBATION",
+  "VENTE_ANNULEE",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -309,6 +310,18 @@ export const venteCreateSchema = z.object({
 });
 export type VenteCreateInput = z.infer<typeof venteCreateSchema>;
 
+// Statut d'une vente (section 3.1). ANNULEE = vente annulée par le DG
+// (annulation exceptionnelle d'une vente frauduleuse) : conservée pour
+// l'historique mais exclue du chiffre d'affaires et de la clôture.
+export const STATUTS_VENTE = ["ACTIVE", "ANNULEE"] as const;
+export type StatutVente = (typeof STATUTS_VENTE)[number];
+
+// Annulation d'une vente par le DG (3.1) — justification obligatoire.
+export const venteAnnulationSchema = z.object({
+  motif: z.string().trim().min(3, "La justification est requise").max(300),
+});
+export type VenteAnnulationInput = z.infer<typeof venteAnnulationSchema>;
+
 export interface LigneVenteDTO {
   id: string;
   produitId: string;
@@ -327,6 +340,11 @@ export interface VenteDTO {
   totalTaxe: number;
   moyenPaiement: MoyenPaiement;
   clotureId: string | null;
+  statut: StatutVente;
+  // Renseignés uniquement si la vente a été annulée par le DG (3.1).
+  annuleePar: { id: string; nom: string } | null;
+  motifAnnulation: string | null;
+  dateAnnulation: string | null;
   lignes: LigneVenteDTO[];
 }
 
@@ -476,6 +494,7 @@ export interface ProductionDTO {
 /** Jusqu'à 3 comptes Administrateur : 1 Principal + 2 secondaires (section 3.7). */
 export const MAX_COMPTES_ADMIN = 3;
 export const ROLE_ADMINISTRATEUR = "Administrateur";
+export const ROLE_DIRECTEUR_GENERAL = "Directeur Général";
 
 export const compteCreateSchema = z.object({
   nom: z.string().trim().min(1, "Le nom est requis").max(120),

@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Banknote, CreditCard, Lock, Minus, Plus, Smartphone, Trash2 } from "lucide-react";
+import { Ban, Banknote, Lock, Minus, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   formatFc,
-  MOYENS_PAIEMENT,
+  ROLE_DIRECTEUR_GENERAL,
   type ClotureCaisseDTO,
-  type MoyenPaiement,
   type ProduitDTO,
   type VenteDTO,
 } from "@lomoto/shared";
@@ -16,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -24,13 +25,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
-
-const ICONES_PAIEMENT: Record<MoyenPaiement, typeof Banknote> = {
-  ESPECES: Banknote,
-  MOBILE_MONEY: Smartphone,
-  CARTE: CreditCard,
-};
 
 function formatHeure(iso: string): string {
   return new Intl.DateTimeFormat("fr-FR", { timeStyle: "short" }).format(new Date(iso));
@@ -42,10 +36,12 @@ interface LignePanier {
 }
 
 export function CaissePage() {
-  const { peutEcrire } = useAuth();
+  const { peutEcrire, utilisateur } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const editable = peutEcrire("CAISSE");
+  // Le DG — et lui seul — peut annuler une vente frauduleuse (section 3.1).
+  const estDG = utilisateur?.role.nom === ROLE_DIRECTEUR_GENERAL;
 
   const { data: produitsData } = useQuery({
     queryKey: ["produits"],
@@ -62,7 +58,9 @@ export function CaissePage() {
 
   // --- Panier --------------------------------------------------------------
   const [panier, setPanier] = useState<LignePanier[]>([]);
-  const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement>("ESPECES");
+  // Paiement en espèces uniquement (décision métier, 3.1) : plus de mobile
+  // money / carte proposés à l'encaissement.
+  const moyenPaiement = "ESPECES" as const;
   const [erreur, setErreur] = useState<string | null>(null);
   const [confirmationVente, setConfirmationVente] = useState<string | null>(null);
 
@@ -124,8 +122,29 @@ export function CaissePage() {
     onError: (e) => setErreur(e instanceof Error ? e.message : t("caisse.closeError")),
   });
 
+  // --- Annulation d'une vente par le DG (3.1) ------------------------------
+  const [venteAAnnuler, setVenteAAnnuler] = useState<VenteDTO | null>(null);
+  const [motifAnnulation, setMotifAnnulation] = useState("");
+  const [erreurAnnulation, setErreurAnnulation] = useState<string | null>(null);
+
+  const annuler = useMutation({
+    mutationFn: (id: string) =>
+      api<{ vente: VenteDTO }>(`/api/caisse/ventes/${id}/annulation`, {
+        method: "POST",
+        body: JSON.stringify({ motif: motifAnnulation.trim() }),
+      }),
+    onSuccess: () => {
+      setVenteAAnnuler(null);
+      setMotifAnnulation("");
+      setErreurAnnulation(null);
+      queryClient.invalidateQueries({ queryKey: ["ventes"] });
+    },
+    onError: (e) => setErreurAnnulation(e instanceof Error ? e.message : t("caisse.cancelError")),
+  });
+
   const ventesOuvertes = ventesData?.ventes ?? [];
-  const totalJournee = ventesOuvertes.reduce((s, v) => s + v.total, 0);
+  // Le CA du jour exclut les ventes annulées (3.1).
+  const totalJournee = ventesOuvertes.reduce((s, v) => s + (v.statut === "ANNULEE" ? 0 : v.total), 0);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -229,26 +248,10 @@ export function CaissePage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2">
-                    {MOYENS_PAIEMENT.map((m) => {
-                      const Icone = ICONES_PAIEMENT[m];
-                      return (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setMoyenPaiement(m)}
-                          className={cn(
-                            "flex flex-col items-center gap-1 rounded-lg border p-2 text-xs font-medium transition-colors",
-                            moyenPaiement === m
-                              ? "border-or bg-or/15 text-terracotta dark:text-or"
-                              : "border-input text-muted-foreground hover:bg-secondary",
-                          )}
-                        >
-                          <Icone className="h-4 w-4" />
-                          {t(`moyenPaiement.${m}`)}
-                        </button>
-                      );
-                    })}
+                  {/* Paiement en espèces uniquement (3.1). */}
+                  <div className="flex items-center justify-center gap-2 rounded-lg border border-or bg-or/15 p-2 text-sm font-medium text-terracotta dark:text-or">
+                    <Banknote className="h-4 w-4" />
+                    {t("caisse.cashOnly")}
                   </div>
 
                   {erreur && (
@@ -291,29 +294,67 @@ export function CaissePage() {
                 <TableHead>N°</TableHead>
                 <TableHead>{t("caisse.colTime")}</TableHead>
                 <TableHead>{t("caisse.colArticles")}</TableHead>
-                <TableHead>{t("caisse.colPayment")}</TableHead>
+                <TableHead>{t("common.status")}</TableHead>
                 <TableHead className="text-right">{t("common.total")}</TableHead>
+                {estDG && <TableHead className="text-right">{t("common.actions")}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {ventesOuvertes.map((v) => (
-                <TableRow key={v.id}>
-                  <TableCell className="font-medium">{v.numero}</TableCell>
-                  <TableCell className="text-muted-foreground">{formatHeure(v.date)}</TableCell>
-                  <TableCell className="max-w-64 truncate text-sm">
-                    {v.lignes.map((l) => `${l.quantite}× ${l.produitNom}`).join(", ")}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{t(`moyenPaiement.${v.moyenPaiement}`)}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-semibold text-marine dark:text-or">
-                    {formatFc(v.total)}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {ventesOuvertes.map((v) => {
+                const annulee = v.statut === "ANNULEE";
+                return (
+                  <TableRow key={v.id} className={annulee ? "opacity-60" : undefined}>
+                    <TableCell className="font-medium">{v.numero}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatHeure(v.date)}</TableCell>
+                    <TableCell className="max-w-64 truncate text-sm">
+                      {v.lignes.map((l) => `${l.quantite}× ${l.produitNom}`).join(", ")}
+                    </TableCell>
+                    <TableCell>
+                      {annulee ? (
+                        <Badge
+                          className="border-transparent bg-terracotta text-creme"
+                          title={v.motifAnnulation ?? undefined}
+                        >
+                          {t("caisse.cancelled")}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">{t("caisse.active")}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell
+                      className={
+                        annulee
+                          ? "text-right font-semibold text-muted-foreground line-through"
+                          : "text-right font-semibold text-marine dark:text-or"
+                      }
+                    >
+                      {formatFc(v.total)}
+                    </TableCell>
+                    {estDG && (
+                      <TableCell className="text-right">
+                        {!annulee && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-terracotta hover:text-terracotta"
+                            onClick={() => {
+                              setVenteAAnnuler(v);
+                              setMotifAnnulation("");
+                              setErreurAnnulation(null);
+                            }}
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                            {t("caisse.cancelSale")}
+                          </Button>
+                        )}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })}
               {ventesOuvertes.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={estDG ? 6 : 5} className="py-8 text-center text-muted-foreground">
                     {t("caisse.noSaleSinceClose")}
                   </TableCell>
                 </TableRow>
@@ -388,6 +429,56 @@ export function CaissePage() {
               {t("caisse.close")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Annulation d'une vente par le DG (3.1) — justification obligatoire. */}
+      <Dialog open={!!venteAAnnuler} onOpenChange={(o) => !o && setVenteAAnnuler(null)}>
+        <DialogContent>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (venteAAnnuler) annuler.mutate(venteAAnnuler.id);
+            }}
+            className="space-y-4"
+          >
+            <DialogHeader>
+              <DialogTitle>{t("caisse.cancelTitle", { numero: venteAAnnuler?.numero ?? "" })}</DialogTitle>
+              <DialogDescription>
+                {t("caisse.cancelDesc", { montant: venteAAnnuler ? formatFc(venteAAnnuler.total) : "" })}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-1.5">
+              <Label htmlFor="motif-annulation">{t("caisse.cancelReason")}</Label>
+              <Input
+                id="motif-annulation"
+                value={motifAnnulation}
+                onChange={(e) => setMotifAnnulation(e.target.value)}
+                minLength={3}
+                required
+                autoFocus
+                placeholder={t("caisse.cancelReasonPlaceholder")}
+              />
+            </div>
+            {erreurAnnulation && (
+              <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
+                {erreurAnnulation}
+              </p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setVenteAAnnuler(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="submit"
+                variant="cta"
+                disabled={annuler.isPending || motifAnnulation.trim().length < 3}
+              >
+                <Ban className="h-4 w-4" />
+                {t("caisse.confirmCancel")}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

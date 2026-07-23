@@ -205,13 +205,15 @@ async function main() {
     await prisma.parametreBoutique.upsert({ where: { cle: p.cle }, update: {}, create: p });
   }
 
-  // --- Catalogue produits initial (pain — exonéré de TVA, tauxTaxe = 0) ---
+  // --- Catalogue produits (Caisse) — catalogue RÉEL confirmé (section 3.1).
+  // 100 % pain, exonéré de TVA (tauxTaxe = 0). En production, ce catalogue est
+  // saisi/ajusté par un Admin via Paramètres → Produits ; on le seede ici pour
+  // que l'environnement de démo reflète la réalité (Carré / Baguette).
   const produits = [
-    { nom: "Pain bac (standard)", prixVente: 4100, categorie: "Pain" },
-    { nom: "Baguette", prixVente: 500, categorie: "Pain" },
-    { nom: "Pain complet", prixVente: 800, categorie: "Pain" },
-    { nom: "Pain de mie", prixVente: 1500, categorie: "Pain" },
-    { nom: "Petit pain", prixVente: 250, categorie: "Pain" },
+    { nom: "Carré 1.500 Fc", prixVente: 1500, categorie: "Pain" },
+    { nom: "Carré 1.000 Fc", prixVente: 1000, categorie: "Pain" },
+    { nom: "Baguette 500 Fc", prixVente: 500, categorie: "Pain" },
+    { nom: "Baguette 1.000 Fc", prixVente: 1000, categorie: "Pain" },
   ];
   for (const p of produits) {
     await prisma.produit.upsert({
@@ -238,7 +240,7 @@ async function main() {
   }
 
   // --- Recette de démonstration (section 3.3) — quantités PAR UNITÉ produite ---
-  const baguette = await prisma.produit.findUniqueOrThrow({ where: { nom: "Baguette" } });
+  const baguette = await prisma.produit.findUniqueOrThrow({ where: { nom: "Baguette 500 Fc" } });
   const recetteExistante = await prisma.recette.findUnique({ where: { produitId: baguette.id } });
   if (!recetteExistante) {
     const ingredient = async (nom: string, quantite: number) => ({
@@ -274,7 +276,7 @@ async function main() {
     });
   }
 
-  console.log("Seed terminé — 7 rôles, 3 types de clients, 9 utilisateurs, 5 clients, 5 produits, 5 matières premières, 1 recette, 2 fournisseurs.");
+  console.log("Seed terminé — 7 rôles, 3 types de clients, 9 utilisateurs, 5 clients, 4 produits, 5 matières premières, 1 recette, 2 fournisseurs.");
   console.log(`Mot de passe de démonstration pour tous les comptes : ${MOT_DE_PASSE_DEMO}`);
 }
 
