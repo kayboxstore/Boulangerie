@@ -48,7 +48,8 @@
     "logout": "Se déconnecter",
     "myProfile": "Mon profil",
     "approbations": "Approbations",
-    "etatSysteme": "État système"
+    "etatSysteme": "État système",
+    "audit": "Journal d'audit"
   },
   "login": {
     "title": "Connexion",
@@ -724,5 +725,24 @@
     "reject": "Rejeter",
     "confirmReject": "Rejeter cette demande ? L'action ne sera pas exécutée.",
     "actionError": "L'action a échoué."
+  },
+  "audit": {
+    "title": "Journal d'audit",
+    "subtitle": "Historique immuable des modifications et suppressions — lecture seule (DG et Administrateurs).",
+    "filters": "Filtres",
+    "filtersSub": "Par utilisateur, par module, par période.",
+    "user": "Utilisateur",
+    "allUsers": "Tous les utilisateurs",
+    "module": "Module",
+    "allModules": "Tous les modules",
+    "entries": "Entrées",
+    "entriesSub": "{{count}} action(s) enregistrée(s).",
+    "entity": "Entité",
+    "action": "Action",
+    "field": "Champ",
+    "before": "Avant",
+    "after": "Après",
+    "noFieldChange": "Aucun champ métier modifié.",
+    "empty": "Aucune action enregistrée pour ces filtres."
   }
 }

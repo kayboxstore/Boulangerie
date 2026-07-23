@@ -29,6 +29,7 @@ const AProposPage = lazy(() => import("@/pages/APropos").then((m) => ({ default:
 const ParametresPage = lazy(() => import("@/pages/Parametres").then((m) => ({ default: m.ParametresPage })));
 const EtatSystemePage = lazy(() => import("@/pages/EtatSysteme").then((m) => ({ default: m.EtatSystemePage })));
 const ApprobationsPage = lazy(() => import("@/pages/Approbations").then((m) => ({ default: m.ApprobationsPage })));
+const AuditPage = lazy(() => import("@/pages/Audit").then((m) => ({ default: m.AuditPage })));
 
 /** Garde d'accès : exige au moins la lecture sur `module`, sinon retour à l'accueil. */
 function RequiertLecture({ module, children }: { module: Module; children: ReactNode }) {
@@ -138,6 +139,15 @@ export default function App() {
             <RequiertEcriture module="EQUIPE">
               <EtatSystemePage />
             </RequiertEcriture>
+          }
+        />
+        {/* Journal d'audit (3.17) : DG (lecture) et Admins — lecture seule. */}
+        <Route
+          path="/audit"
+          element={
+            <RequiertLecture module="EQUIPE">
+              <AuditPage />
+            </RequiertLecture>
           }
         />
         <Route

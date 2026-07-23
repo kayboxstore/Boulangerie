@@ -4,6 +4,7 @@ import { LANGUES } from "@lomoto/shared";
 import { aAcces } from "@lomoto/shared";
 import { verifyToken } from "../lib/jwt.js";
 import { prisma } from "../lib/prisma.js";
+import { contexteRequete } from "../lib/contexteRequete.js";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -77,7 +78,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return res.status(401).json({ erreur: "Compte introuvable ou désactivé" });
     }
     req.utilisateur = utilisateur;
-    next();
+    // Ouvre le contexte de requête pour toute la suite du traitement : l'extension
+    // d'audit y lira l'auteur des écritures Prisma (lib/audit.ts).
+    contexteRequete.run({ id: utilisateur.id, nom: utilisateur.nom }, () => next());
   } catch {
     return res.status(401).json({ erreur: "Jeton invalide ou expiré" });
   }

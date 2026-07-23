@@ -49,7 +49,8 @@
     "logout": "Kobima",
     "myProfile": "Profil na ngai",
     "approbations": "Bandimibi",
-    "etatSysteme": "Ezaleli ya sistɛmɛ"
+    "etatSysteme": "Ezaleli ya sistɛmɛ",
+    "audit": "Buku ya bolandeli"
   },
   "login": {
     "title": "Kokota",
@@ -725,5 +726,24 @@
     "reject": "Koboya",
     "confirmReject": "Koboya bosɛngi oyo ? Ekosalema te.",
     "actionError": "Ekosalema te."
+  },
+  "audit": {
+    "title": "Buku ya bolandeli",
+    "subtitle": "Lisolo oyo ekoki kobongwana te ya mbongwana mpe balongolami — kotánga kaka (DG mpe ba-Administrateur).",
+    "filters": "Batili",
+    "filtersSub": "Na mosaleli, na module, na ntango.",
+    "user": "Mosaleli",
+    "allUsers": "Basaleli nyonso",
+    "module": "Module",
+    "allModules": "Ba-module nyonso",
+    "entries": "Makomi",
+    "entriesSub": "Misala {{count}} ekomami.",
+    "entity": "Eloko",
+    "action": "Ekela",
+    "field": "Esika",
+    "before": "Liboso",
+    "after": "Nsima",
+    "noFieldChange": "Esika ya mosala ebongwani te.",
+    "empty": "Ekela ekomami te mpo na batili oyo."
   }
 }

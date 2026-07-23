@@ -1,6 +1,7 @@
-import type { Prisma, MatierePremiere } from "@prisma/client";
+import type { MatierePremiere } from "@prisma/client";
 import { formatQuantite, type TypeMouvementStock } from "@lomoto/shared";
 import { busEvenements } from "../lib/events.js";
+import type { TxClient } from "../lib/prisma.js";
 
 /** Erreur métier renvoyée au client avec un statut HTTP dédié. */
 export class ErreurStock extends Error {
@@ -26,7 +27,7 @@ export interface ResultatMouvement {
  * pas de l'état : une matière déjà sous le seuil ne ré-alerte pas).
  */
 export async function appliquerMouvement(
-  tx: Prisma.TransactionClient,
+  tx: TxClient,
   params: {
     matierePremiereId: string;
     type: TypeMouvementStock;

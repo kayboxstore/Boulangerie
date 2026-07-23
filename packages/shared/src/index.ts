@@ -913,6 +913,62 @@ export interface EtatSystemeDTO {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 11 — Journal d'audit (section 3.17)
+// ---------------------------------------------------------------------------
+
+// Uniquement les actions RÉUSSIES de modification/suppression (les créations sont
+// déjà tracées via créePar/enregistrePar ; les 403 ne sont pas journalisés).
+export const ACTIONS_AUDIT = ["MODIFICATION", "SUPPRESSION"] as const;
+export type ActionAudit = (typeof ACTIONS_AUDIT)[number];
+
+export const ACTION_AUDIT_LABELS: Record<ActionAudit, string> = {
+  MODIFICATION: "Modification",
+  SUPPRESSION: "Suppression",
+};
+
+/** Libellés lisibles des types d'entité (modèles) journalisés. */
+export const TYPE_ENTITE_LABELS: Record<string, string> = {
+  Utilisateur: "Compte utilisateur",
+  Role: "Rôle",
+  RolePermission: "Permission de rôle",
+  DemandeApprobation: "Demande d'approbation",
+  DelegationRole: "Délégation de rôle",
+  Produit: "Produit",
+  TypeClient: "Qualité (type de client)",
+  ParametreBoutique: "Paramètre de la boutique",
+  Client: "Client",
+  CommandeClient: "Commande client",
+  PaiementCommande: "Règlement de commande",
+  Vente: "Vente",
+  LigneVente: "Ligne de vente",
+  ClotureCaisse: "Clôture de caisse",
+  MatierePremiere: "Matière première",
+  MouvementStock: "Mouvement de stock",
+  Recette: "Recette",
+  IngredientRecette: "Ingrédient de recette",
+  PlanningProduction: "Planning de production",
+  Production: "Production",
+  Fournisseur: "Fournisseur",
+  CommandeFournisseur: "Commande fournisseur",
+  LigneCommandeFournisseur: "Ligne de commande fournisseur",
+  Travailleur: "Travailleur",
+  Presence: "Pointage",
+};
+
+export interface AuditLogDTO {
+  id: string;
+  utilisateur: { id: string | null; nom: string };
+  module: Module;
+  typeEntite: string;
+  entiteId: string;
+  action: ActionAudit;
+  /** Instantanés des champs scalaires (secrets expurgés). */
+  avant: Record<string, unknown> | null;
+  apres: Record<string, unknown> | null;
+  date: string;
+}
+
+// ---------------------------------------------------------------------------
 // Utilitaires
 // ---------------------------------------------------------------------------
 

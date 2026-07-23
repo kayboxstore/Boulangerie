@@ -19,6 +19,7 @@ import { parametresRouter } from "./routes/parametres.js";
 import { approbationsRouter } from "./routes/approbations.js";
 import { delegationsRouter } from "./routes/delegations.js";
 import { etatSystemeRouter } from "./routes/etat-systeme.js";
+import { auditRouter } from "./routes/audit.js";
 
 export function createApp() {
   const app = express();
@@ -50,6 +51,7 @@ export function createApp() {
   app.use("/api/approbations", approbationsRouter);
   app.use("/api/delegations", delegationsRouter);
   app.use("/api/etat-systeme", etatSystemeRouter);
+  app.use("/api/audit", auditRouter);
 
   // Gestion d'erreurs centralisée
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

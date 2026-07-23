@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   Factory,
   HandCoins,
+  History,
   Info,
   LayoutDashboard,
   LogOut,
@@ -66,6 +67,8 @@ const navigation: EntreeNav[] = [
   // Approbations (3.16) & État système (3.15) : réservés aux Admins (écriture Équipe).
   { to: "/approbations", labelKey: "nav.approbations", icon: ClipboardCheck, module: "EQUIPE", ecriture: true },
   { to: "/etat-systeme", labelKey: "nav.etatSysteme", icon: ServerCog, module: "EQUIPE", ecriture: true },
+  // Journal d'audit (3.17) : DG (lecture) et Admins — lecture seule.
+  { to: "/audit", labelKey: "nav.audit", icon: History, module: "EQUIPE" },
   { to: "/travailleurs", labelKey: "nav.travailleurs", icon: Users, module: "TRAVAILLEURS" },
   // Rapports personnels (3.13) : accessibles à tous, portée résolue côté serveur.
   { to: "/rapports", labelKey: "nav.rapports", icon: ScrollText },

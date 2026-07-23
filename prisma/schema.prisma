@@ -134,6 +134,7 @@ model Utilisateur {
   demandesDecidees DemandeApprobation[] @relation("DemandesDecidees")
   delegationsRecues DelegationRole[]    @relation("DelegationsRecues")
   delegationsCreees DelegationRole[]    @relation("DelegationsCreees")
+  auditsEffectues   AuditLog[]          @relation("AuditsEffectues")
 }
 
 // Notification métier (section 3.10) : persistée pour le rattrapage hors ligne,
@@ -522,4 +523,37 @@ model ParametreBoutique {
   cle       String   @unique
   valeur    String
   updatedAt DateTime @updatedAt
+}
+
+// Type d'action journalisée (section 3.17). Uniquement les MODIFICATIONS et
+// SUPPRESSIONS réussies — les créations sont déjà tracées via créePar/
+// enregistrePar sur chaque entité, et les tentatives refusées (403) ne sont
+// pas journalisées (question ouverte résolue, section 11).
+enum ActionAudit {
+  MODIFICATION
+  SUPPRESSION
+}
+
+// Journal d'audit (section 3.17) — historique IMMUABLE : aucune route d'écriture
+// n'est exposée, la table n'est alimentée que par l'extension Prisma centrale
+// (lib/audit.ts). Lecture réservée au DG et aux Admins.
+model AuditLog {
+  id             String       @id @default(cuid())
+  // Auteur de l'action. onDelete: SetNull pour ne pas bloquer la suppression
+  // d'un compte ; le nom reste figé dans utilisateurNom (historique immuable).
+  utilisateurId  String?
+  utilisateur    Utilisateur? @relation("AuditsEffectues", fields: [utilisateurId], references: [id], onDelete: SetNull)
+  utilisateurNom String
+  module         Module
+  typeEntite     String
+  entiteId       String
+  action         ActionAudit
+  // Instantanés avant/après (champs scalaires, secrets expurgés).
+  avant          Json?
+  apres          Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([createdAt])
+  @@index([module, createdAt])
+  @@index([utilisateurId, createdAt])
 }
