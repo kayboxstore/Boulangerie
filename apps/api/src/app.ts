@@ -1,5 +1,8 @@
 import express from "express";
 import cors from "cors";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { authRouter } from "./routes/auth.js";
 import { produitsRouter } from "./routes/produits.js";
 import { rolesRouter } from "./routes/roles.js";
@@ -52,6 +55,29 @@ export function createApp() {
   app.use("/api/delegations", delegationsRouter);
   app.use("/api/etat-systeme", etatSystemeRouter);
   app.use("/api/audit", auditRouter);
+
+  // --- Frontend compilé (production / déploiement) --------------------------
+  // En dev, le frontend est servi par Vite (avec proxy vers cette API). En
+  // production, il n'y a plus de proxy : l'API sert elle-même le build statique
+  // du frontend. Tout est alors sur la MÊME origine, donc les appels relatifs
+  // (/api, /socket.io) fonctionnent sans configuration ni CORS, et l'app est
+  // déployable comme un service unique. Chemin surchargable via WEB_DIST.
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const webDist = process.env.WEB_DIST ?? path.resolve(__dirname, "../../web/dist");
+  if (fs.existsSync(path.join(webDist, "index.html"))) {
+    app.use(express.static(webDist));
+    // Repli SPA : toute route hors /api renvoie index.html (React Router gère
+    // ensuite côté client). Les requêtes /api inconnues tombent dans le 404 JSON.
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api")) return next();
+      res.sendFile(path.join(webDist, "index.html"));
+    });
+  }
+
+  // 404 JSON pour les routes /api non trouvées.
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ erreur: "Ressource introuvable" });
+  });
 
   // Gestion d'erreurs centralisée
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

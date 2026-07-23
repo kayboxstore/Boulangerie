@@ -1,0 +1,41 @@
+# Blueprint de déploiement Render — Boulangerie Lomoto
+# ---------------------------------------------------------------------------
+# Déploie l'application comme UN SEUL service web (l'API Express sert aussi le
+# frontend compilé) + une base PostgreSQL managée. Aucun terminal requis : on
+# connecte ce dépôt GitHub à Render depuis le navigateur (même depuis un
+# téléphone). Voir DEPLOIEMENT.md pour la marche à suivre pas à pas.
+
+databases:
+  - name: lomoto-db
+    plan: free
+    databaseName: boulangerie_lomoto
+    user: lomoto
+    region: frankfurt
+
+services:
+  - type: web
+    name: boulangerie-lomoto
+    runtime: node
+    plan: free
+    region: frankfurt
+    # --include=dev : Render met NODE_ENV=production, or on a besoin des outils
+    # de build (vite, prisma CLI) qui sont en devDependencies.
+    buildCommand: >-
+      npm install --include=dev &&
+      npx prisma generate &&
+      npx prisma migrate deploy &&
+      npm run db:seed &&
+      npm run build --workspace apps/web
+    startCommand: npm run start --workspace apps/api
+    healthCheckPath: /api/health
+    envVars:
+      # URL de connexion injectée automatiquement depuis la base ci-dessus.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lomoto-db
+          property: connectionString
+      # Secret de signature des jetons JWT — généré et gardé secret par Render.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_VERSION
+        value: "22"
