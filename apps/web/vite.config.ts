@@ -28,6 +28,12 @@ export default defineConfig({
     },
   },
   server: {
+    // host: true -> écoute sur 0.0.0.0 (toutes les interfaces), pas seulement
+    // localhost, pour permettre l'accès depuis un autre appareil du réseau Wi-Fi
+    // (téléphone). Le frontend appelle l'API en relatif (/api, /socket.io) et
+    // Vite proxifie vers l'API : l'appareil n'a donc besoin d'atteindre QUE ce
+    // serveur (port 5173), pas directement l'API (3001).
+    host: true,
     port: 5173,
     proxy: {
       "/api": {
@@ -41,6 +47,7 @@ export default defineConfig({
     },
   },
   preview: {
+    host: true,
     port: 4173,
     proxy: {
       "/api": { target: "http://localhost:3001", changeOrigin: true },
