@@ -22,7 +22,7 @@ Administrateur — rôle technique séparé de la hiérarchie métier, jusqu'à 
 ```
 
 **Règle par défaut** : un supérieur a un accès en lecture seule sur le périmètre de son subordonné direct, en plus de l'écriture sur son propre périmètre. Exceptions explicites :
-- Le **DG** voit tout en lecture seule, SAUF **l'édition** des Réglages/Paramètres (taxes, seuils, types de clients, infos boutique, langue par défaut), strictement réservée aux Admins. Il ne modifie jamais rien lui-même dans l'application. *Précision (suite audit Claude Code)* : la **consultation** du catalogue produits (prix) et de l'Équipe (qui, quel rôle, actif/inactif) reste accessible au DG en lecture seule — seule l'**édition** de ces données (créer/modifier un produit, un compte, une permission) est bloquée, via Paramètres.
+- Le **DG** voit tout en lecture seule, SAUF **l'édition** des Réglages/Paramètres (taxes, seuils, types de clients, infos boutique, langue par défaut), strictement réservée aux Admins. Il ne modifie jamais rien lui-même dans l'application, **à une seule exception près : l'annulation d'une vente frauduleuse en Caisse** (voir 3.1) — unique action d'écriture jamais accordée au DG, et à lui seul. *Précision (suite audit Claude Code)* : la **consultation** du catalogue produits (prix) et de l'Équipe (qui, quel rôle, actif/inactif) reste accessible au DG en lecture seule — seule l'**édition** de ces données (créer/modifier un produit, un compte, une permission) est bloquée, via Paramètres.
 - Le **Caissier(ère)** a un accès en lecture seule supplémentaire sur la **Production**, bien que hors de sa chaîne hiérarchique directe.
 - Le **Chargé des commandes** a un accès en lecture seule sur **Commissions**, en plus de l'écriture sur Commandes.
 - Les **Admins** sont hors hiérarchie métier : aucune permission sur les modules métier, uniquement l'édition de Paramètres/Équipe/Activation/État système.
@@ -62,7 +62,11 @@ La liste des rôles est conçue pour être extensible (ajout d'un rôle et de se
 ## 3. Périmètre fonctionnel (v1 — scope complet)
 
 ### 3.1 Point de vente (Caisse)
-Vente au comptoir, panier, **pas de TVA sur le pain** (produit exonéré). Un taux de taxe reste configurable par l'Administrateur au niveau du produit, pour couvrir d'éventuels articles hors pain non exonérés (*voir Questions ouvertes*). Moyens de paiement (espèces, mobile money, CB), impression/génération de ticket, clôture de caisse journalière. Devise : Franc Congolais (Fc).
+Vente au comptoir, panier, **pas de TVA** : le catalogue est à 100 % du pain, produit exonéré (**question close** — plus de taux de taxe applicable en pratique ; l'enum/champ reste en base mais aucun produit n'est taxé). **Paiement en espèces uniquement** (décision métier — le mobile money et la carte bancaire ne sont plus proposés à l'encaissement ; l'enum `moyenPaiement` reste en base au cas où). Impression/génération de ticket, clôture de caisse journalière. Devise : Franc Congolais (Fc).
+
+**Catalogue réel confirmé** (saisi via Paramètres → Produits par un Admin, directement dans l'app) : Carré 1.500 Fc, Carré 1.000 Fc, Baguette 500 Fc, Baguette 1.000 Fc.
+
+**Annulation d'une vente frauduleuse (exception DG)** : le DG — et lui seul — peut annuler une vente existante. C'est la **seule action d'écriture jamais accordée au DG dans toute l'application** (aucun autre rôle, pas même l'Administrateur, ne peut annuler une vente). Une justification (texte court) est obligatoire. La vente passe au statut **ANNULEE** (pas de suppression physique) et sort dès lors des totaux CA / clôture. Les Admins (Principal + secondaires) sont notifiés en temps réel — action exceptionnelle. L'annulation apparaît au Journal d'audit (3.17). Une vente déjà annulée ne peut pas l'être une seconde fois.
 
 ### 3.2 Stocks & matières premières
 Suivi des quantités (farine, beurre, sucre, etc.), mouvements de stock (entrée/sortie), seuils d'alerte, historique.
@@ -74,7 +78,7 @@ Fiches recettes (ingrédients + quantités), planning de production journalier, 
 
 **Types de clients** ("Qualité" dans l'app), configurés dans les Paramètres :
 - **Dépositaires** : prix par bac 4.100 Fc, pas de commission
-- **Vente cash (VC)** : prix par bac 4.350 Fc, pas de commission *(hypothèse — voir Questions ouvertes)*
+- **Vente cash (VC)** : prix par bac 4.350 Fc, pas de commission (**confirmé — 0 Fc**)
 - **Mamans** : prix par bac 6.000 Fc, commission de 1.650 Fc/bac (27,5 %)
 
 **Champs d'une commande** (numérotation automatique, date) :
@@ -113,10 +117,12 @@ Le solde d'avance est porté par le **client** (pas par la commande) et se repor
 - Chaque règlement est journalisé (montant, date, auteur) pour la traçabilité
 - Déclenche une notification temps réel (même circuit que `NOUVELLE_COMMANDE`)
 
-Couvre aussi les commandes spéciales (gâteaux personnalisés, événements) avec acompte, date de retrait/livraison, statut (en attente/en préparation/prête/livrée).
+**Commandes spéciales (gâteaux personnalisés, événements) : retirées du périmètre** (décision métier). Le module Commandes ne couvre que les commandes en bacs.
+
+**Séparation Commandes / Caisse (clarification, aucun changement de logique)** : les deux modules sont et restent totalement indépendants, avec deux catalogues de prix qui ne se croisent jamais. **Commandes** raisonne en **nombre total de bacs**, sans détail produit — `montantBrut = bacs × prix unitaire de la Qualité` (ex. Mutombo, Dépositaire, 50 bacs × 4.100 Fc = 205.000 Fc), via `TypeClient.prixParBac`. **Caisse** raisonne **par produit à l'unité** (Carré, Baguette…), via `Produit.prixVente`. La logique Commandes reste inchangée.
 
 ### 3.5 Clients & fidélité
-Fiche client, historique d'achats, programme de fidélité (points ou carte tampon numérique).
+Fiche client, historique d'achats. **Programme de fidélité : conçu mais NON activé** (décision métier) — ni l'interface ni la logique de points/récompenses ne sont construites pour l'instant. Le champ `pointsFidélité` reste en base (placeholder), sans mécanisme associé.
 
 ### 3.6 Fournisseurs & achats
 Fiches fournisseurs, bons de commande, réception de marchandises (met à jour le stock).
@@ -223,7 +229,8 @@ DG : lecture seule, comme tous les modules métier.
 
 **Caisse**
 - En tant que Caissier(ère), je veux encaisser une vente en moins de 30 secondes pour ne pas faire attendre le client.
-- En tant que Caissier(ère), je veux que la TVA soit calculée automatiquement selon le type de vente (sur place/à emporter).
+- ~~En tant que Caissier(ère), je veux que la TVA soit calculée automatiquement selon le type de vente (sur place/à emporter).~~ *(caduc — catalogue 100 % pain, aucune TVA ; voir 3.1)*
+- En tant que DG, je veux pouvoir annuler une vente frauduleuse (avec justification), afin de corriger un encaissement illégitime sans passer par l'Administrateur ; les Admins en sont notifiés et l'action est tracée au Journal d'audit.
 
 **Stocks**
 - En tant que Responsable Stock/Achats et Fournisseurs, je veux être alerté quand une matière première passe sous le seuil critique pour anticiper la commande fournisseur.
@@ -268,7 +275,7 @@ LigneCommandeFournisseur (commandeId, matierePremiereId, quantité, prixUnitaire
 Client (id, nom, téléphone, typeClientId, avanceDisponible, pointsFidélité)   # avanceDisponible = solde reporté d'une commande à l'autre
 CommandeClient (id, numero, clientId, quantitéBacs, montantBrut, avanceUtilisee, montantAPercevoir, montantRecu, dette, avanceGeneree, statut, dateRetrait, créePar)
 PaiementCommande (id, commandeClientId, montant, date, enregistrePar)   # règlements successifs d'une dette
-Vente (id, date, vendeurId, total, moyenPaiement)
+Vente (id, date, vendeurId, total, moyenPaiement, statut, annuleeParId, motifAnnulation, dateAnnulation)   # statut ANNULEE = vente annulée par le DG (3.1), exclue du CA/clôture ; moyenPaiement = ESPECES uniquement (UI)
 LigneVente (venteId, produitId, quantité, prixUnitaire, tauxTaxe)
 Travailleur (id, nom, téléphone, poste, dateEmbauche, utilisateurId)   # utilisateurId nullable
 Presence (id, travailleurId, date, statut, heureArrivee, heureDepart, enregistrePar)   # statut: present | absent | retard
@@ -424,12 +431,12 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 ## 11. Questions ouvertes
 
 - Faut-il un mode dégradé/hors-ligne pour la caisse en cas de coupure internet ? *(technique — à trancher avant la phase 2)*
-- Quel prestataire pour l'encaissement (mobile money local, carte) ? *(métier)*
-- Le programme de fidélité : points cumulés ou carte tampon simple ? *(métier)*
-- Le pain est exonéré de TVA (confirmé). Les autres produits éventuels (pâtisseries, gâteaux sur commande) sont-ils eux aussi exonérés, ou un taux s'applique-t-il ? *(métier)*
+- Quel prestataire pour l'encaissement (mobile money local, carte) ? **Résolu : sans objet — paiement en espèces uniquement** (mobile money/CB retirés de l'encaissement).
+- Le programme de fidélité : points cumulés ou carte tampon simple ? **Résolu : fidélité conçue mais non activée** — ni interface ni logique construites pour l'instant.
+- Le pain est exonéré de TVA (confirmé). Les autres produits éventuels (pâtisseries, gâteaux sur commande) sont-ils eux aussi exonérés, ou un taux s'applique-t-il ? **Résolu : sans objet — catalogue 100 % pain, aucune TVA** (question close). Le champ taux de taxe reste en base sans être utilisé.
 - Si un rôle a plusieurs titulaires (ex. deux caissiers), la notification doit-elle aller à tous les titulaires du rôle supérieur, ou à une seule personne assignée ? *(métier)*
-- Le DG doit-il disposer d'une action exceptionnelle malgré l'accès lecture seule (ex. annuler une vente frauduleuse), ou cela doit-il toujours passer par l'Administrateur ? *(métier)*
-- La catégorie **Vente cash (VC)** génère-t-elle bien 0 Fc de commission, comme les Dépositaires ? *(métier — hypothèse actuelle, à confirmer)*
+- Le DG doit-il disposer d'une action exceptionnelle malgré l'accès lecture seule (ex. annuler une vente frauduleuse), ou cela doit-il toujours passer par l'Administrateur ? **Résolu : oui — l'annulation d'une vente frauduleuse est la seule action d'écriture accordée au DG** (et à lui seul, pas même l'Admin) ; justification obligatoire, statut ANNULEE, notification aux Admins, tracée au Journal d'audit (voir 3.1).
+- La catégorie **Vente cash (VC)** génère-t-elle bien 0 Fc de commission, comme les Dépositaires ? **Résolu : oui — 0 Fc de commission** (confirmé).
 - Au-delà de ces 3 types (Dépositaires, Vente cash, Mamans), d'autres catégories sont-elles prévues à terme ? *(métier — n'affecte pas l'architecture, juste la configuration)*
 - Le module Travailleurs (3.18) : Résolu — fiches employés + présence/pointage quotidien, sans paie.
 - La liste des "tâches critiques" nécessitant l'approbation de l'Admin Principal (section 2) : **Résolu — liste figée à 5 items** (suppression d'un utilisateur, création/suppression d'un compte Admin, modification prix/commissions par Qualité, modification du taux de taxe, modification des permissions d'un rôle). La réinitialisation de la base de données en est explicitement exclue (procédure d'infrastructure, hors application).
@@ -438,7 +445,7 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - Quel seuil (en Fc) déclenche l'alerte transaction inhabituelle (3.10) ? **Résolu : 100.000 Fc**, valeur par défaut modifiable ensuite dans Paramètres.
 - Une délégation temporaire de rôle (3.7) peut-elle chevaucher plusieurs modules à la fois, ou un seul module par délégation ?
 - Le Journal d'audit (3.17) doit-il aussi inclure les tentatives d'accès refusées (403), utile pour la sécurité, ou seulement les actions réussies ? **Résolu : uniquement les actions réussies** (modifications et suppressions effectivement appliquées) — les tentatives refusées (403) ne sont pas journalisées.
-- Les "commandes spéciales" (gâteaux personnalisés, événements — fin de la section 3.4) n'ont pas encore de statut/dateRetrait en base (omis volontairement en Phase 3, qui couvrait les commandes en bacs). À quel moment les construire ? Pas encore placé dans l'ordre des phases (section 9).
+- Les "commandes spéciales" (gâteaux personnalisés, événements — fin de la section 3.4) n'ont pas encore de statut/dateRetrait en base (omis volontairement en Phase 3, qui couvrait les commandes en bacs). À quel moment les construire ? **Résolu : retirées du périmètre** (décision métier) — le module Commandes ne couvre que les commandes en bacs.
 
 ## 12. Prochaines étapes
 
