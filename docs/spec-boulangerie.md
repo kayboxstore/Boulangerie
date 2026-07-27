@@ -22,7 +22,7 @@ Administrateur — rôle technique séparé de la hiérarchie métier, jusqu'à 
 ```
 
 **Règle par défaut** : un supérieur a un accès en lecture seule sur le périmètre de son subordonné direct, en plus de l'écriture sur son propre périmètre. Exceptions explicites :
-- Le **DG** voit tout en lecture seule, SAUF **l'édition** des Réglages/Paramètres (taxes, seuils, types de clients, infos boutique, langue par défaut), strictement réservée aux Admins. Il ne modifie jamais rien lui-même dans l'application, **à une seule exception près : l'annulation d'une vente frauduleuse en Caisse** (voir 3.1) — unique action d'écriture jamais accordée au DG, et à lui seul. *Précision (suite audit Claude Code)* : la **consultation** du catalogue produits (prix) et de l'Équipe (qui, quel rôle, actif/inactif) reste accessible au DG en lecture seule — seule l'**édition** de ces données (créer/modifier un produit, un compte, une permission) est bloquée, via Paramètres.
+- Le **DG** voit tout en lecture seule, SAUF **l'édition** des Réglages/Paramètres (taxes, seuils, types de clients, infos boutique, langue par défaut), strictement réservée aux Admins. Il ne modifie **jamais rien** lui-même dans l'application — **aucune exception** (l'annulation de vente, seule exception qui avait existé, disparaît avec la refonte de la Caisse en 3.1). *Précision (suite audit Claude Code)* : la **consultation** du catalogue produits (prix) et de l'Équipe (qui, quel rôle, actif/inactif) reste accessible au DG en lecture seule — seule l'**édition** de ces données (créer/modifier un produit, un compte, une permission) est bloquée, via Paramètres.
 - Le **Caissier(ère)** a un accès en lecture seule supplémentaire sur la **Production**, bien que hors de sa chaîne hiérarchique directe.
 - Le **Chargé des commandes** a un accès en lecture seule sur **Commissions**, en plus de l'écriture sur Commandes.
 - Les **Admins** sont hors hiérarchie métier : aucune permission sur les modules métier, uniquement l'édition de Paramètres/Équipe/Activation/État système.
@@ -61,12 +61,81 @@ La liste des rôles est conçue pour être extensible (ajout d'un rôle et de se
 
 ## 3. Périmètre fonctionnel (v1 — scope complet)
 
-### 3.1 Point de vente (Caisse)
-Vente au comptoir, panier, **pas de TVA** : le catalogue est à 100 % du pain, produit exonéré (**question close** — plus de taux de taxe applicable en pratique ; l'enum/champ reste en base mais aucun produit n'est taxé). **Paiement en espèces uniquement** (décision métier — le mobile money et la carte bancaire ne sont plus proposés à l'encaissement ; l'enum `moyenPaiement` reste en base au cas où). Impression/génération de ticket, clôture de caisse journalière. Devise : Franc Congolais (Fc).
+### 3.1 Caisse — registre journalier *(refonte : la vente au comptoir est retirée)*
 
-**Catalogue réel confirmé** (saisi via Paramètres → Produits par un Admin, directement dans l'app) : Carré 1.500 Fc, Carré 1.000 Fc, Baguette 500 Fc, Baguette 1.000 Fc.
+La **vente au comptoir** (panier, vente par produit) est **retirée du périmètre** :
+la boulangerie ne vend pas à l'unité au comptoir, tout passe par les commandes
+clients (3.4). Sont retirés avec elle :
 
-**Annulation d'une vente frauduleuse (exception DG)** : le DG — et lui seul — peut annuler une vente existante. C'est la **seule action d'écriture jamais accordée au DG dans toute l'application** (aucun autre rôle, pas même l'Administrateur, ne peut annuler une vente). Une justification (texte court) est obligatoire. La vente passe au statut **ANNULEE** (pas de suppression physique) et sort dès lors des totaux CA / clôture. Les Admins (Principal + secondaires) sont notifiés en temps réel — action exceptionnelle. L'annulation apparaît au Journal d'audit (3.17). Une vente déjà annulée ne peut pas l'être une seconde fois.
+- le **panier et la vente par produit** — les tables `Vente`/`LigneVente` sont
+  laissées **orphelines en base** (aucune route, aucune UI) plutôt que supprimées ;
+- l'**exception DG « annuler une vente »** — bouton, route et permission spéciale
+  disparaissent : il n'y a plus rien à annuler. Le DG redevient **strictement en
+  lecture seule sur toute l'application, sans aucune exception** ;
+- l'**alerte transaction inhabituelle** (seuil de 100.000 Fc) — notification et
+  paramètre de configuration supprimés.
+
+La Caisse devient un **registre journalier** : ce qui est entré, ce qui est sorti,
+ce qui reste. Devise : Franc Congolais (Fc).
+
+**1. Taux du jour** — une valeur **par date**, saisie par le Caissier (première
+tâche de la journée). Tant qu'aucun taux n'est défini pour aujourd'hui, la
+**dépense farine** (point 3) reste **désactivée** ; le reste du registre
+fonctionne normalement.
+
+**2. Registre du jour** — calculé pour la date sélectionnée (aujourd'hui par
+défaut) :
+
+| Poste | Origine | Calcul |
+|---|---|---|
+| **Entrées** | AUTOMATIQUE | Argent reçu **à la création** des commandes du jour (module Commandes) |
+| **Dettes payées** | AUTOMATIQUE | Somme des règlements (`PaiementCommande`) datés du jour — **total + liste détaillée** (client, montant) |
+| **Dépenses** | SAISIES | Liste libre : motif (texte) + montant ; total = somme des lignes |
+| **Solde** | AUTOMATIQUE | `(Entrées + Dettes payées) − Dépenses` |
+
+**Pas de double comptage (point d'attention)** : le montant reçu porté par une
+commande **inclut ses règlements ultérieurs**. Un règlement encaissé le jour même
+de la commande apparaîtrait donc dans les deux postes. La règle retenue rend les
+deux ensembles **disjoints par construction** :
+
+- **Entrées** = pour chaque commande créée ce jour, `montant reçu − somme de ses
+  règlements` — soit uniquement l'argent encaissé **au moment de la création** ;
+- **Dettes payées** = **tous** les règlements datés de ce jour, y compris ceux
+  portant sur une commande créée le même jour.
+
+Chaque franc n'est ainsi compté qu'une seule fois, et chaque poste porte bien le
+sens de son libellé.
+
+**3. Dépense spéciale farine (case à cocher)** — quand elle est cochée, une ligne
+de dépense **automatique** est ajoutée, au motif fixe « Achat farine » :
+
+```
+montant = [ (33,5 × taux du jour) + 500 ] × nombre de sacs utilisés
+```
+
+Le **nombre de sacs utilisés** provient du module Production (3.3) — les
+*ingrédients utilisés* du jour (`Production.sacsUtilises` pour cette date). Cette
+ligne compte dans le total des dépenses et dans le solde **comme les autres**.
+
+La case est **désactivée**, avec l'explication du blocage, tant que :
+- aucun **taux du jour** n'est défini, ou
+- **aucune production n'est enregistrée** ce jour-là — plutôt qu'un calcul sur une
+  valeur absente ou un zéro trompeur.
+
+**4. Permissions — inchangées** : Caissier(ère) en écriture, DG en **lecture
+seule** (désormais sans aucune exception), autres rôles selon la matrice
+existante. Le Caissier conserve sa lecture sur Commandes, Commissions et
+Production.
+
+**5. Notifications temps réel** : mêmes circuit et principe que le reste de
+l'application, sur les écritures réelles du registre (taux du jour défini,
+dépense ajoutée ou supprimée). Le registre étant un **calcul par date** et non un
+objet que l'on fige, il n'y a **pas d'action de clôture** — l'ancienne table
+`ClotureCaisse` est laissée orpheline, comme `Vente`.
+
+**6. Journal d'audit (3.17)** : les modifications et suppressions sur
+`DepenseCaisse` et `TauxDuJour` sont tracées **automatiquement** par l'extension
+Prisma déjà en place — rien de spécifique à ajouter.
 
 ### 3.2 Stocks & matières premières
 Suivi des quantités (farine, beurre, sucre, etc.), mouvements de stock (entrée/sortie), seuils d'alerte, historique.
@@ -255,13 +324,14 @@ Marge par produit (état actuel et décision) : non calculable proprement aujour
 Catalogue produits, prix, taxes, informations boutique, gestion des rôles/hiérarchie, gestion des types de clients (prix et commission par bac). Écriture réservée à l'**Administrateur**.
 
 **Ajouts** *(nouveau)* :
-- Seuil d'alerte transaction élevée (Fc) — déclenche une notification spéciale au DG (voir 3.10)
 - Langue par défaut de l'application (Français / Lingala), modifiable aussi par chaque utilisateur individuellement
 
-### 3.10 Notifications temps réel
-Quand un événement clé est enregistré (nouvelle commande client, alerte stock bas, nouvelle vente/clôture de caisse, réception fournisseur), une notification s'affiche **instantanément** chez le(s) supérieur(s) hiérarchique(s) concerné(s), sans rechargement de page. Portée : commandes, stock et ventes.
+*Le seuil d'alerte transaction élevée a été retiré avec l'alerte correspondante (refonte 3.1).*
 
-**Alerte transaction inhabituelle** *(nouveau)* : toute vente (Caisse) ou tout règlement (Commandes) dépassant le seuil configuré en Paramètres déclenche une notification dédiée au DG, visuellement distincte (priorité haute) du flux normal.
+### 3.10 Notifications temps réel
+Quand un événement clé est enregistré (nouvelle commande client, règlement de dette, alerte stock bas, production enregistrée, écriture au registre de caisse, réception fournisseur), une notification s'affiche **instantanément** chez le(s) supérieur(s) hiérarchique(s) concerné(s), sans rechargement de page. Portée : commandes, stock, production et caisse.
+
+*L'**alerte transaction inhabituelle** (seuil configurable, notification dédiée au DG) est **retirée** avec la refonte de la Caisse (3.1) : plus de seuil en Paramètres, plus de notification de ce type.*
 
 ### 3.11 Commissions
 Vue dédiée aux commandes de type **Maman** (les seules à générer une commission). Calcul **automatique** — aucune saisie manuelle. Visible en lecture seule par le Caissier(ère), le Chargé des commandes et le DG.
@@ -322,15 +392,17 @@ DG : lecture seule, comme tous les modules métier.
 ## 5. User stories principales
 
 **Caisse**
-- En tant que Caissier(ère), je veux encaisser une vente en moins de 30 secondes pour ne pas faire attendre le client.
+- ~~En tant que Caissier(ère), je veux encaisser une vente en moins de 30 secondes pour ne pas faire attendre le client.~~ *(caduc — la vente au comptoir est retirée ; voir 3.1)*
 - ~~En tant que Caissier(ère), je veux que la TVA soit calculée automatiquement selon le type de vente (sur place/à emporter).~~ *(caduc — catalogue 100 % pain, aucune TVA ; voir 3.1)*
-- En tant que DG, je veux pouvoir annuler une vente frauduleuse (avec justification), afin de corriger un encaissement illégitime sans passer par l'Administrateur ; les Admins en sont notifiés et l'action est tracée au Journal d'audit.
+- ~~En tant que DG, je veux pouvoir annuler une vente frauduleuse.~~ *(caduc — plus de vente à annuler ; le DG est strictement en lecture seule ; voir 3.1)*
+- En tant que Caissier(ère), je veux définir le taux du jour puis suivre en un écran les entrées, les dettes payées, mes dépenses et le solde restant, pour savoir à tout moment ce qu'il y a en caisse.
+- En tant que Caissier(ère), je veux que la dépense d'achat de farine se calcule seule à partir du taux du jour et des sacs réellement consommés en production, pour ne pas refaire le calcul à la main.
 
 **Stocks**
 - En tant que Responsable Stock/Achats et Fournisseurs, je veux être alerté quand une matière première passe sous le seuil critique pour anticiper la commande fournisseur.
 
 **Production**
-- En tant que Responsable de production, je veux voir le planning de production du jour basé sur les commandes et l'historique de vente.
+- En tant que Responsable de production, je veux voir le planning de production du jour basé sur les commandes.
 
 **Commandes clients**
 - En tant que Chargé des commandes, je veux que le prix et la commission se calculent automatiquement selon le type de client (Dépositaire/Maman) pour ne jamais avoir à les saisir à la main.
@@ -343,7 +415,7 @@ DG : lecture seule, comme tous les modules métier.
 
 **Hiérarchie & temps réel**
 - En tant que Chargé des commandes, je veux voir apparaître instantanément une commande enregistrée par un Caissier(ère) pour la valider sans délai.
-- En tant que Directeur Général, je veux voir en temps réel tous les événements clés (commandes, stock, ventes) sans avoir à rafraîchir la page.
+- En tant que Directeur Général, je veux voir en temps réel tous les événements clés (commandes, stock, production, caisse) sans avoir à rafraîchir la page.
 - En tant que Responsable Stock/Achats et Fournisseurs, je veux que le DG soit notifié immédiatement quand je signale une rupture pour qu'il puisse arbitrer rapidement.
 
 ## 6. Modèle de données (entités principales)
@@ -374,8 +446,11 @@ LigneCommandeFournisseur (commandeId, matierePremiereId, quantité, prixUnitaire
 Client (id, nom, téléphone, typeClientId, avanceDisponible, pointsFidélité)   # avanceDisponible = solde reporté d'une commande à l'autre
 CommandeClient (id, numero, clientId, quantitéBacs, montantBrut, avanceUtilisee, montantAPercevoir, montantRecu, dette, avanceGeneree, statut, dateRetrait, créePar)
 PaiementCommande (id, commandeClientId, montant, date, enregistrePar)   # règlements successifs d'une dette
-Vente (id, date, vendeurId, total, moyenPaiement, statut, annuleeParId, motifAnnulation, dateAnnulation)   # statut ANNULEE = vente annulée par le DG (3.1), exclue du CA/clôture ; moyenPaiement = ESPECES uniquement (UI)
-LigneVente (venteId, produitId, quantité, prixUnitaire, tauxTaxe)
+Vente (…)          # ORPHELINE — vente au comptoir retirée (refonte 3.1)
+LigneVente (…)     # ORPHELINE — idem
+ClotureCaisse (…)  # ORPHELINE — pas de clôture dans le registre journalier
+TauxDuJour (id, date, valeur, definiPar)                                  # une valeur par date (3.1)
+DepenseCaisse (id, date, motif, montant, origine, tauxApplique?, sacsUtilises?, enregistrePar)   # origine: MANUELLE | FARINE
 Travailleur (id, nom, téléphone, poste, dateEmbauche, utilisateurId)   # utilisateurId nullable
 Presence (id, travailleurId, date, statut, heureArrivee, heureDepart, enregistrePar)   # statut: present | absent | retard
 ```
@@ -424,7 +499,7 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 2bis. **Retrofit rôles + règlement de dette** — fusion Stock/Fournisseurs, Chargé du personnel, multi-admin, DG sans édition Paramètres, PaiementCommande ✅ *(terminé)*
 2ter. **Retrofit UI "modules grisés"** — le menu doit afficher tous les modules pour tout le monde, grisés/non cliquables hors permission (actuellement les entrées non accessibles sont cachées, pas grisées) — *à faire avant la Phase 4*
 3. **Commandes clients & Commissions** — système d'avance/dette porté par le client ✅ *(terminé)*
-4. **Caisse** — vente, clôture journalière, notification au supérieur, alerte transaction inhabituelle (seuil : **100.000 Fc**, configurable ensuite dans Paramètres)
+4. **Caisse** — registre journalier : taux du jour, entrées, dettes payées, dépenses (dont farine), solde *(la vente au comptoir et l'alerte transaction inhabituelle, initialement prévues ici, ont été retirées lors de la refonte de 3.1)*
 5. **Stocks & production** — matières premières, alertes temps réel *(les recettes, initialement prévues ici, ont été retirées lors de la refonte de 3.3)*
 6. **Fournisseurs & achats** — notification de réception
 7. **Tableau de bord & rapports** — vue KPI globale (DG), vue filtrée (autres rôles), résumé de clôture quotidien
@@ -497,10 +572,15 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - Quand le Chargé des commandes enregistre un règlement de 1.500 Fc
 - Alors la dette repasse à 0, l'excédent de 500 Fc génère une avance de 500 Fc pour le client, et le Caissier(ère)/DG reçoivent une notification temps réel
 
-**Alerte transaction inhabituelle**
-- Étant donné un seuil configuré à 50.000 Fc et une vente de 60.000 Fc encaissée par le Caissier(ère)
-- Quand la vente est validée
-- Alors le DG reçoit une notification temps réel distincte, signalée comme prioritaire
+**Caisse — registre journalier**
+- Étant donné une commande créée aujourd'hui avec 60.000 Fc reçus, puis un règlement de 20.000 Fc le même jour, et une dépense saisie de 5.000 Fc
+- Quand le Caissier(ère) consulte le registre du jour
+- Alors Entrées = 60.000 Fc, Dettes payées = 20.000 Fc (le règlement n'est jamais compté deux fois), Dépenses = 5.000 Fc et Solde = 75.000 Fc
+
+**Caisse — dépense farine**
+- Étant donné un taux du jour défini et une production du jour ayant consommé 10 sacs
+- Quand le Caissier(ère) coche la dépense farine
+- Alors une ligne « Achat farine » est ajoutée pour `[(33,5 × taux) + 500] × 10`, comptée dans les dépenses et le solde ; sans taux ou sans production du jour, la case reste désactivée avec l'explication du blocage
 
 **Journal d'audit**
 - Étant donné un Admin qui modifie le prix par bac d'une Qualité de client
@@ -534,14 +614,14 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - Le programme de fidélité : points cumulés ou carte tampon simple ? **Résolu : fidélité conçue mais non activée** — ni interface ni logique construites pour l'instant.
 - Le pain est exonéré de TVA (confirmé). Les autres produits éventuels (pâtisseries, gâteaux sur commande) sont-ils eux aussi exonérés, ou un taux s'applique-t-il ? **Résolu : sans objet — catalogue 100 % pain, aucune TVA** (question close). Le champ taux de taxe reste en base sans être utilisé.
 - Si un rôle a plusieurs titulaires (ex. deux caissiers), la notification doit-elle aller à tous les titulaires du rôle supérieur, ou à une seule personne assignée ? *(métier)*
-- Le DG doit-il disposer d'une action exceptionnelle malgré l'accès lecture seule (ex. annuler une vente frauduleuse), ou cela doit-il toujours passer par l'Administrateur ? **Résolu : oui — l'annulation d'une vente frauduleuse est la seule action d'écriture accordée au DG** (et à lui seul, pas même l'Admin) ; justification obligatoire, statut ANNULEE, notification aux Admins, tracée au Journal d'audit (voir 3.1).
+- Le DG doit-il disposer d'une action exceptionnelle malgré l'accès lecture seule (ex. annuler une vente frauduleuse) ? **Caduc depuis la refonte 3.1** : la vente au comptoir ayant disparu, il n'y a plus rien à annuler — le DG est **strictement en lecture seule, sans aucune exception**.
 - La catégorie **Vente cash (VC)** génère-t-elle bien 0 Fc de commission, comme les Dépositaires ? **Résolu : oui — 0 Fc de commission** (confirmé).
 - Au-delà de ces 3 types (Dépositaires, Vente cash, Mamans), d'autres catégories sont-elles prévues à terme ? *(métier — n'affecte pas l'architecture, juste la configuration)*
 - Le module Travailleurs (3.18) : Résolu — fiches employés + présence/pointage quotidien, sans paie.
 - La liste des "tâches critiques" nécessitant l'approbation de l'Admin Principal (section 2) : **Résolu — liste figée à 5 items** (suppression d'un utilisateur, création/suppression d'un compte Admin, modification prix/commissions par Qualité, modification du taux de taxe, modification des permissions d'un rôle). La réinitialisation de la base de données en est explicitement exclue (procédure d'infrastructure, hors application).
 - "État système" (3.15) : quelles informations exactes afficher, au-delà du statut base de données ?
 - Un Admin secondaire peut-il lui-même approuver/rejeter une demande d'un autre Admin secondaire, ou seul l'Admin Principal le peut ? **Résolu : seul l'Admin Principal approuve/rejette** — un Admin secondaire ne peut jamais approuver, même une demande émise par un autre Admin secondaire.
-- Quel seuil (en Fc) déclenche l'alerte transaction inhabituelle (3.10) ? **Résolu : 100.000 Fc**, valeur par défaut modifiable ensuite dans Paramètres.
+- Quel seuil (en Fc) déclenche l'alerte transaction inhabituelle (3.10) ? **Caduc depuis la refonte 3.1** : l'alerte et son seuil sont retirés.
 - Une délégation temporaire de rôle (3.7) peut-elle chevaucher plusieurs modules à la fois, ou un seul module par délégation ?
 - Le Journal d'audit (3.17) doit-il aussi inclure les tentatives d'accès refusées (403), utile pour la sécurité, ou seulement les actions réussies ? **Résolu : uniquement les actions réussies** (modifications et suppressions effectivement appliquées) — les tentatives refusées (403) ne sont pas journalisées.
 - Les "commandes spéciales" (gâteaux personnalisés, événements — fin de la section 3.4) n'ont pas encore de statut/dateRetrait en base (omis volontairement en Phase 3, qui couvrait les commandes en bacs). À quel moment les construire ? **Résolu : retirées du périmètre** (décision métier) — le module Commandes ne couvre que les commandes en bacs.
