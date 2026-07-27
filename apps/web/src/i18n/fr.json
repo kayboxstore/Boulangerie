@@ -375,7 +375,28 @@
     "errNameRequired": "Le nom est requis",
     "errChooseQuality": "Choisissez une qualité",
     "clientCreateError": "Création impossible",
-    "createClient": "Créer le client"
+    "createClient": "Créer le client",
+    "todayTitle": "Aujourd'hui",
+    "todayDesc": "Résumé des commandes du {{date}}.",
+    "todayOrders": "Commandes",
+    "todayBacs": "Bacs commandés",
+    "todayToCollect": "À percevoir",
+    "todayReceived": "Reçu",
+    "todaySettled": "Soldées / avec dette",
+    "todayDebts": "Total des dettes",
+    "duplicateTitle": "Commande déjà enregistrée aujourd'hui",
+    "duplicateDesc": "{{client}} a déjà la commande n°{{numero}} aujourd'hui. Choisissez comment l'appliquer — le numéro reste le même, aucune seconde commande n'est créée.",
+    "duplicateExisting": "Commande existante",
+    "duplicateLine": "{{bacs}} bac(s) · reçu {{recu}}",
+    "duplicateResult": "→ n°{{numero}} deviendra {{bacs}} bac(s) / {{recu}} reçus",
+    "strategy": {
+      "MODIFIER": "Modifier",
+      "REMPLACER": "Remplacer"
+    },
+    "strategyHelp": {
+      "MODIFIER": "Additionne la nouvelle saisie à la commande existante.",
+      "REMPLACER": "Écrase l'ancienne saisie, qui est oubliée — pour corriger une erreur."
+    }
   },
   "production": {
     "title": "Production",

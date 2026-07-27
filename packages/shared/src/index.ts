@@ -159,10 +159,31 @@ export const clientCreateSchema = z.object({
 });
 export type ClientCreateInput = z.infer<typeof clientCreateSchema>;
 
+/**
+ * Résolution d'un doublon (section 3.4) : un client ne peut pas avoir deux
+ * commandes le même jour. À la deuxième saisie, l'utilisateur choisit — et le
+ * choix s'applique TOUJOURS sur la commande existante (même numéro) :
+ *  - MODIFIER  : la nouvelle saisie s'additionne à l'existante ;
+ *  - REMPLACER : la nouvelle saisie écrase l'ancienne, qui est oubliée.
+ */
+export const STRATEGIES_DOUBLON = ["MODIFIER", "REMPLACER"] as const;
+export type StrategieDoublon = (typeof STRATEGIES_DOUBLON)[number];
+
+export const STRATEGIE_DOUBLON_LABELS: Record<StrategieDoublon, string> = {
+  MODIFIER: "Modifier (additionner)",
+  REMPLACER: "Remplacer (écraser)",
+};
+
 export const commandeCreateSchema = z.object({
   clientId: z.string().min(1, "Le client est requis"),
   quantiteBacs: z.number().int("Nombre de bacs entier").min(1, "Au moins 1 bac"),
   montantRecu: z.number().int("Montant en Fc entier").min(0, "Le montant reçu doit être positif"),
+  /**
+   * Absent = saisie normale ; si un doublon existe, l'API répond 409 avec la
+   * commande en conflit pour que l'UI propose le choix. Présent = le choix a
+   * été fait, on l'applique sur la commande existante.
+   */
+  strategie: z.enum(STRATEGIES_DOUBLON).optional(),
 });
 export type CommandeCreateInput = z.infer<typeof commandeCreateSchema>;
 
@@ -194,6 +215,19 @@ export function calculerCommande(params: {
   const avanceGeneree = Math.max(0, montantRecu - montantAPercevoir);
   const nouvelleAvance = avanceExistante - avanceUtilisee + avanceGeneree;
   return { montantBrut, avanceUtilisee, montantAPercevoir, dette, avanceGeneree, nouvelleAvance };
+}
+
+/**
+ * Avance dont disposait le client AVANT la commande visée (section 3.4).
+ * Nécessaire pour recalculer une commande mise à jour sans compter deux fois
+ * son propre effet sur le solde : on inverse ce que la commande a appliqué.
+ */
+export function avanceAvantCommande(params: {
+  avanceDisponibleClient: number;
+  avanceUtilisee: number;
+  avanceGeneree: number;
+}): number {
+  return params.avanceDisponibleClient + params.avanceUtilisee - params.avanceGeneree;
 }
 
 export interface TypeClientDTO {
@@ -246,6 +280,30 @@ export interface CommandeDTO {
   nouvelleAvance: number;
   creePar: { id: string; nom: string } | null;
   reglements: ReglementDTO[];
+}
+
+/**
+ * Réponse 409 à une saisie en doublon : porte la commande déjà enregistrée ce
+ * jour-là pour ce client, plus l'aperçu de ce que donnerait chaque choix — afin
+ * que l'utilisateur décide en connaissance de cause.
+ */
+export interface ConflitCommandeDTO {
+  erreur: string;
+  conflit: true;
+  commandeExistante: CommandeDTO;
+  apercu: Record<StrategieDoublon, { quantiteBacs: number; montantRecu: number }>;
+}
+
+/** Résumé du jour du module Commandes (section 3.4). */
+export interface ResumeCommandesJourDTO {
+  date: string;
+  nombreCommandes: number;
+  totalBacs: number;
+  totalAPercevoir: number;
+  totalRecu: number;
+  nbSoldees: number;
+  nbAvecDette: number;
+  totalDettes: number;
 }
 
 // Règlement ultérieur d'une dette (section 3.4) : le montant s'ajoute au

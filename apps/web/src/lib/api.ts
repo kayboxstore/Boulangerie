@@ -13,6 +13,9 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** Corps JSON complet de la réponse — certaines erreurs portent des données
+     *  exploitables (ex. 409 de doublon de commande : la commande en conflit). */
+    public corps?: unknown,
   ) {
     super(message);
   }
@@ -34,7 +37,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 
   const body = await res.json().catch(() => null);
   if (!res.ok) {
-    throw new ApiError(res.status, body?.erreur ?? `Erreur ${res.status}`);
+    throw new ApiError(res.status, body?.erreur ?? `Erreur ${res.status}`, body);
   }
   return body as T;
 }

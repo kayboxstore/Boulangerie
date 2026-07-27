@@ -376,7 +376,28 @@
     "errNameRequired": "Nkombo esengeli",
     "errChooseQuality": "Poná lolenge",
     "clientCreateError": "Kosala ekoki te",
-    "createClient": "Kosala kiliya"
+    "createClient": "Kosala kiliya",
+    "todayTitle": "Lelo",
+    "todayDesc": "Bokuse ya bakomande ya {{date}}.",
+    "todayOrders": "Bakomande",
+    "todayBacs": "Ba-bac batunaki",
+    "todayToCollect": "Ya kozwa",
+    "todayReceived": "Ezwami",
+    "todaySettled": "Efutami / na nyongo",
+    "todayDebts": "Nyongo mobimba",
+    "duplicateTitle": "Komande esili kokomama lelo",
+    "duplicateDesc": "{{client}} azali na komande n°{{numero}} lelo. Pona ndenge ya kosala — nimero ekotikala ndenge moko, komande ya mibale ekosalema te.",
+    "duplicateExisting": "Komande oyo ezali",
+    "duplicateLine": "Ba-bac {{bacs}} · ezwami {{recu}}",
+    "duplicateResult": "→ n°{{numero}} ekokoma ba-bac {{bacs}} / {{recu}} ezwami",
+    "strategy": {
+      "MODIFIER": "Kobongisa",
+      "REMPLACER": "Kozongisa sika"
+    },
+    "strategyHelp": {
+      "MODIFIER": "Ebakisi makomi ya sika na komande oyo ezali.",
+      "REMPLACER": "Elongoli makomi ya kala, ebosani — mpo na kobongisa libunga."
+    }
   },
   "production": {
     "title": "Bosali",

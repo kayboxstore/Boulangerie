@@ -1,15 +1,18 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HandCoins, Plus, RotateCcw, UserPlus } from "lucide-react";
+import { HandCoins, Layers, Plus, RotateCcw, TriangleAlert, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   calculerCommande,
   formatFc,
   type ClientDTO,
   type CommandeDTO,
+  type ConflitCommandeDTO,
+  type ResumeCommandesJourDTO,
+  type StrategieDoublon,
   type TypeClientDTO,
 } from "@lomoto/shared";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +68,12 @@ export function CommandesPage() {
     queryKey: ["commandes", filtres],
     queryFn: () => api<{ commandes: CommandeDTO[] }>(`/api/commandes?${paramsListe}`),
   });
+  // Tableau de bord journalier (section 3.4) — lecture pour tous les rôles
+  // ayant accès au module.
+  const { data: resumeJour } = useQuery({
+    queryKey: ["commandes-resume-jour"],
+    queryFn: () => api<ResumeCommandesJourDTO>("/api/commandes/resume-jour"),
+  });
 
   // --- Dialogue nouvelle commande -----------------------------------------
   const [dialogCommande, setDialogCommande] = useState(false);
@@ -85,19 +94,44 @@ export function CommandesPage() {
     });
   }, [clientChoisi, bacs, recu]);
 
+  // Doublon détecté (même client, même jour) : l'API renvoie 409 avec la
+  // commande en conflit ; on propose alors Modifier ou Remplacer, appliqué sur
+  // CETTE commande (jamais une nouvelle).
+  const [conflit, setConflit] = useState<ConflitCommandeDTO | null>(null);
+
+  const rafraichirCommandes = () => {
+    queryClient.invalidateQueries({ queryKey: ["commandes"] });
+    queryClient.invalidateQueries({ queryKey: ["commandes-resume-jour"] });
+    queryClient.invalidateQueries({ queryKey: ["clients"] });
+    queryClient.invalidateQueries({ queryKey: ["commissions"] });
+  };
+
   const creerCommande = useMutation({
-    mutationFn: () =>
+    mutationFn: (strategie?: StrategieDoublon) =>
       api("/api/commandes", {
         method: "POST",
-        body: JSON.stringify({ clientId, quantiteBacs: Number(bacs), montantRecu: Number(recu) || 0 }),
+        body: JSON.stringify({
+          clientId,
+          quantiteBacs: Number(bacs),
+          montantRecu: Number(recu) || 0,
+          ...(strategie ? { strategie } : {}),
+        }),
       }),
     onSuccess: () => {
       setDialogCommande(false);
-      queryClient.invalidateQueries({ queryKey: ["commandes"] });
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      queryClient.invalidateQueries({ queryKey: ["commissions"] });
+      setConflit(null);
+      rafraichirCommandes();
     },
-    onError: (e) => setErreurCommande(e instanceof Error ? e.message : t("commandes.saveError")),
+    onError: (e) => {
+      if (e instanceof ApiError && e.status === 409) {
+        const corps = e.corps as ConflitCommandeDTO | undefined;
+        if (corps?.conflit) {
+          setConflit(corps);
+          return;
+        }
+      }
+      setErreurCommande(e instanceof Error ? e.message : t("commandes.saveError"));
+    },
   });
 
   function ouvrirDialogCommande() {
@@ -105,6 +139,7 @@ export function CommandesPage() {
     setBacs("");
     setRecu("");
     setErreurCommande(null);
+    setConflit(null);
     setDialogCommande(true);
   }
 
@@ -116,7 +151,7 @@ export function CommandesPage() {
     if (!Number.isInteger(nbBacs) || nbBacs < 1) return setErreurCommande(t("commandes.errBacs"));
     const montantRecu = Number(recu) || 0;
     if (!Number.isInteger(montantRecu) || montantRecu < 0) return setErreurCommande(t("commandes.errReceived"));
-    creerCommande.mutate();
+    creerCommande.mutate(undefined);
   }
 
   // --- Dialogue règlement de dette ----------------------------------------
@@ -143,9 +178,7 @@ export function CommandesPage() {
       }),
     onSuccess: () => {
       setCommandeARegler(null);
-      queryClient.invalidateQueries({ queryKey: ["commandes"] });
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      queryClient.invalidateQueries({ queryKey: ["commissions"] });
+      rafraichirCommandes();
     },
     onError: (e) => setErreurReglement(e instanceof Error ? e.message : t("commandes.saveError")),
   });
@@ -211,6 +244,39 @@ export function CommandesPage() {
           </Button>
         )}
       </div>
+
+      {/* Tableau de bord journalier (section 3.4) */}
+      {resumeJour && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Layers className="h-5 w-5 text-or" />
+              {t("commandes.todayTitle")}
+            </CardTitle>
+            <CardDescription>{t("commandes.todayDesc", { date: resumeJour.date })}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+              {[
+                { cle: "todayOrders", valeur: String(resumeJour.nombreCommandes) },
+                { cle: "todayBacs", valeur: String(resumeJour.totalBacs) },
+                { cle: "todayToCollect", valeur: formatFc(resumeJour.totalAPercevoir) },
+                { cle: "todayReceived", valeur: formatFc(resumeJour.totalRecu) },
+                {
+                  cle: "todaySettled",
+                  valeur: `${resumeJour.nbSoldees} / ${resumeJour.nbAvecDette}`,
+                },
+                { cle: "todayDebts", valeur: formatFc(resumeJour.totalDettes) },
+              ].map(({ cle, valeur }) => (
+                <div key={cle}>
+                  <dt className="text-xs text-muted-foreground">{t(`commandes.${cle}`)}</dt>
+                  <dd className="mt-0.5 text-lg font-semibold text-marine dark:text-creme">{valeur}</dd>
+                </div>
+              ))}
+            </dl>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filtres : Qualité, dates, Tout afficher */}
       <Card>
@@ -482,6 +548,65 @@ export function CommandesPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Doublon détecté : Modifier ou Remplacer — toujours sur LA MÊME commande */}
+      <Dialog open={!!conflit} onOpenChange={(o) => !o && setConflit(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TriangleAlert className="h-5 w-5 text-terracotta dark:text-or" />
+              {t("commandes.duplicateTitle")}
+            </DialogTitle>
+            <DialogDescription>
+              {conflit &&
+                t("commandes.duplicateDesc", {
+                  client: conflit.commandeExistante.client.nom,
+                  numero: conflit.commandeExistante.numero,
+                })}
+            </DialogDescription>
+          </DialogHeader>
+
+          {conflit && (
+            <div className="space-y-3">
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                <p className="font-medium">{t("commandes.duplicateExisting")}</p>
+                <p className="text-muted-foreground">
+                  {t("commandes.duplicateLine", {
+                    bacs: conflit.commandeExistante.quantiteBacs,
+                    recu: formatFc(conflit.commandeExistante.montantRecu),
+                  })}
+                </p>
+              </div>
+
+              {(["MODIFIER", "REMPLACER"] as StrategieDoublon[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={creerCommande.isPending}
+                  onClick={() => creerCommande.mutate(s)}
+                  className="w-full rounded-lg border border-input px-3 py-2.5 text-left transition-colors hover:border-or hover:bg-or/10 disabled:opacity-50"
+                >
+                  <p className="font-semibold text-marine dark:text-creme">{t(`commandes.strategy.${s}`)}</p>
+                  <p className="text-xs text-muted-foreground">{t(`commandes.strategyHelp.${s}`)}</p>
+                  <p className="mt-1 text-sm font-medium text-terracotta dark:text-or">
+                    {t("commandes.duplicateResult", {
+                      numero: conflit.commandeExistante.numero,
+                      bacs: conflit.apercu[s].quantiteBacs,
+                      recu: formatFc(conflit.apercu[s].montantRecu),
+                    })}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConflit(null)}>
+              {t("common.cancel")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

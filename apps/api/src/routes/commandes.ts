@@ -1,11 +1,14 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import {
+  avanceAvantCommande,
   calculerCommande,
   commandeCreateSchema,
   formatFc,
   reglementCreateSchema,
   type CommandeDTO,
+  type ResumeCommandesJourDTO,
+  type StrategieDoublon,
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
@@ -59,6 +62,43 @@ const INCLUDE_RELATIONS = {
   },
 } as const;
 
+/** Bornes [début, fin] du jour local contenant `d`. */
+function bornesDuJour(d: Date): [Date, Date] {
+  const debut = new Date(d);
+  debut.setHours(0, 0, 0, 0);
+  const fin = new Date(d);
+  fin.setHours(23, 59, 59, 999);
+  return [debut, fin];
+}
+
+// Résumé du jour (section 3.4) — accessible en lecture à tous les rôles ayant
+// accès au module Commandes (Chargé des commandes, Caissier(ère), DG).
+commandesRouter.get("/resume-jour", requirePermission("COMMANDES", "LECTURE"), async (_req, res, next) => {
+  try {
+    const [debut, fin] = bornesDuJour(new Date());
+    const duJour = await prisma.commandeClient.findMany({
+      where: { dateCreation: { gte: debut, lte: fin } },
+      select: { quantiteBacs: true, montantAPercevoir: true, montantRecu: true, dette: true },
+    });
+    const somme = (f: (c: (typeof duJour)[number]) => number) => duJour.reduce((s, c) => s + f(c), 0);
+    const avecDette = duJour.filter((c) => c.dette > 0);
+
+    const dto: ResumeCommandesJourDTO = {
+      date: debut.toISOString().slice(0, 10),
+      nombreCommandes: duJour.length,
+      totalBacs: somme((c) => c.quantiteBacs),
+      totalAPercevoir: somme((c) => c.montantAPercevoir),
+      totalRecu: somme((c) => c.montantRecu),
+      nbSoldees: duJour.length - avecDette.length,
+      nbAvecDette: avecDette.length,
+      totalDettes: avecDette.reduce((s, c) => s + c.dette, 0),
+    };
+    res.json(dto);
+  } catch (e) {
+    next(e);
+  }
+});
+
 // Liste avec filtres : ?typeClientId= (Qualité), ?du=AAAA-MM-JJ, ?au=AAAA-MM-JJ.
 // Sans filtre : tout afficher (les plus récentes d'abord).
 commandesRouter.get("/", requirePermission("COMMANDES", "LECTURE"), async (req, res, next) => {
@@ -83,18 +123,27 @@ commandesRouter.get("/", requirePermission("COMMANDES", "LECTURE"), async (req, 
   }
 });
 
-// Enregistrement d'une commande : tous les montants sont calculés
-// automatiquement (section 3.4) — l'avance du client est déduite en premier,
-// puis le solde d'avance du client est mis à jour, le tout atomiquement.
+/**
+ * Enregistrement d'une commande (section 3.4). Tous les montants sont calculés
+ * automatiquement — l'avance du client est déduite en premier, puis son solde
+ * est mis à jour, le tout atomiquement.
+ *
+ * UNE SEULE COMMANDE PAR CLIENT ET PAR JOUR : si le client a déjà une commande
+ * aujourd'hui, on ne crée jamais de seconde ligne.
+ *  - sans `strategie` → 409 portant la commande en conflit, pour que l'UI
+ *    propose le choix à l'utilisateur ;
+ *  - avec `strategie` → UPDATE de la commande existante (même numéro) :
+ *    MODIFIER additionne la saisie, REMPLACER l'écrase.
+ */
 commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
   try {
     const parsed = commandeCreateSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const { clientId, quantiteBacs, montantRecu } = parsed.data;
+    const { clientId, quantiteBacs, montantRecu, strategie } = parsed.data;
 
-    const commande = await prisma.$transaction(
+    const resultat = await prisma.$transaction(
       async (tx) => {
         const client = await tx.client.findUnique({
           where: { id: clientId },
@@ -102,55 +151,146 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
         });
         if (!client) throw new ErreurClientInconnu();
 
-        const calcul = calculerCommande({
-          quantiteBacs,
-          prixParBac: client.typeClient.prixParBac,
-          avanceExistante: client.avanceDisponible,
-          montantRecu,
+        const [debut, fin] = bornesDuJour(new Date());
+        const existante = await tx.commandeClient.findFirst({
+          where: { clientId: client.id, dateCreation: { gte: debut, lte: fin } },
+          include: INCLUDE_RELATIONS,
+          orderBy: { numero: "asc" },
         });
 
-        const creee = await tx.commandeClient.create({
-          data: {
-            clientId: client.id,
+        // --- Cas 1 : pas de doublon → création normale ---------------------
+        if (!existante) {
+          const calcul = calculerCommande({
             quantiteBacs,
+            prixParBac: client.typeClient.prixParBac,
+            avanceExistante: client.avanceDisponible,
+            montantRecu,
+          });
+          const creee = await tx.commandeClient.create({
+            data: {
+              clientId: client.id,
+              quantiteBacs,
+              montantBrut: calcul.montantBrut,
+              avanceUtilisee: calcul.avanceUtilisee,
+              montantAPercevoir: calcul.montantAPercevoir,
+              montantRecu,
+              dette: calcul.dette,
+              avanceGeneree: calcul.avanceGeneree,
+              nouvelleAvance: calcul.nouvelleAvance,
+              creeParId: req.utilisateur!.id,
+            },
+            include: INCLUDE_RELATIONS,
+          });
+          await tx.client.update({
+            where: { id: client.id },
+            data: { avanceDisponible: calcul.nouvelleAvance },
+          });
+          return { type: "creee" as const, commande: creee };
+        }
+
+        // --- Cas 2 : doublon sans choix → on demande à l'utilisateur --------
+        if (!strategie) {
+          return { type: "conflit" as const, existante };
+        }
+
+        // --- Cas 3 : doublon avec choix → UPDATE de la MÊME commande -------
+        // Remplacer écrase l'ancienne saisie : les règlements déjà encaissés
+        // sur cette commande n'auraient plus de contrepartie cohérente (leur
+        // somme dépasserait le montant reçu). On refuse plutôt que de les
+        // effacer silencieusement — Modifier reste disponible.
+        if (strategie === "REMPLACER" && existante.reglements.length > 0) {
+          return { type: "reglementsPresents" as const, existante };
+        }
+
+        const totaux =
+          strategie === "MODIFIER"
+            ? {
+                quantiteBacs: existante.quantiteBacs + quantiteBacs,
+                montantRecu: existante.montantRecu + montantRecu,
+              }
+            : { quantiteBacs, montantRecu };
+
+        // L'avance à considérer est celle du client AVANT cette commande :
+        // on inverse l'effet qu'elle a déjà appliqué sur son solde, pour ne pas
+        // le compter deux fois (la commande est mise à jour, pas dupliquée).
+        const avanceExistante = avanceAvantCommande({
+          avanceDisponibleClient: client.avanceDisponible,
+          avanceUtilisee: existante.avanceUtilisee,
+          avanceGeneree: existante.avanceGeneree,
+        });
+
+        const calcul = calculerCommande({
+          quantiteBacs: totaux.quantiteBacs,
+          prixParBac: client.typeClient.prixParBac,
+          avanceExistante,
+          montantRecu: totaux.montantRecu,
+        });
+
+        const maj = await tx.commandeClient.update({
+          where: { id: existante.id },
+          data: {
+            quantiteBacs: totaux.quantiteBacs,
             montantBrut: calcul.montantBrut,
             avanceUtilisee: calcul.avanceUtilisee,
             montantAPercevoir: calcul.montantAPercevoir,
-            montantRecu,
+            montantRecu: totaux.montantRecu,
             dette: calcul.dette,
             avanceGeneree: calcul.avanceGeneree,
             nouvelleAvance: calcul.nouvelleAvance,
-            creeParId: req.utilisateur!.id,
           },
           include: INCLUDE_RELATIONS,
         });
-
         await tx.client.update({
           where: { id: client.id },
           data: { avanceDisponible: calcul.nouvelleAvance },
         });
-
-        return creee;
+        return { type: "miseAJour" as const, commande: maj, strategie };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
-    const dto = versCommandeDTO(commande);
+    if (resultat.type === "conflit") {
+      const existant = versCommandeDTO(resultat.existante);
+      return res.status(409).json({
+        erreur: `${existant.client.nom} a déjà la commande n°${existant.numero} aujourd'hui (${existant.quantiteBacs} bac(s), reçu ${formatFc(existant.montantRecu)}). Choisissez Modifier ou Remplacer.`,
+        conflit: true,
+        commandeExistante: existant,
+        apercu: {
+          MODIFIER: {
+            quantiteBacs: existant.quantiteBacs + quantiteBacs,
+            montantRecu: existant.montantRecu + montantRecu,
+          },
+          REMPLACER: { quantiteBacs, montantRecu },
+        },
+      });
+    }
+
+    if (resultat.type === "reglementsPresents") {
+      return res.status(409).json({
+        erreur: `La commande n°${resultat.existante.numero} a déjà reçu ${resultat.existante.reglements.length} règlement(s) : elle ne peut pas être remplacée. Utilisez « Modifier ».`,
+      });
+    }
+
+    const dto = versCommandeDTO(resultat.commande);
+    const prefixe =
+      resultat.type === "creee"
+        ? `Commande n°${dto.numero}`
+        : `Commande n°${dto.numero} ${(resultat.strategie as StrategieDoublon) === "MODIFIER" ? "modifiée" : "remplacée"}`;
 
     busEvenements.emettreEvenement({
       type: "NOUVELLE_COMMANDE",
       module: "COMMANDES",
       emetteurId: req.utilisateur!.id,
-      evenementRef: commande.id,
+      evenementRef: dto.id,
       message:
-        `Commande n°${dto.numero} — ${dto.client.nom} (${dto.qualite}) : ${dto.quantiteBacs} bac(s), ` +
+        `${prefixe} — ${dto.client.nom} (${dto.qualite}) : ${dto.quantiteBacs} bac(s), ` +
         `à percevoir ${formatFc(dto.montantAPercevoir)}, reçu ${formatFc(dto.montantRecu)}` +
         (dto.dette > 0 ? ` — dette ${formatFc(dto.dette)}` : "") +
         (dto.avanceGeneree > 0 ? ` — avance générée ${formatFc(dto.avanceGeneree)}` : ""),
-      donnees: { commandeId: commande.id, numero: dto.numero },
+      donnees: { commandeId: dto.id, numero: dto.numero, strategie: resultat.type === "miseAJour" ? resultat.strategie : null },
     });
 
-    res.status(201).json({ commande: dto });
+    res.status(resultat.type === "creee" ? 201 : 200).json({ commande: dto });
   } catch (e) {
     if (e instanceof ErreurClientInconnu) {
       return res.status(400).json({ erreur: "Client inconnu" });
