@@ -161,10 +161,49 @@ circuit de notification temps réel à l'enregistrement d'une production.
 
 Le solde d'avance est porté par le **client** (pas par la commande) et se reporte automatiquement d'une commande à l'autre.
 
+**Détection de doublon — une seule commande par client et par jour**
+
+Un même client (même `clientId`) ne peut **jamais** avoir deux commandes à la même
+date — la règle vaut pour les **trois Qualités** (Dépositaire, Maman, VC). Il n'y a
+donc jamais deux enregistrements distincts pour le même client le même jour :
+**une seule commande subsiste toujours**.
+
+Quand une nouvelle saisie arrive pour un client qui a déjà une commande ce
+jour-là, l'application ne l'enregistre pas d'office : elle **propose un choix à
+l'utilisateur**, appliqué sur **LA MÊME commande** (même numéro, jamais une
+nouvelle) :
+
+| Choix | Effet | Exemple *(Dépositaire, 4.100 Fc/bac — commande n°12 à 50 bacs / 205.000 Fc reçus ; nouvelle saisie 10 bacs / 41.000 Fc)* |
+|---|---|---|
+| **a) Modifier** | La nouvelle saisie **s'additionne** à l'existante | n°12 devient **60 bacs / 246.000 Fc reçus** |
+| **b) Remplacer** | La nouvelle saisie **écrase** l'ancienne, qui est oubliée — utile pour corriger une erreur de saisie | n°12 devient **10 bacs / 41.000 Fc** |
+
+Dans les deux cas, Dette / Avance générée / Nouvelle avance sont **recalculés sur
+les valeurs résultantes** avec la même formule qu'à la création.
+
+**Cohérence du solde d'avance (point délicat commun aux deux cas)** : l'opération
+est une **transaction unique**. Comme un seul enregistrement est modifié — aucune
+seconde commande créée, aucune annulation — il s'agit d'un **UPDATE classique** de
+la commande existante, suivi du même recalcul dette/avance qu'à la création. Ce
+recalcul prend en compte l'avance du client **hors l'effet de cette commande
+elle-même** (puisqu'elle est mise à jour et non dupliquée) : l'avance « d'avant »
+se reconstitue par `avanceDisponible du client + Avance utilisée − Avance générée`
+de la commande visée. Le solde du client est réécrit à partir de ce recalcul.
+
 **Filtres & affichage :**
 - Filtre par Qualité (Dépositaire / Maman / VC)
 - Filtre/tri par date
 - Bouton "Tout afficher"
+
+**Tableau de bord journalier (dans le module Commandes)** — résumé du jour,
+visible par les rôles ayant accès à Commandes (Chargé des commandes en écriture,
+Caissier(ère) et DG en lecture) :
+- Nombre de commandes aujourd'hui
+- Total des bacs commandés aujourd'hui
+- Montant total à percevoir aujourd'hui
+- Montant total reçu aujourd'hui
+- Nombre de commandes soldées (dette = 0) vs avec dette en cours
+- Total des dettes du jour
 
 **Règlement d'une dette (ajout suite retour d'expérience Phase 3)** : une commande avec Dette > 0 peut recevoir un ou plusieurs paiements ultérieurs. Chaque règlement :
 - Écriture réservée au **Chargé des commandes** (seul rôle en écriture sur Commandes)
