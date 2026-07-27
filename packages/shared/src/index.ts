@@ -23,7 +23,7 @@ export const MODULE_LABELS: Record<Module, string> = {
   CAISSE: "Caisse / Ventes",
   COMMANDES: "Commandes clients",
   STOCKS: "Stocks",
-  PRODUCTION: "Production & recettes",
+  PRODUCTION: "Production",
   FOURNISSEURS: "Fournisseurs & achats",
   COMMISSIONS: "Commissions",
   PARAMETRES: "Paramètres",
@@ -417,75 +417,161 @@ export interface MouvementStockDTO {
 }
 
 // ---------------------------------------------------------------------------
-// Production & recettes (section 3.3)
+// Production (section 3.3 — refonte : plus de recettes)
 // ---------------------------------------------------------------------------
 
-export const recetteCreateSchema = z.object({
-  produitId: z.string().min(1, "Le produit est requis"),
-  instructions: z.string().trim().max(4000).optional(),
-  // Quantités nécessaires POUR UNE UNITÉ produite.
-  ingredients: z
-    .array(
-      z.object({
-        matierePremiereId: z.string().min(1),
-        quantite: quantiteMatiere.refine((q) => q > 0, "Quantité d'ingrédient invalide"),
-      }),
-    )
-    .min(1, "Au moins un ingrédient"),
-});
-export type RecetteCreateInput = z.infer<typeof recetteCreateSchema>;
+/**
+ * Les 4 ingrédients suivis à la production. Le `code` relie la quantité saisie
+ * à la MatierePremiere correspondante, pour la décrémentation automatique du
+ * stock (pas de correspondance par nom, trop fragile).
+ */
+export const CODES_INGREDIENT = ["FARINE", "LEVURE", "SEL", "HUILE"] as const;
+export type CodeIngredient = (typeof CODES_INGREDIENT)[number];
 
-export const recetteUpdateSchema = recetteCreateSchema.omit({ produitId: true });
-export type RecetteUpdateInput = z.infer<typeof recetteUpdateSchema>;
+export const CODE_INGREDIENT_LABELS: Record<CodeIngredient, string> = {
+  FARINE: "Farine (sacs)",
+  LEVURE: "Levure (paquets)",
+  SEL: "Sel (kg)",
+  HUILE: "Huile",
+};
+
+const quantiteIngredient = z
+  .number()
+  .min(0, "Quantité négative impossible")
+  .max(1_000_000, "Quantité trop élevée");
+const nbBacs = z.number().int("Nombre entier de bacs").min(0, "Nombre de bacs négatif impossible");
+
+// --- a) Planning de production ---------------------------------------------
 
 export const planningCreateSchema = z.object({
-  recetteId: z.string().min(1, "La recette est requise"),
-  quantitePrevue: z.number().int("Quantité entière").min(1, "Au moins 1"),
   datePrevue: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+  nombreBacsCommandes: nbBacs,
+  /** Détail par produit du catalogue (Carré, Baguette…). */
+  lignes: z
+    .array(
+      z.object({
+        produitId: z.string().min(1),
+        quantitePrevue: nbBacs,
+      }),
+    )
+    .max(50)
+    .default([]),
+  sacsFarinePrevus: quantiteIngredient.default(0),
+  paquetsLevurePrevus: quantiteIngredient.default(0),
+  quantiteHuilePrevue: quantiteIngredient.default(0),
+  kgSelPrevus: quantiteIngredient.default(0),
+  observations: z.string().trim().max(2000).optional(),
 });
 export type PlanningCreateInput = z.infer<typeof planningCreateSchema>;
-
-export const productionCreateSchema = z.object({
-  recetteId: z.string().min(1, "La recette est requise"),
-  quantiteProduite: z.number().int("Quantité entière").min(1, "Au moins 1"),
-  planningId: z.string().optional(),
-});
-export type ProductionCreateInput = z.infer<typeof productionCreateSchema>;
-
-export interface IngredientRecetteDTO {
-  id: string;
-  matierePremiere: { id: string; nom: string; unite: string; quantiteStock: number };
-  quantite: number;
-}
-
-export interface RecetteDTO {
-  id: string;
-  produit: { id: string; nom: string };
-  instructions: string | null;
-  ingredients: IngredientRecetteDTO[];
-}
-
-export type StatutPlanning = "PREVU" | "FAIT";
 
 export interface PlanningProductionDTO {
   id: string;
   datePrevue: string;
-  recette: { id: string; produitNom: string };
-  quantitePrevue: number;
-  statut: StatutPlanning;
+  nombreBacsCommandes: number;
+  lignes: { produitId: string; produitNom: string; quantitePrevue: number }[];
+  sacsFarinePrevus: number;
+  paquetsLevurePrevus: number;
+  quantiteHuilePrevue: number;
+  kgSelPrevus: number;
+  observations: string | null;
   creePar: { id: string; nom: string } | null;
+}
+
+// --- b + c) Production enregistrée -----------------------------------------
+
+export const productionCreateSchema = z.object({
+  bacsProduits: nbBacs,
+  bacsLivresDepositaires: nbBacs.default(0),
+  bacsLivresMamans: nbBacs.default(0),
+  bacsVendusVC: nbBacs.default(0),
+  bacsRestants: nbBacs.default(0),
+  bacsFoutus: nbBacs.default(0),
+  /** Bacs donnés, répartis par motif (Police, Baraka…). */
+  dons: z
+    .array(z.object({ motifDonId: z.string().min(1), nombreBacs: nbBacs }))
+    .max(20)
+    .default([]),
+  kgFarineAbimes: quantiteIngredient.optional(),
+  // Ingrédients utilisés — déclenchent la décrémentation du stock.
+  sacsUtilises: quantiteIngredient.default(0),
+  paquetsLevureUtilises: quantiteIngredient.default(0),
+  kgSelUtilises: quantiteIngredient.default(0),
+  quantiteHuileUtilisee: quantiteIngredient.default(0),
+  observations: z.string().trim().max(2000).optional(),
+});
+export type ProductionCreateInput = z.infer<typeof productionCreateSchema>;
+
+export interface MotifDonDTO {
+  id: string;
+  nom: string;
 }
 
 export interface ProductionDTO {
   id: string;
   numero: number;
   date: string;
-  recette: { id: string; produitNom: string };
-  quantiteProduite: number;
+  bacsProduits: number;
+  bacsLivresDepositaires: number;
+  bacsLivresMamans: number;
+  bacsVendusVC: number;
+  bacsRestants: number;
+  bacsFoutus: number;
+  dons: { motifDonId: string; motifNom: string; nombreBacs: number }[];
+  totalDonnes: number;
+  kgFarineAbimes: number | null;
+  sacsUtilises: number;
+  paquetsLevureUtilises: number;
+  kgSelUtilises: number;
+  quantiteHuileUtilisee: number;
+  observations: string | null;
   enregistrePar: { id: string; nom: string } | null;
   /** Matières consommées par la décrémentation automatique. */
   consommations: { matiereNom: string; unite: string; quantite: number }[];
+  /** Réconciliation : somme des destinations et écart vs bacs produits. */
+  totalDestinations: number;
+  ecartReconciliation: number;
 }
+
+/**
+ * Réconciliation des bacs (section 3.3 b) : un écart est signalé mais
+ * n'empêche JAMAIS l'enregistrement. Fonction partagée pour que le front
+ * affiche l'avertissement avec exactement le même calcul que le back.
+ */
+export function totalDestinationsBacs(p: {
+  bacsLivresDepositaires: number;
+  bacsLivresMamans: number;
+  bacsVendusVC: number;
+  bacsRestants: number;
+  bacsFoutus: number;
+  dons: { nombreBacs: number }[];
+}): number {
+  return (
+    p.bacsLivresDepositaires +
+    p.bacsLivresMamans +
+    p.bacsVendusVC +
+    p.bacsRestants +
+    p.bacsFoutus +
+    p.dons.reduce((s, d) => s + d.nombreBacs, 0)
+  );
+}
+
+// --- Écarts prévu / réalisé -------------------------------------------------
+
+export interface LigneEcartDTO {
+  cle: "bacs" | "sacsFarine" | "paquetsLevure" | "quantiteHuile" | "kgSel";
+  prevu: number;
+  realise: number;
+  /** réalisé − prévu */
+  ecart: number;
+}
+
+export interface EcartsProductionDTO {
+  date: string;
+  planning: PlanningProductionDTO | null;
+  nbProductions: number;
+  lignes: LigneEcartDTO[];
+}
+
 
 // ---------------------------------------------------------------------------
 // Équipe & droits d'accès (section 3.7) — gestion des comptes
@@ -708,7 +794,7 @@ export interface RapportStockDTO {
 
 export interface RapportProductionDTO {
   nbProductions30Jours: number;
-  dernieres: { numero: number; produitNom: string; quantiteProduite: number; date: string }[];
+  dernieres: { numero: number; bacsProduits: number; date: string }[];
 }
 
 export interface RapportFournisseursDTO {
@@ -963,10 +1049,11 @@ export const TYPE_ENTITE_LABELS: Record<string, string> = {
   ClotureCaisse: "Clôture de caisse",
   MatierePremiere: "Matière première",
   MouvementStock: "Mouvement de stock",
-  Recette: "Recette",
-  IngredientRecette: "Ingrédient de recette",
   PlanningProduction: "Planning de production",
+  PlanningLigneProduit: "Ligne de planning (produit)",
   Production: "Production",
+  ProductionDon: "Don de bacs",
+  MotifDon: "Motif de don",
   Fournisseur: "Fournisseur",
   CommandeFournisseur: "Commande fournisseur",
   LigneCommandeFournisseur: "Ligne de commande fournisseur",

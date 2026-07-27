@@ -114,18 +114,18 @@ stocksRouter.put("/matieres/:id", requirePermission("STOCKS", "ECRITURE"), async
   }
 });
 
-// Suppression bloquée si la matière a un historique ou entre dans une recette :
-// le journal des mouvements ne doit jamais être altéré rétroactivement.
+// Suppression bloquée si la matière a un historique de mouvements : le journal
+// ne doit jamais être altéré rétroactivement.
 stocksRouter.delete("/matieres/:id", requirePermission("STOCKS", "ECRITURE"), async (req, res, next) => {
   try {
     const matiere = await prisma.matierePremiere.findUnique({
       where: { id: req.params.id },
-      include: { _count: { select: { mouvements: true, ingredients: true } } },
+      include: { _count: { select: { mouvements: true } } },
     });
     if (!matiere) return res.status(404).json({ erreur: "Matière première introuvable" });
-    if (matiere._count.mouvements > 0 || matiere._count.ingredients > 0) {
+    if (matiere._count.mouvements > 0) {
       return res.status(409).json({
-        erreur: "Suppression impossible : la matière a un historique de mouvements ou est utilisée dans une recette",
+        erreur: "Suppression impossible : la matière a un historique de mouvements",
       });
     }
     await prisma.matierePremiere.delete({ where: { id: matiere.id } });

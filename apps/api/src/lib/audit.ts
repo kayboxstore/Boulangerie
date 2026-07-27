@@ -43,9 +43,10 @@ const MODELE_MODULE: Record<string, string> = {
   MatierePremiere: "STOCKS",
   MouvementStock: "STOCKS",
   // Production
-  Recette: "PRODUCTION",
-  IngredientRecette: "PRODUCTION",
   PlanningProduction: "PRODUCTION",
+  PlanningLigneProduit: "PRODUCTION",
+  ProductionDon: "PRODUCTION",
+  MotifDon: "PRODUCTION",
   Production: "PRODUCTION",
   // Fournisseurs & achats
   Fournisseur: "FOURNISSEURS",

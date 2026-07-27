@@ -179,7 +179,6 @@ rapportsRouter.get("/stock", requirePermission("STOCKS", "LECTURE"), async (_req
 rapportsRouter.get("/production", requirePermission("PRODUCTION", "LECTURE"), async (_req, res, next) => {
   try {
     const dernieres = await prisma.production.findMany({
-      include: { recette: { include: { produit: { select: { nom: true } } } } },
       orderBy: { numero: "desc" },
       take: 8,
     });
@@ -187,8 +186,7 @@ rapportsRouter.get("/production", requirePermission("PRODUCTION", "LECTURE"), as
       nbProductions30Jours: await prisma.production.count({ where: { date: { gte: ilYAJours(29) } } }),
       dernieres: dernieres.map((p) => ({
         numero: p.numero,
-        produitNom: p.recette.produit.nom,
-        quantiteProduite: p.quantiteProduite,
+        bacsProduits: p.bacsProduits,
         date: p.date.toISOString(),
       })),
     };

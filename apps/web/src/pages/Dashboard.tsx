@@ -250,8 +250,8 @@ export function DashboardPage() {
     if (production) {
       sections.push({
         titre: c("lastProductionsTitle"),
-        entetes: ["N°", c("colProduct"), c("colQty"), c("colDate")],
-        lignes: production.dernieres.map((p) => [p.numero, p.produitNom, p.quantiteProduite, p.date.slice(0, 10)]),
+        entetes: ["N°", c("colBacs"), c("colDate")],
+        lignes: production.dernieres.map((p) => [p.numero, p.bacsProduits, p.date.slice(0, 10)]),
       });
     }
     if (fournisseurs) {
@@ -513,7 +513,7 @@ export function DashboardPage() {
                     <li key={p.numero} className="flex justify-between gap-2">
                       <span>
                         <span className="text-muted-foreground">n°{p.numero}</span>{" "}
-                        <span className="font-medium">{p.produitNom}</span> × {p.quantiteProduite}
+                        <span className="font-medium">{p.bacsProduits}</span> {t("dashboard.bacsSuffix")}
                       </span>
                       <span className="whitespace-nowrap text-muted-foreground">{formatDateCourte(p.date.slice(0, 10))}</span>
                     </li>

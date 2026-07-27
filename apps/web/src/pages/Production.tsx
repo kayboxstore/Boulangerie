@@ -1,14 +1,14 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ChefHat, Factory, Plus, Trash2 } from "lucide-react";
+import { CalendarDays, ClipboardList, Factory, Scale, Trash2, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
-  formatQuantite,
-  type MatierePremiereDTO,
+  totalDestinationsBacs,
+  type EcartsProductionDTO,
+  type MotifDonDTO,
   type PlanningProductionDTO,
   type ProduitDTO,
   type ProductionDTO,
-  type RecetteDTO,
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -18,7 +18,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -28,29 +27,45 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-function formatDate(iso: string): string {
-  return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium" }).format(new Date(iso));
-}
+const jourISO = (d: Date) => d.toISOString().slice(0, 10);
+const demain = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return jourISO(d);
+};
+const nombre = (v: string) => (v.trim() === "" ? 0 : Number(v));
 
-function aujourdhui(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-interface LigneIngredient {
-  matierePremiereId: string;
-  quantite: string;
+/** Champ numérique compact, réutilisé par les deux formulaires. */
+function ChampNombre({
+  id,
+  label,
+  valeur,
+  onChange,
+  step,
+}: {
+  id: string;
+  label: string;
+  valeur: string;
+  onChange: (v: string) => void;
+  step?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input id={id} type="number" min={0} step={step ?? "1"} value={valeur} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
 }
 
 export function ProductionPage() {
-  const { peutEcrire, peutLire } = useAuth();
+  const { peutEcrire } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const editable = peutEcrire("PRODUCTION");
-  const voitStocks = peutLire("STOCKS");
 
-  const { data: recettesData } = useQuery({
-    queryKey: ["recettes"],
-    queryFn: () => api<{ recettes: RecetteDTO[] }>("/api/production/recettes"),
+  const { data: produitsData } = useQuery({
+    queryKey: ["produits"],
+    queryFn: () => api<{ produits: ProduitDTO[] }>("/api/produits"),
   });
   const { data: planningsData } = useQuery({
     queryKey: ["plannings"],
@@ -60,157 +75,165 @@ export function ProductionPage() {
     queryKey: ["productions"],
     queryFn: () => api<{ productions: ProductionDTO[] }>("/api/production/productions"),
   });
-  const { data: produitsData } = useQuery({
-    queryKey: ["produits"],
-    queryFn: () => api<{ produits: ProduitDTO[] }>("/api/produits"),
-    enabled: editable,
-  });
-  // La liste des matières sert au formulaire de recette ; réservée aux rôles
-  // qui lisent les Stocks (le Responsable de production passe par ses recettes).
-  const { data: matieresData } = useQuery({
-    queryKey: ["matieres"],
-    queryFn: () => api<{ matieres: MatierePremiereDTO[] }>("/api/stocks/matieres"),
-    enabled: editable && voitStocks,
+  const { data: motifsData } = useQuery({
+    queryKey: ["motifs-don"],
+    queryFn: () => api<{ motifs: MotifDonDTO[] }>("/api/production/motifs-don"),
   });
 
-  const recettes = recettesData?.recettes ?? [];
+  const produits = useMemo(() => (produitsData?.produits ?? []).filter((p) => p.actif), [produitsData]);
   const plannings = planningsData?.plannings ?? [];
   const productions = productionsData?.productions ?? [];
+  const motifs = motifsData?.motifs ?? [];
 
-  // Ingrédients référencés par les recettes existantes — utilisable même sans
-  // accès au module Stocks.
-  const matieresConnues = useMemo(() => {
-    if (matieresData) {
-      return matieresData.matieres.map((m) => ({ id: m.id, nom: m.nom, unite: m.unite }));
-    }
-    const parId = new Map<string, { id: string; nom: string; unite: string }>();
-    for (const r of recettes) {
-      for (const i of r.ingredients) parId.set(i.matierePremiere.id, i.matierePremiere);
-    }
-    return [...parId.values()].sort((a, b) => a.nom.localeCompare(b.nom));
-  }, [matieresData, recettes]);
-
-  const rafraichir = () => {
-    queryClient.invalidateQueries({ queryKey: ["recettes"] });
-    queryClient.invalidateQueries({ queryKey: ["plannings"] });
-    queryClient.invalidateQueries({ queryKey: ["productions"] });
-    queryClient.invalidateQueries({ queryKey: ["matieres"] });
-    queryClient.invalidateQueries({ queryKey: ["mouvements"] });
-  };
-
-  // --- Dialog recette --------------------------------------------------------
-  const [dialogRecette, setDialogRecette] = useState(false);
-  const [recetteEditee, setRecetteEditee] = useState<RecetteDTO | null>(null);
-  const [produitId, setProduitId] = useState("");
-  const [instructions, setInstructions] = useState("");
-  const [lignes, setLignes] = useState<LigneIngredient[]>([]);
-  const [erreurRecette, setErreurRecette] = useState<string | null>(null);
-
-  function ouvrirRecette(r: RecetteDTO | null) {
-    setRecetteEditee(r);
-    setProduitId(r?.produit.id ?? "");
-    setInstructions(r?.instructions ?? "");
-    setLignes(
-      r
-        ? r.ingredients.map((i) => ({ matierePremiereId: i.matierePremiere.id, quantite: String(i.quantite) }))
-        : [{ matierePremiereId: matieresConnues[0]?.id ?? "", quantite: "" }],
-    );
-    setErreurRecette(null);
-    setDialogRecette(true);
-  }
-
-  const sauverRecette = useMutation({
-    mutationFn: () => {
-      const ingredients = lignes.map((l) => ({
-        matierePremiereId: l.matierePremiereId,
-        quantite: Number(l.quantite),
-      }));
-      const corps = { instructions: instructions.trim() || undefined, ingredients };
-      return recetteEditee
-        ? api(`/api/production/recettes/${recetteEditee.id}`, { method: "PUT", body: JSON.stringify(corps) })
-        : api("/api/production/recettes", { method: "POST", body: JSON.stringify({ produitId, ...corps }) });
-    },
-    onSuccess: () => {
-      setDialogRecette(false);
-      rafraichir();
-    },
-    onError: (e) => setErreurRecette(e instanceof Error ? e.message : t("production.saveError")),
-  });
-
-  const supprimerRecette = useMutation({
-    mutationFn: (id: string) => api(`/api/production/recettes/${id}`, { method: "DELETE" }),
-    onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : t("production.deleteError")),
-  });
-
-  // --- Dialog planning -------------------------------------------------------
+  // --- a) Planning ----------------------------------------------------------
   const [dialogPlanning, setDialogPlanning] = useState(false);
-  const [planRecetteId, setPlanRecetteId] = useState("");
-  const [planQuantite, setPlanQuantite] = useState("");
-  const [planDate, setPlanDate] = useState(aujourdhui());
+  const [pDate, setPDate] = useState(demain());
+  const [pBacs, setPBacs] = useState("");
+  const [pLignes, setPLignes] = useState<Record<string, string>>({});
+  const [pSacs, setPSacs] = useState("");
+  const [pLevure, setPLevure] = useState("");
+  const [pHuile, setPHuile] = useState("");
+  const [pSel, setPSel] = useState("");
+  const [pObs, setPObs] = useState("");
   const [erreurPlanning, setErreurPlanning] = useState<string | null>(null);
 
-  const creerPlanning = useMutation({
+  function ouvrirPlanning() {
+    setPDate(demain());
+    setPBacs("");
+    setPLignes({});
+    setPSacs("");
+    setPLevure("");
+    setPHuile("");
+    setPSel("");
+    setPObs("");
+    setErreurPlanning(null);
+    setDialogPlanning(true);
+  }
+
+  const enregistrerPlanning = useMutation({
     mutationFn: () =>
       api("/api/production/planning", {
         method: "POST",
         body: JSON.stringify({
-          recetteId: planRecetteId,
-          quantitePrevue: Number(planQuantite),
-          datePrevue: planDate,
+          datePrevue: pDate,
+          nombreBacsCommandes: nombre(pBacs),
+          lignes: produits
+            .filter((p) => nombre(pLignes[p.id] ?? "") > 0)
+            .map((p) => ({ produitId: p.id, quantitePrevue: nombre(pLignes[p.id]) })),
+          sacsFarinePrevus: nombre(pSacs),
+          paquetsLevurePrevus: nombre(pLevure),
+          quantiteHuilePrevue: nombre(pHuile),
+          kgSelPrevus: nombre(pSel),
+          observations: pObs.trim() || undefined,
         }),
       }),
     onSuccess: () => {
       setDialogPlanning(false);
-      rafraichir();
+      queryClient.invalidateQueries({ queryKey: ["plannings"] });
+      queryClient.invalidateQueries({ queryKey: ["ecarts"] });
     },
     onError: (e) => setErreurPlanning(e instanceof Error ? e.message : t("production.saveError")),
   });
 
   const supprimerPlanning = useMutation({
     mutationFn: (id: string) => api(`/api/production/planning/${id}`, { method: "DELETE" }),
-    onSuccess: rafraichir,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["plannings"] });
+      queryClient.invalidateQueries({ queryKey: ["ecarts"] });
+    },
     onError: (e) => alert(e instanceof Error ? e.message : t("production.deleteError")),
   });
 
-  // --- Dialog production -----------------------------------------------------
+  // --- b + c) Production ----------------------------------------------------
   const [dialogProduction, setDialogProduction] = useState(false);
-  const [prodRecetteId, setProdRecetteId] = useState("");
-  const [prodQuantite, setProdQuantite] = useState("");
-  const [prodPlanningId, setProdPlanningId] = useState("");
+  const [bacsProduits, setBacsProduits] = useState("");
+  const [bacsDepositaires, setBacsDepositaires] = useState("");
+  const [bacsMamans, setBacsMamans] = useState("");
+  const [bacsVC, setBacsVC] = useState("");
+  const [bacsRestants, setBacsRestants] = useState("");
+  const [bacsFoutus, setBacsFoutus] = useState("");
+  const [dons, setDons] = useState<Record<string, string>>({});
+  const [farineAbimee, setFarineAbimee] = useState("");
+  const [sacsUtilises, setSacsUtilises] = useState("");
+  const [levureUtilisee, setLevureUtilisee] = useState("");
+  const [selUtilise, setSelUtilise] = useState("");
+  const [huileUtilisee, setHuileUtilisee] = useState("");
+  const [prodObs, setProdObs] = useState("");
   const [erreurProduction, setErreurProduction] = useState<string | null>(null);
+  const [avertissements, setAvertissements] = useState<string[]>([]);
 
-  function ouvrirProduction(planning?: PlanningProductionDTO) {
-    setProdRecetteId(planning?.recette.id ?? recettes[0]?.id ?? "");
-    setProdQuantite(planning ? String(planning.quantitePrevue) : "");
-    setProdPlanningId(planning?.id ?? "");
+  function ouvrirProduction() {
+    setBacsProduits("");
+    setBacsDepositaires("");
+    setBacsMamans("");
+    setBacsVC("");
+    setBacsRestants("");
+    setBacsFoutus("");
+    setDons({});
+    setFarineAbimee("");
+    setSacsUtilises("");
+    setLevureUtilisee("");
+    setSelUtilise("");
+    setHuileUtilisee("");
+    setProdObs("");
     setErreurProduction(null);
     setDialogProduction(true);
   }
 
+  // Réconciliation en direct — même calcul que le serveur (fonction partagée).
+  const reconciliation = useMemo(() => {
+    const total = totalDestinationsBacs({
+      bacsLivresDepositaires: nombre(bacsDepositaires),
+      bacsLivresMamans: nombre(bacsMamans),
+      bacsVendusVC: nombre(bacsVC),
+      bacsRestants: nombre(bacsRestants),
+      bacsFoutus: nombre(bacsFoutus),
+      dons: motifs.map((m) => ({ nombreBacs: nombre(dons[m.id] ?? "") })),
+    });
+    return { total, ecart: total - nombre(bacsProduits) };
+  }, [bacsProduits, bacsDepositaires, bacsMamans, bacsVC, bacsRestants, bacsFoutus, dons, motifs]);
+
   const enregistrerProduction = useMutation({
     mutationFn: () =>
-      api<{ production: ProductionDTO }>("/api/production/productions", {
+      api<{ production: ProductionDTO; avertissements: string[] }>("/api/production/productions", {
         method: "POST",
         body: JSON.stringify({
-          recetteId: prodRecetteId,
-          quantiteProduite: Number(prodQuantite),
-          planningId: prodPlanningId || undefined,
+          bacsProduits: nombre(bacsProduits),
+          bacsLivresDepositaires: nombre(bacsDepositaires),
+          bacsLivresMamans: nombre(bacsMamans),
+          bacsVendusVC: nombre(bacsVC),
+          bacsRestants: nombre(bacsRestants),
+          bacsFoutus: nombre(bacsFoutus),
+          dons: motifs
+            .filter((m) => nombre(dons[m.id] ?? "") > 0)
+            .map((m) => ({ motifDonId: m.id, nombreBacs: nombre(dons[m.id]) })),
+          kgFarineAbimes: farineAbimee.trim() === "" ? undefined : nombre(farineAbimee),
+          sacsUtilises: nombre(sacsUtilises),
+          paquetsLevureUtilises: nombre(levureUtilisee),
+          kgSelUtilises: nombre(selUtilise),
+          quantiteHuileUtilisee: nombre(huileUtilisee),
+          observations: prodObs.trim() || undefined,
         }),
       }),
-    onSuccess: () => {
+    onSuccess: (r) => {
       setDialogProduction(false);
-      rafraichir();
+      setAvertissements(r.avertissements ?? []);
+      queryClient.invalidateQueries({ queryKey: ["productions"] });
+      queryClient.invalidateQueries({ queryKey: ["matieres"] });
+      queryClient.invalidateQueries({ queryKey: ["ecarts"] });
     },
     onError: (e) => setErreurProduction(e instanceof Error ? e.message : t("production.saveError")),
   });
 
-  const recetteProduction = recettes.find((r) => r.id === prodRecetteId);
-  const quantiteProduction = Number(prodQuantite) || 0;
-  const planningsOuverts = plannings.filter((p) => p.statut === "PREVU" && p.recette.id === prodRecetteId);
+  // --- Écarts ---------------------------------------------------------------
+  const [dateEcarts, setDateEcarts] = useState(jourISO(new Date()));
+  const { data: ecarts } = useQuery({
+    queryKey: ["ecarts", dateEcarts],
+    queryFn: () => api<EcartsProductionDTO>(`/api/production/ecarts?date=${dateEcarts}`),
+  });
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("production.title")}</h1>
@@ -218,15 +241,11 @@ export function ProductionPage() {
         </div>
         {editable && (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setDialogPlanning(true)} disabled={recettes.length === 0}>
+            <Button variant="outline" onClick={ouvrirPlanning}>
               <CalendarDays className="h-4 w-4" />
               {t("production.plan")}
             </Button>
-            <Button variant="outline" onClick={() => ouvrirRecette(null)}>
-              <ChefHat className="h-4 w-4" />
-              {t("production.recipe")}
-            </Button>
-            <Button variant="cta" onClick={() => ouvrirProduction()} disabled={recettes.length === 0}>
+            <Button variant="cta" onClick={ouvrirProduction}>
               <Factory className="h-4 w-4" />
               {t("production.recordProduction")}
             </Button>
@@ -234,120 +253,137 @@ export function ProductionPage() {
         )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Recettes */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("production.recipes")}</CardTitle>
-            <CardDescription>{t("production.recipesDesc")}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {recettes.map((r) => (
-              <div key={r.id} className="rounded-lg border border-beige/60 p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-semibold text-marine dark:text-creme">{r.produit.nom}</p>
+      {avertissements.length > 0 && (
+        <div role="status" className="space-y-1 rounded-md border border-or/50 bg-or/10 px-4 py-3 text-sm">
+          <p className="flex items-center gap-2 font-semibold text-marine dark:text-creme">
+            <TriangleAlert className="h-4 w-4 text-terracotta dark:text-or" />
+            {t("production.savedWithWarnings")}
+          </p>
+          <ul className="ml-6 list-disc text-muted-foreground">
+            {avertissements.map((a) => (
+              <li key={a}>{a}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* --- Écarts prévu / réalisé --- */}
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Scale className="h-5 w-5 text-or" />
+              {t("production.gapsTitle")}
+            </CardTitle>
+            <CardDescription>{t("production.gapsDesc")}</CardDescription>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="date-ecarts">{t("common.date")}</Label>
+            <Input id="date-ecarts" type="date" value={dateEcarts} onChange={(e) => setDateEcarts(e.target.value)} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!ecarts?.planning && ecarts?.nbProductions === 0 ? (
+            <p className="py-6 text-center text-muted-foreground">{t("production.gapsEmpty")}</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("production.gapsMetric")}</TableHead>
+                  <TableHead className="text-right">{t("production.planned")}</TableHead>
+                  <TableHead className="text-right">{t("production.actual")}</TableHead>
+                  <TableHead className="text-right">{t("production.gap")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(ecarts?.lignes ?? []).map((l) => (
+                  <TableRow key={l.cle}>
+                    <TableCell className="font-medium">{t(`production.metric.${l.cle}`)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{l.prevu}</TableCell>
+                    <TableCell className="text-right">{l.realise}</TableCell>
+                    <TableCell
+                      className={
+                        l.ecart === 0
+                          ? "text-right text-muted-foreground"
+                          : "text-right font-semibold text-terracotta dark:text-or"
+                      }
+                    >
+                      {l.ecart > 0 ? `+${l.ecart}` : l.ecart}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* --- a) Plannings --- */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ClipboardList className="h-5 w-5 text-or" />
+            {t("production.planningTitle")}
+          </CardTitle>
+          <CardDescription>{t("production.planningDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("common.date")}</TableHead>
+                <TableHead className="text-right">{t("production.colBacsOrdered")}</TableHead>
+                <TableHead>{t("production.colDetail")}</TableHead>
+                <TableHead>{t("production.colForecast")}</TableHead>
+                {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {plannings.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="whitespace-nowrap font-medium">{p.datePrevue}</TableCell>
+                  <TableCell className="text-right">{p.nombreBacsCommandes}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {p.lignes.length === 0
+                      ? "—"
+                      : p.lignes.map((l) => `${l.quantitePrevue} × ${l.produitNom}`).join(", ")}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {t("production.forecastSummary", {
+                      sacs: p.sacsFarinePrevus,
+                      levure: p.paquetsLevurePrevus,
+                      huile: p.quantiteHuilePrevue,
+                      sel: p.kgSelPrevus,
+                    })}
+                  </TableCell>
                   {editable && (
-                    <div className="flex shrink-0 gap-1">
-                      <Button variant="outline" size="sm" onClick={() => ouvrirRecette(r)}>
-                        {t("common.edit")}
-                      </Button>
+                    <TableCell className="text-right">
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(t("production.confirmDeleteRecipe", { nom: r.produit.nom })) && supprimerRecette.mutate(r.id)}
-                        aria-label={t("production.ariaDeleteRecipe", { nom: r.produit.nom })}
+                        onClick={() => confirm(t("production.confirmDeletePlanning")) && supprimerPlanning.mutate(p.id)}
+                        aria-label={t("production.ariaDeletePlanning")}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
-                    </div>
+                    </TableCell>
                   )}
-                </div>
-                <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                  {r.ingredients.map((i) => (
-                    <li key={i.id} className="flex justify-between">
-                      <span>{i.matierePremiere.nom}</span>
-                      <span className="font-medium text-foreground">
-                        {formatQuantite(i.quantite, i.matierePremiere.unite)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                {r.instructions && <p className="mt-2 border-t pt-2 text-xs text-muted-foreground">{r.instructions}</p>}
-              </div>
-            ))}
-            {recettes.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">{t("production.noRecipe")}</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Planning */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("production.planningTitle")}</CardTitle>
-            <CardDescription>{t("production.planningDesc")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("production.colForDate")}</TableHead>
-                  <TableHead>{t("production.colProduct")}</TableHead>
-                  <TableHead className="text-right">{t("production.colQuantity")}</TableHead>
-                  <TableHead>{t("production.colStatus")}</TableHead>
-                  {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {plannings.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="whitespace-nowrap">{formatDate(p.datePrevue)}</TableCell>
-                    <TableCell className="font-medium">{p.recette.produitNom}</TableCell>
-                    <TableCell className="text-right">{p.quantitePrevue}</TableCell>
-                    <TableCell>
-                      {p.statut === "FAIT" ? (
-                        <Badge variant="gold">{t("production.statutFait")}</Badge>
-                      ) : (
-                        <Badge variant="secondary">{t("production.statutPrevu")}</Badge>
-                      )}
-                    </TableCell>
-                    {editable && (
-                      <TableCell className="text-right">
-                        {p.statut === "PREVU" && (
-                          <>
-                            <Button variant="outline" size="sm" onClick={() => ouvrirProduction(p)}>
-                              {t("production.produce")}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="ml-1 h-8 w-8 text-terracotta hover:text-terracotta"
-                              onClick={() => supprimerPlanning.mutate(p.id)}
-                              aria-label={t("production.ariaDeletePlanning")}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </>
-                        )}
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-                {plannings.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={editable ? 5 : 4} className="py-8 text-center text-muted-foreground">
-                      {t("production.nothingPlanned")}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
+              ))}
+              {plannings.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={editable ? 5 : 4} className="py-8 text-center text-muted-foreground">
+                    {t("production.nothingPlanned")}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
-      {/* Historique des productions */}
+      {/* --- b) Productions enregistrées --- */}
       <Card>
         <CardHeader>
           <CardTitle>{t("production.recordedTitle")}</CardTitle>
@@ -359,8 +395,8 @@ export function ProductionPage() {
               <TableRow>
                 <TableHead>N°</TableHead>
                 <TableHead>{t("common.date")}</TableHead>
-                <TableHead>{t("production.colProduct")}</TableHead>
-                <TableHead className="text-right">{t("production.colQuantity")}</TableHead>
+                <TableHead className="text-right">{t("production.colProduced")}</TableHead>
+                <TableHead>{t("production.colDestinations")}</TableHead>
                 <TableHead>{t("production.colConsumed")}</TableHead>
                 <TableHead>{t("production.colRecordedBy")}</TableHead>
               </TableRow>
@@ -370,12 +406,41 @@ export function ProductionPage() {
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.numero}</TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
-                    {new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(new Date(p.date))}
+                    {new Date(p.date).toLocaleDateString()}
                   </TableCell>
-                  <TableCell className="font-medium">{p.recette.produitNom}</TableCell>
-                  <TableCell className="text-right font-semibold text-marine dark:text-or">{p.quantiteProduite}</TableCell>
-                  <TableCell className="max-w-80 text-sm text-muted-foreground">
-                    {p.consommations.map((c) => `${formatQuantite(c.quantite, c.unite)} ${c.matiereNom}`).join(", ")}
+                  <TableCell className="text-right font-semibold">
+                    {p.bacsProduits}
+                    {p.ecartReconciliation !== 0 && (
+                      <Badge
+                        className="ml-2 border-transparent bg-terracotta text-creme"
+                        title={t("production.reconcileTooltip", {
+                          total: p.totalDestinations,
+                          produits: p.bacsProduits,
+                        })}
+                      >
+                        {p.ecartReconciliation > 0 ? `+${p.ecartReconciliation}` : p.ecartReconciliation}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="max-w-72 text-xs text-muted-foreground">
+                    {t("production.destinationsSummary", {
+                      dep: p.bacsLivresDepositaires,
+                      mamans: p.bacsLivresMamans,
+                      vc: p.bacsVendusVC,
+                      dons: p.totalDonnes,
+                      restants: p.bacsRestants,
+                      foutus: p.bacsFoutus,
+                    })}
+                    {p.dons.length > 0 && (
+                      <span className="block italic">
+                        {p.dons.map((d) => `${d.nombreBacs} ${d.motifNom}`).join(", ")}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="max-w-56 text-xs text-muted-foreground">
+                    {p.consommations.length === 0
+                      ? "—"
+                      : p.consommations.map((c) => `${c.quantite} ${c.unite} ${c.matiereNom}`).join(", ")}
                   </TableCell>
                   <TableCell className="text-sm">{p.enregistrePar?.nom ?? "—"}</TableCell>
                 </TableRow>
@@ -392,169 +457,59 @@ export function ProductionPage() {
         </CardContent>
       </Card>
 
-      {/* Dialog recette */}
-      <Dialog open={dialogRecette} onOpenChange={setDialogRecette}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              sauverRecette.mutate();
-            }}
-            className="space-y-4"
-          >
-            <DialogHeader>
-              <DialogTitle>{recetteEditee ? t("production.recipeDialogTitleEdit", { nom: recetteEditee.produit.nom }) : t("production.recipeDialogTitleNew")}</DialogTitle>
-              <DialogDescription>{t("production.recipeDialogDesc")}</DialogDescription>
-            </DialogHeader>
-
-            {!recetteEditee && (
-              <div className="space-y-1.5">
-                <Label htmlFor="recette-produit">{t("production.product")}</Label>
-                <NativeSelect id="recette-produit" value={produitId} onChange={(e) => setProduitId(e.target.value)} required>
-                  <option value="">{t("production.chooseProduct")}</option>
-                  {(produitsData?.produits ?? [])
-                    .filter((p) => p.actif && !recettes.some((r) => r.produit.id === p.id))
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nom}
-                      </option>
-                    ))}
-                </NativeSelect>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>{t("production.ingredients")}</Label>
-              {lignes.map((l, index) => {
-                const matiere = matieresConnues.find((m) => m.id === l.matierePremiereId);
-                return (
-                  <div key={index} className="flex items-center gap-2">
-                    <NativeSelect
-                      value={l.matierePremiereId}
-                      onChange={(e) =>
-                        setLignes((prev) => prev.map((x, i) => (i === index ? { ...x, matierePremiereId: e.target.value } : x)))
-                      }
-                      required
-                      aria-label={t("production.ariaIngredient", { n: index + 1 })}
-                    >
-                      <option value="">{t("production.chooseMatiere")}</option>
-                      {matieresConnues.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.nom}
-                        </option>
-                      ))}
-                    </NativeSelect>
-                    <Input
-                      type="number"
-                      min="0.001"
-                      step="0.001"
-                      className="w-28 shrink-0"
-                      placeholder={matiere ? matiere.unite : t("production.qtyPlaceholder")}
-                      value={l.quantite}
-                      onChange={(e) =>
-                        setLignes((prev) => prev.map((x, i) => (i === index ? { ...x, quantite: e.target.value } : x)))
-                      }
-                      required
-                      aria-label={t("production.ariaIngredientQty", { n: index + 1 })}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 text-terracotta hover:text-terracotta"
-                      onClick={() => setLignes((prev) => prev.filter((_, i) => i !== index))}
-                      disabled={lignes.length === 1}
-                      aria-label={t("production.ariaRemoveIngredient", { n: index + 1 })}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                );
-              })}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setLignes((prev) => [...prev, { matierePremiereId: "", quantite: "" }])}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                {t("production.addIngredient")}
-              </Button>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="recette-instructions">{t("production.instructionsOptional")}</Label>
-              <textarea
-                id="recette-instructions"
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                rows={3}
-                className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-
-            {erreurRecette && (
-              <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
-                {erreurRecette}
-              </p>
-            )}
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogRecette(false)}>
-                {t("common.cancel")}
-              </Button>
-              <Button type="submit" variant="cta" disabled={sauverRecette.isPending}>
-                {t("common.save")}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog planning */}
+      {/* --- Dialog planning --- */}
       <Dialog open={dialogPlanning} onOpenChange={setDialogPlanning}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              creerPlanning.mutate();
+              enregistrerPlanning.mutate();
             }}
             className="space-y-4"
           >
             <DialogHeader>
               <DialogTitle>{t("production.planDialogTitle")}</DialogTitle>
-              <DialogDescription>{t("production.planningDesc")}</DialogDescription>
+              <DialogDescription>{t("production.planDialogDesc")}</DialogDescription>
             </DialogHeader>
-            <div className="space-y-3">
+
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="plan-recette">{t("production.recipeLabel")}</Label>
-                <NativeSelect id="plan-recette" value={planRecetteId} onChange={(e) => setPlanRecetteId(e.target.value)} required>
-                  <option value="">{t("production.choose")}</option>
-                  {recettes.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.produit.nom}
-                    </option>
-                  ))}
-                </NativeSelect>
+                <Label htmlFor="p-date">{t("production.forDate")}</Label>
+                <Input id="p-date" type="date" value={pDate} onChange={(e) => setPDate(e.target.value)} required />
               </div>
+              <ChampNombre id="p-bacs" label={t("production.bacsOrdered")} valeur={pBacs} onChange={setPBacs} />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">{t("production.detailByProduct")}</p>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="plan-quantite">{t("production.colQuantity")}</Label>
-                  <Input
-                    id="plan-quantite"
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={planQuantite}
-                    onChange={(e) => setPlanQuantite(e.target.value)}
-                    required
+                {produits.map((p) => (
+                  <ChampNombre
+                    key={p.id}
+                    id={`p-prod-${p.id}`}
+                    label={p.nom}
+                    valeur={pLignes[p.id] ?? ""}
+                    onChange={(v) => setPLignes((prev) => ({ ...prev, [p.id]: v }))}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="plan-date">{t("production.forDate")}</Label>
-                  <Input id="plan-date" type="date" value={planDate} onChange={(e) => setPlanDate(e.target.value)} required />
-                </div>
+                ))}
               </div>
             </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">{t("production.forecastIngredients")}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <ChampNombre id="p-sacs" label={t("production.sacksFlour")} valeur={pSacs} onChange={setPSacs} step="0.001" />
+                <ChampNombre id="p-levure" label={t("production.packsYeast")} valeur={pLevure} onChange={setPLevure} step="0.001" />
+                <ChampNombre id="p-huile" label={t("production.oil")} valeur={pHuile} onChange={setPHuile} step="0.001" />
+                <ChampNombre id="p-sel" label={t("production.saltKg")} valeur={pSel} onChange={setPSel} step="0.001" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="p-obs">{t("production.observations")}</Label>
+              <Input id="p-obs" value={pObs} onChange={(e) => setPObs(e.target.value)} />
+            </div>
+
             {erreurPlanning && (
               <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
                 {erreurPlanning}
@@ -564,17 +519,17 @@ export function ProductionPage() {
               <Button type="button" variant="outline" onClick={() => setDialogPlanning(false)}>
                 {t("common.cancel")}
               </Button>
-              <Button type="submit" variant="cta" disabled={creerPlanning.isPending}>
-                {t("production.planButton")}
+              <Button type="submit" variant="cta" disabled={enregistrerPlanning.isPending}>
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog production */}
+      {/* --- Dialog production --- */}
       <Dialog open={dialogProduction} onOpenChange={setDialogProduction}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -586,67 +541,64 @@ export function ProductionPage() {
               <DialogTitle>{t("production.prodDialogTitle")}</DialogTitle>
               <DialogDescription>{t("production.prodDialogDesc")}</DialogDescription>
             </DialogHeader>
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="prod-recette">{t("production.recipeLabel")}</Label>
-                <NativeSelect
-                  id="prod-recette"
-                  value={prodRecetteId}
-                  onChange={(e) => {
-                    setProdRecetteId(e.target.value);
-                    setProdPlanningId("");
-                  }}
-                  required
-                >
-                  {recettes.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.produit.nom}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="prod-quantite">{t("production.quantityProduced")}</Label>
-                <Input
-                  id="prod-quantite"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={prodQuantite}
-                  onChange={(e) => setProdQuantite(e.target.value)}
-                  required
-                />
-              </div>
-              {planningsOuverts.length > 0 && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="prod-planning">{t("production.attachPlanning")}</Label>
-                  <NativeSelect id="prod-planning" value={prodPlanningId} onChange={(e) => setProdPlanningId(e.target.value)}>
-                    <option value="">{t("production.none")}</option>
-                    {planningsOuverts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {t("production.planningOption", { date: formatDate(p.datePrevue), qty: p.quantitePrevue })}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                </div>
-              )}
 
-              {recetteProduction && quantiteProduction > 0 && (
-                <div className="rounded-md bg-secondary/60 px-3 py-2 text-sm">
-                  <p className="font-medium">{t("production.plannedConsumption")}</p>
-                  <ul className="mt-1 space-y-0.5 text-muted-foreground">
-                    {recetteProduction.ingredients.map((i) => (
-                      <li key={i.id} className="flex justify-between">
-                        <span>{i.matierePremiere.nom}</span>
-                        <span>
-                          {formatQuantite(Math.round(i.quantite * quantiteProduction * 1000) / 1000, i.matierePremiere.unite)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+            <div className="grid grid-cols-2 gap-3">
+              <ChampNombre id="b-produits" label={t("production.bacsProduced")} valeur={bacsProduits} onChange={setBacsProduits} />
+              <ChampNombre id="b-dep" label={t("production.bacsDepositaires")} valeur={bacsDepositaires} onChange={setBacsDepositaires} />
+              <ChampNombre id="b-mamans" label={t("production.bacsMamans")} valeur={bacsMamans} onChange={setBacsMamans} />
+              <ChampNombre id="b-vc" label={t("production.bacsVC")} valeur={bacsVC} onChange={setBacsVC} />
+              <ChampNombre id="b-restants" label={t("production.bacsRemaining")} valeur={bacsRestants} onChange={setBacsRestants} />
+              <ChampNombre id="b-foutus" label={t("production.bacsSpoiled")} valeur={bacsFoutus} onChange={setBacsFoutus} />
             </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">{t("production.bacsGiven")}</p>
+              <div className="grid grid-cols-2 gap-3">
+                {motifs.map((m) => (
+                  <ChampNombre
+                    key={m.id}
+                    id={`don-${m.id}`}
+                    label={m.nom}
+                    valeur={dons[m.id] ?? ""}
+                    onChange={(v) => setDons((prev) => ({ ...prev, [m.id]: v }))}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Réconciliation : avertissement visible, jamais bloquant. */}
+            {reconciliation.ecart !== 0 && nombre(bacsProduits) > 0 && (
+              <p className="flex items-start gap-2 rounded-md border border-or/50 bg-or/10 px-3 py-2 text-sm text-marine dark:text-creme">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-terracotta dark:text-or" />
+                <span>
+                  {t("production.reconcileWarning", {
+                    total: reconciliation.total,
+                    produits: nombre(bacsProduits),
+                    ecart: reconciliation.ecart > 0 ? `+${reconciliation.ecart}` : reconciliation.ecart,
+                  })}
+                </span>
+              </p>
+            )}
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">{t("production.usedIngredients")}</p>
+              <p className="text-xs text-muted-foreground">{t("production.usedIngredientsHelp")}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <ChampNombre id="u-sacs" label={t("production.sacksFlour")} valeur={sacsUtilises} onChange={setSacsUtilises} step="0.001" />
+                <ChampNombre id="u-levure" label={t("production.packsYeast")} valeur={levureUtilisee} onChange={setLevureUtilisee} step="0.001" />
+                <ChampNombre id="u-sel" label={t("production.saltKg")} valeur={selUtilise} onChange={setSelUtilise} step="0.001" />
+                <ChampNombre id="u-huile" label={t("production.oil")} valeur={huileUtilisee} onChange={setHuileUtilisee} step="0.001" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <ChampNombre id="u-abimee" label={t("production.flourSpoiled")} valeur={farineAbimee} onChange={setFarineAbimee} step="0.001" />
+              <div className="space-y-1.5">
+                <Label htmlFor="prod-obs">{t("production.observations")}</Label>
+                <Input id="prod-obs" value={prodObs} onChange={(e) => setProdObs(e.target.value)} />
+              </div>
+            </div>
+
             {erreurProduction && (
               <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
                 {erreurProduction}
@@ -657,7 +609,6 @@ export function ProductionPage() {
                 {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={enregistrerProduction.isPending}>
-                <Factory className="h-4 w-4" />
                 {t("common.save")}
               </Button>
             </DialogFooter>

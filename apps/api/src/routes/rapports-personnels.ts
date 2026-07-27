@@ -208,7 +208,7 @@ rapportsPersonnelsRouter.get("/", async (req, res, next) => {
     if (voulu("PRODUCTION")) {
       const productions = await prisma.production.findMany({
         where: { ...filtreAuteur("enregistreParId"), ...filtreDate("date") },
-        include: { enregistrePar: AUTEUR, recette: { include: { produit: { select: { nom: true } } } } },
+        include: { enregistrePar: AUTEUR },
         orderBy: { date: "desc" },
         take: LIMITE_PAR_SOURCE,
       });
@@ -217,7 +217,7 @@ rapportsPersonnelsRouter.get("/", async (req, res, next) => {
           "PRODUCTION",
           p.id,
           p.date,
-          `Production n°${p.numero} — ${p.quantiteProduite} × ${p.recette.produit.nom}`,
+          `Production n°${p.numero} — ${p.bacsProduits} bac(s) produits`,
           p.enregistrePar,
         );
       }

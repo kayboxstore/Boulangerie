@@ -5,7 +5,7 @@
  * permissions lecture/écriture, les types de clients (section 3.4),
  * un utilisateur de démonstration par rôle et un catalogue de pains.
  */
-import { PrismaClient, Module, NiveauAcces } from "@prisma/client";
+import { PrismaClient, Module, NiveauAcces, CodeIngredient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -224,43 +224,30 @@ async function main() {
   }
 
   // --- Matières premières (section 3.2) — stock initial hors journal (seed) ---
+  // `code` relie les 4 ingrédients saisis à la production (section 3.3) à leur
+  // matière : c'est lui qui pilote la décrémentation automatique du stock.
+  // L'unité suit ce qui est réellement saisi (sacs de farine, paquets de levure).
   const matieres = [
-    { nom: "Farine de blé", unite: "kg", quantiteStock: 120, seuilAlerte: 50 },
-    { nom: "Sucre", unite: "kg", quantiteStock: 40, seuilAlerte: 10 },
-    { nom: "Beurre", unite: "kg", quantiteStock: 25, seuilAlerte: 8 },
-    { nom: "Sel", unite: "kg", quantiteStock: 15, seuilAlerte: 5 },
-    { nom: "Levure boulangère", unite: "kg", quantiteStock: 6, seuilAlerte: 2 },
+    { nom: "Farine de blé", code: CodeIngredient.FARINE, unite: "sac", quantiteStock: 120, seuilAlerte: 20 },
+    { nom: "Levure boulangère", code: CodeIngredient.LEVURE, unite: "paquet", quantiteStock: 60, seuilAlerte: 10 },
+    { nom: "Sel", code: CodeIngredient.SEL, unite: "kg", quantiteStock: 15, seuilAlerte: 5 },
+    { nom: "Huile", code: CodeIngredient.HUILE, unite: "L", quantiteStock: 40, seuilAlerte: 10 },
+    { nom: "Sucre", code: null, unite: "kg", quantiteStock: 40, seuilAlerte: 10 },
+    { nom: "Beurre", code: null, unite: "kg", quantiteStock: 25, seuilAlerte: 8 },
   ];
   for (const m of matieres) {
+    // `update` porte le code et l'unité : une base déjà seedée avant la refonte
+    // de 3.3 est ainsi alignée sans perdre son stock ni son historique.
     await prisma.matierePremiere.upsert({
       where: { nom: m.nom },
-      update: {},
+      update: { code: m.code, unite: m.unite },
       create: m,
     });
   }
 
-  // --- Recette de démonstration (section 3.3) — quantités PAR UNITÉ produite ---
-  const baguette = await prisma.produit.findUniqueOrThrow({ where: { nom: "Baguette 500 Fc" } });
-  const recetteExistante = await prisma.recette.findUnique({ where: { produitId: baguette.id } });
-  if (!recetteExistante) {
-    const ingredient = async (nom: string, quantite: number) => ({
-      matierePremiereId: (await prisma.matierePremiere.findUniqueOrThrow({ where: { nom } })).id,
-      quantite,
-    });
-    await prisma.recette.create({
-      data: {
-        produitId: baguette.id,
-        instructions:
-          "Pétrir farine, eau, sel et levure. Pointage 1 h, façonnage, apprêt 45 min, cuisson 20 min à 250 °C.",
-        ingredients: {
-          create: [
-            await ingredient("Farine de blé", 0.25),
-            await ingredient("Sel", 0.005),
-            await ingredient("Levure boulangère", 0.005),
-          ],
-        },
-      },
-    });
+  // --- Motifs de don de bacs (section 3.3 b) — liste fixe extensible ---------
+  for (const nom of ["Police", "Baraka"]) {
+    await prisma.motifDon.upsert({ where: { nom }, update: {}, create: { nom } });
   }
 
   // --- Fournisseurs de démonstration (section 3.6) ---
@@ -276,7 +263,7 @@ async function main() {
     });
   }
 
-  console.log("Seed terminé — 7 rôles, 3 types de clients, 9 utilisateurs, 5 clients, 4 produits, 5 matières premières, 1 recette, 2 fournisseurs.");
+  console.log("Seed terminé — 7 rôles, 3 types de clients, 9 utilisateurs, 5 clients, 4 produits, 6 matières premières, 2 motifs de don, 2 fournisseurs.");
   console.log(`Mot de passe de démonstration pour tous les comptes : ${MOT_DE_PASSE_DEMO}`);
 }
 
