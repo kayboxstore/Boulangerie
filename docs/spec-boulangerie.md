@@ -2,7 +2,7 @@
 
 ## 1. Vision
 
-Une application web (responsive mobile) qui centralise toute la gestion quotidienne d'une boulangerie : vente en caisse, stocks de matières premières, production/recettes, commandes clients spéciales, fournisseurs et pilotage de l'activité. Utilisée par une petite équipe de 2 à 5 personnes organisée selon une hiérarchie de rôles, avec remontée d'information **en temps réel** vers les supérieurs hiérarchiques.
+Une application web (responsive mobile) qui centralise toute la gestion quotidienne d'une boulangerie : vente en caisse, stocks de matières premières, production, commandes clients, fournisseurs et pilotage de l'activité. Utilisée par une petite équipe de 2 à 5 personnes organisée selon une hiérarchie de rôles, avec remontée d'information **en temps réel** vers les supérieurs hiérarchiques.
 
 ## 2. Rôles, hiérarchie & permissions
 
@@ -71,8 +71,63 @@ Vente au comptoir, panier, **pas de TVA** : le catalogue est à 100 % du pain, p
 ### 3.2 Stocks & matières premières
 Suivi des quantités (farine, beurre, sucre, etc.), mouvements de stock (entrée/sortie), seuils d'alerte, historique.
 
-### 3.3 Production & recettes
-Fiches recettes (ingrédients + quantités), planning de production journalier, décrémentation automatique du stock de matières premières à la production.
+### 3.3 Production *(refonte — les fiches recettes sont retirées)*
+
+Les **fiches recettes** (ingrédients + quantités par produit) et la décrémentation
+dérivée « recette × quantité produite » sont **retirées du périmètre** : elles ne
+correspondaient pas au fonctionnement réel de la boulangerie, qui raisonne en
+**bacs** et en **ingrédients consommés globalement sur la journée**, pas en
+nomenclature par produit. Les tables `Recette`/`IngredientRecette` sont laissées
+**orphelines en base** (aucune route, aucune UI ne les expose) plutôt que
+supprimées, pour ne pas risquer les données existantes.
+
+Le module s'articule désormais en trois volets, plus une vue d'écarts.
+
+**a) Planning de production** — ce qui est prévu pour le **jour suivant** :
+
+| # | Champ |
+|---|---|
+| 1 | Date (le jour suivant) |
+| 2 | Nombre total de bacs commandés |
+| 3 | Détail par produit : quantité prévue de Carré 1.500 Fc, Carré 1.000 Fc, Baguette 500 Fc, Baguette 1.000 Fc *(rattaché aux `Produit` existants — pas de catalogue parallèle)* |
+| 4 | Prévision d'ingrédients : sacs de farine, paquets de levure, quantité d'huile, kg de sel |
+| 5 | Observations |
+
+**b) Productions enregistrées** — ce qui a réellement été produit (numéro
+auto-incrémenté, date) :
+
+| # | Champ |
+|---|---|
+| 1 | Bacs produits |
+| 2 | Bacs livrés Dépositaires |
+| 3 | Bacs livrés Mamans |
+| 4 | Bacs vendus VC |
+| 5 | Bacs donnés — **répartis par motif** (table `MotifDon`, liste fixe extensible, initialisée avec « Police » et « Baraka ») |
+| 6 | Bacs restants |
+| 7 | Bacs foutus |
+| 8 | Kg de farine abîmés *(optionnel)* |
+| 9 | Observations |
+
+**Réconciliation (avertissement, jamais un blocage)** : si
+`bacs produits ≠ livrés Dépositaires + livrés Mamans + vendus VC + donnés + restants + foutus`,
+l'écart est affiché de façon visible, mais **l'enregistrement reste accepté** —
+la réalité du terrain prime sur l'équilibre comptable.
+
+**c) Ingrédients utilisés** — saisis sur la production : sacs utilisés, paquets de
+levure utilisés, kg de sel utilisés *(même unité kg que la prévision)*, quantité
+d'huile utilisée. Ces quantités **décrémentent automatiquement le stock** via des
+`MouvementStock` **SORTIE** (référence = la production), dans la **même
+transaction** et avec le **même mécanisme d'alerte de seuil** que les mouvements
+manuels (section 3.2) — c'est le mécanisme mis en place en Phase 5, seule sa
+source de calcul change (quantités saisies au lieu de recette × quantité).
+
+**Écarts** — pour une date donnée, vue comparant prévisions (a) et réalisations
+(b + c) sur : bacs, sacs de farine, levure, huile, sel. Chaque paire affiche
+`écart = réalisé − prévu`.
+
+**Permissions & notifications — inchangées** : Responsable de production en
+écriture, Caissier(ère) et DG en lecture seule (exceptions déjà en place), même
+circuit de notification temps réel à l'enregistrement d'une production.
 
 ### 3.4 Commandes clients
 
@@ -137,7 +192,7 @@ CA du jour/semaine/mois, meilleures ventes, marge par produit, export comptable 
 
 Composition par rôle : chaque widget (CA/Caisse, Commandes, Commissions, Stock, Production, Fournisseurs, Travailleurs/Présence) n'apparaît que si le rôle connecté a au moins la lecture sur le module correspondant — le DG les voit tous, un Admin n'en voit aucun (par design) et devrait plutôt être orienté vers Paramètres/Équipe/État système.
 
-Marge par produit (état actuel et décision) : non calculable proprement aujourd'hui (recettes incomplètes sur le catalogue, pas de coût systématique par matière première) — le widget affiche volume + CA par produit en attendant, limitation explicite dans l'UI et l'export. Décision pour plus tard : le coût utilisé sera un Coût Moyen Pondéré (CUMP) dérivé des réceptions fournisseurs réelles (LigneCommandeFournisseur), pas un coût de référence saisi à la main. Prérequis avant de construire ça : compléter les recettes pour les produits vendus qui n'en ont pas encore.
+Marge par produit (état actuel et décision) : non calculable proprement aujourd'hui (pas de coût systématique par matière première, et depuis la refonte de 3.3 il n'existe plus de nomenclature par produit — les ingrédients sont consommés globalement sur la journée) — le widget affiche volume + CA par produit en attendant, limitation explicite dans l'UI et l'export. Décision pour plus tard : le coût utilisé sera un Coût Moyen Pondéré (CUMP) dérivé des réceptions fournisseurs réelles (LigneCommandeFournisseur), pas un coût de référence saisi à la main. Une marge *par produit* supposerait de réintroduire une clé de répartition des ingrédients journaliers entre produits — à trancher le moment venu ; une marge globale journalière, elle, reste calculable.
 
 **Résumé de clôture quotidien** *(nouveau)* : en fin de journée, un digest auto-généré est disponible pour le DG uniquement — CA du jour, nombre de commandes, dettes en cours, alertes stock actives. Objectif : réduire la dépendance au fil temps réel pour une vue d'ensemble, sans avoir à rejouer toute la journée de notifications. *(L'équivalent Admin reste l'État système, 3.15 — technique et non business, conformément à la règle « aucune permission métier » des Admins posée en section 2.)*
 
@@ -265,9 +320,14 @@ Notification (id, destinataireId, type, événementRef, message, lu, dateCréati
 TypeClient (id, nom, prixParBac, commissionParBac)        # Dépositaire (4100, 0), Vente cash (4350, 0), Maman (6000, 1650)
 Commission (id, commandeClientId, utilisateurId, montant, dateCalcul)  # généré automatiquement
 Produit (id, nom, prixVente, tauxTaxe, catégorie)
-Recette (id, produitId, instructions)
-IngredientRecette (recetteId, matierePremiereId, quantité)
-MatierePremiere (id, nom, unité, quantitéStock, seuilAlerte)
+Recette (id, produitId, instructions)                      # ORPHELINE — plus utilisée (refonte 3.3)
+IngredientRecette (recetteId, matierePremiereId, quantité)  # ORPHELINE — plus utilisée (refonte 3.3)
+PlanningProduction (id, datePrevue, nombreBacsCommandes, sacsFarinePrevus, paquetsLevurePrevus, quantiteHuilePrevue, kgSelPrevus, observations, créePar)
+PlanningLigneProduit (planningId, produitId, quantitePrevue)   # détail par produit du catalogue Caisse
+MotifDon (id, nom)                                             # liste fixe extensible : Police, Baraka…
+Production (id, numero, date, bacsProduits, bacsLivresDepositaires, bacsLivresMamans, bacsVendusVC, bacsRestants, bacsFoutus, kgFarineAbimes?, sacsUtilises, paquetsLevureUtilises, kgSelUtilises, quantiteHuileUtilisee, observations, enregistrePar)
+ProductionDon (productionId, motifDonId, nombreBacs)           # répartition des bacs donnés par motif
+MatierePremiere (id, nom, code?, unité, quantitéStock, seuilAlerte)   # code = FARINE|LEVURE|SEL|HUILE, relie les ingrédients saisis en production au stock
 MouvementStock (id, matierePremiereId, type, quantité, date, référence)
 Fournisseur (id, nom, contact)
 CommandeFournisseur (id, fournisseurId, statut, date)
@@ -326,7 +386,7 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 2ter. **Retrofit UI "modules grisés"** — le menu doit afficher tous les modules pour tout le monde, grisés/non cliquables hors permission (actuellement les entrées non accessibles sont cachées, pas grisées) — *à faire avant la Phase 4*
 3. **Commandes clients & Commissions** — système d'avance/dette porté par le client ✅ *(terminé)*
 4. **Caisse** — vente, clôture journalière, notification au supérieur, alerte transaction inhabituelle (seuil : **100.000 Fc**, configurable ensuite dans Paramètres)
-5. **Stocks & production** — matières premières, recettes, alertes temps réel
+5. **Stocks & production** — matières premières, alertes temps réel *(les recettes, initialement prévues ici, ont été retirées lors de la refonte de 3.3)*
 6. **Fournisseurs & achats** — notification de réception
 7. **Tableau de bord & rapports** — vue KPI globale (DG), vue filtrée (autres rôles), résumé de clôture quotidien
 8. **Rapports personnels, À propos** — journal d'activité par utilisateur (3.13), page statique (3.12)
