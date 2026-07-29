@@ -60,7 +60,9 @@
     "submit": "Kokota",
     "error": "Kokota ekoki te",
     "tagline": "Kaisi, stɔki, bosali, bakomande mpe bapesi biloko — boulangerie mobimba, na tango ya solo.",
-    "footer": "Boulangerie Lomoto — bokambi ya mombongo · Mbongo : Franc Congolais (Fc)"
+    "footer": "Boulangerie Lomoto — bokambi ya mombongo · Mbongo : Franc Congolais (Fc)",
+    "showPassword": "Kolakisa mot de passe",
+    "hidePassword": "Kobomba mot de passe"
   },
   "profil": {
     "title": "Profil na ngai",
@@ -87,7 +89,8 @@
     "bakeryText": "Boulangerie Lomoto esalaka mpe ekabolaka mampa ya sika mokolo na mokolo : botɛki na kɔntwaar, ba-dépositaires mpe ba-« Maman » bateki. Application oyo ezali na kaisi, bakomande ya bakiliya mpe bakomisio, stɔki mpe bosali, basomba epai ya bapesi biloko mpe ekipe — na ba-notifikasio ya tango ya solo engebene mokumba ya moto na moto.",
     "currency": "Mbongo : Franc Congolais (Fc) — mampa ezali na TVA te.",
     "contact": "Kokutana",
-    "contactSub": "Mpo na motuna nyonso na ntina ya magazini to application."
+    "contactSub": "Mpo na motuna nyonso na ntina ya magazini to application.",
+    "developer": "Bosali ya application"
   },
   "activity": {
     "title": "Etando ya misala",

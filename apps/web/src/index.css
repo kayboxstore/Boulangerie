@@ -109,3 +109,66 @@
     -webkit-font-smoothing: antialiased;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Écran de démarrage (section 3.8) & page de connexion
+   Animations en CSS pur : l'écran de démarrage est le tout premier rendu de
+   l'application, il ne doit surtout pas tirer une bibliothèque d'animation
+   dans le chunk initial (framer-motion reste chargé à la demande).
+   --------------------------------------------------------------------------- */
+
+@keyframes lomoto-logo-entree {
+  0% { opacity: 0; transform: scale(0.82) translateY(10px); }
+  55% { opacity: 1; transform: scale(1.04) translateY(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes lomoto-halo {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.75; transform: scale(1.12); }
+}
+
+@keyframes lomoto-monte {
+  0% { opacity: 0; transform: translateY(14px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes lomoto-jauge {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+
+@keyframes lomoto-grains {
+  0% { opacity: 0; transform: translateY(0) rotate(0deg); }
+  25% { opacity: 0.5; }
+  100% { opacity: 0; transform: translateY(-38px) rotate(200deg); }
+}
+
+.lomoto-splash { animation: lomoto-monte 0.5s ease-out both; }
+.lomoto-splash-logo { animation: lomoto-logo-entree 1.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.lomoto-splash-halo { animation: lomoto-halo 3.2s ease-in-out infinite; }
+.lomoto-splash-titre { animation: lomoto-monte 0.9s ease-out 0.9s both; }
+.lomoto-splash-tagline { animation: lomoto-monte 0.9s ease-out 1.5s both; }
+.lomoto-splash-credit { animation: lomoto-monte 0.9s ease-out 2.2s both; }
+/* La jauge dure exactement le temps d'affichage de l'écran. */
+.lomoto-splash-jauge { transform-origin: left; animation: lomoto-jauge var(--duree-splash, 7s) linear both; }
+.lomoto-grain { animation: lomoto-grains 3.4s ease-in-out infinite; }
+
+/* Fondu de sortie, déclenché juste avant le démontage. */
+.lomoto-splash-sortie { opacity: 0; transition: opacity 600ms ease-in; }
+
+/* Respect des préférences système : on garde l'écran (il porte l'identité de
+   marque) mais sans mouvement — apparition simple. */
+@media (prefers-reduced-motion: reduce) {
+  .lomoto-splash,
+  .lomoto-splash-logo,
+  .lomoto-splash-halo,
+  .lomoto-splash-titre,
+  .lomoto-splash-tagline,
+  .lomoto-splash-credit,
+  .lomoto-grain {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

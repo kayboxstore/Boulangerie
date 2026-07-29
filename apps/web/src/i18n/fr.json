@@ -59,7 +59,9 @@
     "submit": "Se connecter",
     "error": "Connexion impossible",
     "tagline": "Caisse, stocks, production, commandes et fournisseurs — toute la boulangerie, en temps réel.",
-    "footer": "Boulangerie Lomoto — gestion commerciale · Devise : Franc Congolais (Fc)"
+    "footer": "Boulangerie Lomoto — gestion commerciale · Devise : Franc Congolais (Fc)",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe"
   },
   "profil": {
     "title": "Mon profil",
@@ -86,7 +88,8 @@
     "bakeryText": "La Boulangerie Lomoto produit et distribue du pain frais chaque jour : vente au comptoir, dépositaires et clientes « Mamans » revendeuses. Cette application couvre la caisse, les commandes clients et commissions, les stocks et la production, les achats fournisseurs et l'équipe — avec des notifications en temps réel selon le rôle de chacun.",
     "currency": "Devise : Franc Congolais (Fc) — le pain est exonéré de TVA.",
     "contact": "Contact",
-    "contactSub": "Pour toute question sur la boutique ou l'application."
+    "contactSub": "Pour toute question sur la boutique ou l'application.",
+    "developer": "Développement"
   },
   "activity": {
     "title": "Feed d'activité",

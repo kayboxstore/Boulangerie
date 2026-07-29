@@ -1,6 +1,6 @@
-import { Mail, MapPin, Phone } from "lucide-react";
+import { Code2, Mail, MapPin, Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { TAGLINE, VERSION_APP } from "@lomoto/shared";
+import { CREDIT_DEVELOPPEUR, TAGLINE, VERSION_APP } from "@lomoto/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -50,6 +50,29 @@ export function AProposPage() {
             <Mail className="h-4 w-4 shrink-0 text-or" />
             contact@lomoto.cd
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Crédit développeur (section 3.12) — également destiné au pied de page
+          des rapports exportés, quand l'export PDF arrivera. */}
+      <Card className="border-or/40">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Code2 className="h-4 w-4 text-or" />
+            {t("apropos.developer")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="font-serif text-lg font-semibold text-marine dark:text-creme">
+            {CREDIT_DEVELOPPEUR.mention}
+          </p>
+          <a
+            href={`tel:${CREDIT_DEVELOPPEUR.telephone.replace(/\s/g, "")}`}
+            className="mt-1 inline-flex items-center gap-2 text-sm text-terracotta hover:underline dark:text-or"
+          >
+            <Phone className="h-4 w-4 shrink-0" />
+            {CREDIT_DEVELOPPEUR.telephone}
+          </a>
         </CardContent>
       </Card>
 

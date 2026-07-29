@@ -788,7 +788,7 @@ export interface CommandeFournisseurDTO {
 
 /** Formate une quantité de matière : 12.5 + "kg" -> "12,5 kg" */
 export function formatQuantite(quantite: number, unite: string): string {
-  return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 3 }).format(quantite)} ${unite}`;
+  return `${formatNombre(quantite, { maximumFractionDigits: 3 })} ${unite}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -934,6 +934,15 @@ export interface ResumeClotureDTO {
 
 export const VERSION_APP = "0.1.0";
 export const TAGLINE = "Pain Lia o Tonda";
+
+/**
+ * Crédit développeur (section 3.12) — affiché sur À propos et destiné au pied de
+ * page des rapports exportés (l'export PDF arrivera dans un lot suivant).
+ */
+export const CREDIT_DEVELOPPEUR = {
+  mention: "Application créée par Augustin Kayembe",
+  telephone: "+243 980 240 000",
+} as const;
 
 /** Types d'action du journal d'activité personnel (3.13). */
 export const TYPES_ACTIVITE = [
@@ -1179,9 +1188,26 @@ export interface AuditLogDTO {
 // Utilitaires
 // ---------------------------------------------------------------------------
 
-/** Formate un montant en Franc Congolais : 4100 -> "4 100 Fc" */
+/** Séparateur de milliers de l'application (section 3.8) : le point. */
+export const SEPARATEUR_MILLIERS = ".";
+
+/**
+ * Formateur de nombres CENTRAL — tout affichage numérique passe par ici, pour
+ * que le séparateur de milliers reste homogène dans toute l'application.
+ * On part du format français (virgule décimale) et on remplace explicitement le
+ * séparateur de groupes par un point : plus robuste qu'un `replace` sur la
+ * chaîne finale, l'espace utilisé par `fr-FR` variant selon les versions d'ICU.
+ */
+export function formatNombre(valeur: number, options?: Intl.NumberFormatOptions): string {
+  return new Intl.NumberFormat("fr-FR", options)
+    .formatToParts(valeur)
+    .map((p) => (p.type === "group" ? SEPARATEUR_MILLIERS : p.value))
+    .join("");
+}
+
+/** Formate un montant en Franc Congolais : 4100 -> "4.100 Fc" */
 export function formatFc(montant: number): string {
-  return `${new Intl.NumberFormat("fr-FR").format(montant)} Fc`;
+  return `${formatNombre(montant)} Fc`;
 }
 
 /** Vérifie qu'un ensemble de permissions accorde au moins `niveau` sur `module`. */

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import {
   formatFc,
+  formatNombre,
   formatQuantite,
   type RapportCaisseDTO,
   type RapportCommandesDTO,
@@ -359,7 +360,7 @@ export function DashboardPage() {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.1} />
                     <XAxis dataKey="date" tickFormatter={formatDateCourte} tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.6} interval={6} />
-                    <YAxis tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.6} width={70} tickFormatter={(v: number) => new Intl.NumberFormat("fr-FR", { notation: "compact" }).format(v)} />
+                    <YAxis tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.6} width={70} tickFormatter={(v: number) => formatNombre(v, { notation: "compact" })} />
                     <Tooltip
                       formatter={(v) => [formatFc(Number(v)), t("dashboard.caTooltip")]}
                       labelFormatter={(l) => formatDateCourte(String(l))}
@@ -383,7 +384,7 @@ export function DashboardPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={caisse.principalesDepenses} layout="vertical" margin={{ top: 0, right: 8, left: 8, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.1} horizontal={false} />
-                      <XAxis type="number" tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.6} allowDecimals={false} tickFormatter={(v: number) => new Intl.NumberFormat("fr-FR", { notation: "compact" }).format(v)} />
+                      <XAxis type="number" tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.6} allowDecimals={false} tickFormatter={(v: number) => formatNombre(v, { notation: "compact" })} />
                       <YAxis type="category" dataKey="motif" tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.8} width={110} />
                       <Tooltip formatter={(v) => [formatFc(Number(v)), t("dashboard.expenseTooltip")]} />
                       <Bar dataKey="total" fill={TERRACOTTA} radius={[0, 4, 4, 0]} barSize={16} />

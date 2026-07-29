@@ -1,10 +1,11 @@
-import { lazy } from "react";
+import { lazy, useCallback, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 import type { Module } from "@lomoto/shared";
 import { useAuth } from "@/lib/auth";
 import { Layout } from "@/components/Layout";
 import { ChargementModule } from "@/components/ChargementModule";
+import { EcranDemarrage, splashDejaVu } from "@/components/EcranDemarrage";
 // La page de connexion reste dans le bundle principal : c'est l'écran d'entrée
 // (pré-authentification), la charger en lazy ajouterait un délai au tout premier
 // affichage. Tous les modules métier sont chargés à la demande via React.lazy —
@@ -48,17 +49,45 @@ function RequiertEcriture({ module, children }: { module: Module; children: Reac
 export default function App() {
   const { utilisateur, chargement } = useAuth();
 
-  if (chargement) return <ChargementModule plein />;
+  // Écran de démarrage (3.8) : au PREMIER chargement de la session seulement.
+  // Il se superpose à l'app, qui se monte et charge ses données derrière — la
+  // transition vers la connexion (ou le tableau de bord) est donc immédiate.
+  const [splashFini, setSplashFini] = useState(() => splashDejaVu());
+  const terminerSplash = useCallback(() => setSplashFini(true), []);
 
-  if (!utilisateur) {
+  const splash = splashFini ? null : <EcranDemarrage onTermine={terminerSplash} />;
+
+  if (chargement) {
     return (
-      <Routes>
-        <Route path="/connexion" element={<LoginPage />} />
-        <Route path="*" element={<Navigate to="/connexion" replace />} />
-      </Routes>
+      <>
+        {splash}
+        <ChargementModule plein />
+      </>
     );
   }
 
+  if (!utilisateur) {
+    return (
+      <>
+        {splash}
+        <Routes>
+          <Route path="/connexion" element={<LoginPage />} />
+          <Route path="*" element={<Navigate to="/connexion" replace />} />
+        </Routes>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {splash}
+      <AppAuthentifiee />
+    </>
+  );
+}
+
+/** Arbre de routes de l'utilisateur authentifié. */
+function AppAuthentifiee() {
   return (
     <Routes>
       <Route element={<Layout />}>
