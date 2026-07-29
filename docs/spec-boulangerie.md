@@ -93,6 +93,10 @@ défaut) :
 | **Dépenses** | SAISIES | Liste libre : motif (texte) + montant ; total = somme des lignes |
 | **Solde** | AUTOMATIQUE | `(Entrées + Dettes payées) − Dépenses` |
 
+**Solde négatif** : quand le solde passe sous zéro, il est affiché **en gras et en
+rouge vif** (couleur d'alerte volontairement hors palette de marque), partout où
+il apparaît — registre de Caisse et tableau de bord — pour qu'il saute aux yeux.
+
 **Pas de double comptage (point d'attention)** : le montant reçu porté par une
 commande **inclut ses règlements ultérieurs**. Un règlement encaissé le jour même
 de la commande apparaîtrait donc dans les deux postes. La règle retenue rend les
@@ -104,7 +108,7 @@ deux ensembles **disjoints par construction** :
   portant sur une commande créée le même jour.
 
 Chaque franc n'est ainsi compté qu'une seule fois, et chaque poste porte bien le
-sens de son libellé.
+sens de son libellé. *(Décision validée.)*
 
 **3. Dépense spéciale farine (case à cocher)** — quand elle est cochée, une ligne
 de dépense **automatique** est ajoutée, au motif fixe « Achat farine » :
@@ -182,6 +186,13 @@ auto-incrémenté, date) :
 l'écart est affiché de façon visible, mais **l'enregistrement reste accepté** —
 la réalité du terrain prime sur l'équilibre comptable.
 
+*Décisions validées sur ce module* : les quantités d'ingrédients sont reliées aux
+matières premières par un **code** porté par `MatierePremiere`
+(`FARINE | LEVURE | SEL | HUILE`), et non par correspondance de nom, trop fragile ;
+les anciennes lignes `Production`/`PlanningProduction`, non représentables dans le
+nouveau modèle, ont été supprimées à la migration, le **journal de stock
+append-only étant intégralement conservé**.
+
 **c) Ingrédients utilisés** — saisis sur la production : sacs utilisés, paquets de
 levure utilisés, kg de sel utilisés *(même unité kg que la prévision)*, quantité
 d'huile utilisée. Ces quantités **décrémentent automatiquement le stock** via des
@@ -258,6 +269,12 @@ recalcul prend en compte l'avance du client **hors l'effet de cette commande
 elle-même** (puisqu'elle est mise à jour et non dupliquée) : l'avance « d'avant »
 se reconstitue par `avanceDisponible du client + Avance utilisée − Avance générée`
 de la commande visée. Le solde du client est réécrit à partir de ce recalcul.
+
+**Remplacer sur une commande déjà réglée** *(décision validée)* : si la commande
+visée porte déjà un ou plusieurs **règlements**, « Remplacer » est **refusé** avec
+un message explicite invitant à utiliser « Modifier ». Écraser le montant reçu
+rendrait la somme des règlements supérieure à ce montant, et effacer des
+paiements réellement encaissés serait pire que le refus.
 
 **Filtres & affichage :**
 - Filtre par Qualité (Dépositaire / Maman / VC)

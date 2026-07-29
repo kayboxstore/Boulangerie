@@ -310,7 +310,8 @@
       "PRODUCTION_MANQUANTE": "Bosali ekomami te na mokolo oyo : motango ya basaki eyebani te."
     },
     "saveError": "Kokoma elongi te.",
-    "deleteError": "Kolongola elongi te."
+    "deleteError": "Kolongola elongi te.",
+    "negativeBalance": "Oyo etikali na se ya zero"
   },
   "commandes": {
     "title": "Bakomande ya bakiliya",

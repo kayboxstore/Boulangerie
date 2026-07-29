@@ -9,6 +9,10 @@
   --creme: #faf8f3;
   --terracotta: #ad5416;
   --beige: #cbaf91;
+  /* Rouge vif d'alerte — hors palette de marque (volontairement plus criard que
+     le terracotta) : réservé aux valeurs qui doivent sauter aux yeux, comme un
+     solde de caisse négatif (3.1). */
+  --rouge-alerte: #dc2626;
 
   --background: #faf8f3;
   --foreground: #0f1923;
@@ -33,6 +37,8 @@
 }
 
 .dark {
+  /* Sur fond marine, un rouge plus clair reste lisible tout en restant vif. */
+  --rouge-alerte: #f87171;
   --background: #0f1923;
   --foreground: #faf8f3;
   --card: #16222e;
@@ -60,6 +66,7 @@
   --color-creme: var(--creme);
   --color-terracotta: var(--terracotta);
   --color-beige: var(--beige);
+  --color-rouge-alerte: var(--rouge-alerte);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);

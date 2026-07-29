@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownCircle, ArrowUpCircle, Info, Plus, Trash2, Wallet, Wheat } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, Info, Plus, Trash2, TriangleAlert, Wallet, Wheat } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   calculerDepenseFarine,
@@ -29,25 +29,54 @@ import {
 const jourISO = (d: Date) => d.toISOString().slice(0, 10);
 const formatHeure = (iso: string) => new Intl.DateTimeFormat("fr-FR", { timeStyle: "short" }).format(new Date(iso));
 
-/** Tuile d'un poste du registre. */
+/**
+ * Tuile d'un poste du registre. `alerteSiNegatif` : un solde négatif s'affiche
+ * en gras et en rouge vif, pour qu'il saute aux yeux (section 3.1).
+ */
 function Poste({
   libelle,
   montant,
   icone: Icone,
   accent,
+  alerteSiNegatif,
 }: {
   libelle: string;
   montant: number;
   icone: typeof Wallet;
   accent?: boolean;
+  alerteSiNegatif?: boolean;
 }) {
+  const { t } = useTranslation();
+  const enAlerte = !!alerteSiNegatif && montant < 0;
   return (
-    <div className={accent ? "rounded-lg border border-or bg-or/10 p-4" : "rounded-lg border bg-card p-4"}>
+    <div
+      className={
+        enAlerte
+          ? "rounded-lg border-2 border-rouge-alerte bg-rouge-alerte/10 p-4"
+          : accent
+            ? "rounded-lg border border-or bg-or/10 p-4"
+            : "rounded-lg border bg-card p-4"
+      }
+    >
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Icone className="h-3.5 w-3.5 text-or" />
+        <Icone className={enAlerte ? "h-3.5 w-3.5 text-rouge-alerte" : "h-3.5 w-3.5 text-or"} />
         {libelle}
       </p>
-      <p className="mt-1 text-2xl font-bold text-marine dark:text-creme">{formatFc(montant)}</p>
+      <p
+        className={
+          enAlerte
+            ? "mt-1 text-2xl font-extrabold text-rouge-alerte"
+            : "mt-1 text-2xl font-bold text-marine dark:text-creme"
+        }
+      >
+        {formatFc(montant)}
+      </p>
+      {enAlerte && (
+        <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-rouge-alerte">
+          <TriangleAlert className="h-3.5 w-3.5" />
+          {t("caisse.negativeBalance")}
+        </p>
+      )}
     </div>
   );
 }
@@ -167,7 +196,7 @@ export function CaissePage() {
         <Poste libelle={t("caisse.entries")} montant={registre.entrees} icone={ArrowUpCircle} />
         <Poste libelle={t("caisse.debtsPaid")} montant={registre.dettesPayees} icone={ArrowUpCircle} />
         <Poste libelle={t("caisse.expenses")} montant={registre.totalDepenses} icone={ArrowDownCircle} />
-        <Poste libelle={t("caisse.balance")} montant={registre.solde} icone={Wallet} accent />
+        <Poste libelle={t("caisse.balance")} montant={registre.solde} icone={Wallet} accent alerteSiNegatif />
       </div>
 
       <p className="text-xs text-muted-foreground">{t("caisse.formulaHint")}</p>

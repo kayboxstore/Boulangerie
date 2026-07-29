@@ -309,7 +309,8 @@
       "PRODUCTION_MANQUANTE": "Aucune production enregistrée cette date : le nombre de sacs utilisés est inconnu."
     },
     "saveError": "L'enregistrement a échoué.",
-    "deleteError": "La suppression a échoué."
+    "deleteError": "La suppression a échoué.",
+    "negativeBalance": "Solde négatif"
   },
   "commandes": {
     "title": "Commandes clients",

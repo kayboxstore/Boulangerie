@@ -89,22 +89,33 @@ function CarteKPI({
   format = (n: number) => String(n),
   detail,
   accent,
+  alerteSiNegatif,
 }: {
   titre: string;
   valeur: number;
   format?: (n: number) => string;
   detail?: string;
   accent?: boolean;
+  /** Un solde négatif s'affiche en gras et en rouge vif (section 3.1). */
+  alerteSiNegatif?: boolean;
 }) {
+  const enAlerte = !!alerteSiNegatif && valeur < 0;
   return (
     <div
       className={cn(
         "rounded-xl border bg-card p-4 shadow-sm transition-shadow hover:shadow",
         accent && "border-or/50 bg-or/5",
+        enAlerte && "border-2 border-rouge-alerte bg-rouge-alerte/10",
       )}
     >
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{titre}</p>
-      <p className={cn("mt-1 text-2xl font-bold tabular-nums text-marine dark:text-creme", accent && "text-terracotta dark:text-or")}>
+      <p
+        className={cn(
+          "mt-1 text-2xl font-bold tabular-nums text-marine dark:text-creme",
+          accent && "text-terracotta dark:text-or",
+          enAlerte && "font-extrabold text-rouge-alerte dark:text-rouge-alerte",
+        )}
+      >
         <Compteur valeur={valeur} format={format} />
       </p>
       {detail && <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>}
@@ -345,7 +356,7 @@ export function DashboardPage() {
             <CardDescription>{t("dashboard.closureSummaryDesc")}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <CarteKPI titre={t("dashboard.kpiBalanceDay")} valeur={cloture.soldeJour} format={formatFc} accent />
+            <CarteKPI titre={t("dashboard.kpiBalanceDay")} valeur={cloture.soldeJour} format={formatFc} accent alerteSiNegatif />
             <CarteKPI
               titre={t("dashboard.kpiCollectedDay")}
               valeur={cloture.entreesJour + cloture.dettesPayeesJour}
@@ -362,10 +373,10 @@ export function DashboardPage() {
       {litCaisse && caisse && (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <CarteKPI titre={t("dashboard.kpiBalanceDay")} valeur={caisse.soldeJour} format={formatFc} accent />
+            <CarteKPI titre={t("dashboard.kpiBalanceDay")} valeur={caisse.soldeJour} format={formatFc} accent alerteSiNegatif />
             <CarteKPI titre={t("dashboard.kpiEntriesDay")} valeur={caisse.entreesJour} format={formatFc} detail={t("dashboard.debtsPaidDetail", { montant: formatFc(caisse.dettesPayeesJour) })} />
             <CarteKPI titre={t("dashboard.kpiExpensesDay")} valeur={caisse.depensesJour} format={formatFc} />
-            <CarteKPI titre={t("dashboard.kpiBalance30")} valeur={caisse.solde30Jours} format={formatFc} detail={t("dashboard.balance7Detail", { montant: formatFc(caisse.solde7Jours) })} />
+            <CarteKPI titre={t("dashboard.kpiBalance30")} valeur={caisse.solde30Jours} format={formatFc} detail={t("dashboard.balance7Detail", { montant: formatFc(caisse.solde7Jours) })} alerteSiNegatif />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
