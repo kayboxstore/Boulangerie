@@ -1,301 +1,329 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import {
+  calculerDepenseFarine,
+  depenseCreateSchema,
+  depenseFarineSchema,
   formatFc,
-  ROLE_ADMINISTRATEUR,
-  ROLE_DIRECTEUR_GENERAL,
-  venteAnnulationSchema,
-  venteCreateSchema,
-  type ClotureCaisseDTO,
-  type StatutVente,
-  type VenteDTO,
+  MOTIF_DEPENSE_FARINE,
+  tauxDuJourSchema,
+  type BlocageFarine,
+  type DepenseCaisseDTO,
+  type OrigineDepense,
+  type RegistreCaisseDTO,
+  type TauxDuJourDTO,
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
-import type { Request, Response, NextFunction } from "express";
 import { busEvenements } from "../lib/events.js";
-import { seuilAlerteTransaction } from "../lib/parametres.js";
 
 export const caisseRouter = Router();
 
 caisseRouter.use(requireAuth);
 
-// Garde dédiée à l'unique action d'écriture jamais accordée au DG : annuler une
-// vente frauduleuse (section 3.1). Réservée au SEUL rôle DG — pas même l'Admin.
-function exigerDG(req: Request, res: Response, next: NextFunction) {
-  if (req.utilisateur?.role.nom !== ROLE_DIRECTEUR_GENERAL) {
-    return res.status(403).json({ erreur: "Seul le Directeur Général peut annuler une vente" });
-  }
-  next();
+const lecture = requirePermission("CAISSE", "LECTURE");
+const ecriture = requirePermission("CAISSE", "ECRITURE");
+
+const jour = (d: Date) => d.toISOString().slice(0, 10);
+const aujourdhui = () => jour(new Date());
+
+/** Date SQL (minuit UTC) pour les colonnes @db.Date. */
+const dateSQL = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+/** Bornes [début, fin] du jour LOCAL — pour les colonnes DateTime horodatées. */
+function bornesLocales(iso: string): [Date, Date] {
+  const [a, m, j] = iso.split("-").map(Number);
+  return [new Date(a, m - 1, j, 0, 0, 0, 0), new Date(a, m - 1, j, 23, 59, 59, 999)];
 }
 
-type VenteAvecRelations = Prisma.VenteGetPayload<{
-  include: {
-    vendeur: { select: { id: true; nom: true } };
-    annuleePar: { select: { id: true; nom: true } };
-    lignes: { include: { produit: { select: { nom: true } } } };
-  };
-}>;
+const estDateValide = (v: string | undefined): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
-const INCLUDE_VENTE = {
-  vendeur: { select: { id: true, nom: true } },
-  annuleePar: { select: { id: true, nom: true } },
-  lignes: { include: { produit: { select: { nom: true } } } },
-} as const;
-
-const versVenteDTO = (v: VenteAvecRelations): VenteDTO => ({
-  id: v.id,
-  numero: v.numero,
-  date: v.date.toISOString(),
-  vendeur: v.vendeur ? { id: v.vendeur.id, nom: v.vendeur.nom } : null,
-  total: v.total,
-  totalTaxe: v.totalTaxe,
-  moyenPaiement: v.moyenPaiement,
-  clotureId: v.clotureId,
-  statut: v.statut as StatutVente,
-  annuleePar: v.annuleePar ? { id: v.annuleePar.id, nom: v.annuleePar.nom } : null,
-  motifAnnulation: v.motifAnnulation,
-  dateAnnulation: v.dateAnnulation?.toISOString() ?? null,
-  lignes: v.lignes.map((l) => ({
-    id: l.id,
-    produitId: l.produitId,
-    produitNom: l.produit.nom,
-    quantite: l.quantite,
-    prixUnitaire: l.prixUnitaire,
-    tauxTaxe: l.tauxTaxe,
-  })),
-});
-
-const versClotureDTO = (c: {
+const versTauxDTO = (t: {
   id: string;
   date: Date;
-  caissier: { id: string; nom: string } | null;
-  nombreVentes: number;
-  totalVentes: number;
-  totalEspeces: number;
-  totalMobileMoney: number;
-  totalCarte: number;
-}): ClotureCaisseDTO => ({
-  id: c.id,
-  date: c.date.toISOString(),
-  caissier: c.caissier ? { id: c.caissier.id, nom: c.caissier.nom } : null,
-  nombreVentes: c.nombreVentes,
-  totalVentes: c.totalVentes,
-  totalEspeces: c.totalEspeces,
-  totalMobileMoney: c.totalMobileMoney,
-  totalCarte: c.totalCarte,
+  valeur: Prisma.Decimal;
+  definiPar: { id: string; nom: string } | null;
+}): TauxDuJourDTO => ({
+  id: t.id,
+  date: jour(t.date),
+  valeur: t.valeur.toNumber(),
+  definiPar: t.definiPar,
 });
 
-// Ventes : ?du/?au (dates), ?ouvertes=1 pour les ventes non clôturées.
-caisseRouter.get("/ventes", requirePermission("CAISSE", "LECTURE"), async (req, res, next) => {
-  try {
-    const { du, au, ouvertes } = req.query as Record<string, string | undefined>;
-    const date: Prisma.DateTimeFilter = {};
-    if (du) date.gte = new Date(`${du}T00:00:00`);
-    if (au) date.lte = new Date(`${au}T23:59:59.999`);
+const versDepenseDTO = (d: {
+  id: string;
+  date: Date;
+  motif: string;
+  montant: number;
+  origine: string;
+  tauxApplique: Prisma.Decimal | null;
+  sacsUtilises: Prisma.Decimal | null;
+  enregistrePar: { id: string; nom: string } | null;
+}): DepenseCaisseDTO => ({
+  id: d.id,
+  date: jour(d.date),
+  motif: d.motif,
+  montant: d.montant,
+  origine: d.origine as OrigineDepense,
+  tauxApplique: d.tauxApplique?.toNumber() ?? null,
+  sacsUtilises: d.sacsUtilises?.toNumber() ?? null,
+  enregistrePar: d.enregistrePar,
+});
 
-    const ventes = await prisma.vente.findMany({
-      where: {
-        ...(du || au ? { date } : {}),
-        ...(ouvertes ? { clotureId: null } : {}),
-      },
-      include: INCLUDE_VENTE,
-      orderBy: { numero: "desc" },
-    });
-    res.json({ ventes: ventes.map(versVenteDTO) });
+const INCLUDE_DEPENSE = { enregistrePar: { select: { id: true, nom: true } } } as const;
+const INCLUDE_TAUX = { definiPar: { select: { id: true, nom: true } } } as const;
+
+/** Sacs de farine consommés en production sur la date donnée (source du calcul). */
+async function sacsUtilisesLe(date: string): Promise<number> {
+  const [debut, fin] = bornesLocales(date);
+  const agg = await prisma.production.aggregate({
+    where: { date: { gte: debut, lte: fin } },
+    _sum: { sacsUtilises: true },
+  });
+  return agg._sum.sacsUtilises?.toNumber() ?? 0;
+}
+
+/**
+ * Registre journalier (section 3.1). Les deux postes automatiques sont DISJOINTS
+ * par construction, pour qu'aucun franc ne soit compté deux fois :
+ *  - Entrées      = argent reçu à la CRÉATION des commandes du jour, soit
+ *                   `montantRecu − somme de ses règlements` (le montant reçu
+ *                   porté par une commande inclut ses règlements ultérieurs) ;
+ *  - Dettes payées = TOUS les règlements datés du jour, y compris ceux portant
+ *                   sur une commande créée le même jour.
+ */
+async function construireRegistre(date: string): Promise<RegistreCaisseDTO> {
+  const [debut, fin] = bornesLocales(date);
+
+  const commandesDuJour = await prisma.commandeClient.findMany({
+    where: { dateCreation: { gte: debut, lte: fin } },
+    select: { montantRecu: true, reglements: { select: { montant: true } } },
+  });
+  const entrees = commandesDuJour.reduce((somme, c) => {
+    const verseALaCreation = c.montantRecu - c.reglements.reduce((s, r) => s + r.montant, 0);
+    return somme + Math.max(0, verseALaCreation);
+  }, 0);
+
+  const reglementsDuJour = await prisma.paiementCommande.findMany({
+    where: { date: { gte: debut, lte: fin } },
+    include: {
+      commandeClient: { select: { numero: true, client: { select: { nom: true } } } },
+    },
+    orderBy: { date: "asc" },
+  });
+  const dettesPayees = reglementsDuJour.reduce((s, r) => s + r.montant, 0);
+
+  const depenses = await prisma.depenseCaisse.findMany({
+    where: { date: dateSQL(date) },
+    include: INCLUDE_DEPENSE,
+    orderBy: { createdAt: "asc" },
+  });
+  const totalDepenses = depenses.reduce((s, d) => s + d.montant, 0);
+
+  const taux = await prisma.tauxDuJour.findUnique({
+    where: { date: dateSQL(date) },
+    include: INCLUDE_TAUX,
+  });
+  const sacsUtilisesJour = await sacsUtilisesLe(date);
+
+  // Case farine : indisponible tant qu'il manque le taux ou la production du
+  // jour — on l'explique plutôt que de calculer sur une valeur absente ou un
+  // zéro trompeur.
+  let blocage: BlocageFarine | null = null;
+  if (!taux) blocage = "TAUX_MANQUANT";
+  else if (sacsUtilisesJour <= 0) blocage = "PRODUCTION_MANQUANTE";
+
+  return {
+    date,
+    entrees,
+    dettesPayees,
+    detailDettesPayees: reglementsDuJour.map((r) => ({
+      id: r.id,
+      clientNom: r.commandeClient.client.nom,
+      commandeNumero: r.commandeClient.numero,
+      montant: r.montant,
+      date: r.date.toISOString(),
+    })),
+    depenses: depenses.map(versDepenseDTO),
+    totalDepenses,
+    solde: entrees + dettesPayees - totalDepenses,
+    taux: taux ? versTauxDTO(taux) : null,
+    sacsUtilisesJour,
+    farine: {
+      active: depenses.some((d) => d.origine === "FARINE"),
+      blocage,
+      montantEstime: blocage ? null : calculerDepenseFarine(taux!.valeur.toNumber(), sacsUtilisesJour),
+    },
+  };
+}
+
+// --- Registre ---------------------------------------------------------------
+
+caisseRouter.get("/registre", lecture, async (req, res, next) => {
+  try {
+    const { date } = req.query as Record<string, string | undefined>;
+    const cible = estDateValide(date) ? date : aujourdhui();
+    res.json({ registre: await construireRegistre(cible) });
   } catch (e) {
     next(e);
   }
 });
 
-// Encaissement (section 3.1) : prix et taux de taxe lus en base (jamais depuis
-// le client). Le pain est exonéré (tauxTaxe = 0) — la taxe éventuelle vient
-// des produits hors pain, au taux configuré par produit.
-caisseRouter.post("/ventes", requirePermission("CAISSE", "ECRITURE"), async (req, res, next) => {
+// --- Taux du jour -----------------------------------------------------------
+
+// Une valeur par date : un second envoi sur la même date met à jour la valeur
+// (l'UPDATE est tracé par le journal d'audit).
+caisseRouter.put("/taux", ecriture, async (req, res, next) => {
   try {
-    const parsed = venteCreateSchema.safeParse(req.body);
+    const parsed = tauxDuJourSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const { moyenPaiement, lignes } = parsed.data;
+    const { date, valeur } = parsed.data;
 
-    const produits = await prisma.produit.findMany({
-      where: { id: { in: lignes.map((l) => l.produitId) }, actif: true },
-    });
-    const parId = new Map(produits.map((p) => [p.id, p]));
-    if (parId.size !== new Set(lignes.map((l) => l.produitId)).size) {
-      return res.status(400).json({ erreur: "Produit inconnu ou inactif dans le panier" });
-    }
-
-    let total = 0;
-    let totalTaxe = 0;
-    const lignesData = lignes.map((l) => {
-      const produit = parId.get(l.produitId)!;
-      const sousTotal = produit.prixVente * l.quantite;
-      total += sousTotal;
-      totalTaxe += Math.round((sousTotal * produit.tauxTaxe) / 100);
-      return {
-        produitId: produit.id,
-        quantite: l.quantite,
-        prixUnitaire: produit.prixVente,
-        tauxTaxe: produit.tauxTaxe,
-      };
+    const taux = await prisma.$transaction(async (tx) => {
+      const existant = await tx.tauxDuJour.findUnique({ where: { date: dateSQL(date) } });
+      if (existant) {
+        return tx.tauxDuJour.update({
+          where: { id: existant.id },
+          data: { valeur, definiParId: req.utilisateur!.id },
+          include: INCLUDE_TAUX,
+        });
+      }
+      return tx.tauxDuJour.create({
+        data: { date: dateSQL(date), valeur, definiParId: req.utilisateur!.id },
+        include: INCLUDE_TAUX,
+      });
     });
 
-    const vente = await prisma.vente.create({
-      data: {
-        vendeurId: req.utilisateur!.id,
-        total,
-        totalTaxe,
-        moyenPaiement,
-        lignes: { create: lignesData },
-      },
-      include: INCLUDE_VENTE,
-    });
-    const dto = versVenteDTO(vente);
-
+    const dto = versTauxDTO(taux);
     busEvenements.emettreEvenement({
-      type: "NOUVELLE_VENTE",
+      type: "REGISTRE_CAISSE",
       module: "CAISSE",
       emetteurId: req.utilisateur!.id,
-      evenementRef: vente.id,
-      message: `Vente n°${dto.numero} — ${formatFc(dto.total)} (${dto.lignes.reduce((n, l) => n + l.quantite, 0)} article(s), ${moyenPaiement.toLowerCase().replace("_", " ")})`,
-      donnees: { venteId: vente.id, numero: dto.numero, total: dto.total },
+      evenementRef: dto.id,
+      message: `Taux du jour défini pour le ${dto.date} : ${dto.valeur}`,
+      donnees: { date: dto.date, valeur: dto.valeur },
     });
 
-    // Alerte transaction inhabituelle (3.10) : dédiée au DG, priorité haute.
-    const seuil = await seuilAlerteTransaction();
-    if (total > seuil) {
-      busEvenements.emettreEvenement({
-        type: "TRANSACTION_INHABITUELLE",
-        module: "CAISSE",
-        emetteurId: req.utilisateur!.id,
-        evenementRef: vente.id,
-        priorite: "HAUTE",
-        restreindreAuxRoles: ["Directeur Général"],
-        message: `⚠ Transaction inhabituelle : vente n°${dto.numero} de ${formatFc(total)} — au-dessus du seuil de ${formatFc(seuil)}`,
-        donnees: { venteId: vente.id, numero: dto.numero, total, seuil },
+    res.json({ taux: dto });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Dépenses ---------------------------------------------------------------
+
+caisseRouter.post("/depenses", ecriture, async (req, res, next) => {
+  try {
+    const parsed = depenseCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const { date, motif, montant } = parsed.data;
+
+    const depense = await prisma.depenseCaisse.create({
+      data: { date: dateSQL(date), motif, montant, origine: "MANUELLE", enregistreParId: req.utilisateur!.id },
+      include: INCLUDE_DEPENSE,
+    });
+    const dto = versDepenseDTO(depense);
+
+    busEvenements.emettreEvenement({
+      type: "REGISTRE_CAISSE",
+      module: "CAISSE",
+      emetteurId: req.utilisateur!.id,
+      evenementRef: dto.id,
+      message: `Dépense de caisse le ${dto.date} : ${dto.motif} — ${formatFc(dto.montant)}`,
+      donnees: { depenseId: dto.id, montant: dto.montant },
+    });
+
+    res.status(201).json({ depense: dto });
+  } catch (e) {
+    next(e);
+  }
+});
+
+caisseRouter.delete("/depenses/:id", ecriture, async (req, res, next) => {
+  try {
+    const depense = await prisma.depenseCaisse.findUnique({ where: { id: req.params.id } });
+    if (!depense) return res.status(404).json({ erreur: "Dépense introuvable" });
+
+    await prisma.depenseCaisse.delete({ where: { id: depense.id } });
+    busEvenements.emettreEvenement({
+      type: "REGISTRE_CAISSE",
+      module: "CAISSE",
+      emetteurId: req.utilisateur!.id,
+      evenementRef: depense.id,
+      message: `Dépense retirée du registre du ${jour(depense.date)} : ${depense.motif} — ${formatFc(depense.montant)}`,
+      donnees: { depenseId: depense.id },
+    });
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * Case à cocher « dépense farine » (section 3.1). Cocher ajoute la ligne
+ * automatique au motif figé, décocher la retire. Le montant est figé à
+ * l'enregistrement, avec le taux et les sacs utilisés pour rester vérifiable.
+ */
+caisseRouter.put("/depenses/farine", ecriture, async (req, res, next) => {
+  try {
+    const parsed = depenseFarineSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const { date, active } = parsed.data;
+
+    const existante = await prisma.depenseCaisse.findFirst({
+      where: { date: dateSQL(date), origine: "FARINE" },
+    });
+
+    if (!active) {
+      if (existante) await prisma.depenseCaisse.delete({ where: { id: existante.id } });
+      return res.json({ registre: await construireRegistre(date) });
+    }
+
+    if (existante) {
+      return res.status(409).json({ erreur: "La dépense farine est déjà enregistrée pour cette date" });
+    }
+
+    const taux = await prisma.tauxDuJour.findUnique({ where: { date: dateSQL(date) } });
+    if (!taux) {
+      return res.status(409).json({ erreur: "Définissez d'abord le taux du jour pour cette date" });
+    }
+    const sacs = await sacsUtilisesLe(date);
+    if (sacs <= 0) {
+      return res.status(409).json({
+        erreur: "Aucune production enregistrée pour cette date : le nombre de sacs utilisés est inconnu",
       });
     }
 
-    res.status(201).json({ vente: dto });
-  } catch (e) {
-    next(e);
-  }
-});
-
-// Clôture de caisse journalière : rassemble toutes les ventes non clôturées,
-// fige les totaux par moyen de paiement.
-caisseRouter.post("/cloture", requirePermission("CAISSE", "ECRITURE"), async (req, res, next) => {
-  try {
-    const resultat = await prisma.$transaction(
-      async (tx) => {
-        // Les ventes annulées (3.1) sont exclues de la clôture et du CA.
-        const ouvertes = await tx.vente.findMany({ where: { clotureId: null, statut: "ACTIVE" } });
-        if (ouvertes.length === 0) return null;
-
-        const totalPar = (moyen: string) =>
-          ouvertes.filter((v) => v.moyenPaiement === moyen).reduce((s, v) => s + v.total, 0);
-
-        const cloture = await tx.clotureCaisse.create({
-          data: {
-            caissierId: req.utilisateur!.id,
-            nombreVentes: ouvertes.length,
-            totalVentes: ouvertes.reduce((s, v) => s + v.total, 0),
-            totalEspeces: totalPar("ESPECES"),
-            totalMobileMoney: totalPar("MOBILE_MONEY"),
-            totalCarte: totalPar("CARTE"),
-          },
-          include: { caissier: { select: { id: true, nom: true } } },
-        });
-        await tx.vente.updateMany({
-          where: { id: { in: ouvertes.map((v) => v.id) } },
-          data: { clotureId: cloture.id },
-        });
-        return cloture;
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
-
-    if (!resultat) {
-      return res.status(409).json({ erreur: "Aucune vente à clôturer" });
-    }
-
-    const dto = versClotureDTO(resultat);
-    busEvenements.emettreEvenement({
-      type: "CLOTURE_CAISSE",
-      module: "CAISSE",
-      emetteurId: req.utilisateur!.id,
-      evenementRef: dto.id,
-      message: `Clôture de caisse — ${dto.nombreVentes} vente(s), total ${formatFc(dto.totalVentes)} (espèces ${formatFc(dto.totalEspeces)}, mobile money ${formatFc(dto.totalMobileMoney)}, carte ${formatFc(dto.totalCarte)})`,
-      donnees: { clotureId: dto.id, totalVentes: dto.totalVentes },
-    });
-
-    res.status(201).json({ cloture: dto });
-  } catch (e) {
-    next(e);
-  }
-});
-
-// Annulation d'une vente frauduleuse (section 3.1) — SEULE action d'écriture du
-// DG dans toute l'application, et pour lui seul. Justification obligatoire ; la
-// vente passe à ANNULEE (pas de suppression) ; les Admins sont notifiés en temps
-// réel ; l'UPDATE est capté par l'extension d'audit (motif dans les données).
-caisseRouter.post("/ventes/:id/annulation", exigerDG, async (req, res, next) => {
-  try {
-    const parsed = venteAnnulationSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
-    }
-    const vente = await prisma.vente.findUnique({ where: { id: req.params.id } });
-    if (!vente) return res.status(404).json({ erreur: "Vente introuvable" });
-    if (vente.statut === "ANNULEE") {
-      return res.status(409).json({ erreur: "Cette vente est déjà annulée" });
-    }
-
-    const maj = await prisma.vente.update({
-      where: { id: vente.id },
+    const valeurTaux = taux.valeur.toNumber();
+    const depense = await prisma.depenseCaisse.create({
       data: {
-        statut: "ANNULEE",
-        annuleeParId: req.utilisateur!.id,
-        motifAnnulation: parsed.data.motif,
-        dateAnnulation: new Date(),
+        date: dateSQL(date),
+        motif: MOTIF_DEPENSE_FARINE,
+        montant: calculerDepenseFarine(valeurTaux, sacs),
+        origine: "FARINE",
+        tauxApplique: valeurTaux,
+        sacsUtilises: sacs,
+        enregistreParId: req.utilisateur!.id,
       },
-      include: INCLUDE_VENTE,
+      include: INCLUDE_DEPENSE,
     });
-    const dto = versVenteDTO(maj);
 
-    // Action exceptionnelle : notifier directement tous les Admins (Principal +
-    // secondaires), hors matrice (ils n'ont pas de permission Caisse).
-    const admins = await prisma.utilisateur.findMany({
-      where: { role: { nom: ROLE_ADMINISTRATEUR }, actif: true },
-      select: { id: true },
-    });
     busEvenements.emettreEvenement({
-      type: "VENTE_ANNULEE",
+      type: "REGISTRE_CAISSE",
       module: "CAISSE",
       emetteurId: req.utilisateur!.id,
-      evenementRef: dto.id,
-      priorite: "HAUTE",
-      destinataireIdsDirects: admins.map((a) => a.id),
-      message: `⚠ Vente n°${dto.numero} (${formatFc(dto.total)}) annulée par le Directeur Général — motif : ${parsed.data.motif}`,
-      donnees: { venteId: dto.id, numero: dto.numero, total: dto.total, motif: parsed.data.motif },
+      evenementRef: depense.id,
+      message: `Dépense farine le ${date} : ${sacs} sac(s) au taux ${valeurTaux} — ${formatFc(depense.montant)}`,
+      donnees: { depenseId: depense.id, montant: depense.montant, sacs, taux: valeurTaux },
     });
 
-    res.json({ vente: dto });
-  } catch (e) {
-    next(e);
-  }
-});
-
-caisseRouter.get("/clotures", requirePermission("CAISSE", "LECTURE"), async (_req, res, next) => {
-  try {
-    const clotures = await prisma.clotureCaisse.findMany({
-      include: { caissier: { select: { id: true, nom: true } } },
-      orderBy: { date: "desc" },
-      take: 30,
-    });
-    res.json({ clotures: clotures.map(versClotureDTO) });
+    res.status(201).json({ registre: await construireRegistre(date) });
   } catch (e) {
     next(e);
   }

@@ -200,10 +200,12 @@ export function DashboardPage() {
         titre: c("caTitle"),
         entetes: [c("indicator"), c("valueFc")],
         lignes: [
-          [c("caDay"), caisse.caJour],
-          [c("ca7"), caisse.ca7Jours],
-          [c("ca30"), caisse.ca30Jours],
-          [c("salesDay"), caisse.nbVentesJour],
+          [c("entriesDay"), caisse.entreesJour],
+          [c("debtsPaidDay"), caisse.dettesPayeesJour],
+          [c("expensesDay"), caisse.depensesJour],
+          [c("balanceDay"), caisse.soldeJour],
+          [c("balance7"), caisse.solde7Jours],
+          [c("balance30"), caisse.solde30Jours],
         ],
       });
       sections.push({
@@ -212,9 +214,9 @@ export function DashboardPage() {
         lignes: serieCA.map((p) => [p.date, p.total]),
       });
       sections.push({
-        titre: c("bestSellersTitle"),
-        entetes: [c("colProduct"), c("colQtySold"), c("caFc")],
-        lignes: caisse.meilleuresVentes.map((v) => [v.produitNom, v.quantite, v.ca]),
+        titre: c("topExpensesTitle"),
+        entetes: [c("colReason"), c("caFc")],
+        lignes: caisse.principalesDepenses.map((d) => [d.motif, d.total]),
       });
     }
     if (commandes) {
@@ -343,8 +345,13 @@ export function DashboardPage() {
             <CardDescription>{t("dashboard.closureSummaryDesc")}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <CarteKPI titre={t("dashboard.kpiCaDay")} valeur={cloture.caJour} format={formatFc} accent />
-            <CarteKPI titre={t("dashboard.kpiSalesDay")} valeur={cloture.nbVentesJour} detail={t("dashboard.ordersClientDetail", { count: cloture.nbCommandesJour })} />
+            <CarteKPI titre={t("dashboard.kpiBalanceDay")} valeur={cloture.soldeJour} format={formatFc} accent />
+            <CarteKPI
+              titre={t("dashboard.kpiCollectedDay")}
+              valeur={cloture.entreesJour + cloture.dettesPayeesJour}
+              format={formatFc}
+              detail={t("dashboard.ordersClientDetail", { count: cloture.nbCommandesJour })}
+            />
             <CarteKPI titre={t("dashboard.kpiDebts")} valeur={cloture.dettesEnCours.total} format={formatFc} detail={t("dashboard.debtsDetail", { count: cloture.dettesEnCours.nombre })} />
             <CarteKPI titre={t("dashboard.kpiStockAlerts")} valeur={cloture.alertesStock.length} detail={cloture.alertesStock.map((a) => a.nom).join(", ") || t("dashboard.none")} />
           </CardContent>
@@ -355,10 +362,10 @@ export function DashboardPage() {
       {litCaisse && caisse && (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <CarteKPI titre={t("dashboard.kpiCaDay")} valeur={caisse.caJour} format={formatFc} accent />
-            <CarteKPI titre={t("dashboard.kpiCa7")} valeur={caisse.ca7Jours} format={formatFc} />
-            <CarteKPI titre={t("dashboard.kpiCa30")} valeur={caisse.ca30Jours} format={formatFc} />
-            <CarteKPI titre={t("dashboard.kpiSalesDay")} valeur={caisse.nbVentesJour} />
+            <CarteKPI titre={t("dashboard.kpiBalanceDay")} valeur={caisse.soldeJour} format={formatFc} accent />
+            <CarteKPI titre={t("dashboard.kpiEntriesDay")} valeur={caisse.entreesJour} format={formatFc} detail={t("dashboard.debtsPaidDetail", { montant: formatFc(caisse.dettesPayeesJour) })} />
+            <CarteKPI titre={t("dashboard.kpiExpensesDay")} valeur={caisse.depensesJour} format={formatFc} />
+            <CarteKPI titre={t("dashboard.kpiBalance30")} valeur={caisse.solde30Jours} format={formatFc} detail={t("dashboard.balance7Detail", { montant: formatFc(caisse.solde7Jours) })} />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -391,26 +398,20 @@ export function DashboardPage() {
 
             <Card>
               <CardHeader>
-                <TitreWidget icone={Banknote}>{t("dashboard.bestSellersTitle")}</TitreWidget>
-                <CardDescription>{t("dashboard.bestSellersDesc")}</CardDescription>
+                <TitreWidget icone={Banknote}>{t("dashboard.topExpensesTitle")}</TitreWidget>
+                <CardDescription>{t("dashboard.topExpensesDesc")}</CardDescription>
               </CardHeader>
               <CardContent className="h-56">
-                {caisse.meilleuresVentes.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">{t("dashboard.noSalePeriod")}</p>
+                {caisse.principalesDepenses.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">{t("dashboard.noExpensePeriod")}</p>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={caisse.meilleuresVentes} layout="vertical" margin={{ top: 0, right: 8, left: 8, bottom: 0 }}>
+                    <BarChart data={caisse.principalesDepenses} layout="vertical" margin={{ top: 0, right: 8, left: 8, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.1} horizontal={false} />
-                      <XAxis type="number" tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.6} allowDecimals={false} />
-                      <YAxis type="category" dataKey="produitNom" tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.8} width={110} />
-                      <Tooltip
-                        formatter={(v, nom, item) =>
-                          nom === "quantite"
-                            ? [t("dashboard.bestSellersTooltip", { count: v, ca: formatFc(item.payload.ca) }), item.payload.produitNom]
-                            : [String(v), String(nom)]
-                        }
-                      />
-                      <Bar dataKey="quantite" fill={TERRACOTTA} radius={[0, 4, 4, 0]} barSize={16} />
+                      <XAxis type="number" tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.6} allowDecimals={false} tickFormatter={(v: number) => new Intl.NumberFormat("fr-FR", { notation: "compact" }).format(v)} />
+                      <YAxis type="category" dataKey="motif" tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.8} width={110} />
+                      <Tooltip formatter={(v) => [formatFc(Number(v)), t("dashboard.expenseTooltip")]} />
+                      <Bar dataKey="total" fill={TERRACOTTA} radius={[0, 4, 4, 0]} barSize={16} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}

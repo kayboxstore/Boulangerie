@@ -140,6 +140,8 @@ model Utilisateur {
   delegationsRecues          DelegationRole[]      @relation("DelegationsRecues")
   delegationsCreees          DelegationRole[]      @relation("DelegationsCreees")
   auditsEffectues            AuditLog[]            @relation("AuditsEffectues")
+  tauxDefinis                TauxDuJour[]          @relation("TauxDefinis")
+  depensesEnregistrees       DepenseCaisse[]       @relation("DepensesEnregistrees")
 }
 
 // Notification métier (section 3.10) : persistée pour le rattrapage hors ligne,
@@ -588,6 +590,49 @@ model DelegationRole {
   createdAt     DateTime     @default(now())
 
   @@index([utilisateurId, dateFin])
+}
+
+// --- Caisse : registre journalier (section 3.1) -----------------------------
+// Les modèles Vente / LigneVente / ClotureCaisse ci-dessus sont ORPHELINS depuis
+// la refonte de 3.1 (vente au comptoir retirée) : conservés en base, plus
+// référencés par aucune route ni UI.
+
+// Taux du jour — une valeur par date, saisie par le Caissier. Sert au calcul de
+// la dépense farine ; son absence ne bloque que cette case.
+model TauxDuJour {
+  id          String       @id @default(cuid())
+  date        DateTime     @unique @db.Date
+  valeur      Decimal      @db.Decimal(12, 3)
+  definiParId String?
+  definiPar   Utilisateur? @relation("TauxDefinis", fields: [definiParId], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+// Origine d'une ligne de dépense : saisie libre, ou ligne farine calculée.
+enum OrigineDepense {
+  MANUELLE
+  FARINE
+}
+
+// Dépense du registre journalier. La ligne FARINE est générée par la case à
+// cocher : montant = [(33,5 × taux du jour) + 500] × sacs utilisés en production.
+// Le montant est FIGÉ à l'enregistrement ; tauxApplique et sacsUtilises gardent
+// les entrées du calcul pour qu'il reste vérifiable après coup.
+model DepenseCaisse {
+  id              String         @id @default(cuid())
+  date            DateTime       @db.Date
+  motif           String
+  montant         Int
+  origine         OrigineDepense @default(MANUELLE)
+  tauxApplique    Decimal?       @db.Decimal(12, 3)
+  sacsUtilises    Decimal?       @db.Decimal(12, 3)
+  enregistreParId String?
+  enregistrePar   Utilisateur?   @relation("DepensesEnregistrees", fields: [enregistreParId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([date])
 }
 
 // Paramètres de la boutique (section 3.9) — clé/valeur, édités par l'Admin.

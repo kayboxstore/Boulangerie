@@ -4,7 +4,6 @@ import {
   CLE_BOUTIQUE_CONTACT,
   CLE_BOUTIQUE_NOM,
   CLE_LANGUE_DEFAUT,
-  CLE_SEUIL_ALERTE_TRANSACTION,
   LANGUE_DEFAUT_PAR_DEFAUT,
   LANGUES,
   parametresBoutiqueSchema,
@@ -12,7 +11,7 @@ import {
   type ParametresBoutiqueDTO,
 } from "@lomoto/shared";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
-import { ecrireParametre, lireParametre, seuilAlerteTransaction } from "../lib/parametres.js";
+import { ecrireParametre, lireParametre } from "../lib/parametres.js";
 
 export const parametresRouter = Router();
 
@@ -28,7 +27,6 @@ const ecritureParametres = requirePermission("PARAMETRES", "ECRITURE");
 async function chargerParametres(): Promise<ParametresBoutiqueDTO> {
   const langue = await lireParametre(CLE_LANGUE_DEFAUT, LANGUE_DEFAUT_PAR_DEFAUT);
   return {
-    seuilAlerteTransaction: await seuilAlerteTransaction(),
     boutiqueNom: await lireParametre(CLE_BOUTIQUE_NOM),
     boutiqueAdresse: await lireParametre(CLE_BOUTIQUE_ADRESSE),
     boutiqueContact: await lireParametre(CLE_BOUTIQUE_CONTACT),
@@ -53,7 +51,6 @@ parametresRouter.put("/", ecritureParametres, async (req, res, next) => {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
     const p = parsed.data;
-    await ecrireParametre(CLE_SEUIL_ALERTE_TRANSACTION, String(p.seuilAlerteTransaction));
     await ecrireParametre(CLE_BOUTIQUE_NOM, p.boutiqueNom);
     await ecrireParametre(CLE_BOUTIQUE_ADRESSE, p.boutiqueAdresse);
     await ecrireParametre(CLE_BOUTIQUE_CONTACT, p.boutiqueContact);

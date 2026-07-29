@@ -1,13 +1,12 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, Banknote, Lock, Minus, Plus, Trash2 } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, Info, Plus, Trash2, Wallet, Wheat } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
+  calculerDepenseFarine,
   formatFc,
-  ROLE_DIRECTEUR_GENERAL,
-  type ClotureCaisseDTO,
-  type ProduitDTO,
-  type VenteDTO,
+  type BlocageFarine,
+  type RegistreCaisseDTO,
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -17,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ChargementModule } from "@/components/ChargementModule";
 import {
   Dialog,
   DialogContent,
@@ -26,383 +26,181 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-function formatHeure(iso: string): string {
-  return new Intl.DateTimeFormat("fr-FR", { timeStyle: "short" }).format(new Date(iso));
-}
+const jourISO = (d: Date) => d.toISOString().slice(0, 10);
+const formatHeure = (iso: string) => new Intl.DateTimeFormat("fr-FR", { timeStyle: "short" }).format(new Date(iso));
 
-interface LignePanier {
-  produit: ProduitDTO;
-  quantite: number;
+/** Tuile d'un poste du registre. */
+function Poste({
+  libelle,
+  montant,
+  icone: Icone,
+  accent,
+}: {
+  libelle: string;
+  montant: number;
+  icone: typeof Wallet;
+  accent?: boolean;
+}) {
+  return (
+    <div className={accent ? "rounded-lg border border-or bg-or/10 p-4" : "rounded-lg border bg-card p-4"}>
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Icone className="h-3.5 w-3.5 text-or" />
+        {libelle}
+      </p>
+      <p className="mt-1 text-2xl font-bold text-marine dark:text-creme">{formatFc(montant)}</p>
+    </div>
+  );
 }
 
 export function CaissePage() {
-  const { peutEcrire, utilisateur } = useAuth();
+  const { peutEcrire } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  // Le DG (et tout rôle en lecture) ne voit AUCUN bouton d'action : depuis la
+  // refonte 3.1, il n'a plus la moindre exception d'écriture.
   const editable = peutEcrire("CAISSE");
-  // Le DG — et lui seul — peut annuler une vente frauduleuse (section 3.1).
-  const estDG = utilisateur?.role.nom === ROLE_DIRECTEUR_GENERAL;
 
-  const { data: produitsData } = useQuery({
-    queryKey: ["produits"],
-    queryFn: () => api<{ produits: ProduitDTO[] }>("/api/produits"),
+  const [date, setDate] = useState(jourISO(new Date()));
+  const { data, isLoading } = useQuery({
+    queryKey: ["registre", date],
+    queryFn: () => api<{ registre: RegistreCaisseDTO }>(`/api/caisse/registre?date=${date}`),
   });
-  const { data: ventesData } = useQuery({
-    queryKey: ["ventes", "ouvertes"],
-    queryFn: () => api<{ ventes: VenteDTO[] }>("/api/caisse/ventes?ouvertes=1"),
-  });
-  const { data: cloturesData } = useQuery({
-    queryKey: ["clotures"],
-    queryFn: () => api<{ clotures: ClotureCaisseDTO[] }>("/api/caisse/clotures"),
-  });
+  const registre = data?.registre;
+  const rafraichir = () => {
+    queryClient.invalidateQueries({ queryKey: ["registre"] });
+    queryClient.invalidateQueries({ queryKey: ["rapport-caisse"] });
+  };
 
-  // --- Panier --------------------------------------------------------------
-  const [panier, setPanier] = useState<LignePanier[]>([]);
-  // Paiement en espèces uniquement (décision métier, 3.1) : plus de mobile
-  // money / carte proposés à l'encaissement.
-  const moyenPaiement = "ESPECES" as const;
-  const [erreur, setErreur] = useState<string | null>(null);
-  const [confirmationVente, setConfirmationVente] = useState<string | null>(null);
+  // --- Taux du jour ---------------------------------------------------------
+  const [dialogTaux, setDialogTaux] = useState(false);
+  const [valeurTaux, setValeurTaux] = useState("");
+  const [erreurTaux, setErreurTaux] = useState<string | null>(null);
 
-  const totaux = useMemo(() => {
-    const total = panier.reduce((s, l) => s + l.produit.prixVente * l.quantite, 0);
-    const taxe = panier.reduce(
-      (s, l) => s + Math.round((l.produit.prixVente * l.quantite * l.produit.tauxTaxe) / 100),
-      0,
-    );
-    return { total, taxe };
-  }, [panier]);
-
-  function ajouter(produit: ProduitDTO) {
-    setConfirmationVente(null);
-    setPanier((prev) => {
-      const existante = prev.find((l) => l.produit.id === produit.id);
-      if (existante) {
-        return prev.map((l) => (l.produit.id === produit.id ? { ...l, quantite: l.quantite + 1 } : l));
-      }
-      return [...prev, { produit, quantite: 1 }];
-    });
-  }
-
-  function changerQuantite(produitId: string, delta: number) {
-    setPanier((prev) =>
-      prev
-        .map((l) => (l.produit.id === produitId ? { ...l, quantite: l.quantite + delta } : l))
-        .filter((l) => l.quantite > 0),
-    );
-  }
-
-  const encaisser = useMutation({
+  const enregistrerTaux = useMutation({
     mutationFn: () =>
-      api<{ vente: VenteDTO }>("/api/caisse/ventes", {
-        method: "POST",
-        body: JSON.stringify({
-          moyenPaiement,
-          lignes: panier.map((l) => ({ produitId: l.produit.id, quantite: l.quantite })),
-        }),
-      }),
-    onSuccess: (r) => {
-      setPanier([]);
-      setErreur(null);
-      setConfirmationVente(t("caisse.saleConfirmed", { numero: r.vente.numero, montant: formatFc(r.vente.total) }));
-      queryClient.invalidateQueries({ queryKey: ["ventes"] });
-    },
-    onError: (e) => setErreur(e instanceof Error ? e.message : t("caisse.checkoutError")),
-  });
-
-  // --- Clôture -------------------------------------------------------------
-  const [dialogCloture, setDialogCloture] = useState(false);
-  const cloturer = useMutation({
-    mutationFn: () => api<{ cloture: ClotureCaisseDTO }>("/api/caisse/cloture", { method: "POST" }),
+      api("/api/caisse/taux", { method: "PUT", body: JSON.stringify({ date, valeur: Number(valeurTaux) }) }),
     onSuccess: () => {
-      setDialogCloture(false);
-      queryClient.invalidateQueries({ queryKey: ["ventes"] });
-      queryClient.invalidateQueries({ queryKey: ["clotures"] });
+      setDialogTaux(false);
+      rafraichir();
     },
-    onError: (e) => setErreur(e instanceof Error ? e.message : t("caisse.closeError")),
+    onError: (e) => setErreurTaux(e instanceof Error ? e.message : t("caisse.saveError")),
   });
 
-  // --- Annulation d'une vente par le DG (3.1) ------------------------------
-  const [venteAAnnuler, setVenteAAnnuler] = useState<VenteDTO | null>(null);
-  const [motifAnnulation, setMotifAnnulation] = useState("");
-  const [erreurAnnulation, setErreurAnnulation] = useState<string | null>(null);
+  // --- Dépenses -------------------------------------------------------------
+  const [dialogDepense, setDialogDepense] = useState(false);
+  const [motif, setMotif] = useState("");
+  const [montant, setMontant] = useState("");
+  const [erreurDepense, setErreurDepense] = useState<string | null>(null);
 
-  const annuler = useMutation({
-    mutationFn: (id: string) =>
-      api<{ vente: VenteDTO }>(`/api/caisse/ventes/${id}/annulation`, {
+  const ajouterDepense = useMutation({
+    mutationFn: () =>
+      api("/api/caisse/depenses", {
         method: "POST",
-        body: JSON.stringify({ motif: motifAnnulation.trim() }),
+        body: JSON.stringify({ date, motif: motif.trim(), montant: Number(montant) }),
       }),
     onSuccess: () => {
-      setVenteAAnnuler(null);
-      setMotifAnnulation("");
-      setErreurAnnulation(null);
-      queryClient.invalidateQueries({ queryKey: ["ventes"] });
+      setDialogDepense(false);
+      rafraichir();
     },
-    onError: (e) => setErreurAnnulation(e instanceof Error ? e.message : t("caisse.cancelError")),
+    onError: (e) => setErreurDepense(e instanceof Error ? e.message : t("caisse.saveError")),
   });
 
-  const ventesOuvertes = ventesData?.ventes ?? [];
-  // Le CA du jour exclut les ventes annulées (3.1).
-  const totalJournee = ventesOuvertes.reduce((s, v) => s + (v.statut === "ANNULEE" ? 0 : v.total), 0);
+  const supprimerDepense = useMutation({
+    mutationFn: (id: string) => api(`/api/caisse/depenses/${id}`, { method: "DELETE" }),
+    onSuccess: rafraichir,
+    onError: (e) => alert(e instanceof Error ? e.message : t("caisse.deleteError")),
+  });
+
+  const basculerFarine = useMutation({
+    mutationFn: (active: boolean) =>
+      api("/api/caisse/depenses/farine", { method: "PUT", body: JSON.stringify({ date, active }) }),
+    onSuccess: rafraichir,
+    onError: (e) => alert(e instanceof Error ? e.message : t("caisse.saveError")),
+  });
+
+  if (isLoading || !registre) return <ChargementModule />;
+
+  const blocage: BlocageFarine | null = registre.farine.blocage;
+  const caseFarineDesactivee = !editable || (!registre.farine.active && blocage !== null);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("caisse.title")}</h1>
           <p className="mt-1 text-muted-foreground">{t("caisse.subtitle")}</p>
         </div>
-        {editable && (
-          <Button
-            variant="outline"
-            onClick={() => setDialogCloture(true)}
-            disabled={ventesOuvertes.length === 0}
-          >
-            <Lock className="h-4 w-4" />
-            {t("caisse.closeRegister")}
-          </Button>
-        )}
+        <div className="space-y-1.5">
+          <Label htmlFor="date-registre">{t("common.date")}</Label>
+          <Input id="date-registre" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
       </div>
 
-      {editable && (
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-          {/* Produits */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("caisse.products")}</CardTitle>
-              <CardDescription>{t("caisse.productsHelp")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {produitsData?.produits
-                  .filter((p) => p.actif)
-                  .map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => ajouter(p)}
-                      className="rounded-xl border border-beige/60 bg-creme p-3 text-left shadow-sm transition-all hover:border-or hover:shadow dark:bg-secondary"
-                    >
-                      <p className="text-sm font-semibold leading-tight">{p.nom}</p>
-                      <p className="mt-1 text-sm font-bold text-terracotta dark:text-or">{formatFc(p.prixVente)}</p>
-                    </button>
-                  ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Panier */}
-          <Card className="border-or/40">
-            <CardHeader>
-              <CardTitle>{t("caisse.cart")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {panier.length === 0 && !confirmationVente && (
-                <p className="py-6 text-center text-sm text-muted-foreground">{t("caisse.cartEmpty")}</p>
-              )}
-              {confirmationVente && panier.length === 0 && (
-                <p className="rounded-md bg-or/10 px-3 py-2 text-center text-sm font-medium text-terracotta dark:text-or">
-                  ✓ {confirmationVente}
-                </p>
-              )}
-              {panier.map((l) => (
-                <div key={l.produit.id} className="flex items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{l.produit.nom}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatFc(l.produit.prixVente)} × {l.quantite} = {formatFc(l.produit.prixVente * l.quantite)}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => changerQuantite(l.produit.id, -1)} aria-label={t("caisse.ariaDecrease")}>
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span className="w-6 text-center text-sm font-semibold">{l.quantite}</span>
-                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => changerQuantite(l.produit.id, 1)} aria-label={t("caisse.ariaIncrease")}>
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-terracotta hover:text-terracotta"
-                    onClick={() => changerQuantite(l.produit.id, -l.quantite)}
-                    aria-label={t("caisse.ariaRemove", { nom: l.produit.nom })}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
-
-              {panier.length > 0 && (
-                <>
-                  <div className="space-y-1 border-t pt-3">
-                    {totaux.taxe > 0 && (
-                      <div className="flex justify-between text-sm text-muted-foreground">
-                        <span>{t("caisse.taxesLabel")}</span>
-                        <span>{formatFc(totaux.taxe)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-lg font-bold">
-                      <span>{t("common.total")}</span>
-                      <span className="text-marine dark:text-or">{formatFc(totaux.total)}</span>
-                    </div>
-                  </div>
-
-                  {/* Paiement en espèces uniquement (3.1). */}
-                  <div className="flex items-center justify-center gap-2 rounded-lg border border-or bg-or/15 p-2 text-sm font-medium text-terracotta dark:text-or">
-                    <Banknote className="h-4 w-4" />
-                    {t("caisse.cashOnly")}
-                  </div>
-
-                  {erreur && (
-                    <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
-                      {erreur}
-                    </p>
-                  )}
-
-                  <Button
-                    variant="cta"
-                    size="lg"
-                    className="w-full text-base"
-                    disabled={encaisser.isPending}
-                    onClick={() => encaisser.mutate()}
-                  >
-                    {t("caisse.checkout", { montant: formatFc(totaux.total) })}
-                  </Button>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Journée en cours */}
+      {/* Taux du jour — première tâche de la journée */}
       <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <div className="space-y-1.5">
-            <CardTitle>{t("caisse.currentDay")}</CardTitle>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="text-lg">{t("caisse.rateTitle")}</CardTitle>
             <CardDescription>
-              {t("caisse.openSales", { count: ventesOuvertes.length })}{" "}
-              <span className="font-semibold text-foreground">{formatFc(totalJournee)}</span>
+              {registre.taux
+                ? t("caisse.rateSet", { valeur: registre.taux.valeur, nom: registre.taux.definiPar?.nom ?? "—" })
+                : t("caisse.rateMissing")}
             </CardDescription>
           </div>
+          {editable && (
+            <Button
+              variant={registre.taux ? "outline" : "cta"}
+              onClick={() => {
+                setValeurTaux(registre.taux ? String(registre.taux.valeur) : "");
+                setErreurTaux(null);
+                setDialogTaux(true);
+              }}
+            >
+              {registre.taux ? t("caisse.rateEdit") : t("caisse.rateDefine")}
+            </Button>
+          )}
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>N°</TableHead>
-                <TableHead>{t("caisse.colTime")}</TableHead>
-                <TableHead>{t("caisse.colArticles")}</TableHead>
-                <TableHead>{t("common.status")}</TableHead>
-                <TableHead className="text-right">{t("common.total")}</TableHead>
-                {estDG && <TableHead className="text-right">{t("common.actions")}</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ventesOuvertes.map((v) => {
-                const annulee = v.statut === "ANNULEE";
-                return (
-                  <TableRow key={v.id} className={annulee ? "opacity-60" : undefined}>
-                    <TableCell className="font-medium">{v.numero}</TableCell>
-                    <TableCell className="text-muted-foreground">{formatHeure(v.date)}</TableCell>
-                    <TableCell className="max-w-64 truncate text-sm">
-                      {v.lignes.map((l) => `${l.quantite}× ${l.produitNom}`).join(", ")}
-                    </TableCell>
-                    <TableCell>
-                      {annulee ? (
-                        <Badge
-                          className="border-transparent bg-terracotta text-creme"
-                          title={v.motifAnnulation ?? undefined}
-                        >
-                          {t("caisse.cancelled")}
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">{t("caisse.active")}</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell
-                      className={
-                        annulee
-                          ? "text-right font-semibold text-muted-foreground line-through"
-                          : "text-right font-semibold text-marine dark:text-or"
-                      }
-                    >
-                      {formatFc(v.total)}
-                    </TableCell>
-                    {estDG && (
-                      <TableCell className="text-right">
-                        {!annulee && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-terracotta hover:text-terracotta"
-                            onClick={() => {
-                              setVenteAAnnuler(v);
-                              setMotifAnnulation("");
-                              setErreurAnnulation(null);
-                            }}
-                          >
-                            <Ban className="h-3.5 w-3.5" />
-                            {t("caisse.cancelSale")}
-                          </Button>
-                        )}
-                      </TableCell>
-                    )}
-                  </TableRow>
-                );
-              })}
-              {ventesOuvertes.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={estDG ? 6 : 5} className="py-8 text-center text-muted-foreground">
-                    {t("caisse.noSaleSinceClose")}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
       </Card>
 
-      {/* Clôtures passées */}
+      {/* Les 4 postes du registre */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Poste libelle={t("caisse.entries")} montant={registre.entrees} icone={ArrowUpCircle} />
+        <Poste libelle={t("caisse.debtsPaid")} montant={registre.dettesPayees} icone={ArrowUpCircle} />
+        <Poste libelle={t("caisse.expenses")} montant={registre.totalDepenses} icone={ArrowDownCircle} />
+        <Poste libelle={t("caisse.balance")} montant={registre.solde} icone={Wallet} accent />
+      </div>
+
+      <p className="text-xs text-muted-foreground">{t("caisse.formulaHint")}</p>
+
+      {/* Dettes payées — détail */}
       <Card>
         <CardHeader>
-          <CardTitle>{t("caisse.closures")}</CardTitle>
-          <CardDescription>{t("caisse.closuresDesc")}</CardDescription>
+          <CardTitle>{t("caisse.debtsPaidTitle")}</CardTitle>
+          <CardDescription>{t("caisse.debtsPaidDesc", { count: registre.detailDettesPayees.length })}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t("common.date")}</TableHead>
-                <TableHead>{t("caisse.colCashier")}</TableHead>
-                <TableHead className="text-right">{t("caisse.colSales")}</TableHead>
-                <TableHead className="text-right">{t("caisse.colCash")}</TableHead>
-                <TableHead className="text-right">{t("caisse.colMobile")}</TableHead>
-                <TableHead className="text-right">{t("caisse.colCard")}</TableHead>
+                <TableHead>{t("caisse.colTime")}</TableHead>
+                <TableHead>{t("caisse.colClient")}</TableHead>
+                <TableHead>{t("caisse.colOrder")}</TableHead>
                 <TableHead className="text-right">{t("common.total")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(cloturesData?.clotures ?? []).map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">
-                    {new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(new Date(c.date))}
-                  </TableCell>
-                  <TableCell>{c.caissier?.nom ?? "—"}</TableCell>
-                  <TableCell className="text-right">{c.nombreVentes}</TableCell>
-                  <TableCell className="text-right">{formatFc(c.totalEspeces)}</TableCell>
-                  <TableCell className="text-right">{formatFc(c.totalMobileMoney)}</TableCell>
-                  <TableCell className="text-right">{formatFc(c.totalCarte)}</TableCell>
-                  <TableCell className="text-right font-semibold text-marine dark:text-or">
-                    {formatFc(c.totalVentes)}
-                  </TableCell>
+              {registre.detailDettesPayees.map((d) => (
+                <TableRow key={d.id}>
+                  <TableCell className="text-muted-foreground">{formatHeure(d.date)}</TableCell>
+                  <TableCell className="font-medium">{d.clientNom}</TableCell>
+                  <TableCell className="text-muted-foreground">n°{d.commandeNumero}</TableCell>
+                  <TableCell className="text-right font-semibold">{formatFc(d.montant)}</TableCell>
                 </TableRow>
               ))}
-              {(cloturesData?.clotures ?? []).length === 0 && (
+              {registre.detailDettesPayees.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    {t("caisse.noClosure")}
+                  <TableCell colSpan={4} className="py-6 text-center text-muted-foreground">
+                    {t("caisse.noDebtPaid")}
                   </TableCell>
                 </TableRow>
               )}
@@ -411,71 +209,205 @@ export function CaissePage() {
         </CardContent>
       </Card>
 
-      {/* Confirmation de clôture */}
-      <Dialog open={dialogCloture} onOpenChange={setDialogCloture}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("caisse.closeTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("caisse.closeConfirmDesc", { count: ventesOuvertes.length, montant: formatFc(totalJournee) })}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogCloture(false)}>
-              {t("common.cancel")}
+      {/* Dépenses */}
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>{t("caisse.expensesTitle")}</CardTitle>
+            <CardDescription>{t("caisse.expensesDesc")}</CardDescription>
+          </div>
+          {editable && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMotif("");
+                setMontant("");
+                setErreurDepense(null);
+                setDialogDepense(true);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              {t("caisse.addExpense")}
             </Button>
-            <Button variant="cta" disabled={cloturer.isPending} onClick={() => cloturer.mutate()}>
-              <Lock className="h-4 w-4" />
-              {t("caisse.close")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Case à cocher farine */}
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-[var(--or)]"
+                checked={registre.farine.active}
+                disabled={caseFarineDesactivee || basculerFarine.isPending}
+                onChange={(e) => basculerFarine.mutate(e.target.checked)}
+              />
+              <span className="min-w-0">
+                <span className="flex items-center gap-1.5 text-sm font-medium">
+                  <Wheat className="h-4 w-4 text-or" />
+                  {t("caisse.flourExpense")}
+                </span>
+                {blocage && !registre.farine.active ? (
+                  <span className="mt-0.5 flex items-start gap-1.5 text-xs text-terracotta dark:text-or">
+                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {t(`caisse.flourBlocked.${blocage}`)}
+                  </span>
+                ) : (
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {t("caisse.flourFormula", {
+                      taux: registre.taux?.valeur ?? "—",
+                      sacs: registre.sacsUtilisesJour,
+                      montant: formatFc(
+                        registre.farine.montantEstime ??
+                          (registre.taux
+                            ? calculerDepenseFarine(registre.taux.valeur, registre.sacsUtilisesJour)
+                            : 0),
+                      ),
+                    })}
+                  </span>
+                )}
+              </span>
+            </label>
+          </div>
 
-      {/* Annulation d'une vente par le DG (3.1) — justification obligatoire. */}
-      <Dialog open={!!venteAAnnuler} onOpenChange={(o) => !o && setVenteAAnnuler(null)}>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("caisse.colReason")}</TableHead>
+                <TableHead>{t("caisse.colRecordedBy")}</TableHead>
+                <TableHead className="text-right">{t("common.total")}</TableHead>
+                {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {registre.depenses.map((d) => (
+                <TableRow key={d.id}>
+                  <TableCell className="font-medium">
+                    {d.motif}
+                    {d.origine === "FARINE" && (
+                      <Badge variant="secondary" className="ml-2">
+                        {t("caisse.autoBadge")}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{d.enregistrePar?.nom ?? "—"}</TableCell>
+                  <TableCell className="text-right font-semibold">{formatFc(d.montant)}</TableCell>
+                  {editable && (
+                    <TableCell className="text-right">
+                      {d.origine === "MANUELLE" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-terracotta hover:text-terracotta"
+                          onClick={() => confirm(t("caisse.confirmDeleteExpense")) && supprimerDepense.mutate(d.id)}
+                          aria-label={t("caisse.ariaDeleteExpense")}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+              {registre.depenses.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={editable ? 4 : 3} className="py-6 text-center text-muted-foreground">
+                    {t("caisse.noExpense")}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Dialog taux */}
+      <Dialog open={dialogTaux} onOpenChange={setDialogTaux}>
         <DialogContent>
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (venteAAnnuler) annuler.mutate(venteAAnnuler.id);
+              enregistrerTaux.mutate();
             }}
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>{t("caisse.cancelTitle", { numero: venteAAnnuler?.numero ?? "" })}</DialogTitle>
-              <DialogDescription>
-                {t("caisse.cancelDesc", { montant: venteAAnnuler ? formatFc(venteAAnnuler.total) : "" })}
-              </DialogDescription>
+              <DialogTitle>{t("caisse.rateDialogTitle")}</DialogTitle>
+              <DialogDescription>{t("caisse.rateDialogDesc", { date })}</DialogDescription>
             </DialogHeader>
             <div className="space-y-1.5">
-              <Label htmlFor="motif-annulation">{t("caisse.cancelReason")}</Label>
+              <Label htmlFor="taux">{t("caisse.rateValue")}</Label>
               <Input
-                id="motif-annulation"
-                value={motifAnnulation}
-                onChange={(e) => setMotifAnnulation(e.target.value)}
-                minLength={3}
+                id="taux"
+                type="number"
+                min={0}
+                step="0.001"
+                value={valeurTaux}
+                onChange={(e) => setValeurTaux(e.target.value)}
                 required
                 autoFocus
-                placeholder={t("caisse.cancelReasonPlaceholder")}
               />
             </div>
-            {erreurAnnulation && (
+            {erreurTaux && (
               <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
-                {erreurAnnulation}
+                {erreurTaux}
               </p>
             )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setVenteAAnnuler(null)}>
+              <Button type="button" variant="outline" onClick={() => setDialogTaux(false)}>
                 {t("common.cancel")}
               </Button>
-              <Button
-                type="submit"
-                variant="cta"
-                disabled={annuler.isPending || motifAnnulation.trim().length < 3}
-              >
-                <Ban className="h-4 w-4" />
-                {t("caisse.confirmCancel")}
+              <Button type="submit" variant="cta" disabled={enregistrerTaux.isPending}>
+                {t("common.save")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog dépense */}
+      <Dialog open={dialogDepense} onOpenChange={setDialogDepense}>
+        <DialogContent>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              ajouterDepense.mutate();
+            }}
+            className="space-y-4"
+          >
+            <DialogHeader>
+              <DialogTitle>{t("caisse.expenseDialogTitle")}</DialogTitle>
+              <DialogDescription>{t("caisse.expenseDialogDesc", { date })}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="motif">{t("caisse.colReason")}</Label>
+                <Input id="motif" value={motif} onChange={(e) => setMotif(e.target.value)} required autoFocus />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="montant">{t("caisse.amountFc")}</Label>
+                <Input
+                  id="montant"
+                  type="number"
+                  min={1}
+                  step="1"
+                  value={montant}
+                  onChange={(e) => setMontant(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            {erreurDepense && (
+              <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
+                {erreurDepense}
+              </p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDialogDepense(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button type="submit" variant="cta" disabled={ajouterDepense.isPending}>
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </form>

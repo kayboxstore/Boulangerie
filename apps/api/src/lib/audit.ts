@@ -35,10 +35,10 @@ const MODELE_MODULE: Record<string, string> = {
   Client: "COMMANDES",
   CommandeClient: "COMMANDES",
   PaiementCommande: "COMMANDES",
-  // Caisse
-  Vente: "CAISSE",
-  LigneVente: "CAISSE",
-  ClotureCaisse: "CAISSE",
+  // Caisse — registre journalier (3.1). Vente/LigneVente/ClotureCaisse sont
+  // orphelines depuis la refonte : plus rien ne les écrit, rien à auditer.
+  TauxDuJour: "CAISSE",
+  DepenseCaisse: "CAISSE",
   // Stocks
   MatierePremiere: "STOCKS",
   MouvementStock: "STOCKS",

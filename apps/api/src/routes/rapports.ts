@@ -51,63 +51,85 @@ async function alertesStock() {
     }));
 }
 
-// --- Widget CA / Caisse -----------------------------------------------------
+// --- Widget Caisse (registre journalier, section 3.1) ------------------------
+// Depuis la refonte, ce widget reflète le REGISTRE (entrées / dettes payées /
+// dépenses / solde) et non plus une somme de ventes, qui n'existent plus.
+
+/**
+ * Encaissements et dépenses agrégés sur une période, avec la même règle de
+ * non-double-comptage que le registre : les entrées ne retiennent que l'argent
+ * versé à la création des commandes, les règlements étant comptés à part.
+ */
+async function registreSur(depuis: Date) {
+  const commandes = await prisma.commandeClient.findMany({
+    where: { dateCreation: { gte: depuis } },
+    select: { montantRecu: true, reglements: { select: { montant: true } } },
+  });
+  const entrees = commandes.reduce((somme, c) => {
+    const aLaCreation = c.montantRecu - c.reglements.reduce((s, r) => s + r.montant, 0);
+    return somme + Math.max(0, aLaCreation);
+  }, 0);
+
+  const aggReglements = await prisma.paiementCommande.aggregate({
+    where: { date: { gte: depuis } },
+    _sum: { montant: true },
+  });
+  const aggDepenses = await prisma.depenseCaisse.aggregate({
+    where: { date: { gte: depuis } },
+    _sum: { montant: true },
+  });
+
+  const dettesPayees = aggReglements._sum.montant ?? 0;
+  const depenses = aggDepenses._sum.montant ?? 0;
+  return { entrees, dettesPayees, depenses, solde: entrees + dettesPayees - depenses };
+}
 
 rapportsRouter.get("/caisse", requirePermission("CAISSE", "LECTURE"), async (_req, res, next) => {
   try {
-    const caDepuis = async (depuis: Date) => {
-      const agg = await prisma.vente.aggregate({ where: { date: { gte: depuis }, statut: "ACTIVE" }, _sum: { total: true }, _count: { _all: true } });
-      return { total: agg._sum.total ?? 0, nombre: agg._count._all };
-    };
-    const jour = await caDepuis(debutJour());
-    const semaine = await caDepuis(ilYAJours(6));
-    const mois = await caDepuis(ilYAJours(29));
+    const duJour = await registreSur(debutJour());
+    const semaine = await registreSur(ilYAJours(6));
+    const mois = await registreSur(ilYAJours(29));
 
-    // CA par jour sur 30 jours (les jours sans vente n'apparaissent pas — le
-    // front comble les trous à zéro pour la courbe).
+    // Solde par jour sur 30 jours : encaissements (créations + règlements) moins
+    // dépenses. Les jours sans mouvement n'apparaissent pas — le front comble
+    // les trous à zéro pour la courbe.
     const lignesSerie = await prisma.$queryRaw<{ jour: Date; total: bigint }[]>`
-      SELECT date_trunc('day', "date") AS jour, SUM("total")::bigint AS total
-      FROM "Vente" WHERE "date" >= ${ilYAJours(29)} AND "statut" = 'ACTIVE'
-      GROUP BY 1 ORDER BY 1`;
+      SELECT jour, SUM(total)::bigint AS total FROM (
+        SELECT date_trunc('day', c."dateCreation") AS jour,
+               c."montantRecu" - COALESCE((SELECT SUM(p."montant") FROM "PaiementCommande" p
+                                           WHERE p."commandeClientId" = c."id"), 0) AS total
+        FROM "CommandeClient" c WHERE c."dateCreation" >= ${ilYAJours(29)}
+        UNION ALL
+        SELECT date_trunc('day', p."date"), p."montant"
+        FROM "PaiementCommande" p WHERE p."date" >= ${ilYAJours(29)}
+        UNION ALL
+        SELECT date_trunc('day', d."date"), -d."montant"
+        FROM "DepenseCaisse" d WHERE d."date" >= ${ilYAJours(29)}
+      ) mouvements GROUP BY jour ORDER BY jour`;
     const serie30Jours = lignesSerie.map((l) => ({
       date: l.jour.toISOString().slice(0, 10),
       total: Number(l.total),
     }));
 
-    const parProduit = await prisma.ligneVente.groupBy({
-      by: ["produitId"],
-      where: { vente: { date: { gte: ilYAJours(29) }, statut: "ACTIVE" } },
-      _sum: { quantite: true },
+    const parMotif = await prisma.depenseCaisse.groupBy({
+      by: ["motif"],
+      where: { date: { gte: ilYAJours(29) } },
+      _sum: { montant: true },
     });
-    const produits = await prisma.produit.findMany({
-      where: { id: { in: parProduit.map((p) => p.produitId) } },
-      select: { id: true, nom: true },
-    });
-    const nomParId = new Map(produits.map((p) => [p.id, p.nom]));
-    // CA par produit = somme des prix figés sur les lignes (pas le prix actuel).
-    const caParProduit = await prisma.$queryRaw<{ produitId: string; ca: bigint }[]>`
-      SELECT lv."produitId", SUM(lv."quantite" * lv."prixUnitaire")::bigint AS ca
-      FROM "LigneVente" lv JOIN "Vente" v ON v."id" = lv."venteId"
-      WHERE v."date" >= ${ilYAJours(29)}
-      GROUP BY lv."produitId"`;
-    const caParId = new Map(caParProduit.map((l) => [l.produitId, Number(l.ca)]));
-
-    const meilleuresVentes = parProduit
-      .map((p) => ({
-        produitNom: nomParId.get(p.produitId) ?? "?",
-        quantite: p._sum.quantite ?? 0,
-        ca: caParId.get(p.produitId) ?? 0,
-      }))
-      .sort((a, b) => b.quantite - a.quantite)
+    const principalesDepenses = parMotif
+      .map((d) => ({ motif: d.motif, total: d._sum.montant ?? 0 }))
+      .sort((a, b) => b.total - a.total)
       .slice(0, 8);
 
     const dto: RapportCaisseDTO = {
-      caJour: jour.total,
-      ca7Jours: semaine.total,
-      ca30Jours: mois.total,
-      nbVentesJour: jour.nombre,
+      entreesJour: duJour.entrees,
+      dettesPayeesJour: duJour.dettesPayees,
+      depensesJour: duJour.depenses,
+      soldeJour: duJour.solde,
+      solde7Jours: semaine.solde,
+      solde30Jours: mois.solde,
       serie30Jours,
-      meilleuresVentes,
+      principalesDepenses,
     };
     res.json(dto);
   } catch (e) {
@@ -267,18 +289,18 @@ rapportsRouter.get("/travailleurs", requirePermission("TRAVAILLEURS", "LECTURE")
 
 rapportsRouter.get("/cloture-quotidienne", requirePermission("RAPPORTS", "LECTURE"), async (_req, res, next) => {
   try {
-    const aggVentes = await prisma.vente.aggregate({
-      where: { date: { gte: debutJour() }, statut: "ACTIVE" },
-      _sum: { total: true },
-      _count: { _all: true },
-    });
+    // Le résumé reflète désormais le registre de caisse (3.1), plus le CA issu
+    // des ventes, qui n'existent plus.
+    const registre = await registreSur(debutJour());
     const nbCommandesJour = await prisma.commandeClient.count({
       where: { dateCreation: { gte: debutJour() } },
     });
     const dto: ResumeClotureDTO = {
       date: new Date().toISOString().slice(0, 10),
-      caJour: aggVentes._sum.total ?? 0,
-      nbVentesJour: aggVentes._count._all,
+      entreesJour: registre.entrees,
+      dettesPayeesJour: registre.dettesPayees,
+      depensesJour: registre.depenses,
+      soldeJour: registre.solde,
       nbCommandesJour,
       dettesEnCours: await dettesEnCours(),
       alertesStock: (await alertesStock()).map(({ id: _id, ...reste }) => reste),

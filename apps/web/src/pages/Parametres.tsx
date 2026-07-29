@@ -78,13 +78,12 @@ export function ParametresPage() {
     onError: (e) => alert(e instanceof Error ? e.message : t("parametres.deleteError")),
   });
 
-  // --- Paramètres boutique + seuil + langue ---------------------------------
+  // --- Paramètres boutique + langue -----------------------------------------
   const { data: parametresData } = useQuery({
     queryKey: ["parametres"],
     queryFn: () => api<{ parametres: ParametresBoutiqueDTO }>("/api/parametres"),
   });
 
-  const [seuil, setSeuil] = useState("");
   const [boutiqueNom, setBoutiqueNom] = useState("");
   const [boutiqueAdresse, setBoutiqueAdresse] = useState("");
   const [boutiqueContact, setBoutiqueContact] = useState("");
@@ -95,7 +94,6 @@ export function ParametresPage() {
   useEffect(() => {
     const p = parametresData?.parametres;
     if (!p) return;
-    setSeuil(String(p.seuilAlerteTransaction));
     setBoutiqueNom(p.boutiqueNom);
     setBoutiqueAdresse(p.boutiqueAdresse);
     setBoutiqueContact(p.boutiqueContact);
@@ -107,7 +105,6 @@ export function ParametresPage() {
       api<{ parametres: ParametresBoutiqueDTO }>("/api/parametres", {
         method: "PUT",
         body: JSON.stringify({
-          seuilAlerteTransaction: Number(seuil),
           boutiqueNom: boutiqueNom.trim(),
           boutiqueAdresse: boutiqueAdresse.trim(),
           boutiqueContact: boutiqueContact.trim(),
@@ -225,14 +222,6 @@ export function ParametresPage() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="seuil" className="flex items-center gap-2">
-                  <Bell className="h-4 w-4 text-or" />
-                  {t("parametres.alertThreshold")}
-                </Label>
-                <Input id="seuil" type="number" min="1" step="1" value={seuil} onChange={(e) => setSeuil(e.target.value)} required />
-                <p className="text-xs text-muted-foreground">{t("parametres.alertThresholdHelp")}</p>
-              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="langue" className="flex items-center gap-2">
                   <Globe className="h-4 w-4 text-or" />

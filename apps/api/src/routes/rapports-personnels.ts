@@ -3,12 +3,10 @@ import { Prisma } from "@prisma/client";
 import {
   formatFc,
   formatQuantite,
-  MOYEN_PAIEMENT_LABELS,
   STATUT_PRESENCE_LABELS,
   TYPE_MOUVEMENT_LABELS,
   TYPES_ACTIVITE,
   type ActiviteDTO,
-  type MoyenPaiement,
   type PorteeRapportsDTO,
   type StatutPresence,
   type TypeActivite,
@@ -169,38 +167,22 @@ rapportsPersonnelsRouter.get("/", async (req, res, next) => {
       }
     }
 
-    if (voulu("VENTE")) {
-      const ventes = await prisma.vente.findMany({
-        where: { ...filtreAuteur("vendeurId"), ...filtreDate("date") },
-        include: { vendeur: AUTEUR, lignes: true },
+    // Les ventes et clôtures de caisse ont disparu avec la refonte 3.1 ; le
+    // journal personnel du Caissier trace désormais ses dépenses de registre.
+    if (voulu("DEPENSE_CAISSE")) {
+      const depenses = await prisma.depenseCaisse.findMany({
+        where: { ...filtreAuteur("enregistreParId"), ...filtreDate("date") },
+        include: { enregistrePar: AUTEUR },
         orderBy: { date: "desc" },
         take: LIMITE_PAR_SOURCE,
       });
-      for (const v of ventes) {
+      for (const d of depenses) {
         pousser(
-          "VENTE",
-          v.id,
-          v.date,
-          `Vente n°${v.numero} — ${formatFc(v.total)} (${v.lignes.reduce((n, l) => n + l.quantite, 0)} article(s), ${MOYEN_PAIEMENT_LABELS[v.moyenPaiement as MoyenPaiement].toLowerCase()})`,
-          v.vendeur,
-        );
-      }
-    }
-
-    if (voulu("CLOTURE_CAISSE")) {
-      const clotures = await prisma.clotureCaisse.findMany({
-        where: { ...filtreAuteur("caissierId"), ...filtreDate("date") },
-        include: { caissier: AUTEUR },
-        orderBy: { date: "desc" },
-        take: LIMITE_PAR_SOURCE,
-      });
-      for (const c of clotures) {
-        pousser(
-          "CLOTURE_CAISSE",
-          c.id,
-          c.date,
-          `Clôture de caisse — ${c.nombreVentes} vente(s), total ${formatFc(c.totalVentes)}`,
-          c.caissier,
+          "DEPENSE_CAISSE",
+          d.id,
+          d.date,
+          `Dépense de caisse — ${d.motif} : ${formatFc(d.montant)}`,
+          d.enregistrePar,
         );
       }
     }

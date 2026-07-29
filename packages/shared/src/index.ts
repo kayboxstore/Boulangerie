@@ -20,7 +20,7 @@ export const MODULES = [
 export type Module = (typeof MODULES)[number];
 
 export const MODULE_LABELS: Record<Module, string> = {
-  CAISSE: "Caisse / Ventes",
+  CAISSE: "Caisse",
   COMMANDES: "Commandes clients",
   STOCKS: "Stocks",
   PRODUCTION: "Production",
@@ -111,9 +111,6 @@ export interface LoginResponse {
 /** Types d'événements métier — la liste s'étoffera avec les phases suivantes. */
 export const TYPES_EVENEMENT = [
   "TEST",
-  "NOUVELLE_VENTE",
-  "CLOTURE_CAISSE",
-  "TRANSACTION_INHABITUELLE",
   "NOUVELLE_COMMANDE",
   "REGLEMENT_COMMANDE",
   "ALERTE_STOCK",
@@ -122,7 +119,8 @@ export const TYPES_EVENEMENT = [
   "PRODUCTION_ENREGISTREE",
   "RAPPORT_PRODUCTION",
   "DEMANDE_APPROBATION",
-  "VENTE_ANNULEE",
+  // Registre de caisse (3.1) : taux du jour défini, dépense ajoutée/supprimée.
+  "REGISTRE_CAISSE",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -337,85 +335,106 @@ export function montantTotalPaye(commande: { dette: number; montantBrut: number;
 // Caisse (section 3.1)
 // ---------------------------------------------------------------------------
 
-export const MOYENS_PAIEMENT = ["ESPECES", "MOBILE_MONEY", "CARTE"] as const;
-export type MoyenPaiement = (typeof MOYENS_PAIEMENT)[number];
-
-export const MOYEN_PAIEMENT_LABELS: Record<MoyenPaiement, string> = {
-  ESPECES: "Espèces",
-  MOBILE_MONEY: "Mobile money",
-  CARTE: "Carte bancaire",
-};
-
 // Clés du magasin clé/valeur ParametreBoutique (section 3.9), éditées par l'Admin.
-export const CLE_SEUIL_ALERTE_TRANSACTION = "seuil_alerte_transaction";
 export const CLE_BOUTIQUE_NOM = "boutique_nom";
 export const CLE_BOUTIQUE_ADRESSE = "boutique_adresse";
 export const CLE_BOUTIQUE_CONTACT = "boutique_contact";
 export const CLE_LANGUE_DEFAUT = "langue_defaut";
 
-export const SEUIL_ALERTE_TRANSACTION_DEFAUT = 100_000; // Fc (3.10)
+// ---------------------------------------------------------------------------
+// Caisse — registre journalier (section 3.1)
+// ---------------------------------------------------------------------------
+// La vente au comptoir est retirée : plus de MOYENS_PAIEMENT, plus de VenteDTO,
+// plus d'alerte transaction inhabituelle ni de seuil configurable.
 
-export const venteCreateSchema = z.object({
-  moyenPaiement: z.enum(MOYENS_PAIEMENT),
-  lignes: z
-    .array(
-      z.object({
-        produitId: z.string().min(1),
-        quantite: z.number().int().min(1, "Quantité invalide"),
-      }),
-    )
-    .min(1, "Le panier est vide"),
-});
-export type VenteCreateInput = z.infer<typeof venteCreateSchema>;
+/** Constantes du calcul de la dépense farine : [(33,5 × taux) + 500] × sacs. */
+export const FARINE_COEFFICIENT_TAUX = 33.5;
+export const FARINE_SUPPLEMENT_FC = 500;
 
-// Statut d'une vente (section 3.1). ANNULEE = vente annulée par le DG
-// (annulation exceptionnelle d'une vente frauduleuse) : conservée pour
-// l'historique mais exclue du chiffre d'affaires et de la clôture.
-export const STATUTS_VENTE = ["ACTIVE", "ANNULEE"] as const;
-export type StatutVente = (typeof STATUTS_VENTE)[number];
-
-// Annulation d'une vente par le DG (3.1) — justification obligatoire.
-export const venteAnnulationSchema = z.object({
-  motif: z.string().trim().min(3, "La justification est requise").max(300),
-});
-export type VenteAnnulationInput = z.infer<typeof venteAnnulationSchema>;
-
-export interface LigneVenteDTO {
-  id: string;
-  produitId: string;
-  produitNom: string;
-  quantite: number;
-  prixUnitaire: number;
-  tauxTaxe: number;
+/** Montant de la depense farine, arrondi au Franc. Partage front/back. */
+export function calculerDepenseFarine(taux: number, sacsUtilises: number): number {
+  return Math.round((FARINE_COEFFICIENT_TAUX * taux + FARINE_SUPPLEMENT_FC) * sacsUtilises);
 }
 
-export interface VenteDTO {
-  id: string;
-  numero: number;
-  date: string;
-  vendeur: { id: string; nom: string } | null;
-  total: number;
-  totalTaxe: number;
-  moyenPaiement: MoyenPaiement;
-  clotureId: string | null;
-  statut: StatutVente;
-  // Renseignés uniquement si la vente a été annulée par le DG (3.1).
-  annuleePar: { id: string; nom: string } | null;
-  motifAnnulation: string | null;
-  dateAnnulation: string | null;
-  lignes: LigneVenteDTO[];
-}
+export const tauxDuJourSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+  valeur: z.number().positive("Le taux doit etre strictement positif").max(1_000_000),
+});
+export type TauxDuJourInput = z.infer<typeof tauxDuJourSchema>;
 
-export interface ClotureCaisseDTO {
+export interface TauxDuJourDTO {
   id: string;
   date: string;
-  caissier: { id: string; nom: string } | null;
-  nombreVentes: number;
-  totalVentes: number;
-  totalEspeces: number;
-  totalMobileMoney: number;
-  totalCarte: number;
+  valeur: number;
+  definiPar: { id: string; nom: string } | null;
 }
+
+export const ORIGINES_DEPENSE = ["MANUELLE", "FARINE"] as const;
+export type OrigineDepense = (typeof ORIGINES_DEPENSE)[number];
+
+/** Motif fige de la ligne de depense farine (section 3.1). */
+export const MOTIF_DEPENSE_FARINE = "Achat farine";
+
+export const depenseCreateSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+  motif: z.string().trim().min(1, "Le motif est requis").max(200),
+  montant: z.number().int("Montant en Fc entier").min(1, "Le montant doit etre positif"),
+});
+export type DepenseCreateInput = z.infer<typeof depenseCreateSchema>;
+
+/** Case a cocher de la depense farine : activer ou retirer la ligne du jour. */
+export const depenseFarineSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+  active: z.boolean(),
+});
+export type DepenseFarineInput = z.infer<typeof depenseFarineSchema>;
+
+export interface DepenseCaisseDTO {
+  id: string;
+  date: string;
+  motif: string;
+  montant: number;
+  origine: OrigineDepense;
+  /** Entrees du calcul, conservees pour que la ligne farine reste verifiable. */
+  tauxApplique: number | null;
+  sacsUtilises: number | null;
+  enregistrePar: { id: string; nom: string } | null;
+}
+
+/** Raison pour laquelle la case farine est indisponible (null = disponible). */
+export type BlocageFarine = "TAUX_MANQUANT" | "PRODUCTION_MANQUANTE";
+
+export interface RegistreCaisseDTO {
+  date: string;
+  /** Argent recu a la CREATION des commandes du jour (hors reglements). */
+  entrees: number;
+  /** Reglements dates du jour - jamais comptes dans les entrees. */
+  dettesPayees: number;
+  detailDettesPayees: {
+    id: string;
+    clientNom: string;
+    commandeNumero: number;
+    montant: number;
+    date: string;
+  }[];
+  depenses: DepenseCaisseDTO[];
+  totalDepenses: number;
+  /** (Entrees + Dettes payees) - Depenses */
+  solde: number;
+  taux: TauxDuJourDTO | null;
+  /** Sacs consommes en production ce jour-la (source du calcul farine). */
+  sacsUtilisesJour: number;
+  farine: {
+    /** Ligne farine deja presente dans les depenses du jour ? */
+    active: boolean;
+    /** null si la case est utilisable ; sinon la raison du blocage. */
+    blocage: BlocageFarine | null;
+    /** Montant qu'ajouterait la case, si elle est utilisable. */
+    montantEstime: number | null;
+  };
+}
+
+
 
 // ---------------------------------------------------------------------------
 // Stocks & matières premières (section 3.2)
@@ -816,19 +835,24 @@ export interface PresenceDTO {
 // étant conditionné à la lecture du module correspondant.
 // ---------------------------------------------------------------------------
 
+/**
+ * Widget Caisse du tableau de bord (3.8) — depuis la refonte 3.1, il reflète le
+ * REGISTRE journalier (entrées / dettes payées / dépenses / solde) et non plus
+ * une somme de ventes, qui n'existent plus.
+ */
 export interface RapportCaisseDTO {
-  caJour: number;
-  ca7Jours: number;
-  ca30Jours: number;
-  nbVentesJour: number;
-  /** CA par jour sur 30 jours, pour la courbe (dates AAAA-MM-JJ, total en Fc). */
+  /** Registre du jour. */
+  entreesJour: number;
+  dettesPayeesJour: number;
+  depensesJour: number;
+  soldeJour: number;
+  /** Cumuls encaissés (entrées + dettes payées) − dépenses. */
+  solde7Jours: number;
+  solde30Jours: number;
+  /** Solde par jour sur 30 jours, pour la courbe (dates AAAA-MM-JJ, en Fc). */
   serie30Jours: { date: string; total: number }[];
-  /**
-   * Meilleures ventes (30 jours) par volume, avec le CA encaissé par produit.
-   * Pas de marge : le coût de revient n'est pas calculable tant que les prix
-   * d'achat des matières ne sont pas systématiquement renseignés.
-   */
-  meilleuresVentes: { produitNom: string; quantite: number; ca: number }[];
+  /** Postes de dépense les plus lourds sur 30 jours. */
+  principalesDepenses: { motif: string; total: number }[];
 }
 
 export interface RapportCommandesDTO {
@@ -872,8 +896,11 @@ export interface RapportTravailleursDTO {
 /** Résumé de clôture quotidien (3.8) — DG uniquement via la matrice (RAPPORTS). */
 export interface ResumeClotureDTO {
   date: string;
-  caJour: number;
-  nbVentesJour: number;
+  /** Registre du jour (3.1) — remplace l'ancien CA issu des ventes. */
+  entreesJour: number;
+  dettesPayeesJour: number;
+  depensesJour: number;
+  soldeJour: number;
   nbCommandesJour: number;
   dettesEnCours: { nombre: number; total: number };
   alertesStock: { nom: string; unite: string; quantiteStock: number; seuilAlerte: number }[];
@@ -890,8 +917,7 @@ export const TAGLINE = "Pain Lia o Tonda";
 export const TYPES_ACTIVITE = [
   "COMMANDE_CLIENT",
   "REGLEMENT",
-  "VENTE",
-  "CLOTURE_CAISSE",
+  "DEPENSE_CAISSE",
   "PRODUCTION",
   "MOUVEMENT_STOCK",
   "COMMANDE_FOURNISSEUR",
@@ -903,8 +929,7 @@ export type TypeActivite = (typeof TYPES_ACTIVITE)[number];
 export const TYPE_ACTIVITE_LABELS: Record<TypeActivite, string> = {
   COMMANDE_CLIENT: "Commande client",
   REGLEMENT: "Règlement de dette",
-  VENTE: "Vente",
-  CLOTURE_CAISSE: "Clôture de caisse",
+  DEPENSE_CAISSE: "Dépense de caisse",
   PRODUCTION: "Production",
   MOUVEMENT_STOCK: "Mouvement de stock",
   COMMANDE_FOURNISSEUR: "Commande fournisseur",
@@ -959,11 +984,9 @@ export function langueEffective(preferee: Langue | null, defautBoutique: Langue)
   return preferee ?? defautBoutique;
 }
 
+// Le seuil d'alerte transaction a été retiré avec l'alerte correspondante
+// (refonte 3.1) : plus de notification de ce type, plus de réglage associé.
 export const parametresBoutiqueSchema = z.object({
-  seuilAlerteTransaction: z
-    .number()
-    .int("Montant en Fc entier")
-    .min(1, "Le seuil doit être strictement positif"),
   boutiqueNom: z.string().trim().max(120).default(""),
   boutiqueAdresse: z.string().trim().max(300).default(""),
   boutiqueContact: z.string().trim().max(200).default(""),
@@ -972,7 +995,6 @@ export const parametresBoutiqueSchema = z.object({
 export type ParametresBoutiqueInput = z.infer<typeof parametresBoutiqueSchema>;
 
 export interface ParametresBoutiqueDTO {
-  seuilAlerteTransaction: number;
   boutiqueNom: string;
   boutiqueAdresse: string;
   boutiqueContact: string;
@@ -1102,9 +1124,8 @@ export const TYPE_ENTITE_LABELS: Record<string, string> = {
   Client: "Client",
   CommandeClient: "Commande client",
   PaiementCommande: "Règlement de commande",
-  Vente: "Vente",
-  LigneVente: "Ligne de vente",
-  ClotureCaisse: "Clôture de caisse",
+  TauxDuJour: "Taux du jour",
+  DepenseCaisse: "Dépense de caisse",
   MatierePremiere: "Matière première",
   MouvementStock: "Mouvement de stock",
   PlanningProduction: "Planning de production",
