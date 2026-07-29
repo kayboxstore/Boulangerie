@@ -391,6 +391,8 @@ Le DG peut ainsi suivre l'activité de chacun de deux façons : directement dans
 
 *Note d'implémentation* : la portée de ce module (par personne + exceptions nommées) ne se réduit pas à une entrée standard dans `RolePermission` — prévoir un mécanisme dédié (filtre par `créePar`/`enregistrePar` + liste d'exceptions), distinct de la matrice de permissions habituelle. Module technique séparé de 3.8 (Tableau de bord), qui lui reste piloté par la matrice standard.
 
+Export & partage (nouveau, s'applique aussi à 3.8 Tableau de bord et 3.11 Commissions) : chaque utilisateur peut imprimer (impression navigateur, aussi utilisable pour enregistrer en PDF localement), télécharger un vrai PDF généré côté serveur, ou l'envoyer par email à quelqu'un (côté serveur, pièce jointe PDF, via Gmail/Google Workspace). Logo Boulangerie Lomoto en filigrane sur chaque PDF, ainsi que le crédit développeur (3.12) en pied de page.
+
 ### 3.14 Activation *(Admin uniquement)*
 Active/désactive un compte utilisateur sans le supprimer (ex. employé en congé ou départ temporaire) — l'utilisateur désactivé ne peut plus se connecter, mais son historique reste intact.
 
