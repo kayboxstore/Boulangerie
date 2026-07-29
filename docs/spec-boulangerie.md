@@ -346,6 +346,9 @@ Marge par produit (état actuel et décision) : non calculable proprement aujour
 - Logo Boulangerie Lomoto en en-tête (sidebar/topbar) et favicon ; tagline "Pain Lia o Tonda" utilisable en pied de page ou écran de connexion
 - Composants sur-mesure, pas de template admin générique
 - **Bilingue** *(nouveau)* : bascule Français/Lingala pour l'interface (labels uniquement — les données saisies, ex. noms de clients, restent telles quelles)
+- Écran de démarrage (nouveau) : animation du logo à l'ouverture de l'app, 6 à 8 secondes, avant la page de connexion
+- Page de connexion (refonte) : traitement visuel soigné, à la hauteur du reste de l'identité de marque
+- Format des nombres (nouveau) : séparateur de milliers par un point partout (ex. « 4.100 Fc », pas « 4 100 Fc »)
 
 ### 3.9 Paramètres
 Catalogue produits, prix, taxes, informations boutique, gestion des rôles/hiérarchie, gestion des types de clients (prix et commission par bac). Écriture réservée à l'**Administrateur**.
@@ -376,7 +379,7 @@ Vue dédiée aux commandes de type **Maman** (les seules à générer une commis
 **Filtres & affichage :** tri/filtre par date, bouton "Tout afficher".
 
 ### 3.12 À propos
-Page accessible à **tous** les rôles : informations sur Boulangerie Lomoto, logo, tagline "Pain Lia o Tonda", version de l'application, contact.
+Page accessible à **tous** les rôles : informations sur Boulangerie Lomoto, logo, tagline "Pain Lia o Tonda", version de l'application, contact. Crédit développeur (nouveau) : « Application créée par Augustin Kayembe » + téléphone +243 980 240 000, affiché ici et en pied de page des rapports exportés (3.13, 3.8).
 
 ### 3.13 Rapports
 Journal d'activité **personnel**, distinct du Tableau de bord/KPI (3.8) : chaque utilisateur y voit ses propres enregistrements (ce qu'il a créé/modifié dans les modules auxquels il a accès), par ordre chronologique. Portée élargie pour certains rôles :
