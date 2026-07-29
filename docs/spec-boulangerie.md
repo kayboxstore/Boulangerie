@@ -291,6 +291,8 @@ Caissier(ère) et DG en lecture) :
 - Nombre de commandes soldées (dette = 0) vs avec dette en cours
 - Total des dettes du jour
 
+**Alerte dette non payée** (nouveau, ponctuelle) : pour toute commande avec dette > 0, une alerte se déclenche une seule fois, le jour suivant sa création (ou à la première ouverture après ce jour si personne ne s'est connecté entre-temps) — jamais répétée pour la même commande une fois envoyée. Reçue par le Chargé des commandes et le Caissier(ère) (règle standard : tous les rôles ayant lecture sur Commandes), à la fois dans la cloche de notifications temps réel et affichée dans le module Commandes.
+
 **Règlement d'une dette (ajout suite retour d'expérience Phase 3)** : une commande avec Dette > 0 peut recevoir un ou plusieurs paiements ultérieurs. Chaque règlement :
 - Écriture réservée au **Chargé des commandes** (seul rôle en écriture sur Commandes)
 - S'ajoute au Montant reçu de la commande visée ; Dette, Avance disponible et Nouvelle avance sont recalculés avec la même formule qu'à la création (un trop-perçu lors du règlement génère de l'avance, comme pour une commande normale)
