@@ -22,7 +22,9 @@ import {
   Wheat,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { Module } from "@lomoto/shared";
+import { useQuery } from "@tanstack/react-query";
+import type { AlerteDetteDTO, Module } from "@lomoto/shared";
+import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +81,17 @@ const navigation: EntreeNav[] = [
 
 export function Layout() {
   const { utilisateur, logout, peutLire, peutEcrire } = useAuth();
+
+  // Vérification paresseuse des dettes non payées (3.4) : déclenchée au
+  // chargement de l'app pour les rôles ayant accès à Commandes — pas de tâche
+  // planifiée, comme pour l'expiration des délégations. Le résultat alimente
+  // aussi le bandeau du module Commandes (même clé de cache).
+  useQuery({
+    queryKey: ["alertes-dette"],
+    queryFn: () => api<{ alertes: AlerteDetteDTO[] }>("/api/commandes/alertes-dette"),
+    enabled: peutLire("COMMANDES"),
+    staleTime: 5 * 60 * 1000,
+  });
   const { t } = useTranslation();
 
   const liens = navigation.map((n) => {

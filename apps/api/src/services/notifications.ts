@@ -38,6 +38,18 @@ async function rolesDestinataires(module: Module, emetteurRoleId: string): Promi
   return roleIds;
 }
 
+/**
+ * Destinataires d'un événement SYSTÈME : tous les rôles ayant au moins la
+ * lecture sur le module (pas de hiérarchie à remonter, faute d'émetteur).
+ */
+async function rolesAvecLecture(module: Module): Promise<Set<string>> {
+  const permissions = await prisma.rolePermission.findMany({
+    where: { module, niveauAcces: { in: ["LECTURE", "ECRITURE"] } },
+    select: { roleId: true },
+  });
+  return new Set(permissions.map((p) => p.roleId));
+}
+
 function versDTO(n: Notification, emetteur: (Utilisateur & { role: { nom: string } }) | null): NotificationDTO {
   return {
     id: n.id,
@@ -58,24 +70,34 @@ function versDTO(n: Notification, emetteur: (Utilisateur & { role: { nom: string
  * dans la room user:{id} de chacun. Retourne les DTO créés.
  */
 export async function publierEvenement(evenement: EvenementMetier): Promise<NotificationDTO[]> {
-  const emetteur = await prisma.utilisateur.findUnique({
-    where: { id: evenement.emetteurId },
-    include: { role: { select: { id: true, nom: true } } },
-  });
-  if (!emetteur) return [];
+  // Événement SYSTÈME : aucun émetteur humain (ex. alerte de dette non payée).
+  // Personne n'est alors exclu des destinataires.
+  const emetteur = evenement.emetteurId
+    ? await prisma.utilisateur.findUnique({
+        where: { id: evenement.emetteurId },
+        include: { role: { select: { id: true, nom: true } } },
+      })
+    : null;
+  if (evenement.emetteurId && !emetteur) return [];
 
   // Ciblage direct (ex. approbation → Admin Principal) : court-circuite la
   // matrice. Sinon, destinataires déduits de la matrice + hiérarchie.
+  const rolesCibles = emetteur
+    ? await rolesDestinataires(evenement.module, emetteur.role.id)
+    : await rolesAvecLecture(evenement.module);
   const destinataires = evenement.destinataireIdsDirects
     ? await prisma.utilisateur.findMany({
-        where: { id: { in: evenement.destinataireIdsDirects, not: emetteur.id }, actif: true },
+        where: {
+          id: { in: evenement.destinataireIdsDirects, ...(emetteur ? { not: emetteur.id } : {}) },
+          actif: true,
+        },
         select: { id: true },
       })
     : await prisma.utilisateur.findMany({
         where: {
-          roleId: { in: [...(await rolesDestinataires(evenement.module, emetteur.role.id))] },
+          roleId: { in: [...rolesCibles] },
           actif: true,
-          id: { not: emetteur.id },
+          ...(emetteur ? { id: { not: emetteur.id } } : {}),
           ...(evenement.restreindreAuxRoles
             ? { role: { nom: { in: evenement.restreindreAuxRoles } } }
             : {}),
@@ -86,7 +108,9 @@ export async function publierEvenement(evenement: EvenementMetier): Promise<Noti
 
   const message =
     evenement.message ??
-    `${emetteur.nom} (${emetteur.role.nom}) — événement ${evenement.type} sur ${MODULE_LABELS[evenement.module]}`;
+    (emetteur
+      ? `${emetteur.nom} (${emetteur.role.nom}) — événement ${evenement.type} sur ${MODULE_LABELS[evenement.module]}`
+      : `Événement ${evenement.type} sur ${MODULE_LABELS[evenement.module]}`);
 
   const io = getIo();
   const dtos: NotificationDTO[] = [];
@@ -94,7 +118,7 @@ export async function publierEvenement(evenement: EvenementMetier): Promise<Noti
     const notification = await prisma.notification.create({
       data: {
         destinataireId: d.id,
-        emetteurId: emetteur.id,
+        emetteurId: emetteur?.id ?? null,
         type: evenement.type,
         module: evenement.module,
         evenementRef: evenement.evenementRef ?? null,

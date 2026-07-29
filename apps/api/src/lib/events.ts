@@ -9,7 +9,12 @@ import type { Module, PrioriteNotification, TypeEvenement } from "@lomoto/shared
 export interface EvenementMetier {
   type: TypeEvenement;
   module: Module;
-  emetteurId: string;
+  /**
+   * Auteur humain de l'action. `null` = événement SYSTÈME (ex. alerte de dette
+   * non payée, 3.4) : personne ne l'a déclenché, donc aucun destinataire n'est
+   * exclu et les destinataires sont déduits de la seule matrice de permissions.
+   */
+  emetteurId: string | null;
   message?: string;
   evenementRef?: string;
   donnees?: unknown;

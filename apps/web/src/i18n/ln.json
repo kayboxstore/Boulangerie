@@ -132,7 +132,8 @@
     "aria": "Ba-notifikasio",
     "statutConnecte": "Tango ya solo ezali kosala",
     "statutReconnexion": "Kokangama lisusu…",
-    "statutDeconnecte": "Na libanda"
+    "statutDeconnecte": "Na libanda",
+    "DETTE_NON_PAYEE": "Nyongo efutami te"
   },
   "commissions": {
     "title": "Bakomisio",
@@ -394,7 +395,9 @@
     "strategyHelp": {
       "MODIFIER": "Ebakisi makomi ya sika na komande oyo ezali.",
       "REMPLACER": "Elongoli makomi ya kala, ebosani — mpo na kobongisa libunga."
-    }
+    },
+    "unpaidDebtTitle": "Banyongo {{count}} efutami te",
+    "unpaidDebtSince": "banda mikolo {{count}}"
   },
   "production": {
     "title": "Bosali",

@@ -1,11 +1,13 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { HandCoins, Layers, Plus, RotateCcw, TriangleAlert, UserPlus } from "lucide-react";
+// TriangleAlert sert au doublon ET au bandeau de dettes non payées.
 import { useTranslation } from "react-i18next";
 import {
   calculerCommande,
   formatFc,
   type ClientDTO,
+  type AlerteDetteDTO,
   type CommandeDTO,
   type ConflitCommandeDTO,
   type ResumeCommandesJourDTO,
@@ -74,6 +76,14 @@ export function CommandesPage() {
     queryKey: ["commandes-resume-jour"],
     queryFn: () => api<ResumeCommandesJourDTO>("/api/commandes/resume-jour"),
   });
+  // Dettes non payées (3.4) : même clé que le déclencheur du Layout — la liste
+  // reste affichée tant que la dette n'est pas soldée, même si la notification
+  // ponctuelle est déjà partie.
+  const { data: alertesData } = useQuery({
+    queryKey: ["alertes-dette"],
+    queryFn: () => api<{ alertes: AlerteDetteDTO[] }>("/api/commandes/alertes-dette"),
+  });
+  const alertesDette = alertesData?.alertes ?? [];
 
   // --- Dialogue nouvelle commande -----------------------------------------
   const [dialogCommande, setDialogCommande] = useState(false);
@@ -244,6 +254,31 @@ export function CommandesPage() {
           </Button>
         )}
       </div>
+
+      {/* Dettes non payées (3.4) — bandeau visible tant que la dette dure */}
+      {alertesDette.length > 0 && (
+        <div
+          role="status"
+          className="rounded-lg border-2 border-rouge-alerte bg-rouge-alerte/10 px-4 py-3"
+        >
+          <p className="flex items-center gap-2 font-semibold text-rouge-alerte">
+            <TriangleAlert className="h-4 w-4" />
+            {t("commandes.unpaidDebtTitle", { count: alertesDette.length })}
+          </p>
+          <ul className="mt-1.5 space-y-0.5 text-sm">
+            {alertesDette.map((a) => (
+              <li key={a.commandeId} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium text-marine dark:text-creme">n°{a.numero}</span>
+                <span>{a.clientNom}</span>
+                <span className="font-semibold text-rouge-alerte">{formatFc(a.dette)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t("commandes.unpaidDebtSince", { count: a.joursDepuis })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Tableau de bord journalier (section 3.4) */}
       {resumeJour && (

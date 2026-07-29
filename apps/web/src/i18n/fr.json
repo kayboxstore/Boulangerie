@@ -131,7 +131,8 @@
     "aria": "Notifications",
     "statutConnecte": "Temps réel actif",
     "statutReconnexion": "Reconnexion…",
-    "statutDeconnecte": "Hors ligne"
+    "statutDeconnecte": "Hors ligne",
+    "DETTE_NON_PAYEE": "Dette non payée"
   },
   "commissions": {
     "title": "Commissions",
@@ -393,7 +394,9 @@
     "strategyHelp": {
       "MODIFIER": "Additionne la nouvelle saisie à la commande existante.",
       "REMPLACER": "Écrase l'ancienne saisie, qui est oubliée — pour corriger une erreur."
-    }
+    },
+    "unpaidDebtTitle": "{{count}} dette(s) non payée(s)",
+    "unpaidDebtSince": "depuis {{count}} jour(s)"
   },
   "production": {
     "title": "Production",

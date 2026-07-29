@@ -121,6 +121,8 @@ export const TYPES_EVENEMENT = [
   "DEMANDE_APPROBATION",
   // Registre de caisse (3.1) : taux du jour défini, dépense ajoutée/supprimée.
   "REGISTRE_CAISSE",
+  // Dette non payée (3.4) : émis par le SYSTÈME (aucun émetteur humain).
+  "DETTE_NON_PAYEE",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -290,6 +292,23 @@ export interface ConflitCommandeDTO {
   conflit: true;
   commandeExistante: CommandeDTO;
   apercu: Record<StrategieDoublon, { quantiteBacs: number; montantRecu: number }>;
+}
+
+/**
+ * Alerte « dette non payée » (section 3.4) : commande antérieure à aujourd'hui
+ * dont la dette reste ouverte. La notification n'est envoyée qu'UNE fois par
+ * commande (`alerteEnvoyeeLe`) ; le module continue d'afficher la liste tant que
+ * la dette n'est pas soldée.
+ */
+export interface AlerteDetteDTO {
+  commandeId: string;
+  numero: number;
+  clientNom: string;
+  dette: number;
+  dateCreation: string;
+  /** Jours écoulés depuis la création de la commande. */
+  joursDepuis: number;
+  alerteEnvoyeeLe: string | null;
 }
 
 /** Résumé du jour du module Commandes (section 3.4). */

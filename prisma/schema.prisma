@@ -199,25 +199,29 @@ model Client {
 // l'enregistrement (en Fc) ; nouvelleAvance est le solde du client juste
 // après cette commande (photographie, pour afficher le champ 11 de la spec).
 model CommandeClient {
-  id                String             @id @default(cuid())
-  numero            Int                @unique @default(autoincrement())
-  clientId          String
-  client            Client             @relation(fields: [clientId], references: [id])
-  quantiteBacs      Int
-  montantBrut       Int
-  avanceUtilisee    Int
-  montantAPercevoir Int
-  montantRecu       Int
-  dette             Int
-  avanceGeneree     Int
-  nouvelleAvance    Int
-  creeParId         String
-  creePar           Utilisateur        @relation(fields: [creeParId], references: [id])
-  dateCreation      DateTime           @default(now())
-  reglements        PaiementCommande[]
+  id                   String             @id @default(cuid())
+  numero               Int                @unique @default(autoincrement())
+  clientId             String
+  client               Client             @relation(fields: [clientId], references: [id])
+  quantiteBacs         Int
+  montantBrut          Int
+  avanceUtilisee       Int
+  montantAPercevoir    Int
+  montantRecu          Int
+  dette                Int
+  avanceGeneree        Int
+  nouvelleAvance       Int
+  creeParId            String
+  creePar              Utilisateur        @relation(fields: [creeParId], references: [id])
+  dateCreation         DateTime           @default(now())
+  // Alerte « dette non payée » (3.4) : horodatage de l'envoi, pour ne jamais
+  // notifier deux fois la même commande. Nul = alerte pas encore envoyée.
+  alerteDetteEnvoyeeLe DateTime?
+  reglements           PaiementCommande[]
 
   @@index([clientId])
   @@index([dateCreation])
+  @@index([alerteDetteEnvoyeeLe])
 }
 
 // Règlement ultérieur d'une dette de commande (section 3.4) : le montant
