@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -11,10 +10,8 @@ import {
   FileBarChart,
   HandCoins,
   Package,
-  Settings,
   ShoppingBasket,
   Truck,
-  UserCog,
 } from "lucide-react";
 import {
   formatFc,
@@ -144,9 +141,8 @@ export function DashboardPage() {
   const litProduction = peutLire("PRODUCTION");
   const litFournisseurs = peutLire("FOURNISSEURS");
   const litTravailleurs = peutLire("TRAVAILLEURS");
-  const litRapports = peutLire("RAPPORTS"); // DG uniquement dans la matrice
-  const aucunWidget =
-    !litCaisse && !litCommandes && !litCommissions && !litStocks && !litProduction && !litFournisseurs && !litTravailleurs;
+  // RAPPORTS : DG + les deux niveaux d'Admin depuis la refonte de la section 2.
+  const litRapports = peutLire("RAPPORTS");
 
   const { data: caisse } = useQuery({
     queryKey: ["rapports", "caisse"],
@@ -309,46 +305,14 @@ export function DashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           <IndicateurConnexion etendu />
-          {!aucunWidget && (
-            <Button variant="outline" onClick={exporterCSV}>
-              <Download className="h-4 w-4" />
-              {t("dashboard.exportCSV")}
-            </Button>
-          )}
+          <Button variant="outline" onClick={exporterCSV}>
+            <Download className="h-4 w-4" />
+            {t("dashboard.exportCSV")}
+          </Button>
         </div>
       </div>
 
-      {/* Admin : aucun widget métier par design — état vide explicite (3.8) */}
-      {aucunWidget && (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-            <FileBarChart className="h-10 w-10 text-muted-foreground/50" />
-            <div>
-              <p className="font-medium">{t("dashboard.emptyTitle")}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{t("dashboard.emptyText")}</p>
-            </div>
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button asChild variant="outline">
-                <Link to="/equipe">
-                  <UserCog className="h-4 w-4" />
-                  {t("nav.equipe")}
-                </Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link to="/parametres">
-                  <Settings className="h-4 w-4" />
-                  {t("nav.parametres")}
-                </Link>
-              </Button>
-              <Button variant="outline" disabled title={t("nav.moduleComingSoon")}>
-                {t("dashboard.systemStateComingSoon")}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Résumé de clôture quotidien — DG uniquement (3.8) */}
+      {/* Résumé de clôture quotidien — DG et les deux niveaux d'Admin (3.8) */}
       {cloture && (
         <Card className="border-or/40">
           <CardHeader>

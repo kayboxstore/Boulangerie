@@ -101,10 +101,15 @@ async function main() {
     TOUS_LES_MODULES.filter((m) => m !== Module.PARAMETRES).map(lecture),
   );
 
-  // Administrateur : hors hiérarchie opérationnelle (rattaché au DG organisationnellement).
-  // Écriture sur Paramètres et Équipe & droits d'accès uniquement.
-  // Jusqu'à 3 comptes (1 principal + 2 secondaires) — voir Utilisateur.estAdminPrincipal.
+  // Administrateur (section 2, refonte des permissions). Les deux niveaux
+  // partagent CE rôle ; ils ne sont distingués que par Utilisateur.estAdminPrincipal.
+  // La matrice porte donc le socle de l'Admin SECONDAIRE : lecture sur tout,
+  // écriture sur Paramètres et Équipe (qui couvre Activation, État système et
+  // Approbations). L'Admin PRINCIPAL, super utilisateur, voit tous ses modules
+  // relevés en ÉCRITURE à la construction de son DTO (middleware/auth.ts) — même
+  // mécanisme que la fusion des délégations temporaires.
   await upsertRole("Administrateur", "Directeur Général", [
+    ...TOUS_LES_MODULES.filter((m) => m !== Module.PARAMETRES && m !== Module.EQUIPE).map(lecture),
     ecriture(Module.PARAMETRES),
     ecriture(Module.EQUIPE),
   ]);

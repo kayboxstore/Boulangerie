@@ -123,6 +123,9 @@ export const TYPES_EVENEMENT = [
   "REGISTRE_CAISSE",
   // Dette non payée (3.4) : émis par le SYSTÈME (aucun émetteur humain).
   "DETTE_NON_PAYEE",
+  // Garde-fou (section 2) : l'Admin Principal a écrit dans un module métier
+  // hors de son périmètre d'origine — le rôle propriétaire et le DG sont alertés.
+  "INTERVENTION_ADMIN",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 

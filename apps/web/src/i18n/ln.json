@@ -133,7 +133,8 @@
     "statutConnecte": "Tango ya solo ezali kosala",
     "statutReconnexion": "Kokangama lisusu…",
     "statutDeconnecte": "Na libanda",
-    "DETTE_NON_PAYEE": "Nyongo efutami te"
+    "DETTE_NON_PAYEE": "Nyongo efutami te",
+    "INTERVENTION_ADMIN": "Ekela ya Admin"
   },
   "commissions": {
     "title": "Bakomisio",
@@ -627,10 +628,7 @@
     "greeting": "Mbote, {{nom}}",
     "connectedAs": "Okoti lokola",
     "exportCSV": "Kobimisa CSV",
-    "emptyTitle": " Data ya mombongo ya kolakisa mpo na mokumba na yo ezali te.",
-    "emptyText": "Ba-widget ya etando elandaka matrise ya bandingisi — mokumba Administrateur azali na ndingisa ya mombongo te, na ndenge esengeli. Talá nde biteni na yo :",
     "paramsComingSoon": "Ebongiseli (ekoya)",
-    "systemStateComingSoon": "Ezalela ya système (ekoya)",
     "closureSummary": "Bokuse ya bokangi — {{date}}",
     "closureSummaryDesc": "Etaleli ya bokuse ya mokolo, elongo na ba-widget ya tango ya solo.",
     "kpiDebts": "Banyongo ezali",

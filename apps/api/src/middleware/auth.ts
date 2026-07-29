@@ -1,10 +1,11 @@
 import type { Request, Response, NextFunction } from "express";
 import type { Langue, Module, NiveauAcces, PermissionDTO, UtilisateurDTO } from "@lomoto/shared";
-import { LANGUES } from "@lomoto/shared";
+import { LANGUES, MODULES } from "@lomoto/shared";
 import { aAcces } from "@lomoto/shared";
 import { verifyToken } from "../lib/jwt.js";
 import { prisma } from "../lib/prisma.js";
 import { contexteRequete } from "../lib/contexteRequete.js";
+import { estHorsPerimetreAdmin, notifierInterventionAdmin } from "../services/interventionsAdmin.js";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -38,6 +39,14 @@ export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | n
   // Fusion base + délégations : on garde le niveau le plus élevé par module.
   const niveaux = new Map<Module, NiveauAcces>();
   for (const p of u.role.permissions) niveaux.set(p.module as Module, p.niveauAcces as NiveauAcces);
+
+  // Admin PRINCIPAL = super utilisateur (section 2) : écriture sur absolument
+  // tous les modules. Les deux niveaux d'Admin partageant un seul rôle, la
+  // distinction ne peut pas vivre dans RolePermission — elle est appliquée ici,
+  // au même endroit et de la même façon que les délégations temporaires.
+  if (u.estAdminPrincipal) {
+    for (const module of MODULES) niveaux.set(module, "ECRITURE");
+  }
 
   const aujourdhui = new Date(new Date().toISOString().slice(0, 10)); // minuit UTC
   const delegations = await prisma.delegationRole.findMany({
@@ -99,6 +108,30 @@ export function requirePermission(module: Module, niveau: Exclude<NiveauAcces, "
         erreur: `Accès refusé : ${niveau.toLowerCase()} requis sur le module ${module}`,
       });
     }
+
+    // Garde-fou (section 2) : écriture de l'Admin Principal hors de son
+    // périmètre d'origine → le rôle propriétaire du module et le DG sont
+    // notifiés. On attend la fin de la réponse pour n'alerter que sur une
+    // action RÉELLEMENT aboutie (une validation refusée ne notifie personne).
+    const auteur = req.utilisateur;
+    if (
+      auteur?.estAdminPrincipal &&
+      niveau === "ECRITURE" &&
+      req.method !== "GET" &&
+      estHorsPerimetreAdmin(module)
+    ) {
+      res.once("finish", () => {
+        if (res.statusCode >= 400) return;
+        notifierInterventionAdmin({
+          module,
+          auteurId: auteur.id,
+          auteurNom: auteur.nom,
+          methode: req.method,
+          chemin: req.originalUrl,
+        }).catch((e) => console.error("Échec de notification d'intervention Admin :", e));
+      });
+    }
+
     next();
   };
 }

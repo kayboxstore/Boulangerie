@@ -132,7 +132,8 @@
     "statutConnecte": "Temps réel actif",
     "statutReconnexion": "Reconnexion…",
     "statutDeconnecte": "Hors ligne",
-    "DETTE_NON_PAYEE": "Dette non payée"
+    "DETTE_NON_PAYEE": "Dette non payée",
+    "INTERVENTION_ADMIN": "Intervention Admin"
   },
   "commissions": {
     "title": "Commissions",
@@ -626,10 +627,7 @@
     "greeting": "Bonjour, {{nom}}",
     "connectedAs": "Connecté(e) en tant que",
     "exportCSV": "Exporter CSV",
-    "emptyTitle": "Aucune donnée métier à afficher pour votre rôle.",
-    "emptyText": "Les widgets du tableau de bord suivent la matrice de permissions — le rôle Administrateur n'a aucune permission métier, par design. Consultez plutôt vos modules :",
     "paramsComingSoon": "Paramètres (à venir)",
-    "systemStateComingSoon": "État système (à venir)",
     "closureSummary": "Résumé de clôture — {{date}}",
     "closureSummaryDesc": "Vue de synthèse du jour, en plus des widgets temps réel.",
     "kpiDebts": "Dettes en cours",
