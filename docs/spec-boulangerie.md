@@ -17,15 +17,23 @@ Directeur Général (DG) — lecture seule sur tous les modules MÉTIER
 └── Chargé du personnel — écriture Travailleurs
 
 Administrateur — rôle technique séparé de la hiérarchie métier, jusqu'à 3 comptes
-├── Admin Principal — écriture Paramètres, Équipe, Activation, État système ; approuve les tâches critiques
-└── Admin secondaire (0 à 2) — mêmes droits, mais tâches critiques soumises à l'approbation de l'Admin Principal
+├── Admin Principal — SUPER UTILISATEUR : écriture sur ABSOLUMENT TOUS les modules,
+│                     métier compris ; approuve les tâches critiques
+└── Admin secondaire (0 à 2) — lecture sur ABSOLUMENT TOUT (comme le DG, y compris
+                      État système et Approbations) ; écriture limitée à
+                      Paramètres/Équipe/Activation/État système, tâches critiques
+                      soumises à l'approbation de l'Admin Principal
 ```
 
 **Règle par défaut** : un supérieur a un accès en lecture seule sur le périmètre de son subordonné direct, en plus de l'écriture sur son propre périmètre. Exceptions explicites :
 - Le **DG** voit tout en lecture seule, SAUF **l'édition** des Réglages/Paramètres (taxes, seuils, types de clients, infos boutique, langue par défaut), strictement réservée aux Admins. Il ne modifie **jamais rien** lui-même dans l'application — **aucune exception** (l'annulation de vente, seule exception qui avait existé, disparaît avec la refonte de la Caisse en 3.1). *Précision (suite audit Claude Code)* : la **consultation** du catalogue produits (prix) et de l'Équipe (qui, quel rôle, actif/inactif) reste accessible au DG en lecture seule — seule l'**édition** de ces données (créer/modifier un produit, un compte, une permission) est bloquée, via Paramètres.
 - Le **Caissier(ère)** a un accès en lecture seule supplémentaire sur la **Production**, bien que hors de sa chaîne hiérarchique directe.
 - Le **Chargé des commandes** a un accès en lecture seule sur **Commissions**, en plus de l'écriture sur Commandes.
-- Les **Admins** sont hors hiérarchie métier : aucune permission sur les modules métier, uniquement l'édition de Paramètres/Équipe/Activation/État système.
+- ~~Les **Admins** sont hors hiérarchie métier : aucune permission sur les modules métier, uniquement l'édition de Paramètres/Équipe/Activation/État système.~~ **Règle entièrement abrogée** — remplacée par les deux points ci-dessous.
+- L'**Admin Principal** est un **super utilisateur** : il a l'**écriture sur absolument tous les modules**, y compris les modules métier (Commandes, Caisse, Stocks, Production, Fournisseurs, Travailleurs), en plus de Paramètres/Équipe/Activation/État système/Approbations.
+- L'**Admin secondaire** a la **lecture sur absolument tout**, comme le DG — y compris État système et Approbations. Son **écriture** reste cantonnée à son périmètre d'origine (Paramètres/Équipe/Activation/État système), et ses tâches critiques restent soumises à l'approbation de l'Admin Principal. La lecture n'a jamais été soumise à approbation : ses nouveaux droits de consultation ne changent rien au workflow.
+
+**Garde-fou — intervention de l'Admin Principal hors de son périmètre d'origine** : quand l'Admin Principal **écrit** dans un module métier qui n'est pas Paramètres/Équipe/Activation/État système/Approbations, le **rôle propriétaire de ce module** (celui qui y détient l'écriture — ex. Chargé des commandes pour Commandes) **et le DG** reçoivent une **notification temps réel** signalant l'intervention. Ce signal s'ajoute à la trace automatique au Journal d'audit (3.17), qui capte déjà toute modification ou suppression. Objectif : un pouvoir total reste possible, mais jamais discret.
 
 **Workflow d'approbation (Admin Principal)** : certaines actions d'un Admin secondaire ne s'exécutent qu'après validation de l'Admin Principal. Tâches critiques (liste figée — 5 items) :
 - Supprimer un utilisateur
@@ -43,8 +51,8 @@ Quand un Admin secondaire déclenche une de ces actions, une demande est créée
 | Rôle | Écriture | Lecture seule (supplémentaire) |
 |---|---|---|
 | Directeur Général | *(aucune)* | Tous les modules métier — PAS Paramètres |
-| Admin Principal | Paramètres, Équipe, Activation, État système | — |
-| Admin secondaire | *(idem, tâches critiques soumises à approbation)* | — |
+| Admin Principal | **TOUS les modules sans exception** (métier compris) + Paramètres, Équipe, Activation, État système, Approbations | — *(déjà tout en écriture)* |
+| Admin secondaire | Paramètres, Équipe, Activation, État système *(tâches critiques soumises à approbation)* | **TOUS les autres modules**, y compris État système et Approbations |
 | Caissier(ère) | Caisse | Commandes, Commissions, Production |
 | Chargé des commandes | Commandes | Commissions |
 | Responsable de production | Production | — |
@@ -315,13 +323,13 @@ Comptes utilisateurs rattachés à un rôle, hiérarchie et matrice de permissio
 **Délégation temporaire de rôle** *(nouveau)* : un Admin peut accorder à un utilisateur les droits d'écriture d'un module précis pour une période donnée (ex. remplacement du Chargé des commandes absent 3 jours), sans changer son rôle permanent. À l'expiration, les droits reviennent automatiquement à la normale. La vérification de permission devient : *droits du rôle de base* **OU** *délégation active couvrant ce module à la date du jour*.
 
 ### 3.8 Tableau de bord & rapports — ultra moderne & sophistiqué
-CA du jour/semaine/mois, meilleures ventes, marge par produit, export comptable (CSV). Contenu strictement filtré selon le rôle connecté et sa matrice de permissions (section 2) — aucune action de modification visible pour le DG.
+Registre de caisse du jour/semaine/mois, activité par module, export comptable (CSV). Contenu strictement filtré selon le rôle connecté et sa matrice de permissions (section 2) — aucune action de modification visible pour le DG.
 
-Composition par rôle : chaque widget (CA/Caisse, Commandes, Commissions, Stock, Production, Fournisseurs, Travailleurs/Présence) n'apparaît que si le rôle connecté a au moins la lecture sur le module correspondant — le DG les voit tous, un Admin n'en voit aucun (par design) et devrait plutôt être orienté vers Paramètres/Équipe/État système.
+Composition par rôle : chaque widget (Caisse, Commandes, Commissions, Stock, Production, Fournisseurs, Travailleurs/Présence) n'apparaît que si le rôle connecté a au moins la lecture sur le module correspondant. Le DG les voit tous — et **depuis la refonte des permissions Admin (section 2), les deux niveaux d'Admin aussi** : l'Admin Principal en écriture, l'Admin secondaire en lecture. L'ancien **état vide « aucune donnée métier »** réservé aux Admins est **supprimé** : ils voient désormais les widgets normalement, comme n'importe quel autre rôle, selon leurs permissions.
 
 Marge par produit (état actuel et décision) : non calculable proprement aujourd'hui (pas de coût systématique par matière première, et depuis la refonte de 3.3 il n'existe plus de nomenclature par produit — les ingrédients sont consommés globalement sur la journée) — le widget affiche volume + CA par produit en attendant, limitation explicite dans l'UI et l'export. Décision pour plus tard : le coût utilisé sera un Coût Moyen Pondéré (CUMP) dérivé des réceptions fournisseurs réelles (LigneCommandeFournisseur), pas un coût de référence saisi à la main. Une marge *par produit* supposerait de réintroduire une clé de répartition des ingrédients journaliers entre produits — à trancher le moment venu ; une marge globale journalière, elle, reste calculable.
 
-**Résumé de clôture quotidien** *(nouveau)* : en fin de journée, un digest auto-généré est disponible pour le DG uniquement — CA du jour, nombre de commandes, dettes en cours, alertes stock actives. Objectif : réduire la dépendance au fil temps réel pour une vue d'ensemble, sans avoir à rejouer toute la journée de notifications. *(L'équivalent Admin reste l'État système, 3.15 — technique et non business, conformément à la règle « aucune permission métier » des Admins posée en section 2.)*
+**Résumé de clôture quotidien** *(nouveau)* : en fin de journée, un digest auto-généré — registre de caisse du jour (entrées, dettes payées, dépenses, solde), nombre de commandes, dettes en cours, alertes stock actives. Objectif : réduire la dépendance au fil temps réel pour une vue d'ensemble, sans avoir à rejouer toute la journée de notifications. **Portée étendue** : disponible pour le **DG et les deux niveaux d'Admin**, en lecture seule pour tous (cohérent avec leurs permissions depuis la refonte de la section 2 ; l'État système, 3.15, reste le pendant technique).
 
 **Identité visuelle** (extraite du logo Boulangerie Lomoto) :
 - Bleu marine `#0F1923` — texte, éléments structurants, mode sombre
