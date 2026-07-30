@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import type { AlerteDetteDTO, Module } from "@lomoto/shared";
+import { CREDIT_DEVELOPPEUR, TAGLINE, type AlerteDetteDTO, type Module } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -106,7 +106,7 @@ export function Layout() {
   });
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background print:bg-white">
       {/* Barre latérale — marine, logo et navigation */}
       <aside className="hidden w-64 flex-col bg-marine text-creme md:flex">
         <div className="flex items-center gap-3 border-b border-creme/10 px-5 py-4">
@@ -237,7 +237,7 @@ export function Layout() {
         </nav>
 
         {/* Barre supérieure (desktop) : statut temps réel + notifications */}
-        <div className="hidden items-center justify-end gap-3 border-b bg-card px-6 py-2 md:flex">
+        <div className="no-print hidden items-center justify-end gap-3 border-b bg-card px-6 py-2 md:flex">
           <IndicateurConnexion etendu />
           <Suspense fallback={<ClocheStatique />}>
             <NotificationBell />
@@ -252,9 +252,18 @@ export function Layout() {
           </Suspense>
         </main>
 
-        <footer className="px-4 pb-4 text-center text-xs text-muted-foreground">
+        {/* À l'impression, c'est le pied de page dédié (crédit développeur, 3.13)
+            qui porte la marque — inutile de doubler la mention ici. */}
+        <footer className="no-print px-4 pb-4 text-center text-xs text-muted-foreground">
           Boulangerie Lomoto — <span className="italic">Pain Lia o Tonda</span>
         </footer>
+
+        {/* Pied de page des documents imprimés (section 3.13) : rendu ici, au
+            niveau de la coquille, pour ne dépendre d'aucun écran — et donc ne
+            jamais hériter d'un conteneur `.no-print`. */}
+        <div className="lomoto-print-only lomoto-print-credit">
+          Boulangerie Lomoto · {TAGLINE} — {CREDIT_DEVELOPPEUR.mention} · {CREDIT_DEVELOPPEUR.telephone}
+        </div>
       </div>
     </div>
   );

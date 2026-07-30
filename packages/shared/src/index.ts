@@ -939,6 +939,50 @@ export const TAGLINE = "Pain Lia o Tonda";
  * Crédit développeur (section 3.12) — affiché sur À propos et destiné au pied de
  * page des rapports exportés (l'export PDF arrivera dans un lot suivant).
  */
+// ---------------------------------------------------------------------------
+// Export & partage des rapports (section 3.13 — vaut aussi pour 3.8 et 3.11)
+// ---------------------------------------------------------------------------
+
+/**
+ * Modèle de document commun à l'impression, au PDF et à l'email : une suite de
+ * sections « titre + en-têtes + lignes ». C'est exactement la forme que l'export
+ * CSV construit déjà côté écran, ce qui garantit que le PDF montre la même chose
+ * que ce que l'utilisateur a sous les yeux — et évite de dupliquer, côté serveur,
+ * les requêtes de chaque écran.
+ */
+export interface SectionDocument {
+  titre: string;
+  entetes: string[];
+  lignes: (string | number)[][];
+}
+
+const sectionSchema = z.object({
+  titre: z.string().max(200),
+  entetes: z.array(z.string().max(120)).max(20),
+  lignes: z.array(z.array(z.union([z.string().max(400), z.number()])).max(20)).max(2000),
+});
+
+export const documentExportSchema = z.object({
+  titre: z.string().trim().min(1).max(200),
+  sousTitre: z.string().trim().max(300).optional(),
+  sections: z.array(sectionSchema).min(1).max(30),
+  /**
+   * Modules dont le document tire ses données. Le serveur exige la LECTURE sur
+   * chacun avant de produire quoi que ce soit : un utilisateur sans accès à
+   * Commissions ne peut pas en demander l'export. Vide pour les Rapports
+   * personnels (3.13), accessibles à tous, dont la portée est déjà résolue
+   * côté serveur.
+   */
+  modules: z.array(z.enum(MODULES)).max(MODULES.length).default([]),
+});
+export type DocumentExportInput = z.infer<typeof documentExportSchema>;
+
+export const envoiEmailSchema = documentExportSchema.extend({
+  destinataire: z.string().email("Adresse e-mail invalide").max(160),
+  message: z.string().trim().max(2000).optional(),
+});
+export type EnvoiEmailInput = z.infer<typeof envoiEmailSchema>;
+
 export const CREDIT_DEVELOPPEUR = {
   mention: "Application créée par Augustin Kayembe",
   telephone: "+243 980 240 000",

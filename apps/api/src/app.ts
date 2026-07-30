@@ -23,6 +23,7 @@ import { approbationsRouter } from "./routes/approbations.js";
 import { delegationsRouter } from "./routes/delegations.js";
 import { etatSystemeRouter } from "./routes/etat-systeme.js";
 import { auditRouter } from "./routes/audit.js";
+import { exportRouter } from "./routes/export.js";
 
 export function createApp() {
   const app = express();
@@ -55,6 +56,7 @@ export function createApp() {
   app.use("/api/delegations", delegationsRouter);
   app.use("/api/etat-systeme", etatSystemeRouter);
   app.use("/api/audit", auditRouter);
+  app.use("/api/export", exportRouter);
 
   // --- Frontend compilé (production / déploiement) --------------------------
   // En dev, le frontend est servi par Vite (avec proxy vers cette API). En

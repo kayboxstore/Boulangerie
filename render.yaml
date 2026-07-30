@@ -39,3 +39,12 @@ services:
         generateValue: true
       - key: NODE_VERSION
         value: "22"
+      # Envoi des rapports par email (section 3.13). `sync: false` = Render
+      # demande la valeur dans son interface et ne la stocke JAMAIS dans le
+      # dépôt. À saisir ici ET dans le .env local : les deux environnements
+      # sont indépendants. Tant qu'elles sont vides, le bouton « Envoyer par
+      # email » ne s'affiche pas ; l'impression et le PDF fonctionnent quand même.
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false

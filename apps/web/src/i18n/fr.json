@@ -718,7 +718,8 @@
     "topExpensesDesc": "Postes les plus lourds sur 30 jours.",
     "noExpensePeriod": "Aucune dépense sur la période.",
     "expenseTooltip": "Dépense",
-    "caTooltip": "Solde du jour"
+    "caTooltip": "Solde du jour",
+    "reportTitle": "Rapport de gestion"
   },
   "langue": {
     "FR": "Français",
@@ -791,5 +792,19 @@
     "after": "Après",
     "noFieldChange": "Aucun champ métier modifié.",
     "empty": "Aucune action enregistrée pour ces filtres."
+  },
+  "export": {
+    "print": "Imprimer",
+    "downloadPdf": "Télécharger en PDF",
+    "sendEmail": "Envoyer par email",
+    "pdfError": "La génération du PDF a échoué.",
+    "emailError": "L'envoi a échoué.",
+    "emailSent": "Rapport envoyé à {{destinataire}}.",
+    "emailDialogTitle": "Envoyer par email",
+    "emailDialogDesc": "Le rapport « {{titre}} » sera envoyé en pièce jointe PDF.",
+    "recipient": "Adresse du destinataire",
+    "messageOptional": "Message (optionnel)",
+    "messagePlaceholder": "Un mot pour accompagner le rapport…",
+    "send": "Envoyer"
   }
 }

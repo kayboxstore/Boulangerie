@@ -719,7 +719,8 @@
     "topExpensesDesc": "Bisika ya minene na mikolo 30.",
     "noExpensePeriod": "Depanse ezali te na ntango wana.",
     "expenseTooltip": "Depanse",
-    "caTooltip": "Oyo etikali mokolo"
+    "caTooltip": "Oyo etikali mokolo",
+    "reportTitle": "Lapolo ya bokambi"
   },
   "langue": {
     "FR": "Français",
@@ -792,5 +793,19 @@
     "after": "Nsima",
     "noFieldChange": "Esika ya mosala ebongwani te.",
     "empty": "Ekela ekomami te mpo na batili oyo."
+  },
+  "export": {
+    "print": "Kobimisa na papye",
+    "downloadPdf": "Kokitisa PDF",
+    "sendEmail": "Kotinda na email",
+    "pdfError": "Bosali PDF elongi te.",
+    "emailError": "Botindi elongi te.",
+    "emailSent": "Lapolo etindami epai ya {{destinataire}}.",
+    "emailDialogTitle": "Kotinda na email",
+    "emailDialogDesc": "Lapolo « {{titre}} » ekotindama lokola PDF.",
+    "recipient": "Adresi ya moyambi",
+    "messageOptional": "Liloba (soki olingi)",
+    "messagePlaceholder": "Liloba moko mpo na lapolo…",
+    "send": "Kotinda"
   }
 }

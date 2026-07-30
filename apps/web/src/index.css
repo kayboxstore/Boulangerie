@@ -172,3 +172,91 @@
     transform: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Impression (section 3.13) — sert aussi à « Enregistrer en PDF » depuis le
+   navigateur. On masque la navigation et les actions, on pose le logo en
+   filigrane et le crédit développeur en pied de page.
+   --------------------------------------------------------------------------- */
+
+.lomoto-print-only { display: none; }
+
+@media print {
+  /* Marge basse plus large : elle limite les rencontres entre le contenu et le
+     pied de page fixe (voir .lomoto-print-credit). */
+  @page { margin: 14mm 14mm 22mm; }
+
+  /* Navigation, en-têtes et boutons n'ont aucun sens sur papier. */
+  aside,
+  header,
+  nav,
+  .no-print { display: none !important; }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f1923 !important;
+    /* Sans cela, les navigateurs suppriment fonds et couleurs à l'impression —
+       le filigrane et les en-têtes de tableau disparaîtraient. */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Filigrane : logo centré, répété sur chaque page imprimée. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    /* Variante allégée (320 px, 130 Ko) : même rendu à 7 % d'opacité que le logo
+       d'origine (1.254 px, 2 Mo), sans alourdir l'aperçu ni le PDF enregistré. */
+    background-image: url("/logo-lomoto-pdf.png");
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: 55%;
+    opacity: 0.07;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  main {
+    padding: 0 !important;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Cartes et tableaux : à plat, sans ombre, sans coupure au milieu. */
+  main [class*="rounded-xl"],
+  main [class*="rounded-lg"],
+  main [class*="shadow"] {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+  table { break-inside: auto; }
+  tr,
+  li { break-inside: avoid; }
+
+  /* Les graphiques passent mal en impression : on les remplace par leurs
+     tableaux, déjà présents dans le document exporté. */
+  .recharts-wrapper { display: none !important; }
+
+  .lomoto-print-only { display: block !important; }
+
+  /* Pied de page répété sur chaque feuille. `position: fixed` est la seule
+     stratégie qui fonctionne ici : mesuré sur Chromium, un décalage négatif
+     (pour loger le crédit dans la marge de @page) le fait disparaître de la
+     PREMIÈRE page — d'où `bottom: 0`, dans la zone imprimable. Le fond opaque
+     garantit qu'il reste lisible si le contenu descend jusqu'en bas. */
+  .lomoto-print-credit {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 2mm 0 1mm;
+    background: #ffffff;
+    border-top: 1px solid #da9f4e;
+    font-size: 8pt;
+    color: #6b6254;
+    text-align: center;
+    z-index: 2;
+  }
+}

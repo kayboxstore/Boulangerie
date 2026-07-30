@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { ScrollText } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { TYPES_ACTIVITE, type ActiviteDTO, type PorteeRapportsDTO } from "@lomoto/shared";
+import { BarreExport } from "@/components/BarreExport";
+import type { SectionCSV } from "@/lib/csv";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -51,17 +53,43 @@ export function RapportsPersonnelsPage() {
   // Le filtre « Qui » n'a de sens que si la portée dépasse soi-même.
   const porteeElargie = !!portee && (portee.tous || portee.utilisateurs.length > 1);
 
+  /** Sections du document exporté (impression, PDF, email). */
+  function construireSections(): SectionCSV[] {
+    return [
+      {
+        titre: t("rapports.journalTitle"),
+        entetes: [t("common.date"), t("common.by"), t("rapports.colType"), t("rapports.summary")],
+        lignes: activites.map((a) => [
+          new Date(a.date).toLocaleString("fr-FR"),
+          `${a.utilisateur.nom} (${a.utilisateur.roleNom})`,
+          t(`activiteType.${a.type}`),
+          a.resume,
+        ]),
+      },
+    ];
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("rapports.title")}</h1>
-        <p className="mt-1 text-muted-foreground">
-          {portee?.tous
-            ? t("rapports.subtitleAll")
-            : porteeElargie
-              ? t("rapports.subtitleExtended")
-              : t("rapports.subtitleSelf")}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("rapports.title")}</h1>
+          <p className="mt-1 text-muted-foreground">
+            {portee?.tous
+              ? t("rapports.subtitleAll")
+              : porteeElargie
+                ? t("rapports.subtitleExtended")
+                : t("rapports.subtitleSelf")}
+          </p>
+        </div>
+        {/* Journal personnel : portée déjà résolue côté serveur (3.13), donc
+            aucun module à exiger — l'utilisateur n'exporte que ce qu'il voit. */}
+        <BarreExport
+          titre={t("rapports.title")}
+          sousTitre={filtresActifs ? t("rapports.countFiltered", { count: activites.length }) : undefined}
+          modules={[]}
+          construireSections={construireSections}
+        />
       </div>
 
       <Card>

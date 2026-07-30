@@ -31,6 +31,28 @@ puis démarre le service.
 6. Une fois « Live », l'URL publique s'affiche, du type
    `https://boulangerie-lomoto.onrender.com` — **ouvre-la sur le téléphone**.
 
+## Activer l'envoi des rapports par email (section 3.13)
+
+L'impression et le téléchargement PDF fonctionnent sans rien configurer. L'envoi
+par email demande deux variables d'environnement — Render les réclame à l'étape 5
+(`sync: false` dans `render.yaml`, donc **aucune valeur n'est stockée dans le
+dépôt**) :
+
+| Variable | Valeur |
+|----------|--------|
+| `GMAIL_USER` | l'adresse Gmail / Google Workspace expéditrice |
+| `GMAIL_APP_PASSWORD` | le **mot de passe d'application** Google (16 caractères), pas le mot de passe du compte |
+
+À renseigner **deux fois, séparément** : dans le `.env` local ET dans Render →
+service `boulangerie-lomoto` → *Environment*. Les deux environnements sont
+indépendants, rien ne se propage automatiquement.
+
+Tant qu'elles sont vides, le bouton « Envoyer par email » ne s'affiche pas ;
+« Imprimer » et « Télécharger en PDF » restent disponibles.
+
+Variables facultatives pour un autre fournisseur SMTP : `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_SECURE`.
+
 ## Se connecter
 
 Comptes de démonstration (mot de passe commun **`Lomoto2026!`**) :

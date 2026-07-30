@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { BarreExport } from "@/components/BarreExport";
+import type { SectionCSV } from "@/lib/csv";
 
 function formatDate(iso: string): string {
   return new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(new Date(iso));
@@ -29,16 +31,63 @@ export function CommissionsPage() {
       api<{ commissions: CommissionLigneDTO[]; totalCommissions: number }>(`/api/commissions?${params}`),
   });
 
+  /** Sections du document exporté (impression, PDF, email). */
+  function construireSections(): SectionCSV[] {
+    const lignes = data?.commissions ?? [];
+    return [
+      {
+        titre: t("commissions.mamanOrders"),
+        entetes: [
+          t("commissions.colNum"),
+          t("common.date"),
+          t("commissions.colClient"),
+          t("commissions.colBacs"),
+          t("commissions.colTotalPaid"),
+          t("commissions.colCommission"),
+        ],
+        lignes: lignes.map((l) => [
+          l.numero,
+          l.dateCreation.slice(0, 10),
+          l.clientNom,
+          l.quantiteBacs,
+          formatFc(l.montantTotalPaye),
+          formatFc(l.commission),
+        ]),
+      },
+      {
+        titre: t("commissions.totalLabel"),
+        entetes: [t("commissions.totalLabel")],
+        lignes: [[formatFc(data?.totalCommissions ?? 0)]],
+      },
+    ];
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("commissions.title")}</h1>
-        <p className="mt-1 text-muted-foreground">{t("commissions.subtitle")}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("commissions.title")}</h1>
+          <p className="mt-1 text-muted-foreground">{t("commissions.subtitle")}</p>
+          {/* La carte de filtres ne s'imprime pas : on rappelle ici la période
+              retenue, sinon le papier ne dirait pas sur quoi porte le total. */}
+          {(du || au) && (
+            <p className="lomoto-print-only mt-1 text-sm">
+              {t("common.from")} {du || "…"} {t("common.to").toLowerCase()} {au || "…"}
+            </p>
+          )}
+        </div>
+        <BarreExport
+          titre={t("commissions.title")}
+          sousTitre={du || au ? `${du || "…"} → ${au || "…"}` : undefined}
+          modules={["COMMISSIONS"]}
+          construireSections={construireSections}
+        />
       </div>
 
       <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
-        {/* Filtres */}
-        <Card>
+        {/* Filtres — contrôles d'écran : à l'impression, la période retenue est
+            portée par le sous-titre du document, pas par des champs vides. */}
+        <Card className="no-print">
           <CardContent className="flex flex-wrap items-end gap-3 pt-6">
             <div className="space-y-1.5">
               <Label htmlFor="commissions-du">{t("common.from")}</Label>

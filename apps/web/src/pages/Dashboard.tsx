@@ -17,6 +17,7 @@ import {
   formatFc,
   formatNombre,
   formatQuantite,
+  type Module,
   type RapportCaisseDTO,
   type RapportCommandesDTO,
   type RapportCommissionsDTO,
@@ -41,6 +42,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useSocket } from "@/lib/socket";
 import { telechargerCSV, type SectionCSV } from "@/lib/csv";
+import { BarreExport } from "@/components/BarreExport";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -200,7 +202,8 @@ export function DashboardPage() {
     return points;
   }, [caisse]);
 
-  function exporterCSV() {
+  /** Sections du document — partagées par l'export CSV et l'export PDF/email. */
+  function construireSections(): SectionCSV[] {
     const c = (k: string) => t(`dashboard.csv.${k}`);
     const sections: SectionCSV[] = [];
     if (caisse) {
@@ -290,8 +293,25 @@ export function DashboardPage() {
         ],
       });
     }
-    telechargerCSV(`rapports-lomoto-${new Date().toISOString().slice(0, 10)}.csv`, sections);
+    return sections;
   }
+
+  function exporterCSV() {
+    telechargerCSV(`rapports-lomoto-${new Date().toISOString().slice(0, 10)}.csv`, construireSections());
+  }
+
+  /** Modules effectivement présents dans le document (vérifiés côté serveur). */
+  const modulesDocument = (
+    [
+      litCaisse && "CAISSE",
+      litCommandes && "COMMANDES",
+      litCommissions && "COMMISSIONS",
+      litStocks && "STOCKS",
+      litProduction && "PRODUCTION",
+      litFournisseurs && "FOURNISSEURS",
+      litTravailleurs && "TRAVAILLEURS",
+    ].filter(Boolean) as Module[]
+  );
 
   if (!utilisateur) return null;
 
@@ -304,8 +324,14 @@ export function DashboardPage() {
             {t("dashboard.connectedAs")} <span className="font-medium text-foreground">{utilisateur.role.nom}</span>
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="no-print flex flex-wrap items-center gap-3">
           <IndicateurConnexion etendu />
+          <BarreExport
+            titre={t("dashboard.reportTitle")}
+            sousTitre={t("dashboard.connectedAs") + " " + utilisateur.role.nom}
+            modules={modulesDocument}
+            construireSections={construireSections}
+          />
           <Button variant="outline" onClick={exporterCSV}>
             <Download className="h-4 w-4" />
             {t("dashboard.exportCSV")}
