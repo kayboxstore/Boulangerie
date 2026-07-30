@@ -9,11 +9,22 @@
  * liste sert de durcissement (elle empêche un site tiers d'appeler l'API
  * directement), pas de condition de fonctionnement.
  */
-export const DOMAINE_CANONIQUE = "boulangerie-lomoto.com";
+// Domaine CANONIQUE = www, pas l'apex. Contre-intuitif (l'usage récent va
+// plutôt vers l'apex sans www), mais Render redirige DÉJÀ l'apex vers www à
+// son edge (avant même que cette app ne reçoive la requête — probablement
+// « www » choisi comme domaine principal au moment d'ajouter le domaine
+// personnalisé dans Render). Un premier essai en sens inverse (apex
+// canonique) a provoqué une boucle de redirection infinie : Render renvoie
+// apex→www, cette app renvoyait www→apex. Sans accès au tableau de bord
+// Render pour changer leur réglage, la seule sortie de boucle est de suivre
+// leur choix plutôt que de le contredire.
+const APEX = "boulangerie-lomoto.com";
+export const DOMAINE_CANONIQUE = `www.${APEX}`;
+export const DOMAINE_A_REDIRIGER = APEX;
 
 export const ORIGINES_AUTORISEES = [
   `https://${DOMAINE_CANONIQUE}`,
-  `https://www.${DOMAINE_CANONIQUE}`,
+  `https://${APEX}`,
   // Ancienne URL Render conservée accessible (liens déjà partagés, favoris).
   "https://boulangerie-lomoto.onrender.com",
 ];

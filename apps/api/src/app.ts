@@ -3,7 +3,7 @@ import cors from "cors";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { DOMAINE_CANONIQUE, verifierOrigine } from "./lib/origines.js";
+import { DOMAINE_A_REDIRIGER, DOMAINE_CANONIQUE, verifierOrigine } from "./lib/origines.js";
 import { authRouter } from "./routes/auth.js";
 import { produitsRouter } from "./routes/produits.js";
 import { rolesRouter } from "./routes/roles.js";
@@ -34,12 +34,13 @@ export function createApp() {
   // pas le domaine réellement visité par le navigateur.
   app.set("trust proxy", true);
 
-  // Domaine canonique (nouveau : boulangerie-lomoto.com) : www redirige vers
-  // l'apex, pour n'avoir qu'UNE seule adresse qui compte (favoris, liens
-  // partagés, référencement) plutôt que deux qui fonctionnent en parallèle.
-  // Placé avant toute autre route pour s'appliquer aussi à /api et /socket.io.
+  // Domaine canonique = www.boulangerie-lomoto.com (voir le commentaire dans
+  // lib/origines.ts sur pourquoi c'est www et pas l'apex) : l'apex redirige
+  // vers www, pour n'avoir qu'UNE seule adresse qui compte plutôt que deux qui
+  // fonctionnent en parallèle. Placé avant toute autre route pour s'appliquer
+  // aussi à /api et /socket.io.
   app.use((req, res, next) => {
-    if (req.hostname === `www.${DOMAINE_CANONIQUE}`) {
+    if (req.hostname === DOMAINE_A_REDIRIGER) {
       return res.redirect(301, `https://${DOMAINE_CANONIQUE}${req.originalUrl}`);
     }
     next();
