@@ -19,7 +19,9 @@ import { contexteRequete } from "./contexteRequete.js";
 
 // Correspondance modèle Prisma → module applicatif (pour le filtrage). Les
 // modèles absents de cette table ne sont pas audités : c'est le cas de
-// Notification (système, haut volume) et d'AuditLog lui-même.
+// Notification (système, haut volume), d'AuditLog lui-même, et de
+// SauvegardeBase (journal en AJOUT SEUL — aucun update ni delete à intercepter).
+// Ajouter ici tout nouveau modèle qui, lui, se modifie ou se supprime.
 const MODELE_MODULE: Record<string, string> = {
   // Équipe & droits d'accès
   Utilisateur: "EQUIPE",

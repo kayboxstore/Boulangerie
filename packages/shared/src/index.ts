@@ -932,6 +932,7 @@ export interface ResumeClotureDTO {
 // À propos (section 3.12) & Rapports personnels (section 3.13)
 // ---------------------------------------------------------------------------
 
+export const NOM_APP = "Boulangerie Lomoto";
 export const VERSION_APP = "0.1.0";
 export const TAGLINE = "Pain Lia o Tonda";
 
@@ -1163,12 +1164,64 @@ export interface DelegationDTO {
   creePar: { id: string; nom: string } | null;
 }
 
+export const TYPES_SAUVEGARDE = ["AUTOMATIQUE", "MANUELLE"] as const;
+export type TypeSauvegarde = (typeof TYPES_SAUVEGARDE)[number];
+
+export const STATUTS_SAUVEGARDE = ["SUCCES", "ECHEC"] as const;
+export type StatutSauvegarde = (typeof STATUTS_SAUVEGARDE)[number];
+
+export interface SauvegardeDTO {
+  id: string;
+  type: TypeSauvegarde;
+  statut: StatutSauvegarde;
+  tailleOctets: number | null;
+  nomFichier: string | null;
+  destination: string | null;
+  erreur: string | null;
+  dureeMs: number | null;
+  declencheParNom: string | null;
+  date: string;
+}
+
 export interface EtatSystemeDTO {
-  baseDeDonnees: { connectee: boolean; latenceMs: number | null };
+  nomApplication: string;
   version: string;
+  /**
+   * Licence : aucun système de licence n'existe encore (section 3.15) — il
+   * viendra avec la version White label. Le champ dit « non configuré » plutôt
+   * que d'afficher une licence factice.
+   */
+  licence: { configuree: false };
+  /**
+   * Base de données : hôte, port et nom SEULEMENT. Jamais l'utilisateur, jamais
+   * le mot de passe, jamais l'URL complète (section 3.15).
+   */
+  baseDeDonnees: {
+    connectee: boolean;
+    latenceMs: number | null;
+    hote: string | null;
+    port: number | null;
+    base: string | null;
+  };
   utilisateursActifs: number;
-  // Aucun mécanisme de sauvegarde n'existe dans le projet : champ non configuré.
-  derniereSauvegarde: null;
+  sauvegardes: {
+    /** Dernière tentative, réussie ou non — un échec est ce qu'il faut voir. */
+    derniere: SauvegardeDTO | null;
+    /** Dernière tentative RÉUSSIE : c'est elle qui dit jusqu'où on est protégé. */
+    dernierSucces: SauvegardeDTO | null;
+    prochainePrevue: string | null;
+    planificationActive: boolean;
+    expressionCron: string;
+    fuseau: string;
+    /** Google Drive configuré ? Sinon l'envoi automatique ne peut pas aboutir. */
+    driveConfigure: boolean;
+    /** Adresse à qui partager le dossier Drive ; null si la clé est absente. */
+    emailCompteService: string | null;
+    /** pg_dump présent sur l'hôte ? Sans lui, aucune sauvegarde n'est possible. */
+    outilDisponible: boolean;
+    outilVersion: string | null;
+    historique: SauvegardeDTO[];
+  };
   horodatage: string;
 }
 
@@ -1252,6 +1305,22 @@ export function formatNombre(valeur: number, options?: Intl.NumberFormatOptions)
 /** Formate un montant en Franc Congolais : 4100 -> "4.100 Fc" */
 export function formatFc(montant: number): string {
   return `${formatNombre(montant)} Fc`;
+}
+
+/**
+ * Taille de fichier lisible (section 3.15, sauvegardes) : 109887 -> "107,3 Ko".
+ * Passe par formatNombre pour garder le séparateur décimal de l'application.
+ */
+export function formatOctets(octets: number): string {
+  if (octets < 1024) return `${formatNombre(octets)} o`;
+  const unites = ["Ko", "Mo", "Go", "To"];
+  let valeur = octets / 1024;
+  let i = 0;
+  while (valeur >= 1024 && i < unites.length - 1) {
+    valeur /= 1024;
+    i++;
+  }
+  return `${formatNombre(valeur, { maximumFractionDigits: 1 })} ${unites[i]}`;
 }
 
 /** Vérifie qu'un ensemble de permissions accorde au moins `niveau` sur `module`. */

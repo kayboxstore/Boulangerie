@@ -53,6 +53,58 @@ Tant qu'elles sont vides, le bouton « Envoyer par email » ne s'affiche pas ;
 Variables facultatives pour un autre fournisseur SMTP : `SMTP_HOST`, `SMTP_PORT`,
 `SMTP_SECURE`.
 
+## Activer la sauvegarde quotidienne vers Google Drive (section 3.15)
+
+Le **téléchargement manuel** d'une sauvegarde (Admin Principal, écran *État
+système*) fonctionne sans rien configurer. L'**envoi automatique quotidien vers
+Google Drive** demande un **compte de service Google Cloud** — un mécanisme
+différent du mot de passe d'application Gmail ci-dessus, avec ses propres
+identifiants.
+
+### À faire une fois dans la Google Cloud Console (console.cloud.google.com)
+
+1. **Créer un projet** (ou réutiliser un projet existant).
+2. **Activer l'API Google Drive** : *APIs & Services → Library → Google Drive
+   API → Enable*.
+3. **Créer un compte de service** : *IAM & Admin → Service Accounts → Create
+   service account*. Un nom suffit ; aucun rôle IAM n'est nécessaire (les droits
+   viennent du partage Drive, à l'étape 6).
+4. **Créer une clé JSON** : sur le compte de service → *Keys → Add key → Create
+   new key → JSON*. Le fichier se télécharge une seule fois — garde-le.
+5. **Relever l'email du compte de service**, de la forme
+   `quelque-chose@mon-projet.iam.gserviceaccount.com`.
+6. **Dans Google Drive**, créer un dossier de sauvegardes et le **partager en
+   Éditeur avec cet email**. Sans ce partage, l'envoi échoue en « dossier
+   introuvable » même si le dossier existe.
+7. **Relever l'identifiant du dossier** : c'est le suffixe de son URL,
+   `https://drive.google.com/drive/folders/<IDENTIFIANT>`.
+
+### Variables d'environnement
+
+| Variable | Valeur |
+|----------|--------|
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | le contenu **entier** du fichier JSON de l'étape 4, sur une seule ligne — ou encodé en base64, les deux sont acceptés |
+| `GOOGLE_DRIVE_FOLDER_ID` | l'identifiant du dossier de l'étape 7 |
+
+À renseigner **deux fois, séparément** : dans le `.env` local **et** dans Render →
+service `boulangerie-lomoto` → *Environment*. Rien ne se propage automatiquement.
+
+Facultatif : `BACKUP_CRON` (défaut `30 2 * * *`) et `BACKUP_TIMEZONE` (défaut
+`Africa/Kinshasa`) pour changer l'heure de la sauvegarde.
+
+L'écran *État système* affiche l'email du compte de service lu depuis la clé,
+ainsi que le statut de chaque tentative — c'est là qu'on vérifie que tout est en
+place.
+
+### Un point à vérifier après le déploiement
+
+La sauvegarde utilise l'outil **`pg_dump`**, qui doit être présent sur le serveur.
+L'écran *État système* l'indique explicitement : si un bandeau signale que
+`pg_dump` est absent, aucune sauvegarde n'est possible tant que le client
+PostgreSQL n'est pas installé sur l'hôte (variable `PG_DUMP_PATH` si l'outil est
+installé ailleurs que dans le `PATH`). Dans ce cas, s'appuyer en attendant sur les
+sauvegardes de la base managée fournies par l'hébergeur.
+
 ## Se connecter
 
 Comptes de démonstration (mot de passe commun **`Lomoto2026!`**) :

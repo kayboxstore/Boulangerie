@@ -140,6 +140,7 @@ model Utilisateur {
   delegationsRecues          DelegationRole[]      @relation("DelegationsRecues")
   delegationsCreees          DelegationRole[]      @relation("DelegationsCreees")
   auditsEffectues            AuditLog[]            @relation("AuditsEffectues")
+  sauvegardesDeclenchees     SauvegardeBase[]      @relation("SauvegardesDeclenchees")
   tauxDefinis                TauxDuJour[]          @relation("TauxDefinis")
   depensesEnregistrees       DepenseCaisse[]       @relation("DepensesEnregistrees")
 }
@@ -679,4 +680,45 @@ model AuditLog {
   @@index([createdAt])
   @@index([module, createdAt])
   @@index([utilisateurId, createdAt])
+}
+
+// Sauvegardes de la base (section 3.15). Une sauvegarde AUTOMATIQUE est
+// déclenchée chaque jour par le planificateur (services/planificateurSauvegarde)
+// et envoyée vers Google Drive ; une MANUELLE est déclenchée par l'Admin
+// Principal et repart directement dans son navigateur, sans passer par Drive.
+enum TypeSauvegarde {
+  AUTOMATIQUE
+  MANUELLE
+}
+
+enum StatutSauvegarde {
+  SUCCES
+  ECHEC
+}
+
+// Journal des tentatives de sauvegarde — écrit AUSSI en cas d'échec : une
+// sauvegarde qui ne s'est pas faite est précisément ce qu'il faut voir.
+model SauvegardeBase {
+  id             String           @id @default(cuid())
+  type           TypeSauvegarde
+  statut         StatutSauvegarde
+  // Taille du dump produit ; null si la génération elle-même a échoué. En Int :
+  // au-delà de 2 Go, un dump de cette base relèverait d'un autre problème.
+  tailleOctets   Int?
+  nomFichier     String?
+  // Destination réelle du fichier : dossier Google Drive (avec son identifiant
+  // distant) ou téléchargement direct, qui ne laisse aucune copie sur le serveur.
+  destination    String?
+  idDistant      String?
+  // Message d'erreur tel que remonté (pg_dump absent, Drive refusé…), pour que
+  // l'Admin puisse agir sans accès aux journaux du serveur.
+  erreur         String?
+  dureeMs        Int?
+  // Auteur d'une sauvegarde manuelle ; null pour les automatiques (pas d'humain).
+  declencheParId String?
+  declenchePar   Utilisateur?     @relation("SauvegardesDeclenchees", fields: [declencheParId], references: [id], onDelete: SetNull)
+  createdAt      DateTime         @default(now())
+
+  @@index([createdAt])
+  @@index([type, createdAt])
 }
