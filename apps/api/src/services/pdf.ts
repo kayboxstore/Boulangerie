@@ -20,9 +20,9 @@ const TAILLE_FILIGRANE = 300;
  * Le logo sert de filigrane sur chaque page. Il vit dans le frontend ; on le
  * cherche d'abord dans le build servi en production, puis dans les sources.
  *
- * On privilégie la variante `-pdf` (320 px) : le logo d'origine fait 1.254 px et
- * près de 2 Mo, ce qui alourdirait inutilement chaque PDF — et donc chaque pièce
- * jointe d'email — alors qu'un filigrane à 6 % d'opacité n'en a pas besoin.
+ * On privilégie la variante `-pdf` (320 px, 31 Ko) plutôt que le logo de
+ * l'interface (480 px) : le filigrane est dessiné à 300 pt et à 6 % d'opacité,
+ * il n'a pas besoin de plus, et chaque Ko compte sur une pièce jointe d'email.
  */
 function cheminLogo(): string | null {
   const ici = path.dirname(fileURLToPath(import.meta.url));

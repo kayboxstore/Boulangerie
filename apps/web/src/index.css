@@ -207,8 +207,8 @@
     content: "";
     position: fixed;
     inset: 0;
-    /* Variante allégée (320 px, 130 Ko) : même rendu à 7 % d'opacité que le logo
-       d'origine (1.254 px, 2 Mo), sans alourdir l'aperçu ni le PDF enregistré. */
+    /* Variante 320 px : à 7 % d'opacité et 55 % de la page, elle rend comme le
+       logo de l'interface (480 px) sans alourdir l'aperçu ni le PDF enregistré. */
     background-image: url("/logo-lomoto-pdf.png");
     background-repeat: no-repeat;
     background-position: center center;
