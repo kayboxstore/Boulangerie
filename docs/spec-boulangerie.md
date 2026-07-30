@@ -403,9 +403,12 @@ Active/désactive un compte utilisateur sans le supprimer (ex. employé en cong�
 - Nombre d'utilisateurs actifs
 
 Sauvegardes (nouveau) :
-- Automatique : sauvegarde quotidienne de la base, envoyée vers Google Drive (compte Google Workspace, via un compte de service Google Cloud distinct du mot de passe d'application Gmail). Historique visible : date, statut (succès/échec), taille.
-- Manuelle : bouton « Télécharger une sauvegarde maintenant » (Admin Principal), génère et télécharge un export de la base directement dans le navigateur, pour copie sur clé USB/disque externe.
+- Automatique : sauvegarde quotidienne de la base, écrite en LOCAL sur le disque du serveur (rétention glissante des sauvegardes les plus récentes, les plus anciennes purgées). Historique visible : date, statut (succès/échec), taille.
+- Bouton « Télécharger la dernière sauvegarde locale » (Admin Principal) : récupère directement le fichier déjà produit par la sauvegarde automatique, pour copie immédiate sur un support externe (clé USB/disque externe) — sans regénérer un export.
+- Manuelle : bouton « Télécharger une sauvegarde maintenant » (Admin Principal), génère et télécharge un export frais de la base directement dans le navigateur, pour copie sur clé USB/disque externe.
 - Tableau de bord de maintenance : dernière sauvegarde (date, statut), prochaine sauvegarde prévue, bouton de sauvegarde manuelle, historique récent.
+
+Décision (remplace l'envoi vers Google Drive prévu initialement) : en usage réel sur l'hébergeur choisi (Render, offre gratuite), un compte de service Google Cloud s'est heurté à une limitation de Google — les comptes de service n'ont pas de quota de stockage propre sur Google Drive, seuls les Drive partagés (Workspace) en offrent un, ce qui alourdit la mise en place pour un gain incertain. Décision : abandon de Google Drive comme destination de sauvegarde. La sauvegarde automatique reste quotidienne mais écrit désormais localement sur le serveur, complétée par un téléchargement facile vers un support externe (clé USB/disque externe) — à la fois pour la sauvegarde automatique la plus récente et pour une sauvegarde manuelle à la demande. Le stockage local du serveur n'étant pas garanti de survivre à un redéploiement, l'écran État système avertit explicitement de cette limite et encourage un téléchargement régulier vers un support externe.
 
 ### 3.16 Approbations *(Admin Principal uniquement)*
 File d'attente des demandes soumises par les Admins secondaires pour les tâches critiques (voir section 2). Chaque demande : type d'action, demandeur, données de l'action, date, statut. Notification temps réel instantanée à l'Admin Principal dès qu'une demande arrive ; approbation ou rejet en un clic, avec effet immédiat sur l'action en attente.
