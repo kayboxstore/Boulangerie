@@ -19,7 +19,6 @@ import {
 } from "../services/sauvegarde.js";
 import { lireSauvegardeLocale, repertoireLocal, retentionLocale } from "../services/sauvegardeLocale.js";
 import {
-  executerSauvegardeAutomatique,
   planificationActive,
   planificationSauvegarde,
   prochaineSauvegarde,
@@ -207,30 +206,6 @@ etatSystemeRouter.get("/sauvegarde/derniere-locale", async (req, res, next) => {
     res.setHeader("Content-Disposition", `attachment; filename="${derniere.nomFichier}"`);
     res.setHeader("Content-Length", String(contenu.length));
     res.end(contenu);
-  } catch (e) {
-    next(e);
-  }
-});
-
-// ---------------------------------------------------------------------------
-// OUTIL DE VÉRIFICATION TEMPORAIRE — à retirer une fois confirmé en production
-// que la sauvegarde locale fonctionne (section 3.15). Déclenche la routine
-// AUTOMATIQUE à la demande, sans attendre l'échéance du cron.
-// ---------------------------------------------------------------------------
-etatSystemeRouter.post("/sauvegarde/declencher-auto-test", async (req, res, next) => {
-  if (!req.utilisateur!.estAdminPrincipal) {
-    return res
-      .status(403)
-      .json({ erreur: "Seul l'Administrateur principal peut déclencher une sauvegarde" });
-  }
-  try {
-    await executerSauvegardeAutomatique();
-    const derniere = await prisma.sauvegardeBase.findFirst({
-      where: { type: "AUTOMATIQUE" },
-      orderBy: { createdAt: "desc" },
-      include: { declenchePar: { select: { nom: true } } },
-    });
-    res.json({ sauvegarde: derniere ? versDTO(derniere) : null });
   } catch (e) {
     next(e);
   }
