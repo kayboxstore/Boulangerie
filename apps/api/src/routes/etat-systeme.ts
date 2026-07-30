@@ -19,6 +19,7 @@ import {
 } from "../services/sauvegarde.js";
 import { driveConfigure, emailCompteService } from "../services/googleDrive.js";
 import {
+  executerSauvegardeAutomatique,
   planificationActive,
   planificationSauvegarde,
   prochaineSauvegarde,
@@ -168,6 +169,32 @@ etatSystemeRouter.post("/sauvegarde", async (req, res, next) => {
       .catch((erreurJournal) => console.error("Journalisation de l'échec impossible :", erreurJournal));
 
     if (e instanceof ErreurSauvegarde) return res.status(e.status).json({ erreur: e.message });
+    next(e);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// OUTIL DE VÉRIFICATION TEMPORAIRE — à retirer après confirmation en
+// production que l'envoi vers Google Drive fonctionne (section 3.15).
+// Déclenche la routine AUTOMATIQUE (donc avec upload Drive) à la demande, sans
+// attendre l'échéance du cron ni modifier BACKUP_CRON. Réservé à l'Admin
+// Principal, comme la sauvegarde manuelle ci-dessus.
+// ---------------------------------------------------------------------------
+etatSystemeRouter.post("/sauvegarde/declencher-auto-test", async (req, res, next) => {
+  if (!req.utilisateur!.estAdminPrincipal) {
+    return res
+      .status(403)
+      .json({ erreur: "Seul l'Administrateur principal peut déclencher une sauvegarde" });
+  }
+  try {
+    await executerSauvegardeAutomatique();
+    const derniere = await prisma.sauvegardeBase.findFirst({
+      where: { type: "AUTOMATIQUE" },
+      orderBy: { createdAt: "desc" },
+      include: { declenchePar: { select: { nom: true } } },
+    });
+    res.json({ sauvegarde: derniere ? versDTO(derniere) : null });
+  } catch (e) {
     next(e);
   }
 });
