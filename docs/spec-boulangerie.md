@@ -396,8 +396,16 @@ Export & partage (nouveau, s'applique aussi à 3.8 Tableau de bord et 3.11 Commi
 ### 3.14 Activation *(Admin uniquement)*
 Active/désactive un compte utilisateur sans le supprimer (ex. employé en congé ou départ temporaire) — l'utilisateur désactivé ne peut plus se connecter, mais son historique reste intact.
 
-### 3.15 État système *(Admin uniquement)*
-Statut de la base de données (connectée/déconnectée), version de l'application, nombre d'utilisateurs actifs, dernière sauvegarde *(contenu exact à affiner)*.
+### 3.15 État système (Admin uniquement — Principal en écriture pour les actions, secondaire en lecture)
+- Nom de l'application, version actuelle
+- Licence : « non configuré » pour l'instant (pas de système de licence — viendra avec la version White label future)
+- Base de données : statut connecté/déconnecté (testé en direct), hôte + nom de la base uniquement — jamais les identifiants/mot de passe
+- Nombre d'utilisateurs actifs
+
+Sauvegardes (nouveau) :
+- Automatique : sauvegarde quotidienne de la base, envoyée vers Google Drive (compte Google Workspace, via un compte de service Google Cloud distinct du mot de passe d'application Gmail). Historique visible : date, statut (succès/échec), taille.
+- Manuelle : bouton « Télécharger une sauvegarde maintenant » (Admin Principal), génère et télécharge un export de la base directement dans le navigateur, pour copie sur clé USB/disque externe.
+- Tableau de bord de maintenance : dernière sauvegarde (date, statut), prochaine sauvegarde prévue, bouton de sauvegarde manuelle, historique récent.
 
 ### 3.16 Approbations *(Admin Principal uniquement)*
 File d'attente des demandes soumises par les Admins secondaires pour les tâches critiques (voir section 2). Chaque demande : type d'action, demandeur, données de l'action, date, statut. Notification temps réel instantanée à l'Admin Principal dès qu'une demande arrive ; approbation ou rejet en un clic, avec effet immédiat sur l'action en attente.
