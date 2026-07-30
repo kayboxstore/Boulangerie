@@ -48,12 +48,9 @@ services:
         sync: false
       - key: GMAIL_APP_PASSWORD
         sync: false
-      # Sauvegarde quotidienne vers Google Drive (section 3.15) — COMPTE DE
-      # SERVICE Google Cloud, distinct du mot de passe d'application Gmail.
-      # `sync: false` : Render demande la valeur, rien n'est stocké dans le dépôt.
-      # Tant qu'elles sont vides, les tentatives sont consignées en échec dans
-      # État système ; le téléchargement manuel fonctionne quand même.
-      - key: GOOGLE_SERVICE_ACCOUNT_JSON
-        sync: false
-      - key: GOOGLE_DRIVE_FOLDER_ID
-        sync: false
+      # Sauvegarde quotidienne (section 3.15) : écrite localement sur le disque
+      # du service (pas de destination externe — un compte de service Google
+      # Cloud a été essayé puis abandonné pour Google Drive, sans quota de
+      # stockage propre). Sur l'offre gratuite, ce disque n'est pas garanti de
+      # survivre à un redéploiement ; complète avec un téléchargement régulier
+      # vers un support externe depuis l'écran État système.

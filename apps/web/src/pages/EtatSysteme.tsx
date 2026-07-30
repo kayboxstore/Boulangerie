@@ -10,6 +10,7 @@ import {
   Loader2,
   RefreshCw,
   Server,
+  Usb,
   Users,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -71,31 +72,43 @@ export function EtatSystemePage() {
     refetchInterval: 15000,
   });
 
-  // Le dump revient en binaire : fetch direct plutôt que le helper JSON.
+  // Téléchargement d'un fichier binaire, factorisé pour les deux boutons
+  // (fresh dump manuel, ou fichier local déjà produit par l'automatique).
+  async function telechargerDepuis(chemin: string, methode: "GET" | "POST", messageErreurDefaut: string) {
+    const res = await fetch(chemin, {
+      method: methode,
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!res.ok) {
+      const corps = await res.json().catch(() => null);
+      throw new Error(corps?.erreur ?? messageErreurDefaut);
+    }
+    const blob = await res.blob();
+    const nom = res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ?? "sauvegarde.dump";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nom;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const sauvegarder = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/etat-systeme/sauvegarde", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (!res.ok) {
-        const corps = await res.json().catch(() => null);
-        throw new Error(corps?.erreur ?? t("etatSysteme.downloadError"));
-      }
-      const blob = await res.blob();
-      const nom =
-        res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ?? "sauvegarde.dump";
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = nom;
-      a.click();
-      URL.revokeObjectURL(url);
-    },
+    mutationFn: () => telechargerDepuis("/api/etat-systeme/sauvegarde", "POST", t("etatSysteme.downloadError")),
     // Réussie ou non, la tentative entre dans l'historique : on le recharge.
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["etat-systeme"] }),
     onError: (e) => setErreurSauvegarde(e instanceof Error ? e.message : t("etatSysteme.downloadError")),
     onSuccess: () => setErreurSauvegarde(null),
+  });
+
+  // Récupère le fichier déjà produit par la dernière sauvegarde automatique —
+  // pas de nouveau pg_dump, juste une copie rapide vers un support externe.
+  const [erreurLocale, setErreurLocale] = useState<string | null>(null);
+  const telechargerLocale = useMutation({
+    mutationFn: () =>
+      telechargerDepuis("/api/etat-systeme/sauvegarde/derniere-locale", "GET", t("etatSysteme.downloadLatestLocalError")),
+    onError: (e) => setErreurLocale(e instanceof Error ? e.message : t("etatSysteme.downloadLatestLocalError")),
+    onSuccess: () => setErreurLocale(null),
   });
 
   if (isLoading) return <ChargementModule />;
@@ -189,16 +202,17 @@ export function EtatSystemePage() {
           <CardDescription>{t("etatSysteme.maintenanceDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Drive absent : les sauvegardes automatiques ne peuvent pas être
-              archivées, mais le téléchargement manuel reste opérationnel. */}
-          {sauv && !sauv.driveConfigure && (
-            <p className="rounded-md border border-or/50 bg-or/10 px-3 py-2 text-sm">
-              {t("etatSysteme.driveNotConfigured")}
-            </p>
-          )}
-          {sauv?.emailCompteService && (
+          {/* Le disque local du serveur n'est pas garanti persistant (ex. un
+              redéploiement peut le réinitialiser) : rappel permanent, pas
+              conditionnel — c'est une caractéristique du mécanisme, pas une
+              anomalie ponctuelle à corriger. */}
+          <p className="flex items-start gap-2 rounded-md border border-or/50 bg-or/10 px-3 py-2 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-or" />
+            {t("etatSysteme.localWarning")}
+          </p>
+          {sauv && (
             <p className="text-xs text-muted-foreground">
-              {t("etatSysteme.serviceAccount", { email: sauv.emailCompteService })}
+              {t("etatSysteme.localStorageInfo", { repertoire: sauv.repertoireLocal, retention: sauv.retentionLocale })}
             </p>
           )}
 
@@ -254,24 +268,50 @@ export function EtatSystemePage() {
             </div>
           </div>
 
-          {/* Sauvegarde manuelle — Admin Principal uniquement (section 3.15).
-              Le serveur revérifie : masquer le bouton ne protège rien. */}
+          {/* Actions de sauvegarde — Admin Principal uniquement (section 3.15).
+              Le serveur revérifie : masquer les boutons ne protège rien. */}
           <div className="border-t pt-4">
             {utilisateur?.estAdminPrincipal ? (
               <>
-                <Button
-                  variant="cta"
-                  onClick={() => sauvegarder.mutate()}
-                  disabled={sauvegarder.isPending || !sauv?.outilDisponible}
-                >
-                  {sauvegarder.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4" />
-                  )}
-                  {sauvegarder.isPending ? t("etatSysteme.downloading") : t("etatSysteme.download")}
-                </Button>
-                <p className="mt-2 text-xs text-muted-foreground">{t("etatSysteme.downloadHelp")}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => telechargerLocale.mutate()}
+                    disabled={telechargerLocale.isPending || !sauv?.dernierSucces}
+                  >
+                    {telechargerLocale.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Usb className="h-4 w-4" />
+                    )}
+                    {telechargerLocale.isPending
+                      ? t("etatSysteme.downloading")
+                      : t("etatSysteme.downloadLatestLocal")}
+                  </Button>
+                  <Button
+                    variant="cta"
+                    onClick={() => sauvegarder.mutate()}
+                    disabled={sauvegarder.isPending || !sauv?.outilDisponible}
+                  >
+                    {sauvegarder.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    {sauvegarder.isPending ? t("etatSysteme.downloading") : t("etatSysteme.download")}
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("etatSysteme.downloadLatestLocalHelp")} {t("etatSysteme.downloadHelp")}
+                </p>
+                {erreurLocale && (
+                  <p
+                    role="alert"
+                    className="mt-2 rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta"
+                  >
+                    {erreurLocale}
+                  </p>
+                )}
                 {erreurSauvegarde && (
                   <p
                     role="alert"

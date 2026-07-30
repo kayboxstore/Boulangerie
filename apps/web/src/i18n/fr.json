@@ -760,7 +760,7 @@
     "licenceHelp": "Aucun système de licence pour l'instant — il arrivera avec la version White label.",
     "activeUsers": "Utilisateurs actifs",
     "maintenance": "Sauvegardes de la base",
-    "maintenanceDesc": "Sauvegarde quotidienne automatique vers Google Drive, et téléchargement manuel pour copie sur clé USB ou disque externe.",
+    "maintenanceDesc": "Sauvegarde quotidienne automatique écrite localement sur le serveur, et téléchargement — automatique ou manuel — pour copie sur clé USB ou disque externe.",
     "lastBackup": "Dernière sauvegarde réussie",
     "lastAttempt": "Dernière tentative",
     "nextBackup": "Prochaine sauvegarde prévue",
@@ -783,12 +783,15 @@
     "typeMANUELLE": "Manuelle",
     "statusSUCCES": "Succès",
     "statusECHEC": "Échec",
-    "destGOOGLE_DRIVE": "Google Drive",
     "destTELECHARGEMENT": "Téléchargement",
-    "driveNotConfigured": "Google Drive n'est pas configuré : les sauvegardes automatiques ne peuvent pas être archivées. Le téléchargement manuel fonctionne.",
-    "serviceAccount": "Compte de service : {{email}}",
     "toolMissing": "L'outil pg_dump est absent de ce serveur : aucune sauvegarde n'est possible tant qu'il n'est pas installé.",
-    "measuredAt": "Mesuré à {{time}}"
+    "measuredAt": "Mesuré à {{time}}",
+    "localWarning": "Le disque local du serveur n'est pas garanti de survivre à un redéploiement. Pense à télécharger régulièrement une copie sur un support externe (clé USB, disque externe).",
+    "localStorageInfo": "Stockage local : {{repertoire}} · {{retention}} sauvegardes conservées",
+    "downloadLatestLocal": "Télécharger la dernière sauvegarde locale",
+    "downloadLatestLocalHelp": "Récupère directement le fichier déjà produit par la sauvegarde automatique, sans regénérer d'export.",
+    "downloadLatestLocalError": "Le téléchargement a échoué.",
+    "destLOCAL": "Local (serveur)"
   },
   "approbations": {
     "title": "Approbations",

@@ -1213,10 +1213,15 @@ export interface EtatSystemeDTO {
     planificationActive: boolean;
     expressionCron: string;
     fuseau: string;
-    /** Google Drive configuré ? Sinon l'envoi automatique ne peut pas aboutir. */
-    driveConfigure: boolean;
-    /** Adresse à qui partager le dossier Drive ; null si la clé est absente. */
-    emailCompteService: string | null;
+    /**
+     * Répertoire de stockage local des sauvegardes automatiques. Ce disque
+     * n'est pas garanti persistant selon l'hébergeur (ex. redéploiement sur
+     * Render) — d'où le rappel, côté écran, de copier régulièrement vers un
+     * support externe.
+     */
+    repertoireLocal: string;
+    /** Nombre de sauvegardes locales conservées avant purge des plus anciennes. */
+    retentionLocale: number;
     /** pg_dump présent sur l'hôte ? Sans lui, aucune sauvegarde n'est possible. */
     outilDisponible: boolean;
     outilVersion: string | null;

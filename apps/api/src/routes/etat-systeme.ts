@@ -17,7 +17,7 @@ import {
   nomFichierSauvegarde,
   outilSauvegardeDisponible,
 } from "../services/sauvegarde.js";
-import { driveConfigure, emailCompteService } from "../services/googleDrive.js";
+import { lireSauvegardeLocale, repertoireLocal, retentionLocale } from "../services/sauvegardeLocale.js";
 import {
   executerSauvegardeAutomatique,
   planificationActive,
@@ -101,8 +101,8 @@ etatSystemeRouter.get("/", async (_req, res, next) => {
         planificationActive: planificationActive(),
         expressionCron: planificationSauvegarde.EXPRESSION,
         fuseau: planificationSauvegarde.FUSEAU,
-        driveConfigure: driveConfigure(),
-        emailCompteService: emailCompteService(),
+        repertoireLocal: repertoireLocal(),
+        retentionLocale: retentionLocale(),
         outilDisponible: outil.disponible,
         outilVersion: outil.version,
         historique: historique.map(versDTO),
@@ -118,7 +118,7 @@ etatSystemeRouter.get("/", async (_req, res, next) => {
 /**
  * Sauvegarde manuelle (section 3.15) — réservée à l'Admin Principal. Le dump
  * repart directement dans le navigateur : aucune copie n'est écrite sur le
- * serveur, et Google Drive n'intervient pas.
+ * serveur (contrairement à la sauvegarde automatique, écrite localement).
  */
 etatSystemeRouter.post("/sauvegarde", async (req, res, next) => {
   if (!req.utilisateur!.estAdminPrincipal) {
@@ -173,12 +173,49 @@ etatSystemeRouter.post("/sauvegarde", async (req, res, next) => {
   }
 });
 
+/**
+ * Téléchargement de la dernière sauvegarde AUTOMATIQUE déjà écrite localement
+ * (section 3.15) — réservé à l'Admin Principal. Sert le fichier tel quel, sans
+ * regénérer de dump : c'est le geste rapide « je récupère la sauvegarde de
+ * cette nuit sur une clé USB avant le prochain redéploiement ».
+ */
+etatSystemeRouter.get("/sauvegarde/derniere-locale", async (req, res, next) => {
+  if (!req.utilisateur!.estAdminPrincipal) {
+    return res
+      .status(403)
+      .json({ erreur: "Seul l'Administrateur principal peut télécharger une sauvegarde" });
+  }
+  try {
+    const derniere = await prisma.sauvegardeBase.findFirst({
+      where: { type: "AUTOMATIQUE", statut: "SUCCES", destination: "LOCAL" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!derniere?.nomFichier) {
+      return res.status(404).json({ erreur: "Aucune sauvegarde automatique locale disponible pour l'instant." });
+    }
+    const contenu = await lireSauvegardeLocale(derniere.nomFichier);
+    if (!contenu) {
+      // Le fichier a pu disparaître (redéploiement, purge de rétention) même si
+      // son entrée reste dans l'historique — l'historique ne ment pas sur ce
+      // qui s'est passé, mais le fichier n'est plus là pour autant.
+      return res.status(404).json({
+        erreur:
+          "Ce fichier n'est plus disponible sur le serveur (redéploiement ou rotation). La prochaine sauvegarde automatique en créera un nouveau.",
+      });
+    }
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="${derniere.nomFichier}"`);
+    res.setHeader("Content-Length", String(contenu.length));
+    res.end(contenu);
+  } catch (e) {
+    next(e);
+  }
+});
+
 // ---------------------------------------------------------------------------
-// OUTIL DE VÉRIFICATION TEMPORAIRE — à retirer après confirmation en
-// production que l'envoi vers Google Drive fonctionne (section 3.15).
-// Déclenche la routine AUTOMATIQUE (donc avec upload Drive) à la demande, sans
-// attendre l'échéance du cron ni modifier BACKUP_CRON. Réservé à l'Admin
-// Principal, comme la sauvegarde manuelle ci-dessus.
+// OUTIL DE VÉRIFICATION TEMPORAIRE — à retirer une fois confirmé en production
+// que la sauvegarde locale fonctionne (section 3.15). Déclenche la routine
+// AUTOMATIQUE à la demande, sans attendre l'échéance du cron.
 // ---------------------------------------------------------------------------
 etatSystemeRouter.post("/sauvegarde/declencher-auto-test", async (req, res, next) => {
   if (!req.utilisateur!.estAdminPrincipal) {

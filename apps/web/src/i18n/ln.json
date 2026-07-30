@@ -761,7 +761,7 @@
     "licenceHelp": "Sistɛmɛ ya licence ezali te sikoyo — ekoya na version White label.",
     "activeUsers": "Basaleli bazali kosala",
     "maintenance": "Bobateli ya ba-données",
-    "maintenanceDesc": "Bobateli ya mokolo na mokolo epai ya Google Drive, mpe bokitisi na maboko mpo na kotia na clé USB to disque.",
+    "maintenanceDesc": "Bobateli ya mokolo na mokolo ekomamaka na serveur yango moko, mpe bokitisi — ya yango moko to na maboko — mpo na kotia na clé USB to disque.",
     "lastBackup": "Bobateli ya nsuka elongi",
     "lastAttempt": "Bomeki ya nsuka",
     "nextBackup": "Bobateli ya nsima ekoya",
@@ -784,12 +784,15 @@
     "typeMANUELLE": "Na maboko",
     "statusSUCCES": "Elongi",
     "statusECHEC": "Elongi te",
-    "destGOOGLE_DRIVE": "Google Drive",
     "destTELECHARGEMENT": "Bokitisi",
-    "driveNotConfigured": "Google Drive ebongisami te : bobateli ya yango moko ekoki kobombama te. Bokitisi na maboko ezali kosala.",
-    "serviceAccount": "Compte ya service : {{email}}",
     "toolMissing": "Esaleli pg_dump ezali te na serveur oyo : bobateli ekoki kosalema te liboso batia yango.",
-    "measuredAt": "Emekami na {{time}}"
+    "measuredAt": "Emekami na {{time}}",
+    "localWarning": "Disque ya serveur ekoki kobomba te soki serveur ebandi lisusu. Kanisa kokitisa mbala na mbala kopi na esika mosusu (clé USB, disque).",
+    "localStorageInfo": "Ebombelo ya esika moko : {{repertoire}} · bobateli {{retention}} ebombami",
+    "downloadLatestLocal": "Kokitisa bobateli ya nsuka ya esika moko",
+    "downloadLatestLocalHelp": "Ezwaka mbala moko dossier oyo bobateli ya yango moko esalaki, esali lisusu export te.",
+    "downloadLatestLocalError": "Bokitisi elongi te.",
+    "destLOCAL": "Esika moko (serveur)"
   },
   "approbations": {
     "title": "Bandimibi",

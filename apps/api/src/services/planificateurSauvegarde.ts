@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { prisma } from "../lib/prisma.js";
 import { construireDump, nomFichierSauvegarde } from "./sauvegarde.js";
-import { driveConfigure, envoyerVersDrive } from "./googleDrive.js";
+import { ecrireSauvegardeLocale } from "./sauvegardeLocale.js";
 
 /**
  * Sauvegarde quotidienne automatique (section 3.15). Portée par node-cron dans
@@ -42,35 +42,20 @@ export async function executerSauvegardeAutomatique(): Promise<void> {
     return;
   }
 
-  // Sans identifiants Drive, la sauvegarde est produite mais n'a nulle part où
-  // aller : on le consigne en échec explicite plutôt que de laisser croire à un
-  // succès. Le téléchargement manuel reste, lui, pleinement fonctionnel.
-  if (!driveConfigure()) {
-    await journaliserEchec(
-      nomFichier,
-      new Error(
-        "Sauvegarde produite mais non archivée : Google Drive n'est pas configuré (GOOGLE_SERVICE_ACCOUNT_JSON et GOOGLE_DRIVE_FOLDER_ID).",
-      ),
-      Date.now() - t0,
-      dump.length,
-    );
-    return;
-  }
-
   try {
-    const { id } = await envoyerVersDrive({ nomFichier, contenu: dump });
+    const chemin = await ecrireSauvegardeLocale(nomFichier, dump);
     await prisma.sauvegardeBase.create({
       data: {
         type: "AUTOMATIQUE",
         statut: "SUCCES",
         tailleOctets: dump.length,
         nomFichier,
-        destination: "GOOGLE_DRIVE",
-        idDistant: id,
+        destination: "LOCAL",
+        idDistant: chemin,
         dureeMs: Date.now() - t0,
       },
     });
-    console.log(`Sauvegarde automatique envoyée vers Google Drive : ${nomFichier} (${dump.length} octets)`);
+    console.log(`Sauvegarde automatique écrite localement : ${chemin} (${dump.length} octets)`);
   } catch (e) {
     await journaliserEchec(nomFichier, e, Date.now() - t0, dump.length);
   }
@@ -91,7 +76,7 @@ async function journaliserEchec(
         statut: "ECHEC",
         tailleOctets,
         nomFichier,
-        destination: driveConfigure() ? "GOOGLE_DRIVE" : null,
+        destination: "LOCAL",
         erreur: message.slice(0, 1000),
         dureeMs,
       },
@@ -117,10 +102,7 @@ export function initPlanificateurSauvegarde(): void {
     noOverlap: true,
     name: "sauvegarde-quotidienne",
   });
-  console.log(
-    `Sauvegarde automatique planifiée (${EXPRESSION}, ${FUSEAU})` +
-      (driveConfigure() ? "" : " — Google Drive non configuré, les tentatives seront consignées en échec"),
-  );
+  console.log(`Sauvegarde automatique planifiée (${EXPRESSION}, ${FUSEAU}), stockage local`);
 }
 
 /** Arrête la planification (tests, extinction propre). */
