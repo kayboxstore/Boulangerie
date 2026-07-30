@@ -3,6 +3,7 @@ import cors from "cors";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { DOMAINE_CANONIQUE, verifierOrigine } from "./lib/origines.js";
 import { authRouter } from "./routes/auth.js";
 import { produitsRouter } from "./routes/produits.js";
 import { rolesRouter } from "./routes/roles.js";
@@ -28,7 +29,23 @@ import { exportRouter } from "./routes/export.js";
 export function createApp() {
   const app = express();
 
-  app.use(cors());
+  // Render (et tout hébergeur derrière un reverse proxy) transmet la requête
+  // en interne ; sans ceci, req.hostname/req.protocol refléteraient le proxy,
+  // pas le domaine réellement visité par le navigateur.
+  app.set("trust proxy", true);
+
+  // Domaine canonique (nouveau : boulangerie-lomoto.com) : www redirige vers
+  // l'apex, pour n'avoir qu'UNE seule adresse qui compte (favoris, liens
+  // partagés, référencement) plutôt que deux qui fonctionnent en parallèle.
+  // Placé avant toute autre route pour s'appliquer aussi à /api et /socket.io.
+  app.use((req, res, next) => {
+    if (req.hostname === `www.${DOMAINE_CANONIQUE}`) {
+      return res.redirect(301, `https://${DOMAINE_CANONIQUE}${req.originalUrl}`);
+    }
+    next();
+  });
+
+  app.use(cors({ origin: verifierOrigine, credentials: true }));
   app.use(express.json());
 
   app.get("/api/health", (_req, res) => {

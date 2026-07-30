@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import type { ServerToClientEvents, ClientToServerEvents, UtilisateurDTO } from "@lomoto/shared";
 import { verifyToken } from "./jwt.js";
 import { chargerUtilisateur } from "../middleware/auth.js";
+import { verifierOrigine } from "./origines.js";
 
 interface InterServerEvents {}
 interface SocketData {
@@ -22,8 +23,12 @@ export const roomRole = (roleId: string) => `role:${roleId}`;
  * son utilisateur (user:{id}) et celle de son rôle (role:{id}).
  */
 export function initRealtime(httpServer: HttpServer): IoServer {
+  // Config CORS SÉPARÉE de celle d'Express (piège classique : Socket.io a la
+  // sienne, ce n'est pas app.use(cors()) qui la couvre) — même liste
+  // d'origines que l'API, importée depuis lib/origines.ts pour ne jamais
+  // diverger.
   io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(httpServer, {
-    cors: { origin: true, credentials: true },
+    cors: { origin: verifierOrigine, credentials: true },
   });
 
   io.use(async (socket, next) => {
