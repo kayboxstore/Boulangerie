@@ -50,7 +50,9 @@
     "approbations": "Approvals",
     "etatSysteme": "System status",
     "audit": "Audit log",
-    "openMenu": "Open menu"
+    "openMenu": "Open menu",
+    "enableDarkMode": "Turn on dark mode",
+    "enableLightMode": "Turn on light mode"
   },
   "login": {
     "title": "Log in",

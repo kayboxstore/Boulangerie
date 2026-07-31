@@ -11,12 +11,14 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Moon,
   Package,
   ScrollText,
   ServerCog,
   Settings,
   ShoppingBasket,
   ShoppingCart,
+  Sun,
   Truck,
   UserCog,
   Users,
@@ -27,6 +29,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CREDIT_DEVELOPPEUR, TAGLINE, type AlerteDetteDTO, type Module } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { IndicateurConnexion } from "@/components/IndicateurConnexion";
@@ -46,6 +49,18 @@ function ClocheStatique() {
   );
 }
 import { cn } from "@/lib/utils";
+
+/** Bascule clair/sombre (section 3.8) — préférence de l'appareil (localStorage), pas du compte. */
+function BasculeTheme() {
+  const { sombre, basculer } = useTheme();
+  const { t } = useTranslation();
+  const label = t(sombre ? "nav.enableLightMode" : "nav.enableDarkMode");
+  return (
+    <Button variant="ghost" size="icon" onClick={basculer} aria-label={label} title={label}>
+      {sombre ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </Button>
+  );
+}
 
 // Règle d'interface (spec section 2) : TOUS les modules apparaissent dans le
 // menu pour tout le monde ; ceux hors du périmètre du rôle connecté (ou pas
@@ -285,6 +300,7 @@ export function Layout() {
             <span className="font-serif font-semibold text-or">Boulangerie Lomoto</span>
           </div>
           <div className="flex items-center gap-1 [&_button]:text-creme/80 [&_button:hover]:bg-creme/10 [&_button:hover]:text-creme">
+            <BasculeTheme />
             <Suspense fallback={<ClocheStatique />}>
               <NotificationBell />
             </Suspense>
@@ -300,6 +316,7 @@ export function Layout() {
         {/* Barre supérieure (desktop) : statut temps réel + notifications */}
         <div className="no-print hidden items-center justify-end gap-3 border-b bg-card px-6 py-2 md:flex">
           <IndicateurConnexion etendu />
+          <BasculeTheme />
           <Suspense fallback={<ClocheStatique />}>
             <NotificationBell />
           </Suspense>

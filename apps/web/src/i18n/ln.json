@@ -51,7 +51,9 @@
     "approbations": "Bandimibi",
     "etatSysteme": "Ezaleli ya sistɛmɛ",
     "audit": "Buku ya bolandeli",
-    "openMenu": "Fungola menu"
+    "openMenu": "Fungola menu",
+    "enableDarkMode": "Kopelisa mode ya molili",
+    "enableLightMode": "Kopelisa mode ya pole"
   },
   "login": {
     "title": "Kokota",

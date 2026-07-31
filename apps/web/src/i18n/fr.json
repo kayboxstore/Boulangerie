@@ -50,7 +50,9 @@
     "approbations": "Approbations",
     "etatSysteme": "État système",
     "audit": "Journal d'audit",
-    "openMenu": "Ouvrir le menu"
+    "openMenu": "Ouvrir le menu",
+    "enableDarkMode": "Activer le mode sombre",
+    "enableLightMode": "Activer le mode clair"
   },
   "login": {
     "title": "Connexion",

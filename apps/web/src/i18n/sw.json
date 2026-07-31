@@ -51,7 +51,9 @@
     "approbations": "Idhini",
     "etatSysteme": "Hali ya mfumo",
     "audit": "Kumbukumbu za ukaguzi",
-    "openMenu": "Fungua menyu"
+    "openMenu": "Fungua menyu",
+    "enableDarkMode": "Washa hali ya giza",
+    "enableLightMode": "Washa hali nyepesi"
   },
   "login": {
     "title": "Ingia",
