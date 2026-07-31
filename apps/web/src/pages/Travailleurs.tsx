@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { STATUTS_PRESENCE, type PresenceDTO, type StatutPresence, type TravailleurDTO } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useFeedback } from "@/components/FeedbackProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +48,7 @@ export function TravailleursPage() {
   const { peutEcrire } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { confirmer, toastErreur } = useFeedback();
   const editable = peutEcrire("TRAVAILLEURS");
 
   const { data: travailleursData } = useQuery({
@@ -134,7 +136,7 @@ export function TravailleursPage() {
   const supprimerFiche = useMutation({
     mutationFn: (id: string) => api(`/api/travailleurs/${id}`, { method: "DELETE" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : t("travailleurs.deleteError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("travailleurs.deleteError")),
   });
 
   // --- Dialog pointage -------------------------------------------------------
@@ -244,7 +246,10 @@ export function TravailleursPage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(t("travailleurs.confirmDelete", { nom: trav.nom })) && supprimerFiche.mutate(trav.id)}
+                        onClick={async () => {
+                          if (await confirmer({ description: t("travailleurs.confirmDelete", { nom: trav.nom }), destructive: true }))
+                            supprimerFiche.mutate(trav.id);
+                        }}
                         aria-label={t("travailleurs.ariaDelete", { nom: trav.nom })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -298,7 +303,10 @@ export function TravailleursPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-terracotta hover:text-terracotta"
-                      onClick={() => confirm(t("travailleurs.confirmDelete", { nom: trav.nom })) && supprimerFiche.mutate(trav.id)}
+                      onClick={async () => {
+                          if (await confirmer({ description: t("travailleurs.confirmDelete", { nom: trav.nom }), destructive: true }))
+                            supprimerFiche.mutate(trav.id);
+                        }}
                       aria-label={t("travailleurs.ariaDelete", { nom: trav.nom })}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

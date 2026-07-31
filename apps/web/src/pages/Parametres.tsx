@@ -12,6 +12,7 @@ import {
   type TypeClientDTO,
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
+import { useFeedback } from "@/components/FeedbackProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -30,6 +31,7 @@ import {
 export function ParametresPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { confirmer, toastErreur } = useFeedback();
 
   // --- Types de clients (Qualité) -------------------------------------------
   const { data: typeClientsData } = useQuery({
@@ -75,7 +77,7 @@ export function ParametresPage() {
   const supprimerQualite = useMutation({
     mutationFn: (id: string) => api(`/api/type-clients/${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["type-clients"] }),
-    onError: (e) => alert(e instanceof Error ? e.message : t("parametres.deleteError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("parametres.deleteError")),
   });
 
   // --- Paramètres boutique + langue -----------------------------------------
@@ -165,7 +167,10 @@ export function ParametresPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-terracotta hover:text-terracotta"
-                      onClick={() => confirm(t("parametres.confirmDeleteQuality", { nom: tc.nom })) && supprimerQualite.mutate(tc.id)}
+                      onClick={async () => {
+                        if (await confirmer({ description: t("parametres.confirmDeleteQuality", { nom: tc.nom }), destructive: true }))
+                          supprimerQualite.mutate(tc.id);
+                      }}
                       aria-label={t("parametres.ariaDelete", { nom: tc.nom })}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

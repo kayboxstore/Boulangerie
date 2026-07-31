@@ -8,6 +8,7 @@ import {
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useFeedback } from "@/components/FeedbackProvider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +28,7 @@ export function ApprobationsPage() {
   const { utilisateur } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { confirmer, toastErreur } = useFeedback();
   const estPrincipal = !!utilisateur?.estAdminPrincipal;
 
   const { data, isLoading } = useQuery({
@@ -45,12 +47,12 @@ export function ApprobationsPage() {
   const approuver = useMutation({
     mutationFn: (id: string) => api(`/api/approbations/${id}/approuver`, { method: "POST" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : t("approbations.actionError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("approbations.actionError")),
   });
   const rejeter = useMutation({
     mutationFn: (id: string) => api(`/api/approbations/${id}/rejeter`, { method: "POST" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : t("approbations.actionError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("approbations.actionError")),
   });
 
   if (isLoading) return <ChargementModule />;
@@ -102,7 +104,10 @@ export function ApprobationsPage() {
               variant="outline"
               size="sm"
               className="text-terracotta hover:text-terracotta"
-              onClick={() => confirm(t("approbations.confirmReject")) && rejeter.mutate(d.id)}
+              onClick={async () => {
+                if (await confirmer({ description: t("approbations.confirmReject"), destructive: true }))
+                  rejeter.mutate(d.id);
+              }}
               disabled={approuver.isPending || rejeter.isPending}
             >
               <X className="h-4 w-4" />

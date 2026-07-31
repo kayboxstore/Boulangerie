@@ -4,6 +4,7 @@ import { Download, Loader2, Mail, Printer } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Module } from "@lomoto/shared";
 import { api, getToken } from "@/lib/api";
+import { useFeedback } from "@/components/FeedbackProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,7 @@ interface Props {
  */
 export function BarreExport({ titre, sousTitre, modules, construireSections }: Props) {
   const { t } = useTranslation();
+  const { toastErreur } = useFeedback();
   const [dialogEmail, setDialogEmail] = useState(false);
   const [destinataire, setDestinataire] = useState("");
   const [message, setMessage] = useState("");
@@ -76,7 +78,7 @@ export function BarreExport({ titre, sousTitre, modules, construireSections }: P
       a.click();
       URL.revokeObjectURL(url);
     },
-    onError: (e) => alert(e instanceof Error ? e.message : t("export.pdfError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("export.pdfError")),
   });
 
   const envoyer = useMutation({

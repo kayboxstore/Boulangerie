@@ -13,6 +13,7 @@ import {
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useFeedback } from "@/components/FeedbackProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,6 +52,7 @@ export function EquipePage() {
   const { utilisateur, peutEcrire } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { confirmer, toastErreur } = useFeedback();
   const editable = peutEcrire("EQUIPE");
 
   // Bandeau « demande soumise à l'approbation de l'Admin Principal ».
@@ -116,7 +118,7 @@ export function EquipePage() {
       if (avis) setAvisApprobation(avis);
       rafraichir();
     },
-    onError: (e) => alert(e instanceof Error ? e.message : t("parametres.deleteError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("parametres.deleteError")),
   });
 
   const basculerActivation = useMutation({
@@ -126,13 +128,13 @@ export function EquipePage() {
         body: JSON.stringify({ actif: !c.actif }),
       }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : t("parametres.saveError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("parametres.saveError")),
   });
 
   const transfererPrincipal = useMutation({
     mutationFn: (id: string) => api(`/api/equipe/${id}/principal`, { method: "POST" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : t("parametres.saveError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("parametres.saveError")),
   });
 
   // --- Délégations temporaires (section 3.7) --------------------------------
@@ -181,7 +183,7 @@ export function EquipePage() {
   const revoquerDelegation = useMutation({
     mutationFn: (id: string) => api(`/api/delegations/${id}`, { method: "DELETE" }),
     onSuccess: rafraichirDelegations,
-    onError: (e) => alert(e instanceof Error ? e.message : t("parametres.deleteError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("parametres.deleteError")),
   });
 
   return (
@@ -267,9 +269,10 @@ export function EquipePage() {
                           variant="outline"
                           size="sm"
                           className="mr-1"
-                          onClick={() =>
-                            confirm(t("equipe.confirmMakePrincipal", { nom: c.nom })) && transfererPrincipal.mutate(c.id)
-                          }
+                          onClick={async () => {
+                            if (await confirmer({ description: t("equipe.confirmMakePrincipal", { nom: c.nom }) }))
+                              transfererPrincipal.mutate(c.id);
+                          }}
                         >
                           <Crown className="h-3.5 w-3.5" />
                           {t("equipe.makePrincipal")}
@@ -280,13 +283,12 @@ export function EquipePage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() =>
-                          confirm(
-                            c.actif
-                              ? t("equipe.confirmDeactivate", { nom: c.nom })
-                              : t("equipe.confirmActivate", { nom: c.nom }),
-                          ) && basculerActivation.mutate(c)
-                        }
+                        onClick={async () => {
+                          const description = c.actif
+                            ? t("equipe.confirmDeactivate", { nom: c.nom })
+                            : t("equipe.confirmActivate", { nom: c.nom });
+                          if (await confirmer({ description, destructive: c.actif })) basculerActivation.mutate(c);
+                        }}
                         disabled={c.id === utilisateur?.id}
                         aria-label={c.actif ? t("equipe.deactivate", { nom: c.nom }) : t("equipe.activate", { nom: c.nom })}
                         title={c.actif ? t("equipe.deactivate", { nom: c.nom }) : t("equipe.activate", { nom: c.nom })}
@@ -300,7 +302,10 @@ export function EquipePage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(t("equipe.confirmDelete", { nom: c.nom })) && supprimerCompte.mutate(c.id)}
+                        onClick={async () => {
+                          if (await confirmer({ description: t("equipe.confirmDelete", { nom: c.nom }), destructive: true }))
+                            supprimerCompte.mutate(c.id);
+                        }}
                         disabled={c.id === utilisateur?.id}
                         aria-label={t("equipe.ariaDelete", { nom: c.nom })}
                       >
@@ -360,9 +365,10 @@ export function EquipePage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                          confirm(t("equipe.confirmMakePrincipal", { nom: c.nom })) && transfererPrincipal.mutate(c.id)
-                        }
+                        onClick={async () => {
+                          if (await confirmer({ description: t("equipe.confirmMakePrincipal", { nom: c.nom }) }))
+                            transfererPrincipal.mutate(c.id);
+                        }}
                       >
                         <Crown className="h-3.5 w-3.5" />
                         {t("equipe.makePrincipal")}
@@ -372,11 +378,12 @@ export function EquipePage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
-                      onClick={() =>
-                        confirm(
-                          c.actif ? t("equipe.confirmDeactivate", { nom: c.nom }) : t("equipe.confirmActivate", { nom: c.nom }),
-                        ) && basculerActivation.mutate(c)
-                      }
+                      onClick={async () => {
+                        const description = c.actif
+                          ? t("equipe.confirmDeactivate", { nom: c.nom })
+                          : t("equipe.confirmActivate", { nom: c.nom });
+                        if (await confirmer({ description, destructive: c.actif })) basculerActivation.mutate(c);
+                      }}
                       disabled={c.id === utilisateur?.id}
                       aria-label={c.actif ? t("equipe.deactivate", { nom: c.nom }) : t("equipe.activate", { nom: c.nom })}
                     >
@@ -389,7 +396,10 @@ export function EquipePage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-terracotta hover:text-terracotta"
-                      onClick={() => confirm(t("equipe.confirmDelete", { nom: c.nom })) && supprimerCompte.mutate(c.id)}
+                      onClick={async () => {
+                        if (await confirmer({ description: t("equipe.confirmDelete", { nom: c.nom }), destructive: true }))
+                          supprimerCompte.mutate(c.id);
+                      }}
                       disabled={c.id === utilisateur?.id}
                       aria-label={t("equipe.ariaDelete", { nom: c.nom })}
                     >
@@ -453,7 +463,10 @@ export function EquipePage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(t("delegations.confirmRevoke")) && revoquerDelegation.mutate(d.id)}
+                        onClick={async () => {
+                          if (await confirmer({ description: t("delegations.confirmRevoke"), destructive: true }))
+                            revoquerDelegation.mutate(d.id);
+                        }}
                         aria-label={t("delegations.revoke")}
                         title={t("delegations.revoke")}
                       >
@@ -493,7 +506,10 @@ export function EquipePage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-terracotta hover:text-terracotta"
-                      onClick={() => confirm(t("delegations.confirmRevoke")) && revoquerDelegation.mutate(d.id)}
+                      onClick={async () => {
+                          if (await confirmer({ description: t("delegations.confirmRevoke"), destructive: true }))
+                            revoquerDelegation.mutate(d.id);
+                        }}
                       aria-label={t("delegations.revoke")}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

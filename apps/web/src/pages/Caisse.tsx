@@ -10,6 +10,7 @@ import {
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useFeedback } from "@/components/FeedbackProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,6 +87,7 @@ export function CaissePage() {
   const { peutEcrire } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { confirmer, toastErreur } = useFeedback();
   // Le DG (et tout rôle en lecture) ne voit AUCUN bouton d'action : depuis la
   // refonte 3.1, il n'a plus la moindre exception d'écriture.
   const editable = peutEcrire("CAISSE");
@@ -138,14 +140,14 @@ export function CaissePage() {
   const supprimerDepense = useMutation({
     mutationFn: (id: string) => api(`/api/caisse/depenses/${id}`, { method: "DELETE" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : t("caisse.deleteError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("caisse.deleteError")),
   });
 
   const basculerFarine = useMutation({
     mutationFn: (active: boolean) =>
       api("/api/caisse/depenses/farine", { method: "PUT", body: JSON.stringify({ date, active }) }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : t("caisse.saveError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("caisse.saveError")),
   });
 
   if (isLoading || !registre) return <ChargementModule />;
@@ -345,7 +347,10 @@ export function CaissePage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-terracotta hover:text-terracotta"
-                          onClick={() => confirm(t("caisse.confirmDeleteExpense")) && supprimerDepense.mutate(d.id)}
+                          onClick={async () => {
+                            if (await confirmer({ description: t("caisse.confirmDeleteExpense"), destructive: true }))
+                              supprimerDepense.mutate(d.id);
+                          }}
                           aria-label={t("caisse.ariaDeleteExpense")}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -386,7 +391,10 @@ export function CaissePage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-terracotta hover:text-terracotta"
-                      onClick={() => confirm(t("caisse.confirmDeleteExpense")) && supprimerDepense.mutate(d.id)}
+                      onClick={async () => {
+                            if (await confirmer({ description: t("caisse.confirmDeleteExpense"), destructive: true }))
+                              supprimerDepense.mutate(d.id);
+                          }}
                       aria-label={t("caisse.ariaDeleteExpense")}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

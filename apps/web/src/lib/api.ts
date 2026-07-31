@@ -34,26 +34,43 @@ export class ApiError extends Error {
   }
 }
 
+// Ton des textes (section 3.8) : un utilisateur ne code pas — jamais de code
+// HTTP brut ni de message technique du navigateur affiché tel quel. Ce
+// message de repli ne sert que si le serveur répond sans corps JSON
+// exploitable (ex. panne en amont du serveur applicatif) ; en fonctionnement
+// normal, chaque route renvoie déjà un champ `erreur` en français.
+const MESSAGE_ERREUR_GENERIQUE = "Une erreur est survenue. Réessayez dans un instant.";
+const MESSAGE_SERVEUR_INJOIGNABLE = "Impossible de contacter le serveur — vérifiez votre connexion internet.";
+
 /** Appel API JSON avec le jeton JWT courant. Lance ApiError en cas d'échec. */
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
-  const res = await fetch(path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+  } catch {
+    // Le serveur n'a jamais répondu (réseau coupé, hors ligne…) : fetch() lève
+    // un TypeError au message anglais et technique ("Failed to fetch") — on ne
+    // le laisse jamais remonter tel quel jusqu'à l'écran.
+    throw new ApiError(0, MESSAGE_SERVEUR_INJOIGNABLE);
+  }
 
   if (res.status === 204) return undefined as T;
 
   const body = await res.json().catch(() => null);
   if (!res.ok) {
+    const message = typeof body?.erreur === "string" ? body.erreur : MESSAGE_ERREUR_GENERIQUE;
     if (res.status === 401 && body?.code === CODE_SESSION_REMPLACEE) {
-      ecouteurSessionRemplacee?.(body.erreur ?? `Erreur ${res.status}`);
+      ecouteurSessionRemplacee?.(message);
     }
-    throw new ApiError(res.status, body?.erreur ?? `Erreur ${res.status}`, body);
+    throw new ApiError(res.status, message, body);
   }
   return body as T;
 }

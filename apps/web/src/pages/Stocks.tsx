@@ -10,6 +10,7 @@ import {
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useFeedback } from "@/components/FeedbackProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +36,7 @@ export function StocksPage() {
   const { peutEcrire } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { confirmer, toastErreur } = useFeedback();
   const editable = peutEcrire("STOCKS");
 
   const { data: matieresData } = useQuery({
@@ -97,7 +99,7 @@ export function StocksPage() {
   const supprimerMatiere = useMutation({
     mutationFn: (id: string) => api(`/api/stocks/matieres/${id}`, { method: "DELETE" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : t("stocks.deleteError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("stocks.deleteError")),
   });
 
   // --- Dialog mouvement ------------------------------------------------------
@@ -231,7 +233,10 @@ export function StocksPage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(t("stocks.confirmDelete", { nom: m.nom })) && supprimerMatiere.mutate(m.id)}
+                        onClick={async () => {
+                          if (await confirmer({ description: t("stocks.confirmDelete", { nom: m.nom }), destructive: true }))
+                            supprimerMatiere.mutate(m.id);
+                        }}
                         aria-label={t("stocks.ariaDelete", { nom: m.nom })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -276,7 +281,10 @@ export function StocksPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-terracotta hover:text-terracotta"
-                      onClick={() => confirm(t("stocks.confirmDelete", { nom: m.nom })) && supprimerMatiere.mutate(m.id)}
+                      onClick={async () => {
+                          if (await confirmer({ description: t("stocks.confirmDelete", { nom: m.nom }), destructive: true }))
+                            supprimerMatiere.mutate(m.id);
+                        }}
                       aria-label={t("stocks.ariaDelete", { nom: m.nom })}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

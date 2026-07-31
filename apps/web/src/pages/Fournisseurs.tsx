@@ -11,6 +11,7 @@ import {
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useFeedback } from "@/components/FeedbackProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +43,7 @@ export function FournisseursPage() {
   const { peutEcrire } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { confirmer, toastErreur } = useFeedback();
   const editable = peutEcrire("FOURNISSEURS");
 
   const { data: fournisseursData } = useQuery({
@@ -102,7 +104,7 @@ export function FournisseursPage() {
   const supprimerFournisseur = useMutation({
     mutationFn: (id: string) => api(`/api/fournisseurs/${id}`, { method: "DELETE" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : t("fournisseurs.deleteError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("fournisseurs.deleteError")),
   });
 
   // --- Dialog bon de commande ------------------------------------------------
@@ -146,7 +148,7 @@ export function FournisseursPage() {
   const supprimerCommande = useMutation({
     mutationFn: (id: string) => api(`/api/fournisseurs/commandes/${id}`, { method: "DELETE" }),
     onSuccess: rafraichir,
-    onError: (e) => alert(e instanceof Error ? e.message : t("fournisseurs.cancelError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("fournisseurs.cancelError")),
   });
 
   // --- Réception -------------------------------------------------------------
@@ -215,7 +217,10 @@ export function FournisseursPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-terracotta hover:text-terracotta"
-                          onClick={() => confirm(t("fournisseurs.confirmDelete", { nom: f.nom })) && supprimerFournisseur.mutate(f.id)}
+                          onClick={async () => {
+                            if (await confirmer({ description: t("fournisseurs.confirmDelete", { nom: f.nom }), destructive: true }))
+                              supprimerFournisseur.mutate(f.id);
+                          }}
                           aria-label={t("fournisseurs.ariaDelete", { nom: f.nom })}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -251,7 +256,10 @@ export function FournisseursPage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(t("fournisseurs.confirmDelete", { nom: f.nom })) && supprimerFournisseur.mutate(f.id)}
+                        onClick={async () => {
+                            if (await confirmer({ description: t("fournisseurs.confirmDelete", { nom: f.nom }), destructive: true }))
+                              supprimerFournisseur.mutate(f.id);
+                          }}
                         aria-label={t("fournisseurs.ariaDelete", { nom: f.nom })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -296,7 +304,10 @@ export function FournisseursPage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(t("fournisseurs.confirmCancel", { numero: c.numero })) && supprimerCommande.mutate(c.id)}
+                        onClick={async () => {
+                          if (await confirmer({ description: t("fournisseurs.confirmCancel", { numero: c.numero }), destructive: true }))
+                            supprimerCommande.mutate(c.id);
+                        }}
                         aria-label={t("fournisseurs.ariaCancel", { numero: c.numero })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />

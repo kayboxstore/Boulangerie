@@ -1,5 +1,28 @@
 import { z } from "zod";
 
+// Ton des textes (section 3.8) : filet de sécurité pour les rares champs de
+// schéma sans message personnalisé (ex. champs internes des id de ligne) — au
+// lieu du message par défaut de Zod, en anglais et technique ("Expected
+// string, received number"), un message générique mais clair et en français.
+// Les schémas ci-dessous continuent de définir un message dédié partout où un
+// utilisateur peut réellement déclencher l'erreur en tapant une valeur.
+z.setErrorMap((issue, ctx) => {
+  switch (issue.code) {
+    case z.ZodIssueCode.invalid_type:
+      return { message: issue.received === "undefined" ? "Ce champ est requis." : "Valeur invalide." };
+    case z.ZodIssueCode.too_small:
+      return { message: "Cette valeur est trop courte ou trop petite." };
+    case z.ZodIssueCode.too_big:
+      return { message: "Cette valeur est trop longue ou trop grande." };
+    case z.ZodIssueCode.invalid_string:
+      return { message: "Format invalide." };
+    case z.ZodIssueCode.invalid_enum_value:
+      return { message: "Valeur non reconnue." };
+    default:
+      return { message: ctx.defaultError };
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Modules & niveaux d'accès (matrice de permissions — section 2 de la spec)
 // ---------------------------------------------------------------------------

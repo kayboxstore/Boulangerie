@@ -12,6 +12,7 @@ import {
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useFeedback } from "@/components/FeedbackProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,6 +63,7 @@ export function ProductionPage() {
   const { peutEcrire } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { confirmer, toastErreur } = useFeedback();
   const editable = peutEcrire("PRODUCTION");
 
   const { data: produitsData } = useQuery({
@@ -142,7 +144,7 @@ export function ProductionPage() {
       queryClient.invalidateQueries({ queryKey: ["plannings"] });
       queryClient.invalidateQueries({ queryKey: ["ecarts"] });
     },
-    onError: (e) => alert(e instanceof Error ? e.message : t("production.deleteError")),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("production.deleteError")),
   });
 
   // --- b + c) Production ----------------------------------------------------
@@ -385,7 +387,10 @@ export function ProductionPage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-terracotta hover:text-terracotta"
-                        onClick={() => confirm(t("production.confirmDeletePlanning")) && supprimerPlanning.mutate(p.id)}
+                        onClick={async () => {
+                          if (await confirmer({ description: t("production.confirmDeletePlanning"), destructive: true }))
+                            supprimerPlanning.mutate(p.id);
+                        }}
                         aria-label={t("production.ariaDeletePlanning")}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -428,7 +433,10 @@ export function ProductionPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-terracotta hover:text-terracotta"
-                      onClick={() => confirm(t("production.confirmDeletePlanning")) && supprimerPlanning.mutate(p.id)}
+                      onClick={async () => {
+                          if (await confirmer({ description: t("production.confirmDeletePlanning"), destructive: true }))
+                            supprimerPlanning.mutate(p.id);
+                        }}
                       aria-label={t("production.ariaDeletePlanning")}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
