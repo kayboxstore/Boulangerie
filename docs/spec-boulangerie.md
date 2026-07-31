@@ -322,6 +322,8 @@ Comptes utilisateurs rattachés à un rôle, hiérarchie et matrice de permissio
 
 **Délégation temporaire de rôle** *(nouveau)* : un Admin peut accorder à un utilisateur les droits d'écriture d'un module précis pour une période donnée (ex. remplacement du Chargé des commandes absent 3 jours), sans changer son rôle permanent. À l'expiration, les droits reviennent automatiquement à la normale. La vérification de permission devient : *droits du rôle de base* **OU** *délégation active couvrant ce module à la date du jour*.
 
+Session unique (nouveau) : un compte ne peut pas être connecté sur 2 appareils en même temps. Une nouvelle connexion invalide automatiquement la session précédente ; l'ancien appareil est déconnecté (en temps réel s'il est encore ouvert, sinon à sa prochaine requête) avec un message explicite — pas une simple expiration silencieuse.
+
 ### 3.8 Tableau de bord & rapports — ultra moderne & sophistiqué
 Registre de caisse du jour/semaine/mois, activité par module, export comptable (CSV). Contenu strictement filtré selon le rôle connecté et sa matrice de permissions (section 2) — aucune action de modification visible pour le DG.
 
