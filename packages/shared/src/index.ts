@@ -1067,14 +1067,16 @@ export interface PorteeRapportsDTO {
 // Paramètres de la boutique (section 3.9) — Administrateur uniquement
 // ---------------------------------------------------------------------------
 
-// Langue de l'interface (3.9). La traduction effective des libellés arrive en
-// phase 9ter ; ici, seul le point de configuration est posé.
-export const LANGUES = ["FR", "LN"] as const;
+// Langue de l'interface (section 3.8) : 4 langues, sélecteur affichant le nom
+// natif de chacune (Français/Lingala/English/Kiswahili).
+export const LANGUES = ["FR", "LN", "EN", "SW"] as const;
 export type Langue = (typeof LANGUES)[number];
 
 export const LANGUE_LABELS: Record<Langue, string> = {
   FR: "Français",
   LN: "Lingala",
+  EN: "English",
+  SW: "Kiswahili",
 };
 
 export const LANGUE_DEFAUT_PAR_DEFAUT: Langue = "FR";

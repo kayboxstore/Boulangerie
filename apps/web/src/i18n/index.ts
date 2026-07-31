@@ -4,12 +4,18 @@ import type { Langue } from "@lomoto/shared";
 import { LANGUE_DEFAUT_PAR_DEFAUT } from "@lomoto/shared";
 import fr from "./fr.json";
 import ln from "./ln.json";
+import en from "./en.json";
+import sw from "./sw.json";
 
-// Français = langue source/référence. Le Lingala est un premier jet (voir la
-// clé "_note" de ln.json) à faire relire par un locuteur natif.
+// Français = langue source/référence. Le Lingala et le Kiswahili sont des
+// premiers jets (voir la clé "_note" de ln.json/sw.json) à faire relire par
+// un locuteur natif avant un usage réel par l'équipe. L'anglais ne porte pas
+// cette réserve.
 export const RESSOURCES = {
   FR: { translation: fr },
   LN: { translation: ln },
+  EN: { translation: en },
+  SW: { translation: sw },
 } as const;
 
 i18n.use(initReactI18next).init({
