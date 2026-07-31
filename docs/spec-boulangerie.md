@@ -427,6 +427,8 @@ Roster du personnel, plus large que les seuls comptes Utilisateur : couvre aussi
 Filtres & affichage : par travailleur, par date, bouton "Tout afficher".
 DG : lecture seule, comme tous les modules métier.
 
+Adresse email professionnelle (nouveau) : sur une fiche Travailleur, le Chargé du personnel peut renseigner une adresse de destination (boîte mail personnelle existante de l'employé) et déclencher la création automatique d'une adresse pro (prenom.nom@boulangerie-lomoto.com) via Cloudflare Email Routing (gratuit, redirection — pas une boîte indépendante). Statut affiché sur la fiche : en attente de vérification / actif / échec. La vérification finale (clic sur le lien reçu par l'employé) reste hors du contrôle de l'app — Cloudflare l'exige côté destinataire, aucun moyen de l'automatiser davantage.
+
 ### 3.19 Assistant (accessible à tous les rôles — mode humain, IA désactivée temporairement)
 Chat en temps réel (Socket.io) accessible à tout utilisateur connecté, pour écrire directement à un Admin et envoyer des captures d'écran. (La couche IA Gemini est codée et prête, mais désactivée pour l'instant — bloquée par la facturation Google Cloud à finaliser. Reprise prévue lors d'une prochaine mise à jour, sans travail de reconstruction : juste la réactiver une fois la facturation réglée.)
 
