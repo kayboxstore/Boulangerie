@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Bot,
   CalendarClock,
+  CheckCircle2,
   Database,
   Download,
   HardDriveDownload,
@@ -12,6 +14,7 @@ import {
   Server,
   Usb,
   Users,
+  XCircle,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatOctets, type EtatSystemeDTO, type SauvegardeDTO } from "@lomoto/shared";
@@ -109,6 +112,13 @@ export function EtatSystemePage() {
       telechargerDepuis("/api/etat-systeme/sauvegarde/derniere-locale", "GET", t("etatSysteme.downloadLatestLocalError")),
     onError: (e) => setErreurLocale(e instanceof Error ? e.message : t("etatSysteme.downloadLatestLocalError")),
     onSuccess: () => setErreurLocale(null),
+  });
+
+  // Diagnostic Assistant IA (section 3.19) : appel Gemini réel à la demande —
+  // évite de tester à chaque chargement de l'écran (coût, latence).
+  const diagnosticIA = useMutation({
+    mutationFn: () =>
+      api<{ modele: string; cleConfiguree: boolean; ok: boolean; details: string }>("/api/assistant/diagnostic-ia"),
   });
 
   if (isLoading) return <ChargementModule />;
@@ -325,6 +335,53 @@ export function EtatSystemePage() {
               <p className="text-sm text-muted-foreground">{t("etatSysteme.principalOnly")}</p>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* --- Diagnostic Assistant IA (section 3.19) --------------------------- */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Bot className="h-4 w-4 text-or" />
+            {t("etatSysteme.iaTitle")}
+          </CardTitle>
+          <CardDescription>{t("etatSysteme.iaDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button variant="outline" onClick={() => diagnosticIA.mutate()} disabled={diagnosticIA.isPending}>
+            {diagnosticIA.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+            {diagnosticIA.isPending ? t("etatSysteme.iaTesting") : t("etatSysteme.iaTest")}
+          </Button>
+
+          {diagnosticIA.data && (
+            <div
+              className={
+                diagnosticIA.data.ok
+                  ? "rounded-md border border-or/50 bg-or/10 px-3 py-2.5 text-sm"
+                  : "rounded-md border border-terracotta/40 bg-terracotta/10 px-3 py-2.5 text-sm"
+              }
+            >
+              <p className="flex items-center gap-2 font-medium">
+                {diagnosticIA.data.ok ? (
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-or" />
+                ) : (
+                  <XCircle className="h-4 w-4 shrink-0 text-terracotta" />
+                )}
+                {diagnosticIA.data.ok ? t("etatSysteme.iaSuccess") : t("etatSysteme.iaFailure")}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("etatSysteme.iaModel", { modele: diagnosticIA.data.modele })} ·{" "}
+                {diagnosticIA.data.cleConfiguree ? t("etatSysteme.iaKeyConfigured") : t("etatSysteme.iaKeyMissing")}
+              </p>
+              <p className="mt-1.5 whitespace-pre-wrap font-mono text-xs">{diagnosticIA.data.details}</p>
+            </div>
+          )}
+
+          {diagnosticIA.isError && (
+            <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
+              {diagnosticIA.error instanceof Error ? diagnosticIA.error.message : t("etatSysteme.iaFailure")}
+            </p>
+          )}
         </CardContent>
       </Card>
 

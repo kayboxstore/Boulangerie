@@ -796,7 +796,16 @@
     "downloadLatestLocal": "Kokitisa bobateli ya nsuka ya esika moko",
     "downloadLatestLocalHelp": "Ezwaka mbala moko dossier oyo bobateli ya yango moko esalaki, esali lisusu export te.",
     "downloadLatestLocalError": "Bokitisi elongi te.",
-    "destLOCAL": "Esika moko (serveur)"
+    "destLOCAL": "Esika moko (serveur)",
+    "iaTitle": "Lisungi IA (Gemini)",
+    "iaDesc": "Bomeki ya boyokani na API Gemini oyo esalelaka na etape ya liboso ya Lisungi.",
+    "iaTest": "Meka boyokani",
+    "iaTesting": "Bomeki ezali kosalema…",
+    "iaKeyConfigured": "Fungola ebongisami",
+    "iaKeyMissing": "Fungola ezali te",
+    "iaModel": "Mokano : {{modele}}",
+    "iaSuccess": "Boyokani elongi",
+    "iaFailure": "Boyokani elongi te"
   },
   "approbations": {
     "title": "Bandimibi",

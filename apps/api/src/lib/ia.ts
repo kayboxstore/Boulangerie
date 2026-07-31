@@ -33,13 +33,29 @@ interface TourEchange {
   texte: string;
 }
 
+/** Ne jamais logger la clé elle-même — seulement de quoi confirmer qu'elle est bien injectée. */
+function clientKeyMasquee(): string {
+  const cle = process.env.GEMINI_API_KEY;
+  if (!cle) return "(absente)";
+  return `${cle.slice(0, 4)}…${cle.slice(-2)} (${cle.length} caractères)`;
+}
+
+type ResultatAppelIA =
+  | { ok: true; texte: string }
+  | { ok: false; motif: "CLE_ABSENTE" }
+  | { ok: false; motif: "REPONSE_VIDE"; brut: unknown }
+  | { ok: false; motif: "HTTP"; status: number; corps: string }
+  | { ok: false; motif: "EXCEPTION"; erreur: string };
+
 /**
- * Interroge Gemini avec l'historique de la conversation. Retourne `null` (et
- * non une exception) si la clé est absente, l'appel échoue, ou la réponse est
- * vide — l'appelant décide alors du repli (voir routes/assistant.ts).
+ * Appel bas niveau, sans filet — retourne toujours un résultat structuré
+ * distinguant précisément la cause d'échec (jamais juste "ça n'a pas marché").
+ * Utilisé à la fois par le premier niveau IA (repondreAssistantIA, qui masque
+ * l'échec derrière un repli silencieux) et par le diagnostic Admin
+ * (testerConnexionIA, qui donne au contraire le détail brut).
  */
-export async function repondreAssistantIA(historique: TourEchange[]): Promise<string | null> {
-  if (!process.env.GEMINI_API_KEY) return null;
+async function appelerGemini(historique: TourEchange[]): Promise<ResultatAppelIA> {
+  if (!process.env.GEMINI_API_KEY) return { ok: false, motif: "CLE_ABSENTE" };
   try {
     const res = await fetch(URL_GEMINI(), {
       method: "POST",
@@ -52,16 +68,84 @@ export async function repondreAssistantIA(historique: TourEchange[]): Promise<st
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
-      console.error("Assistant IA : réponse Gemini non-OK", res.status, await res.text().catch(() => ""));
-      return null;
+      const corps = await res.text().catch(() => "(corps illisible)");
+      return { ok: false, motif: "HTTP", status: res.status, corps };
     }
     const data = (await res.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
     const texte = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    return texte || null;
+    if (!texte) return { ok: false, motif: "REPONSE_VIDE", brut: data };
+    return { ok: true, texte };
   } catch (e) {
-    console.error("Assistant IA : appel Gemini échoué", e);
-    return null;
+    const erreur = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    return { ok: false, motif: "EXCEPTION", erreur };
   }
+}
+
+/**
+ * Interroge Gemini avec l'historique de la conversation. Retourne `null` (et
+ * non une exception) dans tous les cas d'échec — l'appelant décide alors du
+ * repli (voir routes/assistant.ts). L'échec précis est TOUJOURS loggé en
+ * clair côté serveur (jamais juste "ça a échoué") : modèle utilisé, clé
+ * présente/absente (jamais sa valeur), et la cause exacte renvoyée par
+ * Gemini — pour diagnostiquer directement le prochain souci du même genre
+ * dans les logs Render, sans deviner.
+ */
+export async function repondreAssistantIA(historique: TourEchange[]): Promise<string | null> {
+  const resultat = await appelerGemini(historique);
+  if (resultat.ok) return resultat.texte;
+
+  switch (resultat.motif) {
+    case "CLE_ABSENTE":
+      console.error("[assistant-ia] GEMINI_API_KEY absente de l'environnement — vérifier la config Render.");
+      break;
+    case "HTTP":
+      console.error(
+        `[assistant-ia] Gemini a répondu ${resultat.status} (modèle="${MODELE}", clé=${clientKeyMasquee()}) — corps :`,
+        resultat.corps,
+      );
+      break;
+    case "REPONSE_VIDE":
+      console.error(
+        `[assistant-ia] Réponse Gemini 200 mais sans texte exploitable (modèle="${MODELE}") — brut :`,
+        JSON.stringify(resultat.brut),
+      );
+      break;
+    case "EXCEPTION":
+      console.error(
+        `[assistant-ia] Appel Gemini a levé une exception (modèle="${MODELE}", clé=${clientKeyMasquee()}) :`,
+        resultat.erreur,
+      );
+      break;
+  }
+  return null;
+}
+
+/**
+ * Diagnostic Admin (État système) : effectue un VRAI appel Gemini minimal et
+ * renvoie le détail exact du résultat — succès (avec la réponse) ou échec
+ * (avec le motif précis), pour que l'Admin puisse s'auto-diagnostiquer en
+ * production sans avoir besoin des logs serveur bruts.
+ */
+export async function testerConnexionIA(): Promise<{
+  modele: string;
+  cleConfiguree: boolean;
+  ok: boolean;
+  details: string;
+}> {
+  const resultat = await appelerGemini([{ role: "user", texte: 'Réponds uniquement par le mot "OK".' }]);
+  const cleConfiguree = !!process.env.GEMINI_API_KEY;
+  if (resultat.ok) {
+    return { modele: MODELE, cleConfiguree, ok: true, details: resultat.texte };
+  }
+  const details =
+    resultat.motif === "CLE_ABSENTE"
+      ? "La variable d'environnement GEMINI_API_KEY est absente."
+      : resultat.motif === "HTTP"
+        ? `HTTP ${resultat.status} — ${resultat.corps}`
+        : resultat.motif === "REPONSE_VIDE"
+          ? `Réponse 200 mais vide — ${JSON.stringify(resultat.brut)}`
+          : `Exception — ${resultat.erreur}`;
+  return { modele: MODELE, cleConfiguree, ok: false, details };
 }

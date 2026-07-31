@@ -795,7 +795,16 @@
     "downloadLatestLocal": "Télécharger la dernière sauvegarde locale",
     "downloadLatestLocalHelp": "Récupère directement le fichier déjà produit par la sauvegarde automatique, sans regénérer d'export.",
     "downloadLatestLocalError": "Le téléchargement a échoué.",
-    "destLOCAL": "Local (serveur)"
+    "destLOCAL": "Local (serveur)",
+    "iaTitle": "Assistant IA (Gemini)",
+    "iaDesc": "Diagnostic de la connexion à l'API Gemini utilisée par le premier niveau de l'Assistant.",
+    "iaTest": "Tester la connexion",
+    "iaTesting": "Test en cours…",
+    "iaKeyConfigured": "Clé configurée",
+    "iaKeyMissing": "Clé absente",
+    "iaModel": "Modèle : {{modele}}",
+    "iaSuccess": "Connexion réussie",
+    "iaFailure": "Échec de la connexion"
   },
   "approbations": {
     "title": "Approbations",

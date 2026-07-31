@@ -11,7 +11,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
 import { getIo, roomRole, roomUtilisateur } from "../lib/realtime.js";
-import { repondreAssistantIA } from "../lib/ia.js";
+import { repondreAssistantIA, testerConnexionIA } from "../lib/ia.js";
 
 export const assistantRouter = Router();
 
@@ -245,6 +245,21 @@ assistantRouter.post("/escalader", async (req, res, next) => {
 });
 
 // --- Vue Admin : file de toutes les conversations ---------------------------
+
+// Diagnostic (État système, section 3.15) : effectue un VRAI appel Gemini
+// minimal et renvoie le résultat exact — clé configurée ou non, modèle
+// utilisé, succès (avec la réponse reçue) ou échec (avec le motif précis
+// renvoyé par Gemini). Permet à l'Admin de s'auto-diagnostiquer en production
+// sans avoir besoin d'accès aux logs serveur bruts.
+assistantRouter.get("/diagnostic-ia", async (req, res, next) => {
+  try {
+    if (!estAdmin(req)) return res.status(403).json({ erreur: "Réservé aux Administrateurs" });
+    const resultat = await testerConnexionIA();
+    res.json(resultat);
+  } catch (e) {
+    next(e);
+  }
+});
 
 assistantRouter.get("/conversations", async (req, res, next) => {
   try {

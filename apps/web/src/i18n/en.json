@@ -795,7 +795,16 @@
     "downloadLatestLocal": "Download the latest local backup",
     "downloadLatestLocalHelp": "Fetches directly the file already produced by the automatic backup, without regenerating an export.",
     "downloadLatestLocalError": "The download failed.",
-    "destLOCAL": "Local (server)"
+    "destLOCAL": "Local (server)",
+    "iaTitle": "AI Assistant (Gemini)",
+    "iaDesc": "Diagnostics for the Gemini API connection used by the Assistant's first line.",
+    "iaTest": "Test the connection",
+    "iaTesting": "Testing…",
+    "iaKeyConfigured": "Key configured",
+    "iaKeyMissing": "Key missing",
+    "iaModel": "Model: {{modele}}",
+    "iaSuccess": "Connection successful",
+    "iaFailure": "Connection failed"
   },
   "approbations": {
     "title": "Approvals",
