@@ -14,6 +14,7 @@ import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CarteLigne, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select";
@@ -136,7 +137,7 @@ export function AuditPage() {
           {isLoading ? (
             <ChargementModule />
           ) : (
-            <Table>
+            <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8" />
@@ -226,6 +227,67 @@ export function AuditPage() {
                 )}
               </TableBody>
             </Table>
+          )}
+
+          {/* Mobile : cartes dépliables — le diff avant/après imbriqué ne se
+              transpose pas en tableau de tableau sur un petit écran ; en
+              carte ouverte, chaque champ modifié devient une ligne empilée
+              (nom, avant, après) qui s'enroule plutôt que de déborder. */}
+          {!isLoading && (
+            <div className="space-y-2 md:hidden">
+              {entrees.map((e) => {
+                const ouverte = depliees.has(e.id);
+                const champs = champsPertinents(e);
+                return (
+                  <CarteLigne key={e.id} className="cursor-pointer" onClick={() => basculer(e.id)}>
+                    <CarteLigneTitre>
+                      <span className="flex items-center gap-1.5">
+                        {ouverte ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                        {e.utilisateur.nom}
+                      </span>
+                      {e.action === "SUPPRESSION" ? (
+                        <Badge className="border-transparent bg-terracotta text-creme">{ACTION_AUDIT_LABELS[e.action]}</Badge>
+                      ) : (
+                        <Badge className="border-transparent bg-or text-marine">{ACTION_AUDIT_LABELS[e.action]}</Badge>
+                      )}
+                    </CarteLigneTitre>
+                    <CarteLigneChamp label={t("common.date")} value={new Date(e.date).toLocaleString()} />
+                    <CarteLigneChamp label={t("audit.module")} value={<Badge variant="secondary">{MODULE_LABELS[e.module]}</Badge>} />
+                    <CarteLigneChamp
+                      label={t("audit.entity")}
+                      value={
+                        <span>
+                          {TYPE_ENTITE_LABELS[e.typeEntite] ?? e.typeEntite}
+                          <span className="ml-1 text-xs text-muted-foreground">#{e.entiteId.slice(0, 8)}</span>
+                        </span>
+                      }
+                    />
+                    {ouverte && (
+                      <div className="mt-2 space-y-2 border-t pt-2" onClick={(ev) => ev.stopPropagation()}>
+                        {champs.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">{t("audit.noFieldChange")}</p>
+                        ) : (
+                          champs.map((k) => (
+                            <div key={k} className="rounded-md bg-muted/30 p-2 text-sm">
+                              <p className="font-mono text-xs text-muted-foreground">{k}</p>
+                              <p className="mt-0.5 break-words text-terracotta">
+                                <span className="text-xs text-muted-foreground">{t("audit.before")} : </span>
+                                {fmtValeur(e.avant?.[k])}
+                              </p>
+                              <p className="mt-0.5 break-words text-marine dark:text-creme">
+                                <span className="text-xs text-muted-foreground">{t("audit.after")} : </span>
+                                {e.action === "SUPPRESSION" ? "—" : fmtValeur(e.apres?.[k])}
+                              </p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </CarteLigne>
+                );
+              })}
+              {entrees.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">{t("audit.empty")}</p>}
+            </div>
           )}
         </CardContent>
       </Card>

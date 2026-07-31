@@ -49,7 +49,8 @@
     "myProfile": "Mon profil",
     "approbations": "Approbations",
     "etatSysteme": "État système",
-    "audit": "Journal d'audit"
+    "audit": "Journal d'audit",
+    "openMenu": "Ouvrir le menu"
   },
   "login": {
     "title": "Connexion",

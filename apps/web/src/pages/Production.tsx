@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -240,7 +241,7 @@ export function ProductionPage() {
           <p className="mt-1 text-muted-foreground">{t("production.subtitle")}</p>
         </div>
         {editable && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={ouvrirPlanning}>
               <CalendarDays className="h-4 w-4" />
               {t("production.plan")}
@@ -286,34 +287,56 @@ export function ProductionPage() {
           {!ecarts?.planning && ecarts?.nbProductions === 0 ? (
             <p className="py-6 text-center text-muted-foreground">{t("production.gapsEmpty")}</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("production.gapsMetric")}</TableHead>
-                  <TableHead className="text-right">{t("production.planned")}</TableHead>
-                  <TableHead className="text-right">{t("production.actual")}</TableHead>
-                  <TableHead className="text-right">{t("production.gap")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(ecarts?.lignes ?? []).map((l) => (
-                  <TableRow key={l.cle}>
-                    <TableCell className="font-medium">{t(`production.metric.${l.cle}`)}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{l.prevu}</TableCell>
-                    <TableCell className="text-right">{l.realise}</TableCell>
-                    <TableCell
-                      className={
-                        l.ecart === 0
-                          ? "text-right text-muted-foreground"
-                          : "text-right font-semibold text-terracotta dark:text-or"
-                      }
-                    >
-                      {l.ecart > 0 ? `+${l.ecart}` : l.ecart}
-                    </TableCell>
+            <>
+              <Table className="hidden md:table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("production.gapsMetric")}</TableHead>
+                    <TableHead className="text-right">{t("production.planned")}</TableHead>
+                    <TableHead className="text-right">{t("production.actual")}</TableHead>
+                    <TableHead className="text-right">{t("production.gap")}</TableHead>
                   </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(ecarts?.lignes ?? []).map((l) => (
+                    <TableRow key={l.cle}>
+                      <TableCell className="font-medium">{t(`production.metric.${l.cle}`)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{l.prevu}</TableCell>
+                      <TableCell className="text-right">{l.realise}</TableCell>
+                      <TableCell
+                        className={
+                          l.ecart === 0
+                            ? "text-right text-muted-foreground"
+                            : "text-right font-semibold text-terracotta dark:text-or"
+                        }
+                      >
+                        {l.ecart > 0 ? `+${l.ecart}` : l.ecart}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              <div className="space-y-2 md:hidden">
+                {(ecarts?.lignes ?? []).map((l) => (
+                  <CarteLigne key={l.cle}>
+                    <CarteLigneTitre>
+                      <span>{t(`production.metric.${l.cle}`)}</span>
+                    </CarteLigneTitre>
+                    <CarteLigneChamp label={t("production.planned")} value={l.prevu} />
+                    <CarteLigneChamp label={t("production.actual")} value={l.realise} />
+                    <CarteLigneChamp
+                      label={t("production.gap")}
+                      value={
+                        <span className={l.ecart === 0 ? "text-muted-foreground" : "font-semibold text-terracotta dark:text-or"}>
+                          {l.ecart > 0 ? `+${l.ecart}` : l.ecart}
+                        </span>
+                      }
+                    />
+                  </CarteLigne>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -328,7 +351,7 @@ export function ProductionPage() {
           <CardDescription>{t("production.planningDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("common.date")}</TableHead>
@@ -380,6 +403,44 @@ export function ProductionPage() {
               )}
             </TableBody>
           </Table>
+
+          <div className="space-y-2 md:hidden">
+            {plannings.map((p) => (
+              <CarteLigne key={p.id}>
+                <CarteLigneTitre>
+                  <span>{p.datePrevue}</span>
+                  <span>{p.nombreBacsCommandes} {t("production.colBacsOrdered").toLowerCase()}</span>
+                </CarteLigneTitre>
+                <p className="py-1 text-xs text-muted-foreground">
+                  {p.lignes.length === 0 ? "—" : p.lignes.map((l) => `${l.quantitePrevue} × ${l.produitNom}`).join(", ")}
+                </p>
+                <p className="py-1 text-xs text-muted-foreground">
+                  {t("production.forecastSummary", {
+                    sacs: p.sacsFarinePrevus,
+                    levure: p.paquetsLevurePrevus,
+                    huile: p.quantiteHuilePrevue,
+                    sel: p.kgSelPrevus,
+                  })}
+                </p>
+                {editable && (
+                  <CarteLigneActions>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-terracotta hover:text-terracotta"
+                      onClick={() => confirm(t("production.confirmDeletePlanning")) && supprimerPlanning.mutate(p.id)}
+                      aria-label={t("production.ariaDeletePlanning")}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </CarteLigneActions>
+                )}
+              </CarteLigne>
+            ))}
+            {plannings.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("production.nothingPlanned")}</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -390,7 +451,7 @@ export function ProductionPage() {
           <CardDescription>{t("production.recordedDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>N°</TableHead>
@@ -454,6 +515,49 @@ export function ProductionPage() {
               )}
             </TableBody>
           </Table>
+
+          <div className="space-y-2 md:hidden">
+            {productions.map((p) => (
+              <CarteLigne key={p.id}>
+                <CarteLigneTitre>
+                  <span>n°{p.numero}</span>
+                  <span className="flex items-center gap-1">
+                    {p.bacsProduits}
+                    {p.ecartReconciliation !== 0 && (
+                      <Badge className="border-transparent bg-terracotta text-creme">
+                        {p.ecartReconciliation > 0 ? `+${p.ecartReconciliation}` : p.ecartReconciliation}
+                      </Badge>
+                    )}
+                  </span>
+                </CarteLigneTitre>
+                <CarteLigneChamp label={t("common.date")} value={new Date(p.date).toLocaleDateString()} />
+                <CarteLigneChamp label={t("production.colRecordedBy")} value={p.enregistrePar?.nom ?? "—"} />
+                <div className="mt-1 space-y-0.5 border-t pt-1.5 text-xs text-muted-foreground">
+                  <p>
+                    {t("production.destinationsSummary", {
+                      dep: p.bacsLivresDepositaires,
+                      mamans: p.bacsLivresMamans,
+                      vc: p.bacsVendusVC,
+                      dons: p.totalDonnes,
+                      restants: p.bacsRestants,
+                      foutus: p.bacsFoutus,
+                    })}
+                    {p.dons.length > 0 && (
+                      <span className="block italic">{p.dons.map((d) => `${d.nombreBacs} ${d.motifNom}`).join(", ")}</span>
+                    )}
+                  </p>
+                  <p>
+                    {p.consommations.length === 0
+                      ? "—"
+                      : p.consommations.map((c) => `${c.quantite} ${c.unite} ${c.matiereNom}`).join(", ")}
+                  </p>
+                </div>
+              </CarteLigne>
+            ))}
+            {productions.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("production.noProduction")}</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

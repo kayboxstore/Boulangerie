@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ChargementModule } from "@/components/ChargementModule";
@@ -208,7 +209,7 @@ export function CaissePage() {
           <CardDescription>{t("caisse.debtsPaidDesc", { count: registre.detailDettesPayees.length })}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("caisse.colTime")}</TableHead>
@@ -235,6 +236,22 @@ export function CaissePage() {
               )}
             </TableBody>
           </Table>
+
+          <div className="space-y-2 md:hidden">
+            {registre.detailDettesPayees.map((d) => (
+              <CarteLigne key={d.id}>
+                <CarteLigneTitre>
+                  <span>{d.clientNom}</span>
+                  <span className="font-semibold">{formatFc(d.montant)}</span>
+                </CarteLigneTitre>
+                <CarteLigneChamp label={t("caisse.colTime")} value={formatHeure(d.date)} />
+                <CarteLigneChamp label={t("caisse.colOrder")} value={`n°${d.commandeNumero}`} />
+              </CarteLigne>
+            ))}
+            {registre.detailDettesPayees.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">{t("caisse.noDebtPaid")}</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -299,7 +316,7 @@ export function CaissePage() {
             </label>
           </div>
 
-          <Table>
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("caisse.colReason")}</TableHead>
@@ -347,6 +364,41 @@ export function CaissePage() {
               )}
             </TableBody>
           </Table>
+
+          <div className="space-y-2 md:hidden">
+            {registre.depenses.map((d) => (
+              <CarteLigne key={d.id}>
+                <CarteLigneTitre>
+                  <span>
+                    {d.motif}
+                    {d.origine === "FARINE" && (
+                      <Badge variant="secondary" className="ml-2">
+                        {t("caisse.autoBadge")}
+                      </Badge>
+                    )}
+                  </span>
+                  <span className="font-semibold">{formatFc(d.montant)}</span>
+                </CarteLigneTitre>
+                <CarteLigneChamp label={t("caisse.colRecordedBy")} value={d.enregistrePar?.nom ?? "—"} />
+                {editable && d.origine === "MANUELLE" && (
+                  <CarteLigneActions>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-terracotta hover:text-terracotta"
+                      onClick={() => confirm(t("caisse.confirmDeleteExpense")) && supprimerDepense.mutate(d.id)}
+                      aria-label={t("caisse.ariaDeleteExpense")}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </CarteLigneActions>
+                )}
+              </CarteLigne>
+            ))}
+            {registre.depenses.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">{t("caisse.noExpense")}</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select";
@@ -182,7 +183,7 @@ export function TravailleursPage() {
           <p className="mt-1 text-muted-foreground">{t("travailleurs.subtitle")}</p>
         </div>
         {editable && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => ouvrirPointage()} disabled={travailleurs.length === 0}>
               <CalendarCheck className="h-4 w-4" />
               {t("travailleurs.clockIn")}
@@ -202,7 +203,7 @@ export function TravailleursPage() {
           <CardDescription>{t("travailleurs.rosterDesc", { count: travailleurs.length })}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("common.name")}</TableHead>
@@ -261,6 +262,55 @@ export function TravailleursPage() {
               )}
             </TableBody>
           </Table>
+
+          <div className="space-y-2 md:hidden">
+            {travailleurs.map((trav) => (
+              <CarteLigne key={trav.id}>
+                <CarteLigneTitre>
+                  <span>{trav.nom}</span>
+                  <span className="text-sm font-normal text-muted-foreground">{trav.poste}</span>
+                </CarteLigneTitre>
+                <CarteLigneChamp label={t("common.phone")} value={trav.telephone ?? "—"} />
+                <CarteLigneChamp label={t("travailleurs.colHiredOn")} value={formatDate(trav.dateEmbauche)} />
+                <CarteLigneChamp
+                  label={t("travailleurs.colAppAccount")}
+                  value={
+                    trav.compte ? (
+                      <Badge variant="gold">
+                        <Link2 className="mr-1 h-3 w-3" />
+                        {trav.compte.email}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">{t("travailleurs.noAccess")}</span>
+                    )
+                  }
+                />
+                {editable && (
+                  <CarteLigneActions>
+                    <Button variant="outline" size="sm" onClick={() => ouvrirPointage(trav.id)}>
+                      <CalendarCheck className="h-3.5 w-3.5" />
+                      {t("travailleurs.clockIn")}
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirFiche(trav)} aria-label={t("travailleurs.ariaEdit", { nom: trav.nom })}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-terracotta hover:text-terracotta"
+                      onClick={() => confirm(t("travailleurs.confirmDelete", { nom: trav.nom })) && supprimerFiche.mutate(trav.id)}
+                      aria-label={t("travailleurs.ariaDelete", { nom: trav.nom })}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </CarteLigneActions>
+                )}
+              </CarteLigne>
+            ))}
+            {travailleurs.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("travailleurs.noWorker")}</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -272,7 +322,7 @@ export function TravailleursPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
-            <div className="w-56">
+            <div className="w-full sm:w-56">
               <Label htmlFor="filtre-travailleur">{t("travailleurs.worker")}</Label>
               <NativeSelect id="filtre-travailleur" value={filtreTravailleur} onChange={(e) => setFiltreTravailleur(e.target.value)}>
                 <option value="">{t("travailleurs.filterAll")}</option>
@@ -305,7 +355,7 @@ export function TravailleursPage() {
             )}
           </div>
 
-          <Table>
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("common.date")}</TableHead>
@@ -340,6 +390,27 @@ export function TravailleursPage() {
               )}
             </TableBody>
           </Table>
+
+          <div className="space-y-2 md:hidden">
+            {presences.map((p) => (
+              <CarteLigne key={p.id}>
+                <CarteLigneTitre>
+                  <span>{p.travailleur.nom}</span>
+                  <Badge className={cn(BADGE_STATUT[p.statut])}>{t(`presence.${p.statut}`)}</Badge>
+                </CarteLigneTitre>
+                <CarteLigneChamp label={t("common.date")} value={formatDate(p.date)} />
+                <CarteLigneChamp label={t("travailleurs.post")} value={p.travailleur.poste} />
+                <CarteLigneChamp label={t("travailleurs.colArrival")} value={p.heureArrivee ?? "—"} />
+                <CarteLigneChamp label={t("travailleurs.colDeparture")} value={p.heureDepart ?? "—"} />
+                <CarteLigneChamp label={t("travailleurs.colRecordedBy")} value={p.enregistrePar?.nom ?? "—"} />
+              </CarteLigne>
+            ))}
+            {presences.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                {filtresActifs ? t("travailleurs.emptyFiltered") : t("travailleurs.empty")}
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

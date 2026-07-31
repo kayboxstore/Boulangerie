@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Bell,
   CircleUserRound,
@@ -10,6 +10,7 @@ import {
   Info,
   LayoutDashboard,
   LogOut,
+  Menu,
   Package,
   ScrollText,
   ServerCog,
@@ -30,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { IndicateurConnexion } from "@/components/IndicateurConnexion";
 import { ChargementModule } from "@/components/ChargementModule";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 // La cloche de notifications tire framer-motion : chargée en lazy pour garder
 // cette lib hors du chunk initial. Une cloche statique occupe la place le temps
@@ -79,8 +81,71 @@ const navigation: EntreeNav[] = [
   { to: "/a-propos", labelKey: "nav.apropos", icon: Info },
 ];
 
+type LienNavigation = ReturnType<typeof calculerLiens>[number];
+
+function calculerLiens(
+  peutLire: (m: Module) => boolean,
+  peutEcrire: (m: Module) => boolean,
+  t: (cle: string) => string,
+) {
+  return navigation.map((n) => {
+    const aPermission = !n.module || (n.ecriture ? peutEcrire(n.module) : peutLire(n.module));
+    const construit = !!n.to;
+    return {
+      ...n,
+      label: t(n.labelKey),
+      actif: aPermission && construit,
+      motif: !aPermission ? t("nav.outOfScope") : !construit ? t("nav.moduleComingSoon") : undefined,
+    };
+  });
+}
+
+/**
+ * Liste des liens de navigation — un seul rendu, réutilisé par la barre
+ * latérale (desktop) ET le tiroir mobile, pour ne jamais les faire diverger.
+ */
+function ListeNavigation({ liens, t }: { liens: LienNavigation[]; t: (cle: string) => string }) {
+  return (
+    <>
+      {liens.map(({ to, label, icon: Icon, actif, motif }) =>
+        actif ? (
+          <NavLink
+            key={label}
+            to={to!}
+            end={to === "/"}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                isActive ? "bg-or/15 text-or" : "text-creme/70 hover:bg-creme/5 hover:text-creme",
+              )
+            }
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </NavLink>
+        ) : (
+          <span
+            key={label}
+            aria-disabled="true"
+            title={motif}
+            className="flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-creme/25"
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+            {motif === t("nav.moduleComingSoon") && (
+              <span className="ml-auto rounded bg-creme/10 px-1.5 py-0.5 text-[10px] text-creme/40">{t("nav.comingSoon")}</span>
+            )}
+          </span>
+        ),
+      )}
+    </>
+  );
+}
+
 export function Layout() {
   const { utilisateur, logout, peutLire, peutEcrire } = useAuth();
+  const location = useLocation();
+  const [menuOuvert, setMenuOuvert] = useState(false);
 
   // Vérification paresseuse des dettes non payées (3.4) : déclenchée au
   // chargement de l'app pour les rôles ayant accès à Commandes — pas de tâche
@@ -93,6 +158,10 @@ export function Layout() {
     staleTime: 5 * 60 * 1000,
   });
   const { t } = useTranslation();
+
+  // Ferme le tiroir à chaque changement de route — sans ça, naviguer depuis le
+  // menu laisserait le tiroir ouvert par-dessus le nouvel écran.
+  useEffect(() => setMenuOuvert(false), [location.pathname]);
 
   const liens = navigation.map((n) => {
     const aPermission = !n.module || (n.ecriture ? peutEcrire(n.module) : peutLire(n.module));
@@ -122,39 +191,7 @@ export function Layout() {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {liens.map(({ to, label, icon: Icon, actif, motif }) =>
-            actif ? (
-              <NavLink
-                key={label}
-                to={to!}
-                end={to === "/"}
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-or/15 text-or"
-                      : "text-creme/70 hover:bg-creme/5 hover:text-creme",
-                  )
-                }
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </NavLink>
-            ) : (
-              <span
-                key={label}
-                aria-disabled="true"
-                title={motif}
-                className="flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-creme/25"
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-                {motif === t("nav.moduleComingSoon") && (
-                  <span className="ml-auto rounded bg-creme/10 px-1.5 py-0.5 text-[10px] text-creme/40">{t("nav.comingSoon")}</span>
-                )}
-              </span>
-            ),
-          )}
+          <ListeNavigation liens={liens} t={t} />
         </nav>
 
         <div className="border-t border-creme/10 px-5 py-4">
@@ -186,10 +223,64 @@ export function Layout() {
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col">
-        {/* En-tête mobile */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* En-tête mobile — la navigation elle-même vit dans le tiroir
+            (Sheet) plutôt qu'en rangée horizontale : sur un petit écran, une
+            quinzaine de modules ne tient de toute façon pas sur une ligne. */}
         <header className="flex items-center justify-between bg-marine px-4 py-3 text-creme md:hidden">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <Sheet open={menuOuvert} onOpenChange={setMenuOuvert}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("nav.openMenu")}
+                  className="-ml-2 text-creme/80 hover:bg-creme/10 hover:text-creme"
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="p-0">
+                <SheetTitle asChild>
+                  <div className="flex items-center gap-3 border-b border-creme/10 px-5 py-4">
+                    <img
+                      src="/logo-lomoto.png"
+                      alt="Logo Boulangerie Lomoto"
+                      className="h-11 w-11 rounded-full object-contain ring-2 ring-or/70"
+                    />
+                    <div>
+                      <p className="font-serif text-lg font-semibold leading-tight text-or">Boulangerie Lomoto</p>
+                      <p className="text-[11px] tracking-wide text-creme/60">{t("nav.gestionCommerciale")}</p>
+                    </div>
+                  </div>
+                </SheetTitle>
+                <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+                  <ListeNavigation liens={liens} t={t} />
+                </nav>
+                <div className="border-t border-creme/10 px-5 py-4">
+                  <NavLink
+                    to="/profil"
+                    className={({ isActive }) => cn("-mx-2 block rounded-md px-2 py-1 transition-colors hover:bg-creme/5", isActive && "bg-creme/5")}
+                    title={t("nav.myProfile")}
+                  >
+                    <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+                      <CircleUserRound className="h-4 w-4 shrink-0 text-creme/60" />
+                      {utilisateur?.nom}
+                    </p>
+                    <Badge variant="gold" className="mt-1">{utilisateur?.role.nom}</Badge>
+                  </NavLink>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={logout}
+                    className="mt-3 w-full justify-start gap-2 text-creme/70 hover:bg-creme/5 hover:text-creme"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    {t("nav.logout")}
+                  </Button>
+                </div>
+              </SheetContent>
+            </Sheet>
             <img src="/logo-lomoto.png" alt="Logo Boulangerie Lomoto" className="h-9 w-9 rounded-full object-contain" />
             <span className="font-serif font-semibold text-or">Boulangerie Lomoto</span>
           </div>
@@ -206,36 +297,6 @@ export function Layout() {
           </div>
         </header>
 
-        {/* Navigation mobile */}
-        <nav className="flex gap-1 overflow-x-auto border-b bg-card px-2 py-1 md:hidden">
-          {liens.map(({ to, label, actif, motif }) =>
-            actif ? (
-              <NavLink
-                key={label}
-                to={to!}
-                end={to === "/"}
-                className={({ isActive }) =>
-                  cn(
-                    "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
-                    isActive ? "bg-secondary text-foreground" : "text-muted-foreground",
-                  )
-                }
-              >
-                {label}
-              </NavLink>
-            ) : (
-              <span
-                key={label}
-                aria-disabled="true"
-                title={motif}
-                className="cursor-not-allowed whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground/40"
-              >
-                {label}
-              </span>
-            ),
-          )}
-        </nav>
-
         {/* Barre supérieure (desktop) : statut temps réel + notifications */}
         <div className="no-print hidden items-center justify-end gap-3 border-b bg-card px-6 py-2 md:flex">
           <IndicateurConnexion etendu />
@@ -244,7 +305,11 @@ export function Layout() {
           </Suspense>
         </div>
 
-        <main className="flex-1 p-4 md:p-8">
+        {/* min-w-0 : sans lui, un enfant plus large que l'écran (tableau non
+            enroulé, etc.) élargit ce conteneur flex au lieu de défiler dans
+            son propre cadre — c'était la cause du débordement horizontal de
+            toute la page sur mobile, pas un problème propre à chaque écran. */}
+        <main className="min-w-0 flex-1 p-4 md:p-8">
           {/* Chaque module est chargé à la demande (React.lazy) ; la navigation
               reste affichée, seul le contenu montre le fallback de marque. */}
           <Suspense fallback={<ChargementModule />}>

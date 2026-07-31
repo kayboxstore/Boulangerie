@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select";
@@ -223,7 +224,7 @@ export function EquipePage() {
           <CardDescription>{t("equipe.accountsSub", { count: comptes.length })}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("common.name")}</TableHead>
@@ -318,13 +319,95 @@ export function EquipePage() {
               )}
             </TableBody>
           </Table>
+
+          <div className="space-y-2 md:hidden">
+            {comptes.map((c) => (
+              <CarteLigne key={c.id}>
+                <CarteLigneTitre>
+                  <span>
+                    {c.nom}
+                    {c.id === utilisateur?.id && <span className="ml-1 text-xs font-normal text-muted-foreground">({t("equipe.you")})</span>}
+                  </span>
+                </CarteLigneTitre>
+                <CarteLigneChamp label={t("common.email")} value={c.email} />
+                <CarteLigneChamp
+                  label={t("common.role")}
+                  value={
+                    <span className="flex items-center gap-1">
+                      <Badge variant="secondary">{c.role.nom}</Badge>
+                      {c.estAdminPrincipal && (
+                        <Badge variant="gold">
+                          <Crown className="mr-1 h-3 w-3" />
+                          {t("equipe.principal")}
+                        </Badge>
+                      )}
+                    </span>
+                  }
+                />
+                <CarteLigneChamp
+                  label={t("common.status")}
+                  value={
+                    c.actif ? (
+                      <Badge variant="secondary">{t("equipe.active")}</Badge>
+                    ) : (
+                      <Badge className="border-transparent bg-terracotta text-creme">{t("equipe.disabled")}</Badge>
+                    )
+                  }
+                />
+                {editable && (
+                  <CarteLigneActions className="flex-wrap">
+                    {c.role.nom === ROLE_ADMINISTRATEUR && !c.estAdminPrincipal && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          confirm(t("equipe.confirmMakePrincipal", { nom: c.nom })) && transfererPrincipal.mutate(c.id)
+                        }
+                      >
+                        <Crown className="h-3.5 w-3.5" />
+                        {t("equipe.makePrincipal")}
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() =>
+                        confirm(
+                          c.actif ? t("equipe.confirmDeactivate", { nom: c.nom }) : t("equipe.confirmActivate", { nom: c.nom }),
+                        ) && basculerActivation.mutate(c)
+                      }
+                      disabled={c.id === utilisateur?.id}
+                      aria-label={c.actif ? t("equipe.deactivate", { nom: c.nom }) : t("equipe.activate", { nom: c.nom })}
+                    >
+                      <Power className={c.actif ? "h-3.5 w-3.5 text-or" : "h-3.5 w-3.5 text-muted-foreground"} />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirCompte(c)} aria-label={t("equipe.editAccount", { nom: c.nom })}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-terracotta hover:text-terracotta"
+                      onClick={() => confirm(t("equipe.confirmDelete", { nom: c.nom })) && supprimerCompte.mutate(c.id)}
+                      disabled={c.id === utilisateur?.id}
+                      aria-label={t("equipe.ariaDelete", { nom: c.nom })}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </CarteLigneActions>
+                )}
+              </CarteLigne>
+            ))}
+            {comptes.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">{t("equipe.empty")}</p>}
+          </div>
         </CardContent>
       </Card>
 
       {/* Délégations temporaires de rôle (section 3.7) */}
       {editable && (
         <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <CardHeader className="flex flex-col items-start gap-3 space-y-0 sm:flex-row sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <CalendarClock className="h-5 w-5 text-or" />
@@ -337,7 +420,7 @@ export function EquipePage() {
             </Button>
           </CardHeader>
           <CardContent>
-            <Table>
+            <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("delegations.user")}</TableHead>
@@ -388,6 +471,40 @@ export function EquipePage() {
                 )}
               </TableBody>
             </Table>
+
+            <div className="space-y-2 md:hidden">
+              {delegations.map((d) => (
+                <CarteLigne key={d.id}>
+                  <CarteLigneTitre>
+                    <span>
+                      {d.utilisateur.nom}
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">{d.utilisateur.roleNom}</span>
+                    </span>
+                    {d.active ? (
+                      <Badge className="border-transparent bg-or text-marine">{t("delegations.active")}</Badge>
+                    ) : (
+                      <Badge variant="secondary">{t("delegations.inactive")}</Badge>
+                    )}
+                  </CarteLigneTitre>
+                  <CarteLigneChamp label={t("delegations.module")} value={MODULE_LABELS[d.module]} />
+                  <CarteLigneChamp label={t("delegations.period")} value={`${d.dateDebut} → ${d.dateFin}`} />
+                  <CarteLigneActions>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-terracotta hover:text-terracotta"
+                      onClick={() => confirm(t("delegations.confirmRevoke")) && revoquerDelegation.mutate(d.id)}
+                      aria-label={t("delegations.revoke")}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </CarteLigneActions>
+                </CarteLigne>
+              ))}
+              {delegations.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">{t("delegations.empty")}</p>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}

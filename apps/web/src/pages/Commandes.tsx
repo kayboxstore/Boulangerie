@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { NativeSelect } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
 import {
   Dialog,
   DialogContent,
@@ -369,7 +370,7 @@ export function CommandesPage() {
             </p>
           )}
           {data && (
-            <Table>
+            <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
                   <TableHead>N°</TableHead>
@@ -452,6 +453,60 @@ export function CommandesPage() {
                 )}
               </TableBody>
             </Table>
+          )}
+
+          {/* Mobile : cartes — 12-13 colonnes est le tableau le plus dense de
+              l'app, aucun scroll horizontal contenu ne le rendrait lisible. */}
+          {data && (
+            <div className="space-y-2 md:hidden">
+              {data.commandes.map((c) => (
+                <CarteLigne key={c.id}>
+                  <CarteLigneTitre>
+                    <span>
+                      n°{c.numero} — {c.client.nom}
+                    </span>
+                    <Badge variant="secondary">{c.qualite}</Badge>
+                  </CarteLigneTitre>
+                  <CarteLigneChamp label={t("common.date")} value={formatDate(c.dateCreation)} />
+                  <CarteLigneChamp label={t("commandes.colBacs")} value={c.quantiteBacs} />
+                  <CarteLigneChamp label={t("commandes.colGross")} value={formatFc(c.montantBrut)} />
+                  {c.avanceUtilisee > 0 && (
+                    <CarteLigneChamp
+                      label={t("commandes.colAdvanceUsed")}
+                      value={<span className="font-medium text-terracotta">− {formatFc(c.avanceUtilisee)}</span>}
+                    />
+                  )}
+                  <CarteLigneChamp
+                    label={t("commandes.colToCollect")}
+                    value={<span className="font-semibold text-marine dark:text-or">{formatFc(c.montantAPercevoir)}</span>}
+                  />
+                  <CarteLigneChamp label={t("commandes.colReceived")} value={formatFc(c.montantRecu)} />
+                  {c.dette > 0 && (
+                    <CarteLigneChamp label={t("commandes.colDebt")} value={<Badge variant="destructive">{formatFc(c.dette)}</Badge>} />
+                  )}
+                  {c.avanceGeneree > 0 && (
+                    <CarteLigneChamp label={t("commandes.colAdvanceGen")} value={<Badge variant="gold">+ {formatFc(c.avanceGeneree)}</Badge>} />
+                  )}
+                  <CarteLigneChamp label={t("commandes.colNewAdvance")} value={<span className="font-medium">{formatFc(c.nouvelleAvance)}</span>} />
+                  {editable && c.dette > 0 && (
+                    <CarteLigneActions>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => ouvrirReglement(c)}
+                        className="gap-1 border-terracotta/40 text-terracotta hover:bg-terracotta/10 hover:text-terracotta"
+                      >
+                        <HandCoins className="h-3.5 w-3.5" />
+                        {t("commandes.settle")}
+                      </Button>
+                    </CarteLigneActions>
+                  )}
+                </CarteLigne>
+              ))}
+              {data.commandes.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">{t("commandes.emptyCriteria")}</p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>

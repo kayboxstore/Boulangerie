@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select";
@@ -144,7 +145,7 @@ export function StocksPage() {
           <p className="mt-1 text-muted-foreground">{t("stocks.subtitle")}</p>
         </div>
         {editable && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => ouvrirMouvement("ENTREE")} disabled={matieres.length === 0}>
               <ArrowDownToLine className="h-4 w-4" />
               {t("mouvement.ENTREE")}
@@ -189,7 +190,10 @@ export function StocksPage() {
           <CardDescription>{t("stocks.matieresDesc", { count: matieres.length })}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
+          {/* Bureau : tableau classique. Mobile : cartes empilées — 6 colonnes
+              (dont actions) ne tiennent pas sur un écran de 375-414px sans
+              couper les données essentielles (état, actions). */}
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("stocks.colMatiere")}</TableHead>
@@ -245,16 +249,54 @@ export function StocksPage() {
               )}
             </TableBody>
           </Table>
+
+          <div className="space-y-2 md:hidden">
+            {matieres.map((m) => (
+              <CarteLigne key={m.id} className={m.sousSeuil ? "border-terracotta/40 bg-terracotta/5" : undefined}>
+                <CarteLigneTitre>
+                  <span>{m.nom}</span>
+                  {m.sousSeuil ? (
+                    <Badge className="border-transparent bg-terracotta text-creme">{t("stocks.belowThreshold")}</Badge>
+                  ) : (
+                    <Badge variant="secondary">{t("stocks.ok")}</Badge>
+                  )}
+                </CarteLigneTitre>
+                <CarteLigneChamp
+                  label={t("stocks.colInStock")}
+                  value={<span className="font-semibold text-marine dark:text-or">{formatQuantite(m.quantiteStock, m.unite)}</span>}
+                />
+                <CarteLigneChamp label={t("stocks.colThreshold")} value={formatQuantite(m.seuilAlerte, m.unite)} />
+                <CarteLigneChamp label={t("stocks.colUnit")} value={m.unite} />
+                {editable && (
+                  <CarteLigneActions>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirMatiere(m)} aria-label={t("stocks.ariaEdit", { nom: m.nom })}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-terracotta hover:text-terracotta"
+                      onClick={() => confirm(t("stocks.confirmDelete", { nom: m.nom })) && supprimerMatiere.mutate(m.id)}
+                      aria-label={t("stocks.ariaDelete", { nom: m.nom })}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </CarteLigneActions>
+                )}
+              </CarteLigne>
+            ))}
+            {matieres.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">{t("stocks.noMatiere")}</p>}
+          </div>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader className="flex-row items-end justify-between space-y-0">
+        <CardHeader className="flex-col items-start gap-3 space-y-0 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1.5">
             <CardTitle>{t("stocks.historyTitle")}</CardTitle>
             <CardDescription>{t("stocks.historyDesc")}</CardDescription>
           </div>
-          <div className="w-56">
+          <div className="w-full md:w-56">
             <Label htmlFor="filtre-matiere">{t("stocks.colMatiere")}</Label>
             <NativeSelect id="filtre-matiere" value={filtreMatiere} onChange={(e) => setFiltreMatiere(e.target.value)}>
               <option value="">{t("stocks.filterAll")}</option>
@@ -267,7 +309,7 @@ export function StocksPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("common.date")}</TableHead>
@@ -303,6 +345,32 @@ export function StocksPage() {
               )}
             </TableBody>
           </Table>
+
+          <div className="space-y-2 md:hidden">
+            {(mouvementsData?.mouvements ?? []).map((mv) => (
+              <CarteLigne key={mv.id}>
+                <CarteLigneTitre>
+                  <span>{mv.matierePremiere.nom}</span>
+                  <Badge variant={mv.type === "ENTREE" ? "secondary" : "gold"}>{t(`mouvement.${mv.type}`)}</Badge>
+                </CarteLigneTitre>
+                <CarteLigneChamp label={t("common.date")} value={formatDateHeure(mv.date)} />
+                <CarteLigneChamp
+                  label={t("stocks.colQuantity")}
+                  value={
+                    <span className="font-semibold">
+                      {mv.type === "ENTREE" ? "+" : "−"}
+                      {formatQuantite(mv.quantite, mv.matierePremiere.unite)}
+                    </span>
+                  }
+                />
+                <CarteLigneChamp label={t("stocks.colReference")} value={mv.reference ?? "—"} />
+                <CarteLigneChamp label={t("stocks.colAuthor")} value={mv.auteur?.nom ?? "—"} />
+              </CarteLigne>
+            ))}
+            {(mouvementsData?.mouvements ?? []).length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("stocks.noMovement")}</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select";
@@ -169,7 +170,7 @@ export function FournisseursPage() {
           <p className="mt-1 text-muted-foreground">{t("fournisseurs.subtitle")}</p>
         </div>
         {editable && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => ouvrirFournisseur(null)}>
               <Truck className="h-4 w-4" />
               {t("fournisseurs.supplier")}
@@ -190,7 +191,7 @@ export function FournisseursPage() {
             <CardDescription>{t("fournisseurs.suppliersDesc", { count: fournisseurs.length })}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
+            <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("common.name")}</TableHead>
@@ -232,6 +233,37 @@ export function FournisseursPage() {
                 )}
               </TableBody>
             </Table>
+
+            <div className="space-y-2 md:hidden">
+              {fournisseurs.map((f) => (
+                <CarteLigne key={f.id}>
+                  <CarteLigneTitre>
+                    <span>{f.nom}</span>
+                  </CarteLigneTitre>
+                  <CarteLigneChamp label={t("fournisseurs.contact")} value={f.contact ?? "—"} />
+                  <CarteLigneChamp label={t("fournisseurs.colOrders")} value={f.nombreCommandes} />
+                  {editable && (
+                    <CarteLigneActions>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirFournisseur(f)} aria-label={t("fournisseurs.ariaEdit", { nom: f.nom })}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-terracotta hover:text-terracotta"
+                        onClick={() => confirm(t("fournisseurs.confirmDelete", { nom: f.nom })) && supprimerFournisseur.mutate(f.id)}
+                        aria-label={t("fournisseurs.ariaDelete", { nom: f.nom })}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </CarteLigneActions>
+                  )}
+                </CarteLigne>
+              ))}
+              {fournisseurs.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">{t("fournisseurs.noSupplier")}</p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -303,7 +335,7 @@ export function FournisseursPage() {
           <CardDescription>{t("fournisseurs.historyDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>N°</TableHead>
@@ -342,6 +374,31 @@ export function FournisseursPage() {
               )}
             </TableBody>
           </Table>
+
+          <div className="space-y-2 md:hidden">
+            {commandes.map((c) => (
+              <CarteLigne key={c.id}>
+                <CarteLigneTitre>
+                  <span>
+                    n°{c.numero} — {c.fournisseur.nom}
+                  </span>
+                  <Badge variant={c.statut === "RECUE" ? "gold" : "secondary"}>{t(`statutFournisseur.${c.statut}`)}</Badge>
+                </CarteLigneTitre>
+                <CarteLigneChamp label={t("fournisseurs.colPlacedOn")} value={formatDateHeure(c.date)} />
+                <CarteLigneChamp label={t("fournisseurs.colReceivedOn")} value={c.dateReception ? formatDateHeure(c.dateReception) : "—"} />
+                <p className="py-1 text-xs text-muted-foreground">
+                  {c.lignes.map((l) => `${formatQuantite(l.quantite, l.matierePremiere.unite)} ${l.matierePremiere.nom}`).join(", ")}
+                </p>
+                <CarteLigneChamp
+                  label={t("common.total")}
+                  value={<span className="font-semibold text-marine dark:text-or">{formatFc(c.total)}</span>}
+                />
+              </CarteLigne>
+            ))}
+            {commandes.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("fournisseurs.noOrder")}</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
