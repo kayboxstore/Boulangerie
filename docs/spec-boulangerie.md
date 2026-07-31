@@ -427,15 +427,15 @@ Roster du personnel, plus large que les seuls comptes Utilisateur : couvre aussi
 Filtres & affichage : par travailleur, par date, bouton "Tout afficher".
 DG : lecture seule, comme tous les modules métier.
 
-### 3.19 Assistant (nouveau — accessible à tous les rôles, version simplifiée)
-Chat en temps réel (Socket.io) accessible à tout utilisateur connecté, pour écrire directement à un Admin et envoyer des captures d'écran. (La réponse automatique par IA en première ligne, envisagée initialement, est reportée à une prochaine mise à jour. V1 = messagerie humaine uniquement.)
+### 3.19 Assistant (accessible à tous les rôles — mode humain, IA désactivée temporairement)
+Chat en temps réel (Socket.io) accessible à tout utilisateur connecté, pour écrire directement à un Admin et envoyer des captures d'écran. (La couche IA Gemini est codée et prête, mais désactivée pour l'instant — bloquée par la facturation Google Cloud à finaliser. Reprise prévue lors d'une prochaine mise à jour, sans travail de reconstruction : juste la réactiver une fois la facturation réglée.)
 
-Fonctionnement :
-- L'utilisateur écrit directement à un Admin (pas de premier niveau automatisé pour l'instant)
+Fonctionnement (mode actif) :
+- L'utilisateur écrit directement à un Admin, sans étape IA
 - Toute nouvelle conversation apparaît dans une file visible par les 3 comptes Admin (Principal + secondaires), n'importe lequel peut répondre — même logique que la file Approbations (3.16)
 - Notification temps réel aux Admins à chaque nouveau message
-- Captures d'écran : stockées directement en base (choix délibéré, simplicité plutôt que robustesse à grande échelle)
-- Modèle de données pensé pour absorber l'IA plus tard sans tout refaire (le type d'auteur d'un message reste un champ ouvert, pas juste utilisateur/admin en dur)
+- Captures d'écran : stockées directement en base
+- auteurType reste en champ ouvert (utilisateur/admin/ia) — la valeur « ia » existe déjà dans le code, juste non utilisée tant que la couche est désactivée
 
 Permissions : tous les rôles en écriture sur leurs propres conversations ; les Admins voient et répondent à toutes les conversations.
 
