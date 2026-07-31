@@ -58,6 +58,12 @@ services:
       # À renseigner seulement si Google fait évoluer les identifiants de modèle.
       - key: GEMINI_MODEL
         sync: false
+      # Bascule 3.19 : IA désactivée temporairement (facturation Google Cloud
+      # non finalisée) — l'Assistant repasse en mode humain seul, aucun appel
+      # Gemini n'est déclenché. Repasser à "true" réactive la couche IA sans
+      # aucun autre changement de code (voir routes/assistant.ts).
+      - key: ASSISTANT_IA_ACTIF
+        value: "false"
       # Sauvegarde quotidienne (section 3.15) : écrite localement sur le disque
       # du service (pas de destination externe — un compte de service Google
       # Cloud a été essayé puis abandonné pour Google Drive, sans quota de

@@ -19,6 +19,11 @@ assistantRouter.use(requireAuth);
 
 const estAdmin = (req: Request) => req.utilisateur!.role.nom === ROLE_ADMINISTRATEUR;
 
+// Section 3.19 : la couche IA Gemini reste codée et prête (lib/ia.ts, non
+// modifié) mais désactivée tant que la facturation Google Cloud n'est pas
+// réglée. ASSISTANT_IA_ACTIF=true la réactivera sans aucun autre changement.
+const IA_ACTIVE = process.env.ASSISTANT_IA_ACTIF === "true";
+
 const MESSAGE_ECHEC_IA =
   "Désolé, je rencontre un souci technique pour vous répondre. Un administrateur va prendre le relai.";
 
@@ -149,7 +154,9 @@ assistantRouter.post("/messages", async (req, res, next) => {
       where: { utilisateurId: auteur.id, statut: "OUVERTE" },
     });
     if (!conversation) {
-      conversation = await prisma.conversationSupport.create({ data: { utilisateurId: auteur.id } });
+      conversation = await prisma.conversationSupport.create({
+        data: { utilisateurId: auteur.id, escaladee: !IA_ACTIVE },
+      });
     }
 
     await prisma.messageSupport.create({
@@ -167,9 +174,16 @@ assistantRouter.post("/messages", async (req, res, next) => {
     let dto = await chargerConversation(conversation.id);
     await diffuserMessage(dto.messages[dto.messages.length - 1]!, auteur.id);
 
-    if (conversation.escaladee) {
-      // Déjà escaladée (bouton, jonction d'un Admin, ou échec IA précédent) :
-      // l'IA n'intervient plus, seule la notification humaine reste en jeu.
+    if (conversation.escaladee || !IA_ACTIVE) {
+      // Déjà escaladée (bouton, jonction d'un Admin, ou échec IA précédent), ou
+      // IA désactivée (3.19) : l'IA n'intervient jamais, seule la notification
+      // humaine reste en jeu. Filet de sécurité pour une conversation ouverte
+      // avant la désactivation du flag et pas encore marquée escaladée en base.
+      if (!conversation.escaladee) {
+        await prisma.conversationSupport.update({ where: { id: conversation.id }, data: { escaladee: true } });
+        dto = await chargerConversation(conversation.id);
+        await diffuserEscalade(conversation.id, auteur.id);
+      }
       await notifierAdmins(auteur.id, conversation.id, `Nouveau message de ${auteur.nom} — Assistant`, "MESSAGE_SUPPORT");
     } else {
       const historique = dto.messages
@@ -255,7 +269,7 @@ assistantRouter.get("/diagnostic-ia", async (req, res, next) => {
   try {
     if (!estAdmin(req)) return res.status(403).json({ erreur: "Réservé aux Administrateurs" });
     const resultat = await testerConnexionIA();
-    res.json(resultat);
+    res.json({ ...resultat, iaActive: IA_ACTIVE });
   } catch (e) {
     next(e);
   }

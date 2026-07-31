@@ -799,6 +799,8 @@
     "destLOCAL": "Esika moko (serveur)",
     "iaTitle": "Lisungi IA (Gemini)",
     "iaDesc": "Bomeki ya boyokani na API Gemini oyo esalelaka na etape ya liboso ya Lisungi.",
+    "iaFlagActive": "Ezali ya kosala mpo na basali",
+    "iaFlagInactive": "Ekangami mpo na mwa ntango — bato kaka nde bakoyanola",
     "iaTest": "Meka boyokani",
     "iaTesting": "Bomeki ezali kosalema…",
     "iaKeyConfigured": "Fungola ebongisami",

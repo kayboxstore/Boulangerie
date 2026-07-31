@@ -799,6 +799,8 @@
     "destLOCAL": "Ndani (seva)",
     "iaTitle": "Msaidizi wa AI (Gemini)",
     "iaDesc": "Uchunguzi wa muunganisho na API ya Gemini inayotumiwa na hatua ya kwanza ya Msaidizi.",
+    "iaFlagActive": "Imewashwa kwa watumiaji",
+    "iaFlagInactive": "Imezimwa kwa muda — hali ya kibinadamu pekee",
     "iaTest": "Jaribu muunganisho",
     "iaTesting": "Inajaribu…",
     "iaKeyConfigured": "Ufunguo umewekwa",

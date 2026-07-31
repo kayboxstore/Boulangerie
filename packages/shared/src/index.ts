@@ -1271,6 +1271,13 @@ export interface EtatSystemeDTO {
     outilVersion: string | null;
     historique: SauvegardeDTO[];
   };
+  /**
+   * Assistant IA (section 3.19) : l'Assistant repasse temporairement en mode
+   * humain seul tant que la facturation Google Cloud n'est pas réglée. La
+   * couche Gemini reste codée (lib/ia.ts côté API) — ce booléen reflète juste
+   * la variable d'environnement ASSISTANT_IA_ACTIF.
+   */
+  assistantIaActif: boolean;
   horodatage: string;
 }
 

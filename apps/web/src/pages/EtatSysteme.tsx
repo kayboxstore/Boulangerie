@@ -348,6 +348,13 @@ export function EtatSystemePage() {
           <CardDescription>{t("etatSysteme.iaDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <Badge
+            variant="secondary"
+            className={etat?.assistantIaActif ? "border-transparent bg-or text-marine" : undefined}
+          >
+            {etat?.assistantIaActif ? t("etatSysteme.iaFlagActive") : t("etatSysteme.iaFlagInactive")}
+          </Badge>
+
           <Button variant="outline" onClick={() => diagnosticIA.mutate()} disabled={diagnosticIA.isPending}>
             {diagnosticIA.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
             {diagnosticIA.isPending ? t("etatSysteme.iaTesting") : t("etatSysteme.iaTest")}

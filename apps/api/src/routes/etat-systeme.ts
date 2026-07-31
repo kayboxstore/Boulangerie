@@ -106,6 +106,8 @@ etatSystemeRouter.get("/", async (_req, res, next) => {
         outilVersion: outil.version,
         historique: historique.map(versDTO),
       },
+      // Section 3.19 : reflète simplement ASSISTANT_IA_ACTIF, sans appeler Gemini.
+      assistantIaActif: process.env.ASSISTANT_IA_ACTIF === "true",
       horodatage: new Date().toISOString(),
     };
     res.json({ etat });

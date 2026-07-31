@@ -798,6 +798,8 @@
     "destLOCAL": "Local (serveur)",
     "iaTitle": "Assistant IA (Gemini)",
     "iaDesc": "Diagnostic de la connexion à l'API Gemini utilisée par le premier niveau de l'Assistant.",
+    "iaFlagActive": "Activée pour les utilisateurs",
+    "iaFlagInactive": "Désactivée temporairement — mode humain seul",
     "iaTest": "Tester la connexion",
     "iaTesting": "Test en cours…",
     "iaKeyConfigured": "Clé configurée",
