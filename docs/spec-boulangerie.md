@@ -427,6 +427,18 @@ Roster du personnel, plus large que les seuls comptes Utilisateur : couvre aussi
 Filtres & affichage : par travailleur, par date, bouton "Tout afficher".
 DG : lecture seule, comme tous les modules métier.
 
+### 3.19 Assistant (nouveau — accessible à tous les rôles, version simplifiée)
+Chat en temps réel (Socket.io) accessible à tout utilisateur connecté, pour écrire directement à un Admin et envoyer des captures d'écran. (La réponse automatique par IA en première ligne, envisagée initialement, est reportée à une prochaine mise à jour. V1 = messagerie humaine uniquement.)
+
+Fonctionnement :
+- L'utilisateur écrit directement à un Admin (pas de premier niveau automatisé pour l'instant)
+- Toute nouvelle conversation apparaît dans une file visible par les 3 comptes Admin (Principal + secondaires), n'importe lequel peut répondre — même logique que la file Approbations (3.16)
+- Notification temps réel aux Admins à chaque nouveau message
+- Captures d'écran : stockées directement en base (choix délibéré, simplicité plutôt que robustesse à grande échelle)
+- Modèle de données pensé pour absorber l'IA plus tard sans tout refaire (le type d'auteur d'un message reste un champ ouvert, pas juste utilisateur/admin en dur)
+
+Permissions : tous les rôles en écriture sur leurs propres conversations ; les Admins voient et répondent à toutes les conversations.
+
 ## 4. Hors périmètre (v1)
 
 - Gestion multi-boutiques (plusieurs points de vente) — à revoir en v2
