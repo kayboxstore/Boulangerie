@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageCircle,
   Moon,
   Package,
   ScrollText,
@@ -92,6 +93,8 @@ const navigation: EntreeNav[] = [
   // Rapports personnels (3.13) : accessibles à tous, portée résolue côté serveur.
   { to: "/rapports", labelKey: "nav.rapports", icon: ScrollText },
   { to: "/parametres", labelKey: "nav.parametres", icon: Settings, module: "PARAMETRES" },
+  // Assistant (3.19) : accessible à tous, jamais grisé (pas de `module`).
+  { to: "/assistant", labelKey: "nav.assistant", icon: MessageCircle },
   // À propos (3.12) : accessible à tous.
   { to: "/a-propos", labelKey: "nav.apropos", icon: Info },
 ];

@@ -104,50 +104,53 @@ model RolePermission {
 }
 
 model Utilisateur {
-  id                         String                @id @default(cuid())
-  nom                        String
-  email                      String                @unique
-  motDePasseHash             String
-  roleId                     String
-  role                       Role                  @relation(fields: [roleId], references: [id])
-  actif                      Boolean               @default(true)
+  id                          String                @id @default(cuid())
+  nom                         String
+  email                       String                @unique
+  motDePasseHash              String
+  roleId                      String
+  role                        Role                  @relation(fields: [roleId], references: [id])
+  actif                       Boolean               @default(true)
   // Compte Administrateur principal (max 3 comptes admin : 1 principal + 2
   // secondaires). Unicité du principal garantie par un index partiel en SQL
   // (voir migration) ; le workflow d'approbation complet arrive en Phase 10.
-  estAdminPrincipal          Boolean               @default(false)
+  estAdminPrincipal           Boolean               @default(false)
   // Session unique (section 3.7) : identifiant régénéré à chaque connexion
   // réussie et embarqué dans le JWT (claim `sid`). Une requête ou un socket
   // portant un `sid` différent de celui-ci est refusé — la connexion la plus
   // récente invalide donc automatiquement toutes les précédentes.
-  sessionActuelleId          String?
+  sessionActuelleId           String?
   // Langue d'interface préférée (section 3.9) : "FR" | "LN". Nul = suivre la
   // langue par défaut de la boutique (ParametreBoutique). Choisie par l'employé
   // dans « Mon profil ».
-  languePreferee             String?
-  createdAt                  DateTime              @default(now())
-  updatedAt                  DateTime              @updatedAt
-  notifications              Notification[]        @relation("NotificationsRecues")
-  notificationsEmises        Notification[]        @relation("NotificationsEmises")
-  commandesCreees            CommandeClient[]
-  reglementsEnregistres      PaiementCommande[]
-  ventes                     Vente[]               @relation("VentesEffectuees")
-  ventesAnnulees             Vente[]               @relation("VentesAnnulees")
-  clotures                   ClotureCaisse[]
-  mouvementsStock            MouvementStock[]
-  productions                Production[]
-  planningsCrees             PlanningProduction[]
-  commandesFournisseurCreees CommandeFournisseur[] @relation("CommandesFournisseurCreees")
-  commandesFournisseurRecues CommandeFournisseur[] @relation("CommandesFournisseurRecues")
-  ficheTravailleur           Travailleur?
-  presencesEnregistrees      Presence[]
-  demandesEmises             DemandeApprobation[]  @relation("DemandesEmises")
-  demandesDecidees           DemandeApprobation[]  @relation("DemandesDecidees")
-  delegationsRecues          DelegationRole[]      @relation("DelegationsRecues")
-  delegationsCreees          DelegationRole[]      @relation("DelegationsCreees")
-  auditsEffectues            AuditLog[]            @relation("AuditsEffectues")
-  sauvegardesDeclenchees     SauvegardeBase[]      @relation("SauvegardesDeclenchees")
-  tauxDefinis                TauxDuJour[]          @relation("TauxDefinis")
-  depensesEnregistrees       DepenseCaisse[]       @relation("DepensesEnregistrees")
+  languePreferee              String?
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
+  notifications               Notification[]        @relation("NotificationsRecues")
+  notificationsEmises         Notification[]        @relation("NotificationsEmises")
+  commandesCreees             CommandeClient[]
+  reglementsEnregistres       PaiementCommande[]
+  ventes                      Vente[]               @relation("VentesEffectuees")
+  ventesAnnulees              Vente[]               @relation("VentesAnnulees")
+  clotures                    ClotureCaisse[]
+  mouvementsStock             MouvementStock[]
+  productions                 Production[]
+  planningsCrees              PlanningProduction[]
+  commandesFournisseurCreees  CommandeFournisseur[] @relation("CommandesFournisseurCreees")
+  commandesFournisseurRecues  CommandeFournisseur[] @relation("CommandesFournisseurRecues")
+  ficheTravailleur            Travailleur?
+  presencesEnregistrees       Presence[]
+  demandesEmises              DemandeApprobation[]  @relation("DemandesEmises")
+  demandesDecidees            DemandeApprobation[]  @relation("DemandesDecidees")
+  delegationsRecues           DelegationRole[]      @relation("DelegationsRecues")
+  delegationsCreees           DelegationRole[]      @relation("DelegationsCreees")
+  auditsEffectues             AuditLog[]            @relation("AuditsEffectues")
+  sauvegardesDeclenchees      SauvegardeBase[]      @relation("SauvegardesDeclenchees")
+  tauxDefinis                 TauxDuJour[]          @relation("TauxDefinis")
+  depensesEnregistrees        DepenseCaisse[]       @relation("DepensesEnregistrees")
+  conversationsSupport        ConversationSupport[] @relation("ConversationsUtilisateur")
+  conversationsSupportFermees ConversationSupport[] @relation("ConversationsSupportFermeesPar")
+  messagesSupportEnvoyes      MessageSupport[]      @relation("MessagesSupportEnvoyes")
 }
 
 // Notification métier (section 3.10) : persistée pour le rattrapage hors ligne,
@@ -726,4 +729,52 @@ model SauvegardeBase {
 
   @@index([createdAt])
   @@index([type, createdAt])
+}
+
+// --- Assistant (section 3.19) — messagerie humaine directe utilisateur ↔ Admin.
+
+enum StatutConversation {
+  OUVERTE
+  FERMEE
+}
+
+// Une conversation par cycle ouverture→fermeture (pas un fil unique à vie) :
+// une fois fermée par un Admin, le prochain message de l'utilisateur en ouvre
+// une nouvelle plutôt que de rouvrir l'ancienne — historique propre, comme des
+// tickets successifs.
+model ConversationSupport {
+  id            String             @id @default(cuid())
+  utilisateurId String
+  utilisateur   Utilisateur        @relation("ConversationsUtilisateur", fields: [utilisateurId], references: [id])
+  statut        StatutConversation @default(OUVERTE)
+  fermeeParId   String?
+  fermeePar     Utilisateur?       @relation("ConversationsSupportFermeesPar", fields: [fermeeParId], references: [id], onDelete: SetNull)
+  dateFermeture DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  messages      MessageSupport[]
+
+  @@index([utilisateurId, statut])
+  @@index([statut, updatedAt])
+}
+
+// `auteurType` est une chaîne libre — PAS un enum Prisma — délibérément : le
+// modèle doit pouvoir absorber un futur auteur "IA" (réponse automatique en
+// première ligne, reportée pour l'instant, voir 3.19) sans migration de schéma
+// cassante. La validation applicative (aujourd'hui UTILISATEUR | ADMIN) vit
+// dans packages/shared, pas dans la base.
+model MessageSupport {
+  id             String              @id @default(cuid())
+  conversationId String
+  conversation   ConversationSupport @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  auteurType     String
+  auteurId       String
+  auteur         Utilisateur         @relation("MessagesSupportEnvoyes", fields: [auteurId], references: [id])
+  contenu        String?
+  // Data URI base64 stockée directement en base (choix délibéré, 3.19 : la
+  // simplicité prime sur la robustesse à grande échelle pour cette v1).
+  captureEcran   String?
+  createdAt      DateTime            @default(now())
+
+  @@index([conversationId, createdAt])
 }

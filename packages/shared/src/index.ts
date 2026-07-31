@@ -149,6 +149,8 @@ export const TYPES_EVENEMENT = [
   // Garde-fou (section 2) : l'Admin Principal a écrit dans un module métier
   // hors de son périmètre d'origine — le rôle propriétaire et le DG sont alertés.
   "INTERVENTION_ADMIN",
+  // Assistant (section 3.19) : nouveau message dans une conversation support.
+  "MESSAGE_SUPPORT",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -171,6 +173,11 @@ export interface NotificationDTO {
 export interface ServerToClientEvents {
   notification: (notification: NotificationDTO) => void;
   sessionInvalidee: (payload: { message: string }) => void;
+  // Assistant (section 3.19) : mise à jour temps réel du fil d'une conversation
+  // (message ajouté, conversation fermée) — en plus de la notification générique
+  // ci-dessus qui prévient les Admins/l'utilisateur même si la vue n'est pas ouverte.
+  messageSupport: (message: MessageSupportDTO) => void;
+  conversationSupportFermee: (payload: { conversationId: string }) => void;
 }
 // Aucun événement client -> serveur pour l'instant (les actions passent par l'API REST).
 export interface ClientToServerEvents {}
@@ -1372,3 +1379,54 @@ export function aAcces(
   if (niveau === "LECTURE") return true; // ECRITURE implique LECTURE
   return p.niveauAcces === "ECRITURE";
 }
+
+// ---------------------------------------------------------------------------
+// Assistant (section 3.19) — messagerie humaine directe utilisateur ↔ Admin.
+// ---------------------------------------------------------------------------
+
+export const STATUTS_CONVERSATION_SUPPORT = ["OUVERTE", "FERMEE"] as const;
+export type StatutConversationSupport = (typeof STATUTS_CONVERSATION_SUPPORT)[number];
+
+// Restriction APPLICATIVE actuelle — le champ en base (MessageSupport.auteurType)
+// reste une simple chaîne pour pouvoir accueillir "IA" plus tard sans migration.
+export const AUTEUR_TYPES_SUPPORT = ["UTILISATEUR", "ADMIN"] as const;
+export type AuteurTypeSupport = (typeof AUTEUR_TYPES_SUPPORT)[number];
+
+export interface MessageSupportDTO {
+  id: string;
+  conversationId: string;
+  auteurType: string;
+  auteur: { id: string; nom: string };
+  contenu: string | null;
+  captureEcran: string | null;
+  dateCreation: string;
+}
+
+export interface ConversationSupportDTO {
+  id: string;
+  utilisateur: { id: string; nom: string; roleNom: string };
+  statut: StatutConversationSupport;
+  dateFermeture: string | null;
+  fermeePar: { id: string; nom: string } | null;
+  createdAt: string;
+  updatedAt: string;
+  messages: MessageSupportDTO[];
+}
+
+// Limite volontairement généreuse mais bornée (3.19 : stockage direct en base,
+// pas de fichier) — ~2,9 Mo une fois décodée. Le corps JSON global (voir
+// apps/api/src/app.ts) est dimensionné en conséquence.
+export const TAILLE_MAX_CAPTURE_BASE64 = 4_000_000;
+
+export const envoyerMessageSupportSchema = z
+  .object({
+    contenu: z.string().trim().max(4000, "Message trop long").optional(),
+    captureEcran: z
+      .string()
+      .max(TAILLE_MAX_CAPTURE_BASE64, "La capture d'écran est trop volumineuse")
+      .optional(),
+  })
+  .refine((d) => !!d.contenu?.trim() || !!d.captureEcran, {
+    message: "Le message doit contenir du texte ou une capture d'écran",
+  });
+export type EnvoyerMessageSupportInput = z.infer<typeof envoyerMessageSupportSchema>;

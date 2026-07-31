@@ -105,6 +105,20 @@ export function SocketProvider({ children }: { children: ReactNode }) {
           queryClient.invalidateQueries({ queryKey: ["clotures"] });
         }
       });
+
+      // Assistant (section 3.19) : mise à jour temps réel du fil ouvert (côté
+      // utilisateur comme côté file Admin) — en plus du badge de notification
+      // générique ci-dessus, qui prévient même si la vue n'est pas ouverte.
+      socket.on("messageSupport", () => {
+        if (!actif) return;
+        queryClient.invalidateQueries({ queryKey: ["assistant-ma-conversation"] });
+        queryClient.invalidateQueries({ queryKey: ["assistant-conversations"] });
+      });
+      socket.on("conversationSupportFermee", () => {
+        if (!actif) return;
+        queryClient.invalidateQueries({ queryKey: ["assistant-ma-conversation"] });
+        queryClient.invalidateQueries({ queryKey: ["assistant-conversations"] });
+      });
     });
 
     return () => {

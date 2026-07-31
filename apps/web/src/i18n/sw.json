@@ -53,7 +53,8 @@
     "audit": "Kumbukumbu za ukaguzi",
     "openMenu": "Fungua menyu",
     "enableDarkMode": "Washa hali ya giza",
-    "enableLightMode": "Washa hali nyepesi"
+    "enableLightMode": "Washa hali nyepesi",
+    "assistant": "Msaidizi"
   },
   "login": {
     "title": "Ingia",
@@ -846,5 +847,31 @@
     "messageOptional": "Ujumbe (si lazima)",
     "messagePlaceholder": "Neno la kuambatana na ripoti…",
     "send": "Tuma"
+  },
+  "assistant": {
+    "title": "Msaidizi",
+    "subtitleUser": "Andika moja kwa moja kwa msimamizi — picha za skrini zinakaribishwa.",
+    "subtitleAdmin": "Foleni ya mazungumzo na timu.",
+    "placeholder": "Andika ujumbe wako…",
+    "send": "Tuma",
+    "attachScreenshot": "Ambatisha picha ya skrini",
+    "removeScreenshot": "Ondoa picha ya skrini",
+    "screenshotPreviewAlt": "Muhtasari wa picha ya skrini iliyoambatishwa",
+    "screenshotTooLarge": "Picha hii ya skrini ni kubwa mno (upeo wa 3 MB).",
+    "sendError": "Kutuma kumeshindikana.",
+    "you": "Wewe",
+    "emptyMessages": "Hakuna ujumbe bado — andika wa kwanza.",
+    "closedBanner": "Mazungumzo yamefungwa",
+    "closedBannerBy": "Yamefungwa na {{nom}} tarehe {{date}}.",
+    "closeConversation": "Funga",
+    "confirmClose": "Funga mazungumzo haya? Mtumiaji ataweza kufungua mengine mapya endapo atahitaji msaada tena.",
+    "closeError": "Kufunga kumeshindikana.",
+    "queueTitle": "Mazungumzo",
+    "queueEmpty": "Hakuna mazungumzo bado.",
+    "selectConversation": "Chagua mazungumzo kwenye orodha.",
+    "statusOpen": "Yamefunguliwa",
+    "statusClosed": "Yamefungwa",
+    "loadError": "Upakiaji umeshindikana.",
+    "screenshotAttached": "Picha ya skrini imeambatishwa"
   }
 }

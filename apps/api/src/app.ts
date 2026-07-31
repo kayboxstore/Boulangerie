@@ -25,6 +25,7 @@ import { delegationsRouter } from "./routes/delegations.js";
 import { etatSystemeRouter } from "./routes/etat-systeme.js";
 import { auditRouter } from "./routes/audit.js";
 import { exportRouter } from "./routes/export.js";
+import { assistantRouter } from "./routes/assistant.js";
 
 export function createApp() {
   const app = express();
@@ -47,7 +48,9 @@ export function createApp() {
   });
 
   app.use(cors({ origin: verifierOrigine, credentials: true }));
-  app.use(express.json());
+  // 5 Mo plutôt que le défaut 100 Ko : l'Assistant (3.19) stocke les captures
+  // d'écran en base64 directement dans le corps JSON (pas d'upload fichier).
+  app.use(express.json({ limit: "5mb" }));
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", app: "Boulangerie Lomoto API" });
@@ -75,6 +78,7 @@ export function createApp() {
   app.use("/api/etat-systeme", etatSystemeRouter);
   app.use("/api/audit", auditRouter);
   app.use("/api/export", exportRouter);
+  app.use("/api/assistant", assistantRouter);
 
   // --- Frontend compilé (production / déploiement) --------------------------
   // En dev, le frontend est servi par Vite (avec proxy vers cette API). En

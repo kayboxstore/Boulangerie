@@ -52,7 +52,8 @@
     "audit": "Journal d'audit",
     "openMenu": "Ouvrir le menu",
     "enableDarkMode": "Activer le mode sombre",
-    "enableLightMode": "Activer le mode clair"
+    "enableLightMode": "Activer le mode clair",
+    "assistant": "Assistant"
   },
   "login": {
     "title": "Connexion",
@@ -845,5 +846,31 @@
     "messageOptional": "Message (optionnel)",
     "messagePlaceholder": "Un mot pour accompagner le rapport…",
     "send": "Envoyer"
+  },
+  "assistant": {
+    "title": "Assistant",
+    "subtitleUser": "Écrivez directement à un administrateur — captures d'écran bienvenues.",
+    "subtitleAdmin": "File des conversations avec l'équipe.",
+    "placeholder": "Écrivez votre message…",
+    "send": "Envoyer",
+    "attachScreenshot": "Joindre une capture d'écran",
+    "removeScreenshot": "Retirer la capture",
+    "screenshotPreviewAlt": "Aperçu de la capture d'écran jointe",
+    "screenshotTooLarge": "Cette capture est trop volumineuse (3 Mo maximum).",
+    "sendError": "L'envoi a échoué.",
+    "you": "Vous",
+    "emptyMessages": "Aucun message pour l'instant — écrivez le premier.",
+    "closedBanner": "Conversation fermée",
+    "closedBannerBy": "Fermée par {{nom}} le {{date}}.",
+    "closeConversation": "Clôturer",
+    "confirmClose": "Clôturer cette conversation ? L'utilisateur pourra en ouvrir une nouvelle s'il a besoin d'aide à nouveau.",
+    "closeError": "La clôture a échoué.",
+    "queueTitle": "Conversations",
+    "queueEmpty": "Aucune conversation pour l'instant.",
+    "selectConversation": "Sélectionnez une conversation dans la liste.",
+    "statusOpen": "Ouverte",
+    "statusClosed": "Fermée",
+    "loadError": "Chargement impossible.",
+    "screenshotAttached": "Capture d'écran jointe"
   }
 }

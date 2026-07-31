@@ -53,7 +53,8 @@
     "audit": "Buku ya bolandeli",
     "openMenu": "Fungola menu",
     "enableDarkMode": "Kopelisa mode ya molili",
-    "enableLightMode": "Kopelisa mode ya pole"
+    "enableLightMode": "Kopelisa mode ya pole",
+    "assistant": "Lisungi"
   },
   "login": {
     "title": "Kokota",
@@ -846,5 +847,31 @@
     "messageOptional": "Liloba (soki olingi)",
     "messagePlaceholder": "Liloba moko mpo na lapolo…",
     "send": "Kotinda"
+  },
+  "assistant": {
+    "title": "Lisungi",
+    "subtitleUser": "Komela mokambi (Admin) mbala moko — bafɔto ya ekrani ekoki kotindama.",
+    "subtitleAdmin": "Molongo ya masolo na ekipe.",
+    "placeholder": "Koma nsango na yo…",
+    "send": "Kotinda",
+    "attachScreenshot": "Kobakisa fɔto ya ekrani",
+    "removeScreenshot": "Kolongola fɔto",
+    "screenshotPreviewAlt": "Fɔto ya ekrani ebakisami",
+    "screenshotTooLarge": "Fɔto oyo eleki bonene (tii 3 Mo).",
+    "sendError": "Kotinda ekoki te.",
+    "you": "Yo",
+    "emptyMessages": "Nsango moko te sikoyo — koma ya liboso.",
+    "closedBanner": "Lisolo ekangami",
+    "closedBannerBy": "Ekangami na {{nom}} na {{date}}.",
+    "closeConversation": "Kokanga",
+    "confirmClose": "Kokanga lisolo oyo ? Mosaleli akoki kofungola mosusu soki asengeli lisusu na lisungi.",
+    "closeError": "Kokanga ekoki te.",
+    "queueTitle": "Masolo",
+    "queueEmpty": "Lisolo moko te sikoyo.",
+    "selectConversation": "Poná lisolo na molongo.",
+    "statusOpen": "Efungwami",
+    "statusClosed": "Ekangami",
+    "loadError": "Bokoti ekoki te.",
+    "screenshotAttached": "Fɔto ya ekrani ebakisami"
   }
 }

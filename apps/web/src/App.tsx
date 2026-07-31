@@ -31,6 +31,7 @@ const ParametresPage = lazy(() => import("@/pages/Parametres").then((m) => ({ de
 const EtatSystemePage = lazy(() => import("@/pages/EtatSysteme").then((m) => ({ default: m.EtatSystemePage })));
 const ApprobationsPage = lazy(() => import("@/pages/Approbations").then((m) => ({ default: m.ApprobationsPage })));
 const AuditPage = lazy(() => import("@/pages/Audit").then((m) => ({ default: m.AuditPage })));
+const AssistantPage = lazy(() => import("@/pages/Assistant").then((m) => ({ default: m.AssistantPage })));
 
 /** Garde d'accès : exige au moins la lecture sur `module`, sinon retour à l'accueil. */
 function RequiertLecture({ module, children }: { module: Module; children: ReactNode }) {
@@ -146,6 +147,8 @@ function AppAuthentifiee() {
         <Route path="/rapports" element={<RapportsPersonnelsPage />} />
         {/* À propos (3.12) : accessible à tous. */}
         <Route path="/a-propos" element={<AProposPage />} />
+        {/* Assistant (3.19) : accessible à tous, sans permission de module. */}
+        <Route path="/assistant" element={<AssistantPage />} />
         <Route
           path="/parametres"
           element={
