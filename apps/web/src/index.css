@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Tailwind v4 fait basculer `dark:` sur `prefers-color-scheme` par défaut. Cette
+   app n'a (encore) aucun bouton pour activer le mode sombre — seule la classe
+   `.dark` (jamais posée par le JS pour l'instant) doit le déclencher. Sans cette
+   ligne, un système en préférence sombre applique les classes `dark:*` (texte)
+   sans que les variables `--background`/`--card` etc. ne changent (elles ne
+   suivent que `.dark`) : texte clair sur fond resté clair, illisible partout. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Palette de marque Boulangerie Lomoto (section 3.8 de la spec)
    Marine #0F1923 · Or #DA9F4E · Crème #FAF8F3 · Terracotta #AD5416 · Beige #CBAF91 */
 
