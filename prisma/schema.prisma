@@ -115,6 +115,11 @@ model Utilisateur {
   // secondaires). Unicité du principal garantie par un index partiel en SQL
   // (voir migration) ; le workflow d'approbation complet arrive en Phase 10.
   estAdminPrincipal          Boolean               @default(false)
+  // Session unique (section 3.7) : identifiant régénéré à chaque connexion
+  // réussie et embarqué dans le JWT (claim `sid`). Une requête ou un socket
+  // portant un `sid` différent de celui-ci est refusé — la connexion la plus
+  // récente invalide donc automatiquement toutes les précédentes.
+  sessionActuelleId          String?
   // Langue d'interface préférée (section 3.9) : "FR" | "LN". Nul = suivre la
   // langue par défaut de la boutique (ParametreBoutique). Choisie par l'employé
   // dans « Mon profil ».

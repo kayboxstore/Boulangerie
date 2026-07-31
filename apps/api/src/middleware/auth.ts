@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import type { Langue, Module, NiveauAcces, PermissionDTO, UtilisateurDTO } from "@lomoto/shared";
-import { LANGUES, MODULES } from "@lomoto/shared";
+import { CODE_SESSION_REMPLACEE, LANGUES, MESSAGE_SESSION_REMPLACEE, MODULES } from "@lomoto/shared";
 import { aAcces } from "@lomoto/shared";
 import { verifyToken } from "../lib/jwt.js";
 import { prisma } from "../lib/prisma.js";
@@ -82,6 +82,22 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
   try {
     const payload = verifyToken(header.slice("Bearer ".length));
+
+    // Session unique (section 3.7) : vérifie AVANT toute autre chose que le sid
+    // du jeton correspond encore à la session courante de l'utilisateur — une
+    // connexion plus récente ailleurs l'aurait remplacé. Requête légère dédiée
+    // (plutôt que de surcharger chargerUtilisateur, appelé aussi hors HTTP).
+    const session = await prisma.utilisateur.findUnique({
+      where: { id: payload.sub },
+      select: { sessionActuelleId: true },
+    });
+    if (!session) {
+      return res.status(401).json({ erreur: "Compte introuvable ou désactivé" });
+    }
+    if (!payload.sid || payload.sid !== session.sessionActuelleId) {
+      return res.status(401).json({ code: CODE_SESSION_REMPLACEE, erreur: MESSAGE_SESSION_REMPLACEE });
+    }
+
     const utilisateur = await chargerUtilisateur(payload.sub);
     if (!utilisateur) {
       return res.status(401).json({ erreur: "Compte introuvable ou désactivé" });

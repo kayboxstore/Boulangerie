@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Langue, LoginResponse, Module, UtilisateurDTO } from "@lomoto/shared";
 import { aAcces, LANGUE_DEFAUT_PAR_DEFAUT, langueEffective } from "@lomoto/shared";
-import { api, getToken, setToken } from "./api";
+import { api, getToken, setToken, surSessionRemplacee } from "./api";
 import { appliquerLangue } from "@/i18n";
 
 interface AuthContextValue {
@@ -15,6 +15,12 @@ interface AuthContextValue {
   langueDefautBoutique: Langue;
   /** Change sa propre préférence de langue (null = suivre la boutique). */
   changerLangue: (langue: Langue | null) => Promise<void>;
+  /** Session unique (section 3.7) : message à afficher sur /connexion après une
+   *  déconnexion forcée (autre appareil), distinct d'une erreur de connexion. */
+  messageSessionRemplacee: string | null;
+  /** Déconnecte immédiatement avec un message dédié (401 SESSION_REMPLACEE ou
+   *  événement Socket.io `sessionInvalidee`). */
+  deconnexionForcee: (message: string) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -23,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [utilisateur, setUtilisateur] = useState<UtilisateurDTO | null>(null);
   const [langueDefautBoutique, setLangueDefautBoutique] = useState<Langue>(LANGUE_DEFAUT_PAR_DEFAUT);
   const [chargement, setChargement] = useState(true);
+  const [messageSessionRemplacee, setMessageSessionRemplacee] = useState<string | null>(null);
 
   // Applique la langue effective : préférence de l'utilisateur, sinon boutique.
   const appliquer = useCallback((u: UtilisateurDTO | null, defautBoutique: Langue) => {
@@ -60,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(r.token);
       setUtilisateur(r.utilisateur);
       setLangueDefautBoutique(r.langueDefautBoutique);
+      setMessageSessionRemplacee(null);
       appliquer(r.utilisateur, r.langueDefautBoutique);
     },
     [appliquer],
@@ -68,9 +76,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setToken(null);
     setUtilisateur(null);
+    setMessageSessionRemplacee(null);
     // Retour à la langue par défaut de la boutique après déconnexion.
     appliquer(null, langueDefautBoutique);
   }, [appliquer, langueDefautBoutique]);
+
+  const deconnexionForcee = useCallback(
+    (message: string) => {
+      setToken(null);
+      setUtilisateur(null);
+      setMessageSessionRemplacee(message);
+      appliquer(null, langueDefautBoutique);
+    },
+    [appliquer, langueDefautBoutique],
+  );
+
+  // Enregistre l'écouteur de session-remplacée auprès de lib/api.ts (401
+  // SESSION_REMPLACEE sur n'importe quelle requête) ; socket.tsx appelle
+  // deconnexionForcee directement pour le cas temps réel.
+  useEffect(() => {
+    surSessionRemplacee(deconnexionForcee);
+    return () => surSessionRemplacee(null);
+  }, [deconnexionForcee]);
 
   const changerLangue = useCallback(
     async (langue: Langue | null) => {
@@ -96,7 +123,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ utilisateur, chargement, login, logout, peutLire, peutEcrire, langueDefautBoutique, changerLangue }}
+      value={{
+        utilisateur,
+        chargement,
+        login,
+        logout,
+        peutLire,
+        peutEcrire,
+        langueDefautBoutique,
+        changerLangue,
+        messageSessionRemplacee,
+        deconnexionForcee,
+      }}
     >
       {children}
     </AuthContext.Provider>

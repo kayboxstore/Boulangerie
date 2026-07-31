@@ -10,6 +10,7 @@ import {
 import type { Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
 import type { NotificationDTO, ServerToClientEvents, ClientToServerEvents } from "@lomoto/shared";
+import { MESSAGE_SESSION_REMPLACEE } from "@lomoto/shared";
 import { api, getToken } from "./api";
 import { useAuth } from "./auth";
 
@@ -28,7 +29,7 @@ const SocketContext = createContext<SocketContextValue | null>(null);
 const MAX_FEED = 100;
 
 export function SocketProvider({ children }: { children: ReactNode }) {
-  const { utilisateur } = useAuth();
+  const { utilisateur, deconnexionForcee } = useAuth();
   const queryClient = useQueryClient();
   const [statut, setStatut] = useState<StatutConnexion>("deconnecte");
   const [notifications, setNotifications] = useState<NotificationDTO[]>([]);
@@ -73,7 +74,21 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       });
       socket.io.on("reconnect_attempt", () => setStatut("reconnexion"));
       socket.on("disconnect", () => setStatut("reconnexion"));
-      socket.on("connect_error", () => setStatut("reconnexion"));
+      socket.on("connect_error", (err) => {
+        // Session unique (section 3.7) : une tentative de (re)connexion peut
+        // porter un sid déjà périmé (ex. onglet resté ouvert) — le handshake
+        // middleware la rejette alors avec ce message précis. Filet de sécurité
+        // en plus de l'événement `sessionInvalidee` (cas d'un socket déjà ouvert).
+        if (err.message === MESSAGE_SESSION_REMPLACEE) {
+          deconnexionForcee(err.message);
+          return;
+        }
+        setStatut("reconnexion");
+      });
+
+      socket.on("sessionInvalidee", (payload) => {
+        deconnexionForcee(payload.message);
+      });
 
       socket.on("notification", (notification) => {
         if (!actif) return;

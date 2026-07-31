@@ -6,6 +6,7 @@ const EXPIRATION = "12h";
 export interface JwtPayload {
   sub: string; // id utilisateur
   roleId: string;
+  sid: string; // identifiant de session (section 3.7) — voir Utilisateur.sessionActuelleId
 }
 
 export function signToken(payload: JwtPayload): string {

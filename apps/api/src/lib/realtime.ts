@@ -1,9 +1,11 @@
 import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 import type { ServerToClientEvents, ClientToServerEvents, UtilisateurDTO } from "@lomoto/shared";
+import { MESSAGE_SESSION_REMPLACEE } from "@lomoto/shared";
 import { verifyToken } from "./jwt.js";
 import { chargerUtilisateur } from "../middleware/auth.js";
 import { verifierOrigine } from "./origines.js";
+import { prisma } from "./prisma.js";
 
 interface InterServerEvents {}
 interface SocketData {
@@ -38,6 +40,18 @@ export function initRealtime(httpServer: HttpServer): IoServer {
         return next(new Error("Authentification requise"));
       }
       const payload = verifyToken(token);
+
+      // Session unique (section 3.7) : même contrôle que requireAuth côté HTTP —
+      // un socket ouvert avec un sid périmé n'est pas admis.
+      const session = await prisma.utilisateur.findUnique({
+        where: { id: payload.sub },
+        select: { sessionActuelleId: true },
+      });
+      if (!session) return next(new Error("Compte introuvable ou désactivé"));
+      if (!payload.sid || payload.sid !== session.sessionActuelleId) {
+        return next(new Error(MESSAGE_SESSION_REMPLACEE));
+      }
+
       const utilisateur = await chargerUtilisateur(payload.sub);
       if (!utilisateur) return next(new Error("Compte introuvable ou désactivé"));
       socket.data.utilisateur = utilisateur;
@@ -59,4 +73,19 @@ export function initRealtime(httpServer: HttpServer): IoServer {
 export function getIo(): IoServer {
   if (!io) throw new Error("Socket.io n'est pas initialisé (initRealtime manquant)");
   return io;
+}
+
+/**
+ * Session unique (section 3.7) : appelée juste après qu'une connexion a
+ * remplacé le sid d'un utilisateur. Si un socket de cet utilisateur tourne
+ * encore ailleurs, on le prévient en temps réel avant de le déconnecter —
+ * plutôt que de le laisser découvrir l'invalidation à sa prochaine requête
+ * HTTP. `io` peut être `null` (initRealtime pas encore appelé, ex. tests) :
+ * no-op silencieux, la vérification côté requireAuth reste le filet de sécurité.
+ */
+export function invaliderSessionUtilisateur(utilisateurId: string): void {
+  if (!io) return;
+  const room = roomUtilisateur(utilisateurId);
+  io.to(room).emit("sessionInvalidee", { message: MESSAGE_SESSION_REMPLACEE });
+  io.in(room).disconnectSockets(true);
 }

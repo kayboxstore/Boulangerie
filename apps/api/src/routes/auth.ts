@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import {
@@ -13,6 +14,7 @@ import { prisma } from "../lib/prisma.js";
 import { signToken } from "../lib/jwt.js";
 import { chargerUtilisateur, requireAuth } from "../middleware/auth.js";
 import { lireParametre } from "../lib/parametres.js";
+import { invaliderSessionUtilisateur } from "../lib/realtime.js";
 
 /** Langue par défaut de la boutique (repli quand l'utilisateur n'a pas de préférence). */
 async function langueDefautBoutique(): Promise<Langue> {
@@ -47,7 +49,17 @@ authRouter.post("/login", async (req, res, next) => {
     const utilisateur = await chargerUtilisateur(u.id);
     if (!utilisateur) return identifiantsInvalides();
 
-    const token = signToken({ sub: u.id, roleId: u.roleId });
+    // Session unique (section 3.7) : un nouveau sid remplace l'ancien, ce qui
+    // invalidera toute requête/socket encore porteuse de l'ancien jeton. On
+    // avertit l'éventuel appareil déjà connecté AVANT de répondre à celui-ci.
+    const sessionId = randomUUID();
+    await prisma.utilisateur.update({
+      where: { id: u.id },
+      data: { sessionActuelleId: sessionId },
+    });
+    invaliderSessionUtilisateur(u.id);
+
+    const token = signToken({ sub: u.id, roleId: u.roleId, sid: sessionId });
     res.json({ token, utilisateur, langueDefautBoutique: await langueDefautBoutique() });
   } catch (e) {
     next(e);

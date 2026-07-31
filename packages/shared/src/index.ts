@@ -147,9 +147,17 @@ export interface NotificationDTO {
 /** Événements Socket.io serveur -> client. */
 export interface ServerToClientEvents {
   notification: (notification: NotificationDTO) => void;
+  sessionInvalidee: (payload: { message: string }) => void;
 }
 // Aucun événement client -> serveur pour l'instant (les actions passent par l'API REST).
 export interface ClientToServerEvents {}
+
+// Session unique (section 3.7) : code d'erreur HTTP 401 et message partagés
+// entre le middleware d'auth, le canal Socket.io et le frontend, pour que les
+// deux voies (requête suivante / déconnexion temps réel) affichent le même texte.
+export const CODE_SESSION_REMPLACEE = "SESSION_REMPLACEE" as const;
+export const MESSAGE_SESSION_REMPLACEE =
+  "Vous avez été déconnecté(e) car votre compte a été utilisé sur un autre appareil";
 
 // ---------------------------------------------------------------------------
 // Commandes clients & avances (section 3.4)

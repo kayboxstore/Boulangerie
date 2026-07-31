@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
+import { Eye, EyeOff, Info, Loader2, Lock, Mail } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { TAGLINE } from "@lomoto/shared";
 import { useAuth } from "@/lib/auth";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, messageSessionRemplacee } = useAuth();
   const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
@@ -94,6 +94,16 @@ export function LoginPage() {
             <div className="px-7 py-8">
               <h2 className="font-serif text-2xl font-bold text-marine dark:text-creme">{t("login.title")}</h2>
               <p className="mt-1 text-sm text-muted-foreground">{t("login.subtitle")}</p>
+
+              {messageSessionRemplacee && (
+                <p
+                  role="status"
+                  className="mt-5 flex items-start gap-2 rounded-md bg-or/10 px-3 py-2 text-sm font-medium text-marine dark:text-or"
+                >
+                  <Info aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+                  {messageSessionRemplacee}
+                </p>
+              )}
 
               <form onSubmit={onSubmit} className="mt-7 space-y-5" noValidate>
                 <div className="space-y-2">
