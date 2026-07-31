@@ -347,7 +347,7 @@ Marge par produit (état actuel et décision) : non calculable proprement aujour
 - Mode clair / sombre basé sur la palette ci-dessus
 - Logo Boulangerie Lomoto en en-tête (sidebar/topbar) et favicon ; tagline "Pain Lia o Tonda" utilisable en pied de page ou écran de connexion
 - Composants sur-mesure, pas de template admin générique
-- **Bilingue** *(nouveau)* : bascule Français/Lingala pour l'interface (labels uniquement — les données saisies, ex. noms de clients, restent telles quelles)
+- **Multilingue** *(mis à jour — 4 langues)* : bascule Français/Lingala/Anglais/Swahili pour l'interface (labels uniquement — les données saisies restent telles quelles). Sélecteur affichant le nom natif de chaque langue (Français/Lingala/English/Kiswahili).
 - Écran de démarrage (nouveau) : animation du logo à l'ouverture de l'app, 6 à 8 secondes, avant la page de connexion
 - Page de connexion (refonte) : traitement visuel soigné, à la hauteur du reste de l'identité de marque
 - Format des nombres (nouveau) : séparateur de milliers par un point partout (ex. « 4.100 Fc », pas « 4 100 Fc »)
@@ -514,7 +514,7 @@ Presence (id, travailleurId, date, statut, heureArrivee, heureDepart, enregistre
 | Temps réel | Socket.io (WebSocket) | Notifications instantanées, s'intègre nativement à Express, gère la reconnexion automatique |
 | Visualisation de données | Recharts | Graphiques interactifs pour un dashboard riche |
 | Animations | Framer Motion | Micro-interactions, feed d'activité animé — look sophistiqué demandé |
-| Internationalisation | react-i18next | Bascule Français/Lingala sur les labels d'interface |
+| Internationalisation | react-i18next | Bascule Français/Lingala/Anglais/Swahili sur les labels d'interface |
 | Tests | Vitest (unitaires) + Playwright (E2E) | Standard, bien supporté par Claude Code |
 
 **Note technique** : côté serveur, un émetteur d'événements interne (EventEmitter Node) déclenche l'envoi Socket.io vers la ou les "room" correspondant au(x) supérieur(s) hiérarchique(s) concerné(s) à chaque création d'un événement clé (commande, mouvement de stock, vente).
