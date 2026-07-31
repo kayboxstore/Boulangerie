@@ -849,7 +849,7 @@
   },
   "assistant": {
     "title": "Assistant",
-    "subtitleUser": "Écrivez directement à un administrateur — captures d'écran bienvenues.",
+    "subtitleUser": "Posez votre question — l'assistant vous répond, ou parlez directement à un administrateur.",
     "subtitleAdmin": "File des conversations avec l'équipe.",
     "placeholder": "Écrivez votre message…",
     "send": "Envoyer",
@@ -871,6 +871,12 @@
     "statusOpen": "Ouverte",
     "statusClosed": "Fermée",
     "loadError": "Chargement impossible.",
-    "screenshotAttached": "Capture d'écran jointe"
+    "screenshotAttached": "Capture d'écran jointe",
+    "iaLabel": "Assistant IA",
+    "talkToAdmin": "Parler à un Admin",
+    "escaladeBanner": "Vous êtes maintenant en contact avec un administrateur.",
+    "escaladeError": "La demande a échoué.",
+    "statusIA": "IA",
+    "iaHandlingBanner": "L'IA répond actuellement à cet utilisateur — envoyer un message prend le relai."
   }
 }

@@ -151,6 +151,9 @@ export const TYPES_EVENEMENT = [
   "INTERVENTION_ADMIN",
   // Assistant (section 3.19) : nouveau message dans une conversation support.
   "MESSAGE_SUPPORT",
+  // Assistant : une conversation vient d'être escaladée à un humain (bouton
+  // "Parler à un Admin", ou automatiquement si l'IA échoue).
+  "ESCALADE_SUPPORT",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -178,6 +181,7 @@ export interface ServerToClientEvents {
   // ci-dessus qui prévient les Admins/l'utilisateur même si la vue n'est pas ouverte.
   messageSupport: (message: MessageSupportDTO) => void;
   conversationSupportFermee: (payload: { conversationId: string }) => void;
+  conversationSupportEscaladee: (payload: { conversationId: string }) => void;
 }
 // Aucun événement client -> serveur pour l'instant (les actions passent par l'API REST).
 export interface ClientToServerEvents {}
@@ -1387,16 +1391,18 @@ export function aAcces(
 export const STATUTS_CONVERSATION_SUPPORT = ["OUVERTE", "FERMEE"] as const;
 export type StatutConversationSupport = (typeof STATUTS_CONVERSATION_SUPPORT)[number];
 
-// Restriction APPLICATIVE actuelle — le champ en base (MessageSupport.auteurType)
-// reste une simple chaîne pour pouvoir accueillir "IA" plus tard sans migration.
-export const AUTEUR_TYPES_SUPPORT = ["UTILISATEUR", "ADMIN"] as const;
+// "IA" (section 3.19, premier niveau) : réponse automatique tant que la
+// conversation n'est pas escaladée. Le champ en base (MessageSupport.auteurType)
+// reste une simple chaîne, ce qui a permis d'ajouter cette valeur sans migration.
+export const AUTEUR_TYPES_SUPPORT = ["UTILISATEUR", "ADMIN", "IA"] as const;
 export type AuteurTypeSupport = (typeof AUTEUR_TYPES_SUPPORT)[number];
 
 export interface MessageSupportDTO {
   id: string;
   conversationId: string;
   auteurType: string;
-  auteur: { id: string; nom: string };
+  // null pour un message IA (pas d'auteur humain).
+  auteur: { id: string; nom: string } | null;
   contenu: string | null;
   captureEcran: string | null;
   dateCreation: string;
@@ -1406,6 +1412,10 @@ export interface ConversationSupportDTO {
   id: string;
   utilisateur: { id: string; nom: string; roleNom: string };
   statut: StatutConversationSupport;
+  // true dès que l'utilisateur (ou l'IA elle-même en cas d'échec, voir
+  // apps/api/src/lib/ia.ts) a demandé un humain : l'IA ne répond plus sur ce
+  // cycle, seul un Admin peut désormais écrire.
+  escaladee: boolean;
   dateFermeture: string | null;
   fermeePar: { id: string; nom: string } | null;
   createdAt: string;

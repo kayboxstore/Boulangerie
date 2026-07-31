@@ -747,6 +747,11 @@ model ConversationSupport {
   utilisateurId String
   utilisateur   Utilisateur        @relation("ConversationsUtilisateur", fields: [utilisateurId], references: [id])
   statut        StatutConversation @default(OUVERTE)
+  // IA (premier niveau, section 3.19 mise à jour) : tant que false, l'IA
+  // répond automatiquement aux messages de l'utilisateur. Passe à true via
+  // "Parler à un Admin" (ou automatiquement si l'IA échoue, voir lib/ia.ts) —
+  // irréversible pour le cycle en cours : seul un Admin peut alors répondre.
+  escaladee     Boolean            @default(false)
   fermeeParId   String?
   fermeePar     Utilisateur?       @relation("ConversationsSupportFermeesPar", fields: [fermeeParId], references: [id], onDelete: SetNull)
   dateFermeture DateTime?
@@ -759,17 +764,17 @@ model ConversationSupport {
 }
 
 // `auteurType` est une chaîne libre — PAS un enum Prisma — délibérément : le
-// modèle doit pouvoir absorber un futur auteur "IA" (réponse automatique en
-// première ligne, reportée pour l'instant, voir 3.19) sans migration de schéma
-// cassante. La validation applicative (aujourd'hui UTILISATEUR | ADMIN) vit
-// dans packages/shared, pas dans la base.
+// modèle doit pouvoir absorber un futur auteur "IA" sans migration de schéma
+// cassante — désormais utilisé (UTILISATEUR | ADMIN | IA, packages/shared).
+// `auteurId` est nullable pour cette même raison : un message IA n'a pas
+// d'auteur humain.
 model MessageSupport {
   id             String              @id @default(cuid())
   conversationId String
   conversation   ConversationSupport @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   auteurType     String
-  auteurId       String
-  auteur         Utilisateur         @relation("MessagesSupportEnvoyes", fields: [auteurId], references: [id])
+  auteurId       String?
+  auteur         Utilisateur?        @relation("MessagesSupportEnvoyes", fields: [auteurId], references: [id])
   contenu        String?
   // Data URI base64 stockée directement en base (choix délibéré, 3.19 : la
   // simplicité prime sur la robustesse à grande échelle pour cette v1).

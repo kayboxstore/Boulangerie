@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Paperclip, Send, X } from "lucide-react";
+import { ArrowLeft, Bot, Paperclip, Send, UserRound, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   ROLE_ADMINISTRATEUR,
@@ -34,15 +34,23 @@ const formatHeure = (iso: string) => new Date(iso).toLocaleString();
 
 function BulleMessage({ message, estMoi }: { message: MessageSupportDTO; estMoi: boolean }) {
   const { t } = useTranslation();
+  const estIA = message.auteurType === "IA";
   return (
     <div className={cn("flex", estMoi ? "justify-end" : "justify-start")}>
       <div
         className={cn(
           "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm",
-          estMoi ? "bg-terracotta text-creme" : "bg-secondary text-secondary-foreground",
+          estMoi
+            ? "bg-terracotta text-creme"
+            : estIA
+              ? "border border-or/40 bg-or/10 text-marine dark:text-creme"
+              : "bg-secondary text-secondary-foreground",
         )}
       >
-        <p className="mb-0.5 text-xs font-medium opacity-70">{estMoi ? t("assistant.you") : message.auteur.nom}</p>
+        <p className="mb-0.5 flex items-center gap-1 text-xs font-medium opacity-70">
+          {estIA && <Bot className="h-3 w-3" aria-hidden />}
+          {estMoi ? t("assistant.you") : estIA ? t("assistant.iaLabel") : message.auteur?.nom}
+        </p>
         {message.contenu && <p className="whitespace-pre-wrap">{message.contenu}</p>}
         {message.captureEcran && (
           <img
@@ -152,6 +160,15 @@ function BandeauFermeture({ conversation }: { conversation: ConversationSupportD
   );
 }
 
+function BandeauEscalade() {
+  const { t } = useTranslation();
+  return (
+    <div className="border-t bg-or/10 px-4 py-2 text-center text-sm font-medium text-marine dark:text-or">
+      {t("assistant.escaladeBanner")}
+    </div>
+  );
+}
+
 // --- Vue utilisateur : sa propre conversation -------------------------------
 
 function VueUtilisateur() {
@@ -181,13 +198,33 @@ function VueUtilisateur() {
     onError: (e) => toastErreur(e instanceof Error ? e.message : t("assistant.sendError")),
   });
 
+  const escalader = useMutation({
+    mutationFn: () => api<{ conversation: ConversationSupportDTO }>("/api/assistant/escalader", { method: "POST" }),
+    onSuccess: (r) => queryClient.setQueryData(["assistant-ma-conversation"], { conversation: r.conversation }),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("assistant.escaladeError")),
+  });
+
   if (isLoading) return <ChargementModule />;
+  const enContactAvecAdmin = conversation?.statut === "OUVERTE" && conversation.escaladee;
 
   return (
     <div className="mx-auto flex h-[calc(100vh-9rem)] max-w-2xl flex-col">
-      <div className="mb-4">
-        <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("assistant.title")}</h1>
-        <p className="mt-1 text-muted-foreground">{t("assistant.subtitleUser")}</p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("assistant.title")}</h1>
+          <p className="mt-1 text-muted-foreground">{t("assistant.subtitleUser")}</p>
+        </div>
+        {!enContactAvecAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => escalader.mutate()}
+            disabled={escalader.isPending}
+          >
+            <UserRound className="h-4 w-4" />
+            {t("assistant.talkToAdmin")}
+          </Button>
+        )}
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <CardContent className="flex-1 space-y-3 overflow-y-auto p-4">
@@ -195,11 +232,15 @@ function VueUtilisateur() {
             <p className="py-10 text-center text-muted-foreground">{t("assistant.emptyMessages")}</p>
           )}
           {conversation?.messages.map((m) => (
-            <BulleMessage key={m.id} message={m} estMoi={m.auteur.id === utilisateur?.id} />
+            <BulleMessage key={m.id} message={m} estMoi={m.auteur?.id === utilisateur?.id} />
           ))}
           <div ref={finRef} />
         </CardContent>
-        {conversation?.statut === "FERMEE" && <BandeauFermeture conversation={conversation} />}
+        {conversation?.statut === "FERMEE" ? (
+          <BandeauFermeture conversation={conversation} />
+        ) : (
+          enContactAvecAdmin && <BandeauEscalade />
+        )}
         <Composeur onEnvoyer={(contenu, captureEcran) => envoyer.mutate({ contenu, captureEcran })} enCours={envoyer.isPending} />
       </Card>
     </div>
@@ -277,8 +318,15 @@ function VueAdmin() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate font-medium text-marine dark:text-creme">{c.utilisateur.nom}</span>
-                    <Badge variant={c.statut === "OUVERTE" ? "gold" : "secondary"} className="shrink-0 text-[10px]">
-                      {c.statut === "OUVERTE" ? t("assistant.statusOpen") : t("assistant.statusClosed")}
+                    <Badge
+                      variant={c.statut !== "OUVERTE" ? "secondary" : c.escaladee ? "gold" : "outline"}
+                      className="shrink-0 text-[10px]"
+                    >
+                      {c.statut !== "OUVERTE"
+                        ? t("assistant.statusClosed")
+                        : c.escaladee
+                          ? t("assistant.statusOpen")
+                          : t("assistant.statusIA")}
                     </Badge>
                   </div>
                   {dernier && (
@@ -325,12 +373,18 @@ function VueAdmin() {
                   </Button>
                 )}
               </CardHeader>
+              {selectionnee.statut === "OUVERTE" && !selectionnee.escaladee && (
+                <p className="flex items-center gap-1.5 border-b bg-or/10 px-4 py-1.5 text-xs text-marine dark:text-or">
+                  <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  {t("assistant.iaHandlingBanner")}
+                </p>
+              )}
               <CardContent className="flex-1 space-y-3 overflow-y-auto">
                 {selectionnee.messages.length === 0 && (
                   <p className="py-10 text-center text-muted-foreground">{t("assistant.emptyMessages")}</p>
                 )}
                 {selectionnee.messages.map((m) => (
-                  <BulleMessage key={m.id} message={m} estMoi={m.auteur.id === utilisateur?.id} />
+                  <BulleMessage key={m.id} message={m} estMoi={m.auteur?.id === utilisateur?.id} />
                 ))}
                 <div ref={finRef} />
               </CardContent>

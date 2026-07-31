@@ -849,7 +849,7 @@
   },
   "assistant": {
     "title": "Assistant",
-    "subtitleUser": "Write directly to an administrator — screenshots welcome.",
+    "subtitleUser": "Ask your question — the assistant will answer, or talk directly to an administrator.",
     "subtitleAdmin": "Queue of conversations with the team.",
     "placeholder": "Write your message…",
     "send": "Send",
@@ -871,6 +871,12 @@
     "statusOpen": "Open",
     "statusClosed": "Closed",
     "loadError": "Loading failed.",
-    "screenshotAttached": "Screenshot attached"
+    "screenshotAttached": "Screenshot attached",
+    "iaLabel": "AI Assistant",
+    "talkToAdmin": "Talk to an Admin",
+    "escaladeBanner": "You are now in contact with an administrator.",
+    "escaladeError": "The request failed.",
+    "statusIA": "AI",
+    "iaHandlingBanner": "The AI is currently answering this user — sending a message takes over."
   }
 }

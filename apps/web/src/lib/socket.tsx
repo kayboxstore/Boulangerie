@@ -119,6 +119,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ["assistant-ma-conversation"] });
         queryClient.invalidateQueries({ queryKey: ["assistant-conversations"] });
       });
+      socket.on("conversationSupportEscaladee", () => {
+        if (!actif) return;
+        queryClient.invalidateQueries({ queryKey: ["assistant-ma-conversation"] });
+        queryClient.invalidateQueries({ queryKey: ["assistant-conversations"] });
+      });
     });
 
     return () => {

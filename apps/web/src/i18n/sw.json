@@ -850,7 +850,7 @@
   },
   "assistant": {
     "title": "Msaidizi",
-    "subtitleUser": "Andika moja kwa moja kwa msimamizi — picha za skrini zinakaribishwa.",
+    "subtitleUser": "Uliza swali lako — msaidizi atajibu, au zungumza moja kwa moja na msimamizi.",
     "subtitleAdmin": "Foleni ya mazungumzo na timu.",
     "placeholder": "Andika ujumbe wako…",
     "send": "Tuma",
@@ -872,6 +872,12 @@
     "statusOpen": "Yamefunguliwa",
     "statusClosed": "Yamefungwa",
     "loadError": "Upakiaji umeshindikana.",
-    "screenshotAttached": "Picha ya skrini imeambatishwa"
+    "screenshotAttached": "Picha ya skrini imeambatishwa",
+    "iaLabel": "Msaidizi wa AI",
+    "talkToAdmin": "Zungumza na Msimamizi",
+    "escaladeBanner": "Sasa uko katika mawasiliano na msimamizi.",
+    "escaladeError": "Ombi limeshindikana.",
+    "statusIA": "AI",
+    "iaHandlingBanner": "AI inamjibu mtumiaji huyu kwa sasa — kutuma ujumbe kutachukua nafasi yake."
   }
 }

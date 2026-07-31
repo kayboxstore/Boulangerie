@@ -850,7 +850,7 @@
   },
   "assistant": {
     "title": "Lisungi",
-    "subtitleUser": "Komela mokambi (Admin) mbala moko — bafɔto ya ekrani ekoki kotindama.",
+    "subtitleUser": "Tuna motuna na yo — lisungi ekoyanola, to koma mbala moko na mokambi (Admin).",
     "subtitleAdmin": "Molongo ya masolo na ekipe.",
     "placeholder": "Koma nsango na yo…",
     "send": "Kotinda",
@@ -872,6 +872,12 @@
     "statusOpen": "Efungwami",
     "statusClosed": "Ekangami",
     "loadError": "Bokoti ekoki te.",
-    "screenshotAttached": "Fɔto ya ekrani ebakisami"
+    "screenshotAttached": "Fɔto ya ekrani ebakisami",
+    "iaLabel": "Lisungi IA",
+    "talkToAdmin": "Koma na Admin",
+    "escaladeBanner": "Sikoyo ozali na boyokani na mokambi (Admin).",
+    "escaladeError": "Bosɛngi ekoki te.",
+    "statusIA": "IA",
+    "iaHandlingBanner": "IA ezali koyanola na mosaleli oyo sikoyo — kotinda nsango ekozwa esika na yango."
   }
 }
