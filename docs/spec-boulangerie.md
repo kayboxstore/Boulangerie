@@ -351,6 +351,7 @@ Marge par produit (état actuel et décision) : non calculable proprement aujour
 - Écran de démarrage (nouveau) : animation du logo à l'ouverture de l'app, 6 à 8 secondes, avant la page de connexion
 - Page de connexion (refonte) : traitement visuel soigné, à la hauteur du reste de l'identité de marque
 - Format des nombres (nouveau) : séparateur de milliers par un point partout (ex. « 4.100 Fc », pas « 4 100 Fc »)
+- Ton des textes (nouveau) : messages d'erreur, confirmations et libellés en langage clair et humain — jamais de code d'erreur brut (403, 401, « Bad Request ») affiché à l'utilisateur, toujours une explication compréhensible à la place. Le vocabulaire métier légitime (Qualité, bac, avance, dette...) reste tel quel, ce n'est pas à simplifier — c'est le ton et la clarté qui doivent s'améliorer, pas le vocabulaire.
 
 ### 3.9 Paramètres
 Catalogue produits, prix, taxes, informations boutique, gestion des rôles/hiérarchie, gestion des types de clients (prix et commission par bac). Écriture réservée à l'**Administrateur**.
