@@ -423,8 +423,14 @@ export function DashboardPage() {
         </>
       )}
 
-      {/* Widgets secondaires — chacun conditionné à la lecture du module */}
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+      {/* Widgets secondaires — chacun conditionné à la lecture du module.
+          [&>*]:min-w-0 : comme les enfants flex, un élément de grille refuse
+          par défaut de rétrécir sous la largeur minimale de son contenu — sans
+          ça, la carte la plus « large » (contenu qui ne s'enroule pas)
+          élargit toute la colonne de grille implicite, et donc CHAQUE carte
+          qui la partage, même celles au contenu court (déjà observé : les 6
+          cartes rapportaient ~400px sur un écran de 375px). */}
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
         {litCommandes && commandes && (
           <Card>
             <CardHeader>
