@@ -390,6 +390,10 @@ Vue dédiée aux commandes de type **Maman** (les seules à générer une commis
 ### 3.12 À propos
 Page accessible à **tous** les rôles : informations sur Boulangerie Lomoto, logo, tagline "Pain Lia o Tonda", version de l'application, contact. Crédit développeur (nouveau) : « Application créée par Augustin Kayembe » + téléphone +243 980 240 000, affiché ici et en pied de page des rapports exportés (3.13, 3.8).
 
+Modifiable par l'Admin (nouveau) :
+- Nom, contact, adresse : mêmes champs que « Informations boutique » en Paramètres (3.9) — même donnée éditable depuis les deux endroits, pas une copie séparée
+- Nouveau contenu : texte de présentation libre de la boulangerie, horaires d'ouverture, réseaux sociaux (liste extensible : Facebook, Instagram, WhatsApp... pas limité à des champs fixes)
+
 ### 3.13 Rapports
 Journal d'activité **personnel**, distinct du Tableau de bord/KPI (3.8) : chaque utilisateur y voit ses propres enregistrements (ce qu'il a créé/modifié dans les modules auxquels il a accès), par ordre chronologique. Portée élargie pour certains rôles :
 - **DG et Admins** : voient les rapports de tout le monde
