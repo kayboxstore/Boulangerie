@@ -1,15 +1,19 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import {
+  emailProCreerSchema,
   presencePointageSchema,
   travailleurCreateSchema,
   travailleurUpdateSchema,
   type PresenceDTO,
+  type StatutEmailPro,
   type StatutPresence,
   type TravailleurDTO,
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { APEX } from "../lib/origines.js";
+import { creerOuObtenirDestination, creerRegleRoutage, ErreurCloudflare, obtenirDestination } from "../lib/cloudflareEmail.js";
 
 export const travailleursRouter = Router();
 
@@ -30,6 +34,10 @@ const versTravailleurDTO = (t: TravailleurAvecCompte): TravailleurDTO => ({
   poste: t.poste,
   dateEmbauche: t.dateEmbauche.toISOString().slice(0, 10),
   compte: t.utilisateur,
+  emailDestination: t.emailDestination,
+  emailProAdresse: t.emailProAdresse,
+  emailProStatut: t.emailProStatut as StatutEmailPro,
+  emailProErreur: t.emailProErreur,
 });
 
 type PresenceAvecRelations = Prisma.PresenceGetPayload<{
@@ -165,6 +173,153 @@ travailleursRouter.delete("/:id", requirePermission("TRAVAILLEURS", "ECRITURE"),
     if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
     await prisma.travailleur.delete({ where: { id: travailleur.id } });
     res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Adresse email professionnelle (section 3.18, nouveau) ------------------
+
+/** Retire les accents/diacritiques et ne garde que [a-z0-9]. */
+function normaliserPourEmail(segment: string): string {
+  return segment
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/** prenom.nom — premier mot du nom complet = prénom, le reste = nom de famille. */
+function baseAdresseDepuisNom(nomComplet: string): string {
+  const mots = nomComplet.trim().split(/\s+/);
+  const prenom = normaliserPourEmail(mots[0] ?? "");
+  const nom = normaliserPourEmail(mots.slice(1).join(""));
+  if (prenom && nom) return `${prenom}.${nom}`;
+  return prenom || nom || "employe";
+}
+
+/** Ajoute un suffixe numérique (2, 3…) si l'adresse de base est déjà prise par un AUTRE travailleur — collision de prénom+nom. */
+async function genererAdresseProUnique(nomComplet: string, ignorerTravailleurId: string): Promise<string> {
+  const base = baseAdresseDepuisNom(nomComplet);
+  for (let suffixe = 1; ; suffixe++) {
+    const local = suffixe === 1 ? base : `${base}${suffixe}`;
+    const adresse = `${local}@${APEX}`;
+    const existant = await prisma.travailleur.findUnique({ where: { emailProAdresse: adresse } });
+    if (!existant || existant.id === ignorerTravailleurId) return adresse;
+  }
+}
+
+const messageErreurCloudflare = (e: unknown): string =>
+  e instanceof ErreurCloudflare ? e.message : e instanceof Error ? e.message : "Erreur inconnue";
+
+// Déclenche la création : adresse de destination Cloudflare (envoie l'email
+// de vérification à l'employé) + adresse pro générée (avec suffixe en cas de
+// collision). La règle de routage n'est créée immédiatement que si la
+// destination est DÉJÀ vérifiée (rare à ce stade) — sinon /verifier la
+// complète une fois l'employé passé par le lien reçu.
+travailleursRouter.post("/:id/email-pro", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
+  try {
+    const travailleur = await prisma.travailleur.findUnique({ where: { id: req.params.id } });
+    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
+
+    const parsed = emailProCreerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const { emailDestination } = parsed.data;
+    const emailProAdresse = travailleur.emailProAdresse ?? (await genererAdresseProUnique(travailleur.nom, travailleur.id));
+
+    try {
+      const destination = await creerOuObtenirDestination(emailDestination);
+      let statut: StatutEmailPro = "EN_ATTENTE_VERIFICATION";
+      let cloudflareRegleId = travailleur.cloudflareRegleId;
+      let erreur: string | null = null;
+
+      // Destination déjà vérifiée (ex. réutilisée d'une fiche précédente) :
+      // la règle peut être posée tout de suite, pas besoin d'attendre.
+      if (destination.verified) {
+        try {
+          const regle = await creerRegleRoutage(emailProAdresse, emailDestination);
+          cloudflareRegleId = regle.id;
+          statut = "ACTIF";
+        } catch (e) {
+          statut = "ECHEC";
+          erreur = messageErreurCloudflare(e);
+        }
+      }
+
+      const maj = await prisma.travailleur.update({
+        where: { id: travailleur.id },
+        data: {
+          emailDestination,
+          emailProAdresse,
+          emailProStatut: statut,
+          emailProErreur: erreur,
+          cloudflareAdresseId: destination.id,
+          cloudflareRegleId,
+        },
+        include: INCLUDE_TRAVAILLEUR,
+      });
+      res.status(201).json({ travailleur: versTravailleurDTO(maj) });
+    } catch (e) {
+      // Échec de l'appel Cloudflare lui-même (jeton invalide, compte/zone
+      // incorrects, adresse refusée…) — jamais silencieux : le motif exact
+      // remonte jusqu'à la fiche pour que l'Admin puisse agir.
+      const maj = await prisma.travailleur.update({
+        where: { id: travailleur.id },
+        data: { emailDestination, emailProAdresse, emailProStatut: "ECHEC", emailProErreur: messageErreurCloudflare(e) },
+        include: INCLUDE_TRAVAILLEUR,
+      });
+      res.status(201).json({ travailleur: versTravailleurDTO(maj) });
+    }
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Re-vérifie l'état côté Cloudflare (asynchrone : dépend du clic de
+// l'employé sur le lien reçu, hors du contrôle de l'app) et pose la règle de
+// routage dès que la destination est vérifiée.
+travailleursRouter.post("/:id/email-pro/verifier", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
+  try {
+    const travailleur = await prisma.travailleur.findUnique({ where: { id: req.params.id } });
+    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
+
+    if (travailleur.emailProStatut === "AUCUNE") {
+      return res.status(400).json({ erreur: "Aucune adresse professionnelle n'a encore été demandée pour ce travailleur." });
+    }
+    if (travailleur.emailProStatut === "ACTIF") {
+      const complet = await prisma.travailleur.findUnique({ where: { id: travailleur.id }, include: INCLUDE_TRAVAILLEUR });
+      return res.json({ travailleur: versTravailleurDTO(complet!) });
+    }
+    if (!travailleur.cloudflareAdresseId || !travailleur.emailProAdresse || !travailleur.emailDestination) {
+      return res.status(409).json({ erreur: "État incomplet pour la vérification — relancez la création de l'adresse pro." });
+    }
+
+    try {
+      const destination = await obtenirDestination(travailleur.cloudflareAdresseId);
+      if (!destination.verified) {
+        // Toujours en attente : rien à faire, l'employé n'a pas encore cliqué
+        // le lien — l'UI réessaiera plus tard (bouton ou actualisation automatique).
+        const inchange = await prisma.travailleur.findUnique({ where: { id: travailleur.id }, include: INCLUDE_TRAVAILLEUR });
+        return res.json({ travailleur: versTravailleurDTO(inchange!) });
+      }
+
+      const regle = await creerRegleRoutage(travailleur.emailProAdresse, travailleur.emailDestination);
+      const maj = await prisma.travailleur.update({
+        where: { id: travailleur.id },
+        data: { emailProStatut: "ACTIF", cloudflareRegleId: regle.id, emailProErreur: null },
+        include: INCLUDE_TRAVAILLEUR,
+      });
+      res.json({ travailleur: versTravailleurDTO(maj) });
+    } catch (e) {
+      const maj = await prisma.travailleur.update({
+        where: { id: travailleur.id },
+        data: { emailProStatut: "ECHEC", emailProErreur: messageErreurCloudflare(e) },
+        include: INCLUDE_TRAVAILLEUR,
+      });
+      res.json({ travailleur: versTravailleurDTO(maj) });
+    }
   } catch (e) {
     next(e);
   }

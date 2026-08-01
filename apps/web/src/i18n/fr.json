@@ -570,7 +570,21 @@
     "arrivalOptional": "Heure d'arrivée (optionnel)",
     "departureOptional": "Heure de départ (optionnel)",
     "clockInError": "Pointage impossible",
-    "saveClockIn": "Enregistrer le pointage"
+    "saveClockIn": "Enregistrer le pointage",
+    "emailProTitle": "Adresse email professionnelle",
+    "emailProDesc": "Génère une adresse @boulangerie-lomoto.com qui redirige vers la boîte perso de l'employé (Cloudflare Email Routing). La vérification finale se fait par l'employé, via le lien reçu par email — hors du contrôle de l'application.",
+    "emailProDestinationLabel": "Boîte email perso de l'employé",
+    "emailProCreateButton": "Créer l'adresse pro",
+    "emailProCheckButton": "Vérifier le statut",
+    "emailProAddressLabel": "Adresse pro",
+    "emailProPendingHelp": "En attente que l'employé clique sur le lien de vérification reçu par email. Actualisation automatique toutes les 20 secondes.",
+    "emailProError": "Action impossible"
+  },
+  "emailProStatut": {
+    "AUCUNE": "Aucune",
+    "EN_ATTENTE_VERIFICATION": "En attente de vérification",
+    "ACTIF": "Active",
+    "ECHEC": "Échec"
   },
   "statutFournisseur": {
     "EN_ATTENTE": "En attente",

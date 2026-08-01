@@ -1,8 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck, Link2, Pencil, Trash2, UserPlus } from "lucide-react";
+import { CalendarCheck, Link2, Mail, Pencil, RefreshCw, Trash2, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { STATUTS_PRESENCE, type PresenceDTO, type StatutPresence, type TravailleurDTO } from "@lomoto/shared";
+import {
+  STATUTS_PRESENCE,
+  type PresenceDTO,
+  type StatutEmailPro,
+  type StatutPresence,
+  type TravailleurDTO,
+} from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/components/FeedbackProvider";
@@ -37,6 +43,19 @@ const BADGE_STATUT: Record<StatutPresence, string> = {
   ABSENT: "bg-terracotta text-creme border-transparent",
   RETARD: "bg-beige/60 text-marine dark:bg-beige/20 dark:text-creme border-transparent",
 };
+
+const BADGE_STATUT_EMAIL_PRO: Record<StatutEmailPro, string> = {
+  AUCUNE: "bg-secondary text-muted-foreground border-transparent",
+  EN_ATTENTE_VERIFICATION: "bg-beige/60 text-marine dark:bg-beige/20 dark:text-creme border-transparent",
+  ACTIF: "bg-or/15 text-terracotta dark:text-or border-transparent",
+  ECHEC: "bg-terracotta text-creme border-transparent",
+};
+
+// Re-vérification périodique (bouton "Vérifier le statut" en complément) : la
+// vérification dépend du clic de l'employé sur le lien reçu, hors du
+// contrôle de l'app — un intervalle modéré évite de solliciter l'API pour
+// rien pendant que la fiche reste ouverte sans que rien n'ait changé.
+const INTERVALLE_VERIF_EMAIL_PRO_MS = 20_000;
 
 interface CompteLiable {
   id: string;
@@ -96,6 +115,7 @@ export function TravailleursPage() {
   const [dateEmbauche, setDateEmbauche] = useState(aujourdhui());
   const [compteLie, setCompteLie] = useState("");
   const [erreurFiche, setErreurFiche] = useState<string | null>(null);
+  const [emailDestinationSaisie, setEmailDestinationSaisie] = useState("");
 
   function ouvrirFiche(trav: TravailleurDTO | null) {
     setFicheEditee(trav);
@@ -104,9 +124,46 @@ export function TravailleursPage() {
     setPoste(trav?.poste ?? "");
     setDateEmbauche(trav?.dateEmbauche ?? aujourdhui());
     setCompteLie(trav?.compte?.id ?? "");
+    setEmailDestinationSaisie(trav?.emailDestination ?? "");
     setErreurFiche(null);
     setDialogFiche(true);
   }
+
+  // Version toujours à jour de la fiche ouverte (le cache react-query se
+  // rafraîchit après chaque action email pro) — ficheEditee reste un instantané.
+  const travailleurCourant = ficheEditee ? (travailleurs.find((t) => t.id === ficheEditee.id) ?? ficheEditee) : null;
+
+  const creerEmailPro = useMutation({
+    mutationFn: () => {
+      if (!ficheEditee) throw new Error("Aucune fiche ouverte");
+      return api(`/api/travailleurs/${ficheEditee.id}/email-pro`, {
+        method: "POST",
+        body: JSON.stringify({ emailDestination: emailDestinationSaisie.trim() }),
+      });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["travailleurs"] }),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("travailleurs.emailProError")),
+  });
+
+  const verifierEmailPro = useMutation({
+    mutationFn: () => {
+      if (!ficheEditee) throw new Error("Aucune fiche ouverte");
+      return api(`/api/travailleurs/${ficheEditee.id}/email-pro/verifier`, { method: "POST" });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["travailleurs"] }),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("travailleurs.emailProError")),
+  });
+
+  // Actualisation automatique tant que la vérification est en attente — la
+  // fiche reste à jour sans que l'Admin ait à cliquer "Vérifier le statut"
+  // lui-même à chaque fois (la vérification dépend du clic de l'employé,
+  // asynchrone et hors du contrôle de l'app).
+  useEffect(() => {
+    if (!dialogFiche || travailleurCourant?.emailProStatut !== "EN_ATTENTE_VERIFICATION") return;
+    const id = setInterval(() => verifierEmailPro.mutate(), INTERVALLE_VERIF_EMAIL_PRO_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialogFiche, travailleurCourant?.id, travailleurCourant?.emailProStatut]);
 
   const sauverFiche = useMutation({
     mutationFn: () => {
@@ -465,6 +522,71 @@ export function TravailleursPage() {
                 </NativeSelect>
               </div>
             </div>
+
+            {ficheEditee && (
+              <div className="space-y-2.5 rounded-lg border p-3">
+                <div>
+                  <p className="text-sm font-medium text-marine dark:text-creme">{t("travailleurs.emailProTitle")}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{t("travailleurs.emailProDesc")}</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="fiche-email-destination">{t("travailleurs.emailProDestinationLabel")}</Label>
+                  <Input
+                    id="fiche-email-destination"
+                    type="email"
+                    value={emailDestinationSaisie}
+                    onChange={(e) => setEmailDestinationSaisie(e.target.value)}
+                    placeholder="employe@gmail.com"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => creerEmailPro.mutate()}
+                    disabled={creerEmailPro.isPending || !emailDestinationSaisie.trim()}
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    {t("travailleurs.emailProCreateButton")}
+                  </Button>
+                  {travailleurCourant?.emailProStatut === "EN_ATTENTE_VERIFICATION" && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => verifierEmailPro.mutate()}
+                      disabled={verifierEmailPro.isPending}
+                    >
+                      <RefreshCw className={verifierEmailPro.isPending ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+                      {t("travailleurs.emailProCheckButton")}
+                    </Button>
+                  )}
+                </div>
+                {travailleurCourant && travailleurCourant.emailProStatut !== "AUCUNE" && (
+                  <div className="space-y-1.5 text-sm">
+                    {travailleurCourant.emailProAdresse && (
+                      <p>
+                        <span className="text-muted-foreground">{t("travailleurs.emailProAddressLabel")} : </span>
+                        <span className="font-medium">{travailleurCourant.emailProAdresse}</span>
+                      </p>
+                    )}
+                    <Badge className={cn(BADGE_STATUT_EMAIL_PRO[travailleurCourant.emailProStatut])}>
+                      {t(`emailProStatut.${travailleurCourant.emailProStatut}`)}
+                    </Badge>
+                    {travailleurCourant.emailProStatut === "EN_ATTENTE_VERIFICATION" && (
+                      <p className="text-xs text-muted-foreground">{t("travailleurs.emailProPendingHelp")}</p>
+                    )}
+                    {travailleurCourant.emailProStatut === "ECHEC" && travailleurCourant.emailProErreur && (
+                      <p role="alert" className="rounded-md bg-terracotta/10 px-2.5 py-1.5 text-xs font-medium text-terracotta">
+                        {travailleurCourant.emailProErreur}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {erreurFiche && (
               <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
                 {erreurFiche}

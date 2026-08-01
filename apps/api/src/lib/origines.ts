@@ -18,7 +18,7 @@
 // apex→www, cette app renvoyait www→apex. Sans accès au tableau de bord
 // Render pour changer leur réglage, la seule sortie de boucle est de suivre
 // leur choix plutôt que de le contredire.
-const APEX = "boulangerie-lomoto.com";
+export const APEX = "boulangerie-lomoto.com";
 export const DOMAINE_CANONIQUE = `www.${APEX}`;
 export const DOMAINE_A_REDIRIGER = APEX;
 

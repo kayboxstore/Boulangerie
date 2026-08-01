@@ -64,6 +64,19 @@ services:
       # aucun autre changement de code (voir routes/assistant.ts).
       - key: ASSISTANT_IA_ACTIF
         value: "false"
+      # Adresse email professionnelle (section 3.18) — Cloudflare Email
+      # Routing. Deux portées DIFFÉRENTES requises sur le jeton : "Email
+      # Routing Addresses: Edit" (Compte) pour les adresses de destination,
+      # ET "Email Routing Rules: Edit" (Zone, limitable au domaine) pour les
+      # règles de routage — voir apps/api/src/lib/cloudflareEmail.ts.
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      # Tableau de bord Cloudflare → domaine → aperçu, colonne de droite.
+      - key: CLOUDFLARE_ZONE_ID
+        sync: false
+      # Même page, juste en dessous du Zone ID — portée Compte, différente.
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
       # Sauvegarde quotidienne (section 3.15) : écrite localement sur le disque
       # du service (pas de destination externe — un compte de service Google
       # Cloud a été essayé puis abandonné pour Google Drive, sans quota de

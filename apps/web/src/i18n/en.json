@@ -570,7 +570,21 @@
     "arrivalOptional": "Arrival time (optional)",
     "departureOptional": "Departure time (optional)",
     "clockInError": "Clock-in failed",
-    "saveClockIn": "Save clock-in"
+    "saveClockIn": "Save clock-in",
+    "emailProTitle": "Professional email address",
+    "emailProDesc": "Generates an @boulangerie-lomoto.com address that forwards to the employee's personal inbox (Cloudflare Email Routing). Final verification is done by the employee, via the link received by email — outside the app's control.",
+    "emailProDestinationLabel": "Employee's personal email inbox",
+    "emailProCreateButton": "Create the professional address",
+    "emailProCheckButton": "Check status",
+    "emailProAddressLabel": "Professional address",
+    "emailProPendingHelp": "Waiting for the employee to click the verification link received by email. Auto-refreshes every 20 seconds.",
+    "emailProError": "Action failed"
+  },
+  "emailProStatut": {
+    "AUCUNE": "None",
+    "EN_ATTENTE_VERIFICATION": "Awaiting verification",
+    "ACTIF": "Active",
+    "ECHEC": "Failed"
   },
   "statutFournisseur": {
     "EN_ATTENTE": "Pending",

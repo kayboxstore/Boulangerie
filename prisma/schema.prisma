@@ -536,16 +536,36 @@ model ProductionDon {
 // le personnel sans accès à l'application (livreur, agent d'entretien…).
 // `utilisateurId` relie optionnellement la fiche à un compte de l'app.
 model Travailleur {
-  id            String       @id @default(cuid())
-  nom           String
-  telephone     String?
-  poste         String
-  dateEmbauche  DateTime     @db.Date
-  utilisateurId String?      @unique
-  utilisateur   Utilisateur? @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
-  presences     Presence[]
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id                  String         @id @default(cuid())
+  nom                 String
+  telephone           String?
+  poste               String
+  dateEmbauche        DateTime       @db.Date
+  utilisateurId       String?        @unique
+  utilisateur         Utilisateur?   @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
+  presences           Presence[]
+  // Adresse email professionnelle (3.18, nouveau) — Cloudflare Email Routing.
+  // emailDestination = boîte perso existante de l'employé, saisie par le
+  // Chargé du personnel. emailProAdresse = adresse générée
+  // (prenom.nom@boulangerie-lomoto.com), unique, avec suffixe numérique en
+  // cas de collision de nom. Les deux identifiants Cloudflare sont internes
+  // (jamais exposés au front) : ils permettent de reprendre la vérification
+  // ou d'éviter de recréer une règle déjà posée.
+  emailDestination    String?
+  emailProAdresse     String?        @unique
+  emailProStatut      StatutEmailPro @default(AUCUNE)
+  emailProErreur      String?
+  cloudflareAdresseId String?
+  cloudflareRegleId   String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+}
+
+enum StatutEmailPro {
+  AUCUNE
+  EN_ATTENTE_VERIFICATION
+  ACTIF
+  ECHEC
 }
 
 // Pointage quotidien : une ligne par travailleur et par jour (re-pointer le

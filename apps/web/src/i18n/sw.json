@@ -571,7 +571,21 @@
     "arrivalOptional": "Muda wa kuwasili (si lazima)",
     "departureOptional": "Muda wa kuondoka (si lazima)",
     "clockInError": "Usaini wa muda umeshindikana",
-    "saveClockIn": "Hifadhi usaini wa muda"
+    "saveClockIn": "Hifadhi usaini wa muda",
+    "emailProTitle": "Anwani ya email ya kazini",
+    "emailProDesc": "Inatengeneza anwani @boulangerie-lomoto.com inayoelekeza kwenye sanduku la barua binafsi la mfanyakazi (Cloudflare Email Routing). Uthibitisho wa mwisho unafanywa na mfanyakazi mwenyewe, kupitia kiungo alichopokea kwa barua pepe — nje ya udhibiti wa programu.",
+    "emailProDestinationLabel": "Sanduku la barua pepe binafsi la mfanyakazi",
+    "emailProCreateButton": "Unda anwani ya kazini",
+    "emailProCheckButton": "Angalia hali",
+    "emailProAddressLabel": "Anwani ya kazini",
+    "emailProPendingHelp": "Inasubiri mfanyakazi abofye kiungo cha uthibitisho alichopokea kwa barua pepe. Inajisasisha kila sekunde 20.",
+    "emailProError": "Kitendo hakikufanikiwa"
+  },
+  "emailProStatut": {
+    "AUCUNE": "Hakuna",
+    "EN_ATTENTE_VERIFICATION": "Inasubiri uthibitisho",
+    "ACTIF": "Inatumika",
+    "ECHEC": "Imeshindwa"
   },
   "statutFournisseur": {
     "EN_ATTENTE": "Inasubiri",

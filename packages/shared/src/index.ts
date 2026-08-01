@@ -865,6 +865,24 @@ export const travailleurUpdateSchema = travailleurCreateSchema.partial().extend(
 });
 export type TravailleurUpdateInput = z.infer<typeof travailleurUpdateSchema>;
 
+// Adresse email professionnelle (section 3.18, nouveau) — Cloudflare Email
+// Routing. La vérification finale (clic employé sur le lien reçu) est hors
+// du contrôle de l'app : le statut "en attente" peut rester affiché un moment.
+export const STATUTS_EMAIL_PRO = ["AUCUNE", "EN_ATTENTE_VERIFICATION", "ACTIF", "ECHEC"] as const;
+export type StatutEmailPro = (typeof STATUTS_EMAIL_PRO)[number];
+
+export const STATUT_EMAIL_PRO_LABELS: Record<StatutEmailPro, string> = {
+  AUCUNE: "Aucune",
+  EN_ATTENTE_VERIFICATION: "En attente de vérification",
+  ACTIF: "Active",
+  ECHEC: "Échec",
+};
+
+export const emailProCreerSchema = z.object({
+  emailDestination: z.string().trim().email("Adresse email invalide").max(160),
+});
+export type EmailProCreerInput = z.infer<typeof emailProCreerSchema>;
+
 // Pointage quotidien : re-pointer le même jour corrige la ligne existante.
 export const presencePointageSchema = z.object({
   travailleurId: z.string().min(1, "Le travailleur est requis"),
@@ -882,6 +900,11 @@ export interface TravailleurDTO {
   poste: string;
   dateEmbauche: string;
   compte: { id: string; nom: string; email: string } | null;
+  emailDestination: string | null;
+  emailProAdresse: string | null;
+  emailProStatut: StatutEmailPro;
+  /** Détail exploitable en cas d'échec (ex. jeton invalide, zone incorrecte) — jamais un échec silencieux. */
+  emailProErreur: string | null;
 }
 
 export interface PresenceDTO {

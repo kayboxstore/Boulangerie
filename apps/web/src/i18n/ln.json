@@ -571,7 +571,21 @@
     "arrivalOptional": "Ngonga ya boyei (ya kotika)",
     "departureOptional": "Ngonga ya bokei (ya kotika)",
     "clockInError": "Kokoma bozali ekoki te",
-    "saveClockIn": "Kobomba bozali"
+    "saveClockIn": "Kobomba bozali",
+    "emailProTitle": "Adrese email ya mosala",
+    "emailProDesc": "Esalaka adrese @boulangerie-lomoto.com oyo etindaka na boîte ya moto ya mosali (Cloudflare Email Routing). Bozali ya suka esalemaka na mosali ye moko, na lien oyo azwi na email — ezali te na se ya application.",
+    "emailProDestinationLabel": "Boîte email ya moto ya mosali",
+    "emailProCreateButton": "Kela adrese ya mosala",
+    "emailProCheckButton": "Tala bozali",
+    "emailProAddressLabel": "Adrese ya mosala",
+    "emailProPendingHelp": "Bozelaka ete mosali abeta na lien ya bozali oyo azwi na email. Ekobongisama yango moko mokolo mokolo na ba segondi 20.",
+    "emailProError": "Ekoki kosalema te"
+  },
+  "emailProStatut": {
+    "AUCUNE": "Ezali te",
+    "EN_ATTENTE_VERIFICATION": "Ezali kozela bozali",
+    "ACTIF": "Ezali kosala",
+    "ECHEC": "Elongaki te"
   },
   "statutFournisseur": {
     "EN_ATTENTE": "Ezali kozela",
