@@ -93,7 +93,22 @@
     "currency": "Devise : Franc Congolais (Fc) — le pain est exonéré de TVA.",
     "contact": "Contact",
     "contactSub": "Pour toute question sur la boutique ou l'application.",
-    "developer": "Développement"
+    "contactEmpty": "Aucune information de contact renseignée pour l'instant.",
+    "developer": "Développement",
+    "edit": "Modifier",
+    "saveError": "Enregistrement impossible",
+    "editSharedHelp": "Ces champs sont partagés avec « Informations boutique » en Paramètres — une modification ici s'y reflète aussi.",
+    "presentationTitle": "Présentation",
+    "presentationHelp": "Texte libre affiché sur cette page, visible par tous.",
+    "presentationPlaceholder": "Présentez la boulangerie en quelques lignes…",
+    "hoursTitle": "Horaires d'ouverture",
+    "hoursPlaceholder": "Ex. Lundi–Samedi : 6h–19h · Dimanche : 7h–13h",
+    "socialTitle": "Réseaux sociaux",
+    "socialHelp": "Ajoutez autant de réseaux que nécessaire — aucune plateforme n'est imposée.",
+    "socialPlatform": "Plateforme",
+    "socialLink": "Lien",
+    "socialAdd": "Ajouter un réseau",
+    "socialRemove": "Retirer"
   },
   "activity": {
     "title": "Feed d'activité",

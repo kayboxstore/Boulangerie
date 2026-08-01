@@ -93,7 +93,22 @@
     "currency": "Currency: Congolese Franc (Fc) — bread is exempt from VAT.",
     "contact": "Contact",
     "contactSub": "For any question about the shop or the application.",
-    "developer": "Development"
+    "contactEmpty": "No contact information provided yet.",
+    "developer": "Development",
+    "edit": "Edit",
+    "saveError": "Could not save",
+    "editSharedHelp": "These fields are shared with \"Shop information\" in Settings — a change here reflects there too.",
+    "presentationTitle": "About us",
+    "presentationHelp": "Free text shown on this page, visible to everyone.",
+    "presentationPlaceholder": "Introduce the bakery in a few lines…",
+    "hoursTitle": "Opening hours",
+    "hoursPlaceholder": "E.g. Monday–Saturday: 6am–7pm · Sunday: 7am–1pm",
+    "socialTitle": "Social media",
+    "socialHelp": "Add as many as needed — no platform is fixed.",
+    "socialPlatform": "Platform",
+    "socialLink": "Link",
+    "socialAdd": "Add a social media",
+    "socialRemove": "Remove"
   },
   "activity": {
     "title": "Activity feed",

@@ -94,7 +94,22 @@
     "currency": "Sarafu : Faranga ya Kongo (Fc) — mkate hauna VAT.",
     "contact": "Wasiliana",
     "contactSub": "Kwa swali lolote kuhusu duka au programu.",
-    "developer": "Uundaji wa programu"
+    "contactEmpty": "Hakuna taarifa za mawasiliano zilizowekwa bado.",
+    "developer": "Uundaji wa programu",
+    "edit": "Hariri",
+    "saveError": "Imeshindikana kuhifadhi",
+    "editSharedHelp": "Sehemu hizi zinashirikiwa na « Taarifa za duka » kwenye Mipangilio — mabadiliko hapa yanaonekana huko pia.",
+    "presentationTitle": "Utangulizi",
+    "presentationHelp": "Maandishi huru yanayoonyeshwa kwenye ukurasa huu, yanayoonekana na wote.",
+    "presentationPlaceholder": "Eleza kiwanda cha mikate kwa mistari michache…",
+    "hoursTitle": "Saa za ufunguzi",
+    "hoursPlaceholder": "Mfano : Jumatatu–Jumamosi : saa 12:00–19:00 · Jumapili : saa 1:00–7:00",
+    "socialTitle": "Mitandao ya kijamii",
+    "socialHelp": "Ongeza kadri inavyohitajika — hakuna jukwaa lililowekwa.",
+    "socialPlatform": "Jukwaa",
+    "socialLink": "Kiungo",
+    "socialAdd": "Ongeza mtandao",
+    "socialRemove": "Ondoa"
   },
   "activity": {
     "title": "Mtiririko wa shughuli",

@@ -27,6 +27,7 @@ import { auditRouter } from "./routes/audit.js";
 import { exportRouter } from "./routes/export.js";
 import { assistantRouter } from "./routes/assistant.js";
 import { premierLancementRouter } from "./routes/premierLancement.js";
+import { aProposRouter } from "./routes/apropos.js";
 
 export function createApp() {
   const app = express();
@@ -83,6 +84,7 @@ export function createApp() {
   // Public par nécessité (section 3.7) : chaque route revérifie elle-même que
   // la base est encore vide, voir routes/premierLancement.ts.
   app.use("/api/premier-lancement", premierLancementRouter);
+  app.use("/api/apropos", aProposRouter);
 
   // --- Frontend compilé (production / déploiement) --------------------------
   // En dev, le frontend est servi par Vite (avec proxy vers cette API). En

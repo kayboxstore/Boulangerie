@@ -94,7 +94,22 @@
     "currency": "Mbongo : Franc Congolais (Fc) — mampa ezali na TVA te.",
     "contact": "Kokutana",
     "contactSub": "Mpo na motuna nyonso na ntina ya magazini to application.",
-    "developer": "Bosali ya application"
+    "contactEmpty": "Ba-nsango ya kokutana ezali naino te.",
+    "developer": "Bosali ya application",
+    "edit": "Kobongola",
+    "saveError": "Ekoki te kobomba",
+    "editSharedHelp": "Ba-champ oyo ekabwani na « Ba-nsango ya magazini » na Paramètres — kobongola awa ekomonana kuna mpe.",
+    "presentationTitle": "Bomilakisi",
+    "presentationHelp": "Makomi ya bonsomi emonisami na page oyo, bato nyonso bakoki kotala.",
+    "presentationPlaceholder": "Lakisa boulangerie na ba ligne moke…",
+    "hoursTitle": "Bantango ya kofungwama",
+    "hoursPlaceholder": "Ndakisa : Mokolo–Mokolo (Lundi–Samedi) : 6h–19h · Eyenga : 7h–13h",
+    "socialTitle": "Ba-réseaux sociaux",
+    "socialHelp": "Bakisa boye osengeli — plateforme moko te esengelisami.",
+    "socialPlatform": "Plateforme",
+    "socialLink": "Lien",
+    "socialAdd": "Kobakisa réseau",
+    "socialRemove": "Kolongola"
   },
   "activity": {
     "title": "Etando ya misala",

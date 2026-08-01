@@ -420,6 +420,12 @@ export const CLE_BOUTIQUE_NOM = "boutique_nom";
 export const CLE_BOUTIQUE_ADRESSE = "boutique_adresse";
 export const CLE_BOUTIQUE_CONTACT = "boutique_contact";
 export const CLE_LANGUE_DEFAUT = "langue_defaut";
+// Nouveaux champs éditables depuis À propos (section 3.12) — même magasin
+// clé/valeur, aucune duplication. reseaux_sociaux est un JSON sérialisé
+// (ReseauSocial[]) : liste extensible, pas de plateformes fixes prédéfinies.
+export const CLE_BOUTIQUE_PRESENTATION = "boutique_presentation";
+export const CLE_BOUTIQUE_HORAIRES = "boutique_horaires";
+export const CLE_BOUTIQUE_RESEAUX_SOCIAUX = "boutique_reseaux_sociaux";
 
 // ---------------------------------------------------------------------------
 // Caisse — registre journalier (section 3.1)
@@ -1181,6 +1187,41 @@ export interface ParametresBoutiqueDTO {
   boutiqueAdresse: string;
   boutiqueContact: string;
   langueDefaut: Langue;
+}
+
+// ---------------------------------------------------------------------------
+// À propos (section 3.12) — nom/adresse/contact partagés avec Paramètres
+// (même magasin clé/valeur ParametreBoutique, jamais une copie séparée),
+// plus présentation/horaires/réseaux sociaux, propres à cette page.
+// ---------------------------------------------------------------------------
+
+export interface ReseauSocial {
+  plateforme: string;
+  lien: string;
+}
+
+const reseauSocialSchema = z.object({
+  plateforme: z.string().trim().min(1, "Le nom du réseau est requis").max(60),
+  lien: z.string().trim().min(1, "Le lien est requis").max(300),
+});
+
+export const aProposEditSchema = z.object({
+  boutiqueNom: z.string().trim().max(120).default(""),
+  boutiqueAdresse: z.string().trim().max(300).default(""),
+  boutiqueContact: z.string().trim().max(200).default(""),
+  presentation: z.string().trim().max(2000).default(""),
+  horaires: z.string().trim().max(500).default(""),
+  reseauxSociaux: z.array(reseauSocialSchema).max(20, "20 réseaux sociaux maximum").default([]),
+});
+export type AProposEditInput = z.infer<typeof aProposEditSchema>;
+
+export interface AProposDTO {
+  boutiqueNom: string;
+  boutiqueAdresse: string;
+  boutiqueContact: string;
+  presentation: string;
+  horaires: string;
+  reseauxSociaux: ReseauSocial[];
 }
 
 // ---------------------------------------------------------------------------

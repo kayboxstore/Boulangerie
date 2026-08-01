@@ -117,6 +117,9 @@ export function ParametresPage() {
       setErreurParams(null);
       setSuccesParams(true);
       queryClient.invalidateQueries({ queryKey: ["parametres"] });
+      // Nom/adresse/contact sont partagés avec À propos (3.12) — même donnée,
+      // pas une copie séparée : sa page doit refléter ce changement aussi.
+      queryClient.invalidateQueries({ queryKey: ["apropos"] });
     },
     onError: (e) => {
       setSuccesParams(false);
