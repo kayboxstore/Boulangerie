@@ -324,6 +324,12 @@ Comptes utilisateurs rattachés à un rôle, hiérarchie et matrice de permissio
 
 Session unique (nouveau) : un compte ne peut pas être connecté sur 2 appareils en même temps. Une nouvelle connexion invalide automatiquement la session précédente ; l'ancien appareil est déconnecté (en temps réel s'il est encore ouvert, sinon à sa prochaine requête) avec un message explicite — pas une simple expiration silencieuse.
 
+Identifiant de connexion issu de Travailleurs (obligatoire pour TOUT compte, y compris DG et Admins, après réinitialisation) : créer un compte Utilisateur ne se fait plus en saisissant un email librement — il faut sélectionner une fiche Travailleur (3.18) dont l'email professionnel est actif (généré et vérifié via Cloudflare Email Routing). L'email du compte est automatiquement celui de cette fiche, non modifiable à la création.
+
+Réaffectation d'équipe (nouveau) : changer le rôle/équipe d'un compte existant se fait directement dans Équipe (ex. un Chargé des commandes qui passe à la Caisse) — l'identifiant de connexion (email pro) ne change pas, seules les permissions changent. La personne concernée reçoit une notification temps réel (« Vous êtes maintenant affecté à [Équipe] ») au moment du changement. Déjà tracé au Journal d'audit comme toute autre modification.
+
+Assistant de premier lancement (nouveau) : quand la base ne contient aucun compte Utilisateur (premier démarrage, ou après une réinitialisation), l'app remplace l'écran de connexion par un assistant guidé : création de la première fiche Travailleur (celle du futur Admin Principal), saisie de son email de destination, génération et vérification de l'email pro via Cloudflare, puis création automatique de son compte (rôle Administrateur, Principal). Aucune connexion possible avant que ce parcours soit terminé.
+
 ### 3.8 Tableau de bord & rapports — ultra moderne & sophistiqué
 Registre de caisse du jour/semaine/mois, activité par module, export comptable (CSV). Contenu strictement filtré selon le rôle connecté et sa matrice de permissions (section 2) — aucune action de modification visible pour le DG.
 
@@ -412,6 +418,13 @@ Sauvegardes (nouveau) :
 - Tableau de bord de maintenance : dernière sauvegarde (date, statut), prochaine sauvegarde prévue, bouton de sauvegarde manuelle, historique récent.
 
 Décision (remplace l'envoi vers Google Drive prévu initialement) : en usage réel sur l'hébergeur choisi (Render, offre gratuite), un compte de service Google Cloud s'est heurté à une limitation de Google — les comptes de service n'ont pas de quota de stockage propre sur Google Drive, seuls les Drive partagés (Workspace) en offrent un, ce qui alourdit la mise en place pour un gain incertain. Décision : abandon de Google Drive comme destination de sauvegarde. La sauvegarde automatique reste quotidienne mais écrit désormais localement sur le serveur, complétée par un téléchargement facile vers un support externe (clé USB/disque externe) — à la fois pour la sauvegarde automatique la plus récente et pour une sauvegarde manuelle à la demande. Le stockage local du serveur n'étant pas garanti de survivre à un redéploiement, l'écran État système avertit explicitement de cette limite et encourage un téléchargement régulier vers un support externe.
+
+Réinitialisation de la base (nouveau, Admin Principal uniquement — irréversible) :
+- Confirmation par saisie d'un mot précis avant activation du bouton (pas un simple clic)
+- Champ « raison » optionnel
+- Déclenche automatiquement une sauvegarde (pas juste vérifiée comme existante) avant d'effacer quoi que ce soit — la raison est stockée dans les métadonnées de cette sauvegarde spécifique, seule trace qui survit puisque le Journal d'audit lui-même est effacé par l'opération
+- Efface toutes les données transactionnelles et tous les comptes (Commandes, Caisse, Stocks/mouvements, Production, Fournisseurs, Travailleurs, Utilisateurs, Assistant, notifications, journal d'audit) ; conserve la configuration structurelle (rôles/permissions, types de clients et leurs prix, catalogue produits, paramètres boutique)
+- Après réinitialisation, l'app redémarre automatiquement sur l'Assistant de premier lancement (3.7)
 
 ### 3.16 Approbations *(Admin Principal uniquement)*
 File d'attente des demandes soumises par les Admins secondaires pour les tâches critiques (voir section 2). Chaque demande : type d'action, demandeur, données de l'action, date, statut. Notification temps réel instantanée à l'Admin Principal dès qu'une demande arrive ; approbation ou rejet en un clic, avec effet immédiat sur l'action en attente.
