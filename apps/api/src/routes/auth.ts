@@ -66,6 +66,18 @@ authRouter.post("/login", async (req, res, next) => {
   }
 });
 
+// Assistant de premier lancement (section 3.7, nouveau) — accessible sans
+// authentification : c'est justement ce qui décide si l'écran de connexion
+// normal ou l'assistant guidé doit s'afficher.
+authRouter.get("/etat-initial", async (_req, res, next) => {
+  try {
+    const nombreComptes = await prisma.utilisateur.count();
+    res.json({ premierLancement: nombreComptes === 0 });
+  } catch (e) {
+    next(e);
+  }
+});
+
 authRouter.get("/me", requireAuth, async (req, res, next) => {
   try {
     res.json({ utilisateur: req.utilisateur, langueDefautBoutique: await langueDefautBoutique() });

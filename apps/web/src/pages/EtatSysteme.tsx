@@ -12,18 +12,34 @@ import {
   Loader2,
   RefreshCw,
   Server,
+  Trash2,
   Usb,
   Users,
   XCircle,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { formatOctets, type EtatSystemeDTO, type SauvegardeDTO } from "@lomoto/shared";
+import {
+  formatOctets,
+  MOT_CONFIRMATION_REINITIALISATION,
+  type EtatSystemeDTO,
+  type SauvegardeDTO,
+} from "@lomoto/shared";
 import { api, getToken } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChargementModule } from "@/components/ChargementModule";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const formatDate = (iso: string) => new Date(iso).toLocaleString();
 
@@ -119,6 +135,25 @@ export function EtatSystemePage() {
   const diagnosticIA = useMutation({
     mutationFn: () =>
       api<{ modele: string; cleConfiguree: boolean; ok: boolean; details: string }>("/api/assistant/diagnostic-ia"),
+  });
+
+  // --- Réinitialisation de la base (section 3.15, nouveau) -------------------
+  // Irréversible : confirmation par saisie EXACTE du mot (pas un simple clic).
+  const [dialogReinit, setDialogReinit] = useState(false);
+  const [motReinit, setMotReinit] = useState("");
+  const [raisonReinit, setRaisonReinit] = useState("");
+  const [erreurReinit, setErreurReinit] = useState<string | null>(null);
+
+  const reinitialiser = useMutation({
+    mutationFn: () =>
+      api("/api/etat-systeme/reinitialiser", {
+        method: "POST",
+        body: JSON.stringify({ motConfirmation: motReinit, raison: raisonReinit.trim() || undefined }),
+      }),
+    onError: (e) => setErreurReinit(e instanceof Error ? e.message : t("etatSysteme.resetError")),
+    // Pas de onSuccess : la déconnexion (tous les comptes viennent de
+    // disparaître) est déjà déclenchée par l'événement Socket.io
+    // `sessionInvalidee`, reçu par ce même onglet comme par tout autre.
   });
 
   if (isLoading) return <ChargementModule />;
@@ -443,6 +478,34 @@ export function EtatSystemePage() {
         </CardContent>
       </Card>
 
+      {/* --- Réinitialisation de la base (section 3.15, nouveau) — Admin Principal uniquement */}
+      {utilisateur?.estAdminPrincipal && (
+        <Card className="border-terracotta/40">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-terracotta">
+              <Trash2 className="h-4 w-4" />
+              {t("etatSysteme.resetTitle")}
+            </CardTitle>
+            <CardDescription>{t("etatSysteme.resetDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="outline"
+              className="border-terracotta text-terracotta hover:bg-terracotta/10 hover:text-terracotta"
+              onClick={() => {
+                setMotReinit("");
+                setRaisonReinit("");
+                setErreurReinit(null);
+                setDialogReinit(true);
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+              {t("etatSysteme.resetButton")}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {etat && (
         <p className="text-center text-xs text-muted-foreground">
           {t("etatSysteme.measuredAt", {
@@ -450,6 +513,65 @@ export function EtatSystemePage() {
           })}
         </p>
       )}
+
+      {/* Dialog réinitialisation — confirmation par saisie exacte du mot, pas un simple clic. */}
+      <Dialog open={dialogReinit} onOpenChange={setDialogReinit}>
+        <DialogContent>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              reinitialiser.mutate();
+            }}
+            className="space-y-4"
+          >
+            <DialogHeader>
+              <DialogTitle className="text-terracotta">{t("etatSysteme.resetDialogTitle")}</DialogTitle>
+              <DialogDescription>{t("etatSysteme.resetDialogDesc")}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <p className="rounded-md border border-terracotta/40 bg-terracotta/10 px-3 py-2 text-sm text-terracotta">
+                {t("etatSysteme.resetWarning")}
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="reinit-raison">{t("etatSysteme.resetReasonLabel")}</Label>
+                <Input id="reinit-raison" value={raisonReinit} onChange={(e) => setRaisonReinit(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="reinit-mot">
+                  {t("etatSysteme.resetConfirmLabel", { mot: MOT_CONFIRMATION_REINITIALISATION })}
+                </Label>
+                <Input
+                  id="reinit-mot"
+                  value={motReinit}
+                  onChange={(e) => setMotReinit(e.target.value)}
+                  placeholder={MOT_CONFIRMATION_REINITIALISATION}
+                  autoComplete="off"
+                  required
+                />
+              </div>
+            </div>
+            {erreurReinit && (
+              <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
+                {erreurReinit}
+              </p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDialogReinit(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="submit"
+                variant="cta"
+                className="bg-terracotta hover:bg-terracotta/90"
+                disabled={reinitialiser.isPending || motReinit !== MOT_CONFIRMATION_REINITIALISATION}
+              >
+                {reinitialiser.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {t("etatSysteme.resetConfirmButton")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -47,20 +47,26 @@ const EXECUTEURS: Record<TypeActionCritique, Executeur> = {
     return { message: `Compte « ${compte.nom} » supprimé` };
   },
 
-  CREER_COMPTE_ADMIN: async ({ nom, email, roleId, motDePasseHash }) => {
+  CREER_COMPTE_ADMIN: async ({ nom, email, roleId, motDePasseHash, travailleurId }) => {
     const existant = await prisma.utilisateur.findUnique({ where: { email: email as string } });
     if (existant) throw new ErreurAction(409, "Un compte utilise déjà cette adresse e-mail");
     const nbAdmins = await prisma.utilisateur.count({ where: { role: { nom: ROLE_ADMINISTRATEUR } } });
     if (nbAdmins >= MAX_COMPTES_ADMIN) {
       throw new ErreurAction(409, `Limite atteinte : au plus ${MAX_COMPTES_ADMIN} comptes Administrateur`);
     }
-    const compte = await prisma.utilisateur.create({
-      data: {
-        nom: nom as string,
-        email: email as string,
-        roleId: roleId as string,
-        motDePasseHash: motDePasseHash as string,
-      },
+    const compte = await prisma.$transaction(async (tx) => {
+      const c = await tx.utilisateur.create({
+        data: {
+          nom: nom as string,
+          email: email as string,
+          roleId: roleId as string,
+          motDePasseHash: motDePasseHash as string,
+        },
+      });
+      // Identifiant de connexion issu de Travailleurs (section 3.7) : la fiche
+      // d'origine reste liée au compte qu'elle vient de générer.
+      if (travailleurId) await tx.travailleur.update({ where: { id: travailleurId as string }, data: { utilisateurId: c.id } });
+      return c;
     });
     return { message: `Compte Administrateur « ${compte.nom} » créé` };
   },

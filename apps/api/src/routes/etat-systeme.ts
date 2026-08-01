@@ -1,6 +1,8 @@
 import { Router } from "express";
 import {
+  MESSAGE_BASE_REINITIALISEE,
   NOM_APP,
+  reinitialisationSchema,
   VERSION_APP,
   type EtatSystemeDTO,
   type SauvegardeDTO,
@@ -24,6 +26,8 @@ import {
   prochaineSauvegarde,
   TAILLE_HISTORIQUE,
 } from "../services/planificateurSauvegarde.js";
+import { ErreurReinitialisation, reinitialiserBase } from "../services/reinitialisation.js";
+import { getIo } from "../lib/realtime.js";
 
 export const etatSystemeRouter = Router();
 
@@ -209,6 +213,41 @@ etatSystemeRouter.get("/sauvegarde/derniere-locale", async (req, res, next) => {
     res.setHeader("Content-Length", String(contenu.length));
     res.end(contenu);
   } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * Réinitialisation de la base (section 3.15) — Admin Principal uniquement,
+ * irréversible. Confirmation par saisie exacte d'un mot (validée par
+ * reinitialisationSchema), pas un simple clic. Déclenche systématiquement une
+ * sauvegarde de sûreté avant d'effacer quoi que ce soit (voir
+ * services/reinitialisation.ts) : si elle échoue, rien n'est effacé.
+ *
+ * Une fois terminée, TOUS les comptes ont disparu — y compris celui qui vient
+ * d'agir : on déconnecte immédiatement toute session ouverte (comme la
+ * session unique, 3.7) plutôt que de laisser chacun le découvrir à sa
+ * prochaine requête.
+ */
+etatSystemeRouter.post("/reinitialiser", async (req, res, next) => {
+  if (!req.utilisateur!.estAdminPrincipal) {
+    return res.status(403).json({ erreur: "Seul l'Administrateur principal peut réinitialiser la base" });
+  }
+  try {
+    const parsed = reinitialisationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+
+    const resultat = await reinitialiserBase(parsed.data.raison);
+
+    const io = getIo();
+    io.emit("sessionInvalidee", { message: MESSAGE_BASE_REINITIALISEE });
+    io.disconnectSockets(true);
+
+    res.json({ ok: true, sauvegardeId: resultat.sauvegardeId });
+  } catch (e) {
+    if (e instanceof ErreurReinitialisation) return res.status(e.status).json({ erreur: e.message });
     next(e);
   }
 });

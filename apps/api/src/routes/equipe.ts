@@ -12,6 +12,7 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { traiterActionCritique } from "../services/actionsCritiques.js";
+import { busEvenements } from "../lib/events.js";
 
 export const equipeRouter = Router();
 
@@ -63,21 +64,34 @@ equipeRouter.get("/", requirePermission("EQUIPE", "LECTURE"), async (_req, res, 
   }
 });
 
-// Création d'un compte réel : nom, e-mail, rôle, mot de passe initial défini
-// par l'Admin (section 3.7).
+// Création d'un compte réel (section 3.7, nouveau) : plus d'email saisi
+// librement — on sélectionne une fiche Travailleur dont l'email pro est actif
+// (3.18), qui devient l'identifiant de connexion, non modifiable. Équipe
+// (rôle) et mot de passe initial restent définis par l'Admin.
 equipeRouter.post("/", requirePermission("EQUIPE", "ECRITURE"), async (req, res, next) => {
   try {
     const parsed = compteCreateSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const { nom, email, roleId, motDePasse } = parsed.data;
+    const { travailleurId, roleId, motDePasse } = parsed.data;
+
+    const travailleur = await prisma.travailleur.findUnique({ where: { id: travailleurId } });
+    if (!travailleur) return res.status(404).json({ erreur: "Fiche Travailleur introuvable" });
+    if (travailleur.utilisateurId) {
+      return res.status(409).json({ erreur: "Cette fiche a déjà un compte de connexion" });
+    }
+    if (travailleur.emailProStatut !== "ACTIF" || !travailleur.emailProAdresse) {
+      return res.status(409).json({ erreur: "L'adresse email professionnelle de cette fiche n'est pas encore active" });
+    }
+    const nom = travailleur.nom;
+    const email = travailleur.emailProAdresse;
 
     const existant = await prisma.utilisateur.findUnique({ where: { email } });
     if (existant) return res.status(409).json({ erreur: "Un compte utilise déjà cette adresse e-mail" });
 
     const role = await prisma.role.findUnique({ where: { id: roleId } });
-    if (!role) return res.status(404).json({ erreur: "Rôle introuvable" });
+    if (!role) return res.status(404).json({ erreur: "L'équipe sélectionnée est introuvable" });
 
     const motDePasseHash = await bcrypt.hash(motDePasse, 10);
 
@@ -90,15 +104,16 @@ equipeRouter.post("/", requirePermission("EQUIPE", "ECRITURE"), async (req, res,
       const r = await traiterActionCritique(
         req,
         "CREER_COMPTE_ADMIN",
-        { nom, email, roleId, motDePasseHash },
+        { nom, email, roleId, motDePasseHash, travailleurId: travailleur.id },
         `créer le compte Administrateur « ${nom} » (${email})`,
       );
       return res.status(r.http).json(r.body);
     }
 
-    const compte = await prisma.utilisateur.create({
-      data: { nom, email, roleId, motDePasseHash },
-      include: INCLUDE_COMPTE,
+    const compte = await prisma.$transaction(async (tx) => {
+      const c = await tx.utilisateur.create({ data: { nom, email, roleId, motDePasseHash }, include: INCLUDE_COMPTE });
+      await tx.travailleur.update({ where: { id: travailleur.id }, data: { utilisateurId: c.id } });
+      return c;
     });
     res.status(201).json({ compte: versCompteDTO(compte) });
   } catch (e) {
@@ -132,6 +147,12 @@ equipeRouter.put("/:id/activation", requirePermission("EQUIPE", "ECRITURE"), asy
   }
 });
 
+// Réaffectation d'équipe (section 3.7, nouveau) : changer le rôle d'un compte
+// existant se fait ici. L'identifiant de connexion (email pro) ne change
+// jamais — compteUpdateSchema n'accepte plus que nom/roleId. Le titulaire
+// reçoit une notification temps réel dès que son équipe change ; la
+// modification est déjà tracée au Journal d'audit (extension Prisma centrale,
+// lib/audit.ts, branchée sur `update`).
 equipeRouter.put("/:id", requirePermission("EQUIPE", "ECRITURE"), async (req, res, next) => {
   try {
     const parsed = compteUpdateSchema.safeParse(req.body);
@@ -141,19 +162,15 @@ equipeRouter.put("/:id", requirePermission("EQUIPE", "ECRITURE"), async (req, re
     const existant = await prisma.utilisateur.findUnique({ where: { id: req.params.id }, include: INCLUDE_COMPTE });
     if (!existant) return res.status(404).json({ erreur: "Compte introuvable" });
 
-    const { nom, email, roleId } = parsed.data;
+    const { nom, roleId } = parsed.data;
+    const equipeChangee = !!roleId && roleId !== existant.roleId;
 
-    if (email && email !== existant.email) {
-      const doublon = await prisma.utilisateur.findUnique({ where: { email } });
-      if (doublon) return res.status(409).json({ erreur: "Un compte utilise déjà cette adresse e-mail" });
-    }
-
-    if (roleId && roleId !== existant.roleId) {
+    if (equipeChangee) {
       // L'Admin Principal garde son rôle Administrateur tant que le statut
       // Principal n'a pas été transféré (index unique en base, retrofit).
       if (existant.estAdminPrincipal) {
         return res.status(409).json({
-          erreur: "Transférez d'abord le statut d'Administrateur principal avant de changer ce rôle",
+          erreur: "Transférez d'abord le statut d'Administrateur principal avant de changer cette équipe",
         });
       }
       const quota = await verifierQuotaAdmins(roleId, existant.id);
@@ -162,9 +179,23 @@ equipeRouter.put("/:id", requirePermission("EQUIPE", "ECRITURE"), async (req, re
 
     const compte = await prisma.utilisateur.update({
       where: { id: existant.id },
-      data: { nom, email, roleId },
+      data: { nom, roleId },
       include: INCLUDE_COMPTE,
     });
+
+    if (equipeChangee) {
+      busEvenements.emettreEvenement({
+        type: "REAFFECTATION_EQUIPE",
+        module: "EQUIPE",
+        emetteurId: req.utilisateur!.id,
+        evenementRef: compte.id,
+        priorite: "HAUTE",
+        destinataireIdsDirects: [compte.id],
+        message: `Vous êtes maintenant affecté à ${compte.role.nom}`,
+        donnees: { compteId: compte.id, roleId: compte.role.id },
+      });
+    }
+
     res.json({ compte: versCompteDTO(compte) });
   } catch (e) {
     next(e);

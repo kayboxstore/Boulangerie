@@ -10,6 +10,7 @@ import {
   type DelegationDTO,
   type Module,
   type ResultatActionCritique,
+  type TravailleurDTO,
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -66,9 +67,20 @@ export function EquipePage() {
     queryKey: ["roles"],
     queryFn: () => api<{ roles: RoleListe[] }>("/api/roles"),
   });
+  // Identifiant de connexion issu de Travailleurs (section 3.7, nouveau) :
+  // seules les fiches à email pro ACTIF et pas encore liées à un compte
+  // peuvent servir à créer un compte.
+  const { data: travailleursData } = useQuery({
+    queryKey: ["travailleurs"],
+    queryFn: () => api<{ travailleurs: TravailleurDTO[] }>("/api/travailleurs"),
+    enabled: peutEcrire("EQUIPE"),
+  });
 
   const comptes = comptesData?.comptes ?? [];
   const roles = rolesData?.roles ?? [];
+  const travailleursEligibles = (travailleursData?.travailleurs ?? []).filter(
+    (tr) => tr.emailProStatut === "ACTIF" && !tr.compte,
+  );
 
   const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["equipe"] });
 
@@ -76,7 +88,7 @@ export function EquipePage() {
   const [dialogCompte, setDialogCompte] = useState(false);
   const [compteEdite, setCompteEdite] = useState<CompteDTO | null>(null);
   const [nom, setNom] = useState("");
-  const [email, setEmail] = useState("");
+  const [travailleurId, setTravailleurId] = useState("");
   const [roleId, setRoleId] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
@@ -84,7 +96,7 @@ export function EquipePage() {
   function ouvrirCompte(c: CompteDTO | null) {
     setCompteEdite(c);
     setNom(c?.nom ?? "");
-    setEmail(c?.email ?? "");
+    setTravailleurId("");
     setRoleId(c?.role.id ?? "");
     setMotDePasse("");
     setErreur(null);
@@ -96,11 +108,11 @@ export function EquipePage() {
       compteEdite
         ? api(`/api/equipe/${compteEdite.id}`, {
             method: "PUT",
-            body: JSON.stringify({ nom: nom.trim(), email: email.trim(), roleId }),
+            body: JSON.stringify({ nom: nom.trim(), roleId }),
           })
         : api("/api/equipe", {
             method: "POST",
-            body: JSON.stringify({ nom: nom.trim(), email: email.trim(), roleId, motDePasse }),
+            body: JSON.stringify({ travailleurId, roleId, motDePasse }),
           }),
     onSuccess: (res) => {
       setDialogCompte(false);
@@ -540,16 +552,42 @@ export function EquipePage() {
               <DialogDescription>{compteEdite ? t("equipe.editHelp") : t("equipe.createHelp")}</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
+              {compteEdite ? (
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="compte-nom">{t("common.name")}</Label>
+                    <Input id="compte-nom" value={nom} onChange={(e) => setNom(e.target.value)} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("common.email")}</Label>
+                    <p className="rounded-md border bg-secondary/40 px-3 py-2 text-sm text-muted-foreground">
+                      {compteEdite.email}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="compte-travailleur">{t("equipe.workerFicheLabel")}</Label>
+                  <NativeSelect
+                    id="compte-travailleur"
+                    value={travailleurId}
+                    onChange={(e) => setTravailleurId(e.target.value)}
+                    required
+                  >
+                    <option value="">{t("equipe.chooseWorkerFiche")}</option>
+                    {travailleursEligibles.map((tr) => (
+                      <option key={tr.id} value={tr.id}>
+                        {tr.nom} — {tr.emailProAdresse}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                  {travailleursEligibles.length === 0 && (
+                    <p className="text-xs text-muted-foreground">{t("equipe.noEligibleWorkerFiche")}</p>
+                  )}
+                </div>
+              )}
               <div className="space-y-1.5">
-                <Label htmlFor="compte-nom">{t("common.name")}</Label>
-                <Input id="compte-nom" value={nom} onChange={(e) => setNom(e.target.value)} required />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="compte-email">{t("common.email")}</Label>
-                <Input id="compte-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="compte-role">{t("common.role")}</Label>
+                <Label htmlFor="compte-role">{t("equipe.role")}</Label>
                 <NativeSelect id="compte-role" value={roleId} onChange={(e) => setRoleId(e.target.value)} required>
                   <option value="">{t("equipe.chooseRole")}</option>
                   {roles.map((r) => (

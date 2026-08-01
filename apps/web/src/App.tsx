@@ -1,4 +1,4 @@
-import { lazy, useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 import type { Module } from "@lomoto/shared";
@@ -12,6 +12,12 @@ import { EcranDemarrage, splashDejaVu } from "@/components/EcranDemarrage";
 // leur code (et les grosses libs qu'ils tirent, ex. Recharts pour le Dashboard)
 // n'entre pas dans le chunk initial et n'est récupéré qu'à la navigation.
 import { LoginPage } from "@/pages/Login";
+// Assistant de premier lancement (3.7) : lui aussi pré-authentification,
+// mais rarement affiché (une seule fois dans la vie de l'app) — lazy est
+// approprié ici, contrairement à LoginPage.
+const PremierLancementPage = lazy(() =>
+  import("@/pages/PremierLancement").then((m) => ({ default: m.PremierLancementPage })),
+);
 
 // `.then(...)` : les pages exportent des composants nommés, pas un export default.
 const DashboardPage = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.DashboardPage })));
@@ -48,7 +54,7 @@ function RequiertEcriture({ module, children }: { module: Module; children: Reac
 }
 
 export default function App() {
-  const { utilisateur, chargement } = useAuth();
+  const { utilisateur, chargement, premierLancement } = useAuth();
 
   // Écran de démarrage (3.8) : au PREMIER chargement de la session seulement.
   // Il se superpose à l'app, qui se monte et charge ses données derrière — la
@@ -68,6 +74,19 @@ export default function App() {
   }
 
   if (!utilisateur) {
+    // Assistant de premier lancement (3.7) : base sans aucun compte —
+    // remplace entièrement l'écran de connexion, aucune route accessible
+    // avant la fin du parcours (finaliser() → login() fait sortir de cette branche).
+    if (premierLancement) {
+      return (
+        <>
+          {splash}
+          <Suspense fallback={<ChargementModule plein />}>
+            <PremierLancementPage />
+          </Suspense>
+        </>
+      );
+    }
     return (
       <>
         {splash}

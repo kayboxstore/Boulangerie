@@ -128,6 +128,15 @@ export interface LoginResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Assistant de premier lancement (section 3.7, nouveau) — DTO ici, schémas de
+// saisie plus bas (après la déclaration de `dateISO`, section Travailleurs).
+// ---------------------------------------------------------------------------
+
+export interface EtatInitialDTO {
+  premierLancement: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Notifications temps réel (section 3.10)
 // ---------------------------------------------------------------------------
 
@@ -154,6 +163,9 @@ export const TYPES_EVENEMENT = [
   // Assistant : une conversation vient d'être escaladée à un humain (bouton
   // "Parler à un Admin", ou automatiquement si l'IA échoue).
   "ESCALADE_SUPPORT",
+  // Réaffectation d'équipe (section 3.7) : le rôle/équipe d'un compte change —
+  // notification au titulaire du compte concerné.
+  "REAFFECTATION_EQUIPE",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -192,6 +204,10 @@ export interface ClientToServerEvents {}
 export const CODE_SESSION_REMPLACEE = "SESSION_REMPLACEE" as const;
 export const MESSAGE_SESSION_REMPLACEE =
   "Vous avez été déconnecté(e) car votre compte a été utilisé sur un autre appareil";
+
+// Réinitialisation de la base (section 3.15) : tous les comptes disparaissent
+// d'un coup — même canal `sessionInvalidee` que la session unique, message dédié.
+export const MESSAGE_BASE_REINITIALISEE = "La base de données vient d'être réinitialisée par un administrateur.";
 
 // ---------------------------------------------------------------------------
 // Commandes clients & avances (section 3.4)
@@ -723,19 +739,23 @@ export const MAX_COMPTES_ADMIN = 3;
 export const ROLE_ADMINISTRATEUR = "Administrateur";
 export const ROLE_DIRECTEUR_GENERAL = "Directeur Général";
 
+// Identifiant de connexion issu de Travailleurs (section 3.7, nouveau) : créer
+// un compte ne se fait plus en saisissant un email librement — on sélectionne
+// une fiche Travailleur dont l'email professionnel est actif (3.18). L'email
+// du compte est celui de cette fiche, non modifiable à la création.
 export const compteCreateSchema = z.object({
-  nom: z.string().trim().min(1, "Le nom est requis").max(120),
-  email: z.string().email("Adresse e-mail invalide").max(160),
-  roleId: z.string().min(1, "Le rôle est requis"),
+  travailleurId: z.string().min(1, "La fiche Travailleur est requise"),
+  roleId: z.string().min(1, "L'équipe est requise"),
   // Mot de passe initial défini par l'Admin, changé ensuite par l'employé
   // depuis « Mon profil ».
   motDePasse: z.string().min(8, "Le mot de passe initial doit faire au moins 8 caractères").max(100),
 });
 export type CompteCreateInput = z.infer<typeof compteCreateSchema>;
 
+// L'email n'est plus modifiable ici non plus : il resterait sinon possible de
+// le désynchroniser de la fiche Travailleur dont il provient.
 export const compteUpdateSchema = z.object({
   nom: z.string().trim().min(1, "Le nom est requis").max(120).optional(),
-  email: z.string().email("Adresse e-mail invalide").max(160).optional(),
   roleId: z.string().min(1).optional(),
 });
 export type CompteUpdateInput = z.infer<typeof compteUpdateSchema>;
@@ -858,6 +878,25 @@ export const travailleurCreateSchema = z.object({
   utilisateurId: z.string().optional(),
 });
 export type TravailleurCreateInput = z.infer<typeof travailleurCreateSchema>;
+
+// Assistant de premier lancement (section 3.7, nouveau) — endpoints publics
+// (aucune authentification possible tant qu'aucun compte n'existe), mais
+// chaque appel revérifie côté serveur que la base est bien encore vide.
+// Sous-ensemble volontairement minimal de travailleurCreateSchema : ne crée
+// que la fiche du futur Admin Principal.
+export const premierLancementTravailleurSchema = z.object({
+  nom: z.string().trim().min(1, "Le nom est requis").max(120),
+  telephone: z.string().trim().max(30).optional(),
+  poste: z.string().trim().min(1, "Le poste est requis").max(80),
+  dateEmbauche: dateISO,
+});
+export type PremierLancementTravailleurInput = z.infer<typeof premierLancementTravailleurSchema>;
+
+export const premierLancementFinaliserSchema = z.object({
+  travailleurId: z.string().min(1, "La fiche Travailleur est requise"),
+  motDePasse: z.string().min(8, "Le mot de passe initial doit faire au moins 8 caractères").max(100),
+});
+export type PremierLancementFinaliserInput = z.infer<typeof premierLancementFinaliserSchema>;
 
 export const travailleurUpdateSchema = travailleurCreateSchema.partial().extend({
   // null = délier explicitement le compte.
@@ -1303,6 +1342,22 @@ export interface EtatSystemeDTO {
   assistantIaActif: boolean;
   horodatage: string;
 }
+
+// ---------------------------------------------------------------------------
+// Réinitialisation de la base (section 3.15, nouveau) — Admin Principal
+// uniquement, irréversible. Confirmation par saisie exacte d'un mot plutôt
+// qu'un simple clic.
+// ---------------------------------------------------------------------------
+
+export const MOT_CONFIRMATION_REINITIALISATION = "LOMOTO";
+
+export const reinitialisationSchema = z.object({
+  motConfirmation: z.string().refine((v) => v === MOT_CONFIRMATION_REINITIALISATION, {
+    message: `Tapez exactement « ${MOT_CONFIRMATION_REINITIALISATION} » pour confirmer`,
+  }),
+  raison: z.string().trim().max(500).optional(),
+});
+export type ReinitialisationInput = z.infer<typeof reinitialisationSchema>;
 
 // ---------------------------------------------------------------------------
 // Phase 11 — Journal d'audit (section 3.17)

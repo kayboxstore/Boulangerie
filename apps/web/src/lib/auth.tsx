@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import type { Langue, LoginResponse, Module, UtilisateurDTO } from "@lomoto/shared";
+import type { EtatInitialDTO, Langue, LoginResponse, Module, UtilisateurDTO } from "@lomoto/shared";
 import { aAcces, LANGUE_DEFAUT_PAR_DEFAUT, langueEffective } from "@lomoto/shared";
 import { api, getToken, setToken, surSessionRemplacee } from "./api";
 import { appliquerLangue } from "@/i18n";
@@ -21,6 +21,9 @@ interface AuthContextValue {
   /** Déconnecte immédiatement avec un message dédié (401 SESSION_REMPLACEE ou
    *  événement Socket.io `sessionInvalidee`). */
   deconnexionForcee: (message: string) => void;
+  /** Assistant de premier lancement (3.7) : true si la base ne contient aucun
+   *  compte Utilisateur (premier démarrage, ou juste après une réinitialisation). */
+  premierLancement: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -30,21 +33,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [langueDefautBoutique, setLangueDefautBoutique] = useState<Langue>(LANGUE_DEFAUT_PAR_DEFAUT);
   const [chargement, setChargement] = useState(true);
   const [messageSessionRemplacee, setMessageSessionRemplacee] = useState<string | null>(null);
+  const [premierLancement, setPremierLancement] = useState(false);
 
   // Applique la langue effective : préférence de l'utilisateur, sinon boutique.
   const appliquer = useCallback((u: UtilisateurDTO | null, defautBoutique: Langue) => {
     appliquerLangue(langueEffective(u?.languePreferee ?? null, defautBoutique));
   }, []);
 
+  // Assistant de premier lancement (3.7) : revérifié après toute déconnexion
+  // forcée (ex. réinitialisation de la base, section 3.15) — le premier
+  // chargement seul ne suffit pas, l'état peut changer en cours de session.
+  const rafraichirEtatInitial = useCallback(async () => {
+    try {
+      const r = await api<EtatInitialDTO>("/api/auth/etat-initial");
+      setPremierLancement(r.premierLancement);
+    } catch {
+      // Au pire, l'écran de connexion normal reste affiché.
+    }
+  }, []);
+
   useEffect(() => {
     if (!getToken()) {
       // Pré-connexion : la page de connexion suit la langue par défaut boutique.
-      api<{ langueDefaut: Langue }>("/api/auth/langue-defaut")
-        .then((r) => {
-          setLangueDefautBoutique(r.langueDefaut);
-          appliquer(null, r.langueDefaut);
+      Promise.all([
+        api<{ langueDefaut: Langue }>("/api/auth/langue-defaut").catch(() => null),
+        api<EtatInitialDTO>("/api/auth/etat-initial").catch(() => null),
+      ])
+        .then(([langueRes, etatRes]) => {
+          if (langueRes) {
+            setLangueDefautBoutique(langueRes.langueDefaut);
+            appliquer(null, langueRes.langueDefaut);
+          }
+          if (etatRes) setPremierLancement(etatRes.premierLancement);
         })
-        .catch(() => {})
         .finally(() => setChargement(false));
       return;
     }
@@ -87,8 +108,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUtilisateur(null);
       setMessageSessionRemplacee(message);
       appliquer(null, langueDefautBoutique);
+      // Couvre le cas réinitialisation (3.15) : plus aucun compte n'existe,
+      // l'écran de connexion doit céder la place à l'assistant de premier lancement.
+      rafraichirEtatInitial();
     },
-    [appliquer, langueDefautBoutique],
+    [appliquer, langueDefautBoutique, rafraichirEtatInitial],
   );
 
   // Enregistre l'écouteur de session-remplacée auprès de lib/api.ts (401
@@ -134,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         changerLangue,
         messageSessionRemplacee,
         deconnexionForcee,
+        premierLancement,
       }}
     >
       {children}

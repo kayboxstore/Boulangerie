@@ -717,6 +717,10 @@ model AuditLog {
 enum TypeSauvegarde {
   AUTOMATIQUE
   MANUELLE
+  // Sauvegarde de sûreté déclenchée automatiquement juste avant une
+  // réinitialisation de la base (section 3.15) — écrite localement comme les
+  // autres, donc soumise à la même rétention glissante (services/sauvegardeLocale.ts).
+  REINITIALISATION
 }
 
 enum StatutSauvegarde {
@@ -727,25 +731,29 @@ enum StatutSauvegarde {
 // Journal des tentatives de sauvegarde — écrit AUSSI en cas d'échec : une
 // sauvegarde qui ne s'est pas faite est précisément ce qu'il faut voir.
 model SauvegardeBase {
-  id             String           @id @default(cuid())
-  type           TypeSauvegarde
-  statut         StatutSauvegarde
+  id                     String           @id @default(cuid())
+  type                   TypeSauvegarde
+  statut                 StatutSauvegarde
   // Taille du dump produit ; null si la génération elle-même a échoué. En Int :
   // au-delà de 2 Go, un dump de cette base relèverait d'un autre problème.
-  tailleOctets   Int?
-  nomFichier     String?
+  tailleOctets           Int?
+  nomFichier             String?
   // Destination réelle du fichier : dossier Google Drive (avec son identifiant
   // distant) ou téléchargement direct, qui ne laisse aucune copie sur le serveur.
-  destination    String?
-  idDistant      String?
+  destination            String?
+  idDistant              String?
   // Message d'erreur tel que remonté (pg_dump absent, Drive refusé…), pour que
   // l'Admin puisse agir sans accès aux journaux du serveur.
-  erreur         String?
-  dureeMs        Int?
+  erreur                 String?
+  dureeMs                Int?
   // Auteur d'une sauvegarde manuelle ; null pour les automatiques (pas d'humain).
-  declencheParId String?
-  declenchePar   Utilisateur?     @relation("SauvegardesDeclenchees", fields: [declencheParId], references: [id], onDelete: SetNull)
-  createdAt      DateTime         @default(now())
+  declencheParId         String?
+  declenchePar           Utilisateur?     @relation("SauvegardesDeclenchees", fields: [declencheParId], references: [id], onDelete: SetNull)
+  // Raison saisie par l'Admin Principal avant une réinitialisation (section
+  // 3.15) — seule trace qui survit à l'opération, puisque le Journal d'audit
+  // lui-même est effacé. Nul pour tout autre type de sauvegarde.
+  raisonReinitialisation String?
+  createdAt              DateTime         @default(now())
 
   @@index([createdAt])
   @@index([type, createdAt])
