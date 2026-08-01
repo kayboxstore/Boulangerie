@@ -1,5 +1,5 @@
 import nodemailer, { type Transporter } from "nodemailer";
-import { CREDIT_DEVELOPPEUR, TAGLINE } from "@lomoto/shared";
+import { TAGLINE } from "@lomoto/shared";
 
 /**
  * Envoi d'email (section 3.13) via Gmail / Google Workspace, avec un MOT DE PASSE
@@ -72,7 +72,7 @@ export async function envoyerRapport(params: {
       from: `"Boulangerie Lomoto" <${process.env.GMAIL_USER}>`,
       to: destinataire,
       subject: `Boulangerie Lomoto — ${sujet}`,
-      text: `${corps}\n\n—\nBoulangerie Lomoto · ${TAGLINE}\n${CREDIT_DEVELOPPEUR.mention} · ${CREDIT_DEVELOPPEUR.telephone}`,
+      text: `${corps}\n\n—\nBoulangerie Lomoto · ${TAGLINE}`,
       attachments: [{ filename: nomFichier, content: pdf, contentType: "application/pdf" }],
     });
   } catch (e) {

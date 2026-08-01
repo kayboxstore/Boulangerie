@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { CREDIT_DEVELOPPEUR, TAGLINE, type AlerteDetteDTO, type Module } from "@lomoto/shared";
+import { TAGLINE, type AlerteDetteDTO, type Module } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
@@ -337,17 +337,18 @@ export function Layout() {
           </Suspense>
         </main>
 
-        {/* À l'impression, c'est le pied de page dédié (crédit développeur, 3.13)
-            qui porte la marque — inutile de doubler la mention ici. */}
+        {/* À l'impression, c'est le pied de page dédié ci-dessous qui porte la
+            marque — inutile de doubler la mention ici. */}
         <footer className="no-print px-4 pb-4 text-center text-xs text-muted-foreground">
           Boulangerie Lomoto — <span className="italic">Pain Lia o Tonda</span>
         </footer>
 
         {/* Pied de page des documents imprimés (section 3.13) : rendu ici, au
             niveau de la coquille, pour ne dépendre d'aucun écran — et donc ne
-            jamais hériter d'un conteneur `.no-print`. */}
+            jamais hériter d'un conteneur `.no-print`. Pas de crédit
+            développeur ici (réservé à la page À propos, 3.12). */}
         <div className="lomoto-print-only lomoto-print-credit">
-          Boulangerie Lomoto · {TAGLINE} — {CREDIT_DEVELOPPEUR.mention} · {CREDIT_DEVELOPPEUR.telephone}
+          Boulangerie Lomoto · {TAGLINE}
         </div>
       </div>
     </div>

@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
-import { CREDIT_DEVELOPPEUR, TAGLINE, VERSION_APP, type DocumentExportInput } from "@lomoto/shared";
+import { TAGLINE, VERSION_APP, type DocumentExportInput } from "@lomoto/shared";
 
 // Palette de marque (section 3.8)
 const MARINE = "#0F1923";
@@ -174,15 +174,12 @@ export function construirePdf(document: DocumentExportInput, auteurNom: string):
 
       // Le pied de page doit rester À L'INTÉRIEUR de la zone imprimable : écrire
       // sur la marge basse fait ajouter une page à pdfkit, une par page traitée.
+      // Pas de crédit développeur ici (réservé à la page À propos, 3.12) —
+      // seule la pagination figure en pied de page.
       const bas = doc.page.height - MARGE - 12;
       doc.save();
       doc.moveTo(MARGE, bas - 6).lineTo(doc.page.width - MARGE, bas - 6).strokeColor(OR).lineWidth(0.5).stroke();
       doc.font("Helvetica").fontSize(7.5).fillColor(GRIS);
-      doc.text(`${CREDIT_DEVELOPPEUR.mention} · ${CREDIT_DEVELOPPEUR.telephone}`, MARGE, bas, {
-        width: largeurUtile,
-        align: "left",
-        lineBreak: false,
-      });
       doc.text(`Page ${i + 1} / ${pages.count}`, MARGE, bas, {
         width: largeurUtile,
         align: "right",
