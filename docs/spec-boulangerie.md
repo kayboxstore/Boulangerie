@@ -388,7 +388,7 @@ Vue dédiée aux commandes de type **Maman** (les seules à générer une commis
 **Filtres & affichage :** tri/filtre par date, bouton "Tout afficher".
 
 ### 3.12 À propos
-Page accessible à **tous** les rôles : informations sur Boulangerie Lomoto, logo, tagline "Pain Lia o Tonda", version de l'application, contact. Crédit développeur (nouveau) : « Application créée par Augustin Kayembe » + téléphone +243 980 240 000, affiché ici et en pied de page des rapports exportés (3.13, 3.8).
+Page accessible à **tous** les rôles : informations sur Boulangerie Lomoto, logo, tagline "Pain Lia o Tonda", version de l'application, contact. Crédit développeur (nouveau) : « Application créée par Augustin Kayembe » + téléphone +243 980 240 000, affiché **uniquement ici** — pas sur les rapports exportés (voir 3.13, 3.8).
 
 Modifiable par l'Admin (nouveau) :
 - Nom, contact, adresse : mêmes champs que « Informations boutique » en Paramètres (3.9) — même donnée éditable depuis les deux endroits, pas une copie séparée
@@ -404,7 +404,7 @@ Le DG peut ainsi suivre l'activité de chacun de deux façons : directement dans
 
 *Note d'implémentation* : la portée de ce module (par personne + exceptions nommées) ne se réduit pas à une entrée standard dans `RolePermission` — prévoir un mécanisme dédié (filtre par `créePar`/`enregistrePar` + liste d'exceptions), distinct de la matrice de permissions habituelle. Module technique séparé de 3.8 (Tableau de bord), qui lui reste piloté par la matrice standard.
 
-Export & partage (nouveau, s'applique aussi à 3.8 Tableau de bord et 3.11 Commissions) : chaque utilisateur peut imprimer (impression navigateur, aussi utilisable pour enregistrer en PDF localement), télécharger un vrai PDF généré côté serveur, ou l'envoyer par email à quelqu'un (côté serveur, pièce jointe PDF, via Gmail/Google Workspace). Logo Boulangerie Lomoto en filigrane sur chaque PDF, ainsi que le crédit développeur (3.12) en pied de page.
+Export & partage (nouveau, s'applique aussi à 3.8 Tableau de bord et 3.11 Commissions) : chaque utilisateur peut imprimer (impression navigateur, aussi utilisable pour enregistrer en PDF localement), télécharger un vrai PDF généré côté serveur, ou l'envoyer par email à quelqu'un (côté serveur, pièce jointe PDF, via Gmail/Google Workspace). Logo Boulangerie Lomoto en filigrane sur chaque PDF. *(Modifié — le crédit développeur, 3.12, n'apparaît plus en pied de page des rapports exportés : réservé à la page À propos.)*
 
 ### 3.14 Activation *(Admin uniquement)*
 Active/désactive un compte utilisateur sans le supprimer (ex. employé en congé ou départ temporaire) — l'utilisateur désactivé ne peut plus se connecter, mais son historique reste intact.
