@@ -447,6 +447,12 @@ Adresse email professionnelle (nouveau) : sur une fiche Travailleur, l'Admin sec
 
 Départements & Groupes (nouveau — purement organisationnel, aucune permission associée) : chaque Travailleur est rattaché à un Département (ex. « Département de Production », « Département des finances »), qui a un chef désigné (un Travailleur, simple référence, pas de droits particuliers dans l'app). Un Département peut être subdivisé en Groupes (ex. « Groupe 1 », « Groupe 2 » au sein de la Production) — terme volontairement différent d'« Équipe » pour éviter la confusion avec le nom d'affichage des rôles (3.7).
 
+Salaire & paie (nouveau) : chaque fiche Travailleur porte un salaire mensuel (Fc) et un nombre de jours travaillés par mois — pas une valeur fixe pour tous, certains agents à 26 jours, d'autres à 13 : saisi individuellement à la création de la fiche (obligatoire pour toute nouvelle fiche, comme le Département), il sert de diviseur pour calculer le taux journalier (salaireMensuel / joursTravaillesParMois).
+
+Sanction (nouveau, distincte des déductions automatiques pour absence) : punition ou retenue disciplinaire déclarée sur une fiche — motif, date, et un montant uniquement pour une retenue (jamais pour une punition non financière).
+
+Calcul de paie (nouveau), par Travailleur et par mois : salaire de base (salaireMensuel) − retenue pour absences non justifiées de ce mois (nombre de jours × taux journalier) − retenues disciplinaires (somme des Sanction de type retenue de ce mois) = salaire net. Aucun arrondi intermédiaire : le calcul reste en précision complète jusqu'au résultat final, arrondi au Fc le plus proche une seule fois. Seules les absences au statut « non justifiée » sont retenues — une absence en attente ou justifiée n'a aucun impact. Le calcul est bloqué, avec message explicite, pour un Travailleur dont le salaire ou les jours travaillés ne sont pas encore renseignés (fiches créées avant cette fonctionnalité). Écriture (salaire, jours travaillés, sanctions) réservée à l'Admin secondaire/Principal, comme le reste du module Travailleurs.
+
 ### 3.19 Assistant (accessible à tous les rôles — mode humain, IA désactivée temporairement)
 Chat en temps réel (Socket.io) accessible à tout utilisateur connecté, pour écrire directement à un Admin et envoyer des captures d'écran. (La couche IA Gemini est codée et prête, mais désactivée pour l'instant — bloquée par la facturation Google Cloud à finaliser. Reprise prévue lors d'une prochaine mise à jour, sans travail de reconstruction : juste la réactiver une fois la facturation réglée.)
 
@@ -529,11 +535,12 @@ LigneVente (…)     # ORPHELINE — idem
 ClotureCaisse (…)  # ORPHELINE — pas de clôture dans le registre journalier
 TauxDuJour (id, date, valeur, definiPar)                                  # une valeur par date (3.1)
 DepenseCaisse (id, date, motif, montant, origine, tauxApplique?, sacsUtilises?, enregistrePar)   # origine: MANUELLE | FARINE
-Travailleur (id, nom, téléphone, poste, dateEmbauche, utilisateurId, departementId, groupeId)   # utilisateurId/departementId/groupeId nullable
+Travailleur (id, nom, téléphone, poste, dateEmbauche, utilisateurId, departementId, groupeId, salaireMensuel, joursTravaillesParMois)   # utilisateurId/departementId/groupeId/salaireMensuel/joursTravaillesParMois nullables en base (fiches existantes), obligatoires côté schéma applicatif pour toute NOUVELLE fiche
 Departement (id, nom, chefTravailleurId)   # chefTravailleurId nullable — simple référence, aucune permission (3.18)
 Groupe (id, departementId, nom)            # subdivision d'un Département
 Pointage (id, travailleurId, horodatageEntree, horodatageSortie, enregistrePar)   # horodatageSortie nullable (encore en poste) — date+heure réels, pas juste une date (équipes de nuit)
-Absence (id, travailleurId, date, motif, decisionStatut, decidePar, dateDecision)   # decisionStatut: en_attente | justifiee | non_justifiee ; decidePar/dateDecision nullables tant qu'en attente
+Absence (id, travailleurId, date, motif, declareParId, decisionStatut, decidePar, dateDecision)   # declareParId = auteur de la déclaration, distinct de decidePar qui tranche ; decisionStatut: en_attente | justifiee | non_justifiee ; decidePar/dateDecision nullables tant qu'en attente
+Sanction (id, travailleurId, type, motif, montant, date, enregistrePar)   # type: punition | retenue ; montant nullable (uniquement pour une retenue)
 ```
 
 ## 7. Stack technique recommandée
