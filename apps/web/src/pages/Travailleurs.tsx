@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarCheck, Link2, Pencil, Trash2, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { STATUTS_PRESENCE, type PresenceDTO, type StatutPresence, type TravailleurDTO } from "@lomoto/shared";
+import { STATUTS_PRESENCE, type DepartementDTO, type PresenceDTO, type StatutPresence, type TravailleurDTO } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/components/FeedbackProvider";
@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PanneauEmailPro } from "@/components/PanneauEmailPro";
+import { DepartementsCard } from "@/components/DepartementsCard";
 import { cn } from "@/lib/utils";
 
 function formatDate(iso: string): string {
@@ -61,6 +62,10 @@ export function TravailleursPage() {
     queryFn: () => api<{ comptes: CompteLiable[] }>("/api/travailleurs/comptes-liables"),
     enabled: editable,
   });
+  const { data: departementsData } = useQuery({
+    queryKey: ["departements"],
+    queryFn: () => api<{ departements: DepartementDTO[] }>("/api/departements"),
+  });
 
   // --- Filtres présence (pattern Commandes : travailleur, dates, Tout afficher)
   const [filtreTravailleur, setFiltreTravailleur] = useState("");
@@ -81,6 +86,7 @@ export function TravailleursPage() {
   const travailleurs = travailleursData?.travailleurs ?? [];
   const presences = presencesData?.presences ?? [];
   const comptes = comptesData?.comptes ?? [];
+  const departements = departementsData?.departements ?? [];
   const filtresActifs = !!(filtreTravailleur || filtreDu || filtreAu);
 
   const rafraichir = () => {
@@ -96,6 +102,8 @@ export function TravailleursPage() {
   const [poste, setPoste] = useState("");
   const [dateEmbauche, setDateEmbauche] = useState(aujourdhui());
   const [compteLie, setCompteLie] = useState("");
+  const [departementId, setDepartementId] = useState("");
+  const [groupeId, setGroupeId] = useState("");
   const [erreurFiche, setErreurFiche] = useState<string | null>(null);
 
   function ouvrirFiche(trav: TravailleurDTO | null) {
@@ -105,9 +113,20 @@ export function TravailleursPage() {
     setPoste(trav?.poste ?? "");
     setDateEmbauche(trav?.dateEmbauche ?? aujourdhui());
     setCompteLie(trav?.compte?.id ?? "");
+    setDepartementId(trav?.departement?.id ?? "");
+    setGroupeId(trav?.groupe?.id ?? "");
     setErreurFiche(null);
     setDialogFiche(true);
   }
+
+  // Le groupe choisi doit appartenir au département choisi (3.18) — changer
+  // de département vide donc systématiquement le groupe sélectionné.
+  function changerDepartement(id: string) {
+    setDepartementId(id);
+    setGroupeId("");
+  }
+
+  const groupesDuDepartementChoisi = departements.find((d) => d.id === departementId)?.groupes ?? [];
 
   // Version toujours à jour de la fiche ouverte (le cache react-query se
   // rafraîchit après chaque action email pro) — ficheEditee reste un instantané.
@@ -124,11 +143,21 @@ export function TravailleursPage() {
       return ficheEditee
         ? api(`/api/travailleurs/${ficheEditee.id}`, {
             method: "PUT",
-            body: JSON.stringify({ ...commun, utilisateurId: compteLie || null }),
+            body: JSON.stringify({
+              ...commun,
+              utilisateurId: compteLie || null,
+              departementId: departementId || null,
+              groupeId: groupeId || null,
+            }),
           })
         : api("/api/travailleurs", {
             method: "POST",
-            body: JSON.stringify({ ...commun, utilisateurId: compteLie || undefined }),
+            body: JSON.stringify({
+              ...commun,
+              utilisateurId: compteLie || undefined,
+              departementId,
+              groupeId: groupeId || undefined,
+            }),
           });
     },
     onSuccess: () => {
@@ -203,6 +232,8 @@ export function TravailleursPage() {
         )}
       </div>
 
+      <DepartementsCard travailleurs={travailleurs} editable={editable} />
+
       {/* Roster */}
       <Card>
         <CardHeader>
@@ -217,6 +248,7 @@ export function TravailleursPage() {
                 <TableHead>{t("travailleurs.post")}</TableHead>
                 <TableHead>{t("common.phone")}</TableHead>
                 <TableHead>{t("travailleurs.colHiredOn")}</TableHead>
+                <TableHead>{t("travailleurs.department")}</TableHead>
                 <TableHead>{t("travailleurs.colAppAccount")}</TableHead>
                 {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
               </TableRow>
@@ -228,6 +260,16 @@ export function TravailleursPage() {
                   <TableCell>{trav.poste}</TableCell>
                   <TableCell className="text-muted-foreground">{trav.telephone ?? "—"}</TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(trav.dateEmbauche)}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {trav.departement ? (
+                      <>
+                        {trav.departement.nom}
+                        {trav.groupe && <span className="text-sm"> · {trav.groupe.nom}</span>}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
                   <TableCell>
                     {trav.compte ? (
                       <Badge variant="gold">
@@ -265,7 +307,7 @@ export function TravailleursPage() {
               ))}
               {travailleurs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={editable ? 6 : 5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={editable ? 7 : 6} className="py-8 text-center text-muted-foreground">
                     {t("travailleurs.noWorker")}
                   </TableCell>
                 </TableRow>
@@ -282,6 +324,10 @@ export function TravailleursPage() {
                 </CarteLigneTitre>
                 <CarteLigneChamp label={t("common.phone")} value={trav.telephone ?? "—"} />
                 <CarteLigneChamp label={t("travailleurs.colHiredOn")} value={formatDate(trav.dateEmbauche)} />
+                <CarteLigneChamp
+                  label={t("travailleurs.department")}
+                  value={trav.departement ? `${trav.departement.nom}${trav.groupe ? ` · ${trav.groupe.nom}` : ""}` : "—"}
+                />
                 <CarteLigneChamp
                   label={t("travailleurs.colAppAccount")}
                   value={
@@ -457,6 +503,38 @@ export function TravailleursPage() {
               <div className="space-y-1.5">
                 <Label htmlFor="fiche-embauche">{t("travailleurs.hireDate")}</Label>
                 <Input id="fiche-embauche" type="date" value={dateEmbauche} onChange={(e) => setDateEmbauche(e.target.value)} required />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fiche-departement">{t("travailleurs.department")}</Label>
+                <NativeSelect
+                  id="fiche-departement"
+                  value={departementId}
+                  onChange={(e) => changerDepartement(e.target.value)}
+                  required={!ficheEditee}
+                >
+                  <option value="">{t("travailleurs.departmentOption")}</option>
+                  {departements.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.nom}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fiche-groupe">{t("travailleurs.groupOptional")}</Label>
+                <NativeSelect
+                  id="fiche-groupe"
+                  value={groupeId}
+                  onChange={(e) => setGroupeId(e.target.value)}
+                  disabled={!departementId}
+                >
+                  <option value="">{t("travailleurs.groupNoneOption")}</option>
+                  {groupesDuDepartementChoisi.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.nom}
+                    </option>
+                  ))}
+                </NativeSelect>
               </div>
               <div className="col-span-2 space-y-1.5">
                 <Label htmlFor="fiche-compte">{t("travailleurs.appAccountOptional")}</Label>

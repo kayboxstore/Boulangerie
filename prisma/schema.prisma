@@ -536,14 +536,23 @@ model ProductionDon {
 // le personnel sans accès à l'application (livreur, agent d'entretien…).
 // `utilisateurId` relie optionnellement la fiche à un compte de l'app.
 model Travailleur {
-  id                  String         @id @default(cuid())
-  nom                 String
-  telephone           String?
-  poste               String
-  dateEmbauche        DateTime       @db.Date
-  utilisateurId       String?        @unique
-  utilisateur         Utilisateur?   @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
-  presences           Presence[]
+  id                   String         @id @default(cuid())
+  nom                  String
+  telephone            String?
+  poste                String
+  dateEmbauche         DateTime       @db.Date
+  utilisateurId        String?        @unique
+  utilisateur          Utilisateur?   @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
+  presences            Presence[]
+  // Départements & Groupes (3.18, nouveau) — purement organisationnel, aucune
+  // permission associée. Nullable en base pour ne pas casser les fiches
+  // existantes créées avant cette fonctionnalité ; obligatoire côté schéma
+  // applicatif pour toute NOUVELLE fiche (travailleurCreateSchema).
+  departementId        String?
+  departement          Departement?   @relation("TravailleursDuDepartement", fields: [departementId], references: [id], onDelete: SetNull)
+  groupeId             String?
+  groupe               Groupe?        @relation("TravailleursDuGroupe", fields: [groupeId], references: [id], onDelete: SetNull)
+  departementsDontChef Departement[]  @relation("ChefDepartement")
   // Adresse email professionnelle (3.18, nouveau) — Cloudflare Email Routing.
   // emailDestination = boîte perso existante de l'employé, saisie par le
   // Chargé du personnel. emailProAdresse = adresse générée
@@ -551,14 +560,14 @@ model Travailleur {
   // cas de collision de nom. Les deux identifiants Cloudflare sont internes
   // (jamais exposés au front) : ils permettent de reprendre la vérification
   // ou d'éviter de recréer une règle déjà posée.
-  emailDestination    String?
-  emailProAdresse     String?        @unique
-  emailProStatut      StatutEmailPro @default(AUCUNE)
-  emailProErreur      String?
-  cloudflareAdresseId String?
-  cloudflareRegleId   String?
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  emailDestination     String?
+  emailProAdresse      String?        @unique
+  emailProStatut       StatutEmailPro @default(AUCUNE)
+  emailProErreur       String?
+  cloudflareAdresseId  String?
+  cloudflareRegleId    String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 }
 
 enum StatutEmailPro {
@@ -566,6 +575,36 @@ enum StatutEmailPro {
   EN_ATTENTE_VERIFICATION
   ACTIF
   ECHEC
+}
+
+// Départements & Groupes (3.18, nouveau) : purement organisationnel, aucune
+// permission propre — géré via le module TRAVAILLEURS (Admin secondaire/
+// Principal, écriture). Le chef de département est une simple référence à un
+// Travailleur, sans droit particulier dans l'app.
+model Departement {
+  id                String        @id @default(cuid())
+  nom               String        @unique
+  chefTravailleurId String?
+  chefTravailleur   Travailleur?  @relation("ChefDepartement", fields: [chefTravailleurId], references: [id], onDelete: SetNull)
+  groupes           Groupe[]
+  travailleurs      Travailleur[] @relation("TravailleursDuDepartement")
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+// Subdivision d'un Département (ex. « Groupe 1 », « Groupe 2 » au sein de la
+// Production). Terme volontairement différent d'« Équipe » (nom d'affichage
+// des rôles, 3.7) pour éviter toute confusion.
+model Groupe {
+  id            String        @id @default(cuid())
+  departementId String
+  departement   Departement   @relation(fields: [departementId], references: [id], onDelete: Cascade)
+  nom           String
+  travailleurs  Travailleur[] @relation("TravailleursDuGroupe")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([departementId, nom])
 }
 
 // Pointage quotidien : une ligne par travailleur et par jour (re-pointer le

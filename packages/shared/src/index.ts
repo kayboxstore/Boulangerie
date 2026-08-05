@@ -882,6 +882,11 @@ export const travailleurCreateSchema = z.object({
   dateEmbauche: dateISO,
   // Lien optionnel vers un compte Utilisateur (si la personne a un accès à l'app).
   utilisateurId: z.string().optional(),
+  // Départements & Groupes (3.18, nouveau) : obligatoire pour toute nouvelle
+  // fiche — nullable en base uniquement pour ne pas casser les fiches
+  // existantes créées avant cette fonctionnalité. Groupe reste optionnel.
+  departementId: z.string().min(1, "Le département est requis"),
+  groupeId: z.string().optional(),
 });
 export type TravailleurCreateInput = z.infer<typeof travailleurCreateSchema>;
 
@@ -907,8 +912,55 @@ export type PremierLancementFinaliserInput = z.infer<typeof premierLancementFina
 export const travailleurUpdateSchema = travailleurCreateSchema.partial().extend({
   // null = délier explicitement le compte.
   utilisateurId: z.string().nullable().optional(),
+  // null = retirer explicitement le département/groupe (fiche existante sans
+  // département, ou réaffectation). undefined = laisser intact.
+  departementId: z.string().nullable().optional(),
+  groupeId: z.string().nullable().optional(),
 });
 export type TravailleurUpdateInput = z.infer<typeof travailleurUpdateSchema>;
+
+// ---------------------------------------------------------------------------
+// Départements & Groupes (section 3.18, nouveau) — purement organisationnel,
+// aucune permission propre : géré via le module TRAVAILLEURS.
+// ---------------------------------------------------------------------------
+
+export const departementCreateSchema = z.object({
+  nom: z.string().trim().min(1, "Le nom est requis").max(120),
+  chefTravailleurId: z.string().optional(),
+});
+export type DepartementCreateInput = z.infer<typeof departementCreateSchema>;
+
+export const departementUpdateSchema = departementCreateSchema.partial().extend({
+  // null = retirer explicitement le chef désigné.
+  chefTravailleurId: z.string().nullable().optional(),
+});
+export type DepartementUpdateInput = z.infer<typeof departementUpdateSchema>;
+
+export const groupeCreateSchema = z.object({
+  departementId: z.string().min(1, "Le département est requis"),
+  nom: z.string().trim().min(1, "Le nom est requis").max(120),
+});
+export type GroupeCreateInput = z.infer<typeof groupeCreateSchema>;
+
+export const groupeUpdateSchema = z.object({
+  nom: z.string().trim().min(1, "Le nom est requis").max(120),
+});
+export type GroupeUpdateInput = z.infer<typeof groupeUpdateSchema>;
+
+export interface GroupeDTO {
+  id: string;
+  departementId: string;
+  nom: string;
+  nombreTravailleurs: number;
+}
+
+export interface DepartementDTO {
+  id: string;
+  nom: string;
+  chef: { id: string; nom: string } | null;
+  groupes: GroupeDTO[];
+  nombreTravailleurs: number;
+}
 
 // Adresse email professionnelle (section 3.18, nouveau) — Cloudflare Email
 // Routing. La vérification finale (clic employé sur le lien reçu) est hors
@@ -950,6 +1002,8 @@ export interface TravailleurDTO {
   emailProStatut: StatutEmailPro;
   /** Détail exploitable en cas d'échec (ex. jeton invalide, zone incorrecte) — jamais un échec silencieux. */
   emailProErreur: string | null;
+  departement: { id: string; nom: string } | null;
+  groupe: { id: string; nom: string } | null;
 }
 
 export interface PresenceDTO {

@@ -17,6 +17,7 @@ import { productionRouter } from "./routes/production.js";
 import { fournisseursRouter } from "./routes/fournisseurs.js";
 import { equipeRouter } from "./routes/equipe.js";
 import { travailleursRouter } from "./routes/travailleurs.js";
+import { departementsRouter, groupesRouter } from "./routes/departements.js";
 import { rapportsRouter } from "./routes/rapports.js";
 import { rapportsPersonnelsRouter } from "./routes/rapports-personnels.js";
 import { parametresRouter } from "./routes/parametres.js";
@@ -72,6 +73,8 @@ export function createApp() {
   app.use("/api/fournisseurs", fournisseursRouter);
   app.use("/api/equipe", equipeRouter);
   app.use("/api/travailleurs", travailleursRouter);
+  app.use("/api/departements", departementsRouter);
+  app.use("/api/groupes", groupesRouter);
   app.use("/api/rapports", rapportsRouter);
   app.use("/api/rapports-personnels", rapportsPersonnelsRouter);
   app.use("/api/parametres", parametresRouter);

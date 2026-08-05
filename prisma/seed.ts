@@ -78,6 +78,33 @@ async function fusionnerRolesStockAchats(nomFusionne: string) {
   console.log(`Retrofit : rôles fusionnés en « ${nomFusionne} » (${anciens.length} ancien(s) rôle(s) supprimé(s))`);
 }
 
+/**
+ * Retrofit (section 2/3.18) : le rôle « Chargé du personnel » disparaît —
+ * Travailleurs passe à l'écriture de l'Admin secondaire. Les comptes qui
+ * portaient encore ce rôle sont rebasculés sur « Administrateur » (en tant
+ * que secondaire : `estAdminPrincipal` n'est jamais touché ici, il ne devient
+ * `true` que pour le compte admin@lomoto.cd plus bas). Idempotent : ne fait
+ * rien si le rôle n'existe plus.
+ */
+async function retirerRoleChargeDuPersonnel() {
+  const ancien = await prisma.role.findUnique({ where: { nom: "Chargé du personnel" } });
+  if (!ancien) return;
+
+  const administrateur = await prisma.role.upsert({
+    where: { nom: "Administrateur" },
+    update: {},
+    create: { nom: "Administrateur" },
+  });
+
+  const { count } = await prisma.utilisateur.updateMany({
+    where: { roleId: ancien.id },
+    data: { roleId: administrateur.id },
+  });
+  await prisma.role.updateMany({ where: { roleParentId: ancien.id }, data: { roleParentId: null } });
+  await prisma.role.delete({ where: { id: ancien.id } }); // permissions supprimées en cascade
+  console.log(`Retrofit : rôle « Chargé du personnel » supprimé (${count} compte(s) rebasculé(s) sur Administrateur)`);
+}
+
 async function upsertUtilisateur(nom: string, email: string, roleNom: string) {
   const role = await prisma.role.findUniqueOrThrow({ where: { nom: roleNom } });
   const motDePasseHash = await bcrypt.hash(MOT_DE_PASSE_DEMO, 10);
@@ -91,6 +118,8 @@ async function upsertUtilisateur(nom: string, email: string, roleNom: string) {
 async function main() {
   // --- Retrofit de la matrice (fusion des rôles stock/achats) ---
   await fusionnerRolesStockAchats("Responsable Stock/Achats et Fournisseurs");
+  // --- Retrofit : suppression du rôle Chargé du personnel (3.18) ---
+  await retirerRoleChargeDuPersonnel();
 
   // --- Rôles, hiérarchie et matrice de permissions (section 2, à jour) ---
 
@@ -104,14 +133,18 @@ async function main() {
   // Administrateur (section 2, refonte des permissions). Les deux niveaux
   // partagent CE rôle ; ils ne sont distingués que par Utilisateur.estAdminPrincipal.
   // La matrice porte donc le socle de l'Admin SECONDAIRE : lecture sur tout,
-  // écriture sur Paramètres et Équipe (qui couvre Activation, État système et
-  // Approbations). L'Admin PRINCIPAL, super utilisateur, voit tous ses modules
-  // relevés en ÉCRITURE à la construction de son DTO (middleware/auth.ts) — même
-  // mécanisme que la fusion des délégations temporaires.
+  // écriture sur Paramètres, Équipe et Travailleurs (qui couvre Activation, État
+  // système et Approbations, plus le roster du personnel depuis le retrait du
+  // rôle Chargé du personnel). L'Admin PRINCIPAL, super utilisateur, voit tous
+  // ses modules relevés en ÉCRITURE à la construction de son DTO
+  // (middleware/auth.ts) — même mécanisme que la fusion des délégations temporaires.
   await upsertRole("Administrateur", "Directeur Général", [
-    ...TOUS_LES_MODULES.filter((m) => m !== Module.PARAMETRES && m !== Module.EQUIPE).map(lecture),
+    ...TOUS_LES_MODULES.filter(
+      (m) => m !== Module.PARAMETRES && m !== Module.EQUIPE && m !== Module.TRAVAILLEURS,
+    ).map(lecture),
     ecriture(Module.PARAMETRES),
     ecriture(Module.EQUIPE),
+    ecriture(Module.TRAVAILLEURS),
   ]);
 
   // Caissier(ère) : écriture Caisse ; lecture Commandes (son subordonné),
@@ -138,9 +171,6 @@ async function main() {
     ecriture(Module.FOURNISSEURS),
   ]);
 
-  // Chargé du personnel : écriture Travailleurs (module construit en phase ultérieure).
-  await upsertRole("Chargé du personnel", "Directeur Général", [ecriture(Module.TRAVAILLEURS)]);
-
   // --- Types de clients (section 3.4) — montants en Fc ---
   const typesClients = [
     { nom: "Dépositaire", prixParBac: 4100, commissionParBac: 0 },
@@ -166,7 +196,6 @@ async function main() {
   await upsertUtilisateur("Responsable de production", "production@lomoto.cd", "Responsable de production");
   await upsertUtilisateur("Responsable Fournisseurs", "achats@lomoto.cd", "Responsable Stock/Achats et Fournisseurs");
   await upsertUtilisateur("Chargé du stock", "stock@lomoto.cd", "Responsable Stock/Achats et Fournisseurs");
-  await upsertUtilisateur("Chargé du personnel", "personnel@lomoto.cd", "Chargé du personnel");
 
   // Le compte admin seedé est le compte Administrateur principal (unique).
   await prisma.utilisateur.updateMany({
@@ -267,7 +296,7 @@ async function main() {
     });
   }
 
-  console.log("Seed terminé — 7 rôles, 3 types de clients, 9 utilisateurs, 5 clients, 4 produits, 6 matières premières, 2 motifs de don, 2 fournisseurs.");
+  console.log("Seed terminé — 6 rôles, 3 types de clients, 8 utilisateurs, 5 clients, 4 produits, 6 matières premières, 2 motifs de don, 2 fournisseurs.");
   console.log(`Mot de passe de démonstration pour tous les comptes : ${MOT_DE_PASSE_DEMO}`);
 }
 

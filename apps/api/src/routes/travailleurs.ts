@@ -19,11 +19,17 @@ export const travailleursRouter = Router();
 travailleursRouter.use(requireAuth);
 
 type TravailleurAvecCompte = Prisma.TravailleurGetPayload<{
-  include: { utilisateur: { select: { id: true; nom: true; email: true } } };
+  include: {
+    utilisateur: { select: { id: true; nom: true; email: true } };
+    departement: { select: { id: true; nom: true } };
+    groupe: { select: { id: true; nom: true } };
+  };
 }>;
 
 export const INCLUDE_TRAVAILLEUR = {
   utilisateur: { select: { id: true, nom: true, email: true } },
+  departement: { select: { id: true, nom: true } },
+  groupe: { select: { id: true, nom: true } },
 } as const;
 
 export const versTravailleurDTO = (t: TravailleurAvecCompte): TravailleurDTO => ({
@@ -37,7 +43,35 @@ export const versTravailleurDTO = (t: TravailleurAvecCompte): TravailleurDTO => 
   emailProAdresse: t.emailProAdresse,
   emailProStatut: t.emailProStatut as StatutEmailPro,
   emailProErreur: t.emailProErreur,
+  departement: t.departement,
+  groupe: t.groupe,
 });
+
+/**
+ * Vérifie la cohérence département/groupe (3.18) : un groupe appartient
+ * toujours à un département précis, un Travailleur ne peut donc pas être
+ * rattaché à un groupe qui n'est pas celui de son propre département. Un
+ * département nul entraîne systématiquement un groupe nul (pas de groupe
+ * « orphelin » d'un département).
+ */
+async function validerDepartementGroupe(
+  departementId: string | null,
+  groupeId: string | null,
+): Promise<{ status: number; erreur: string } | { departementId: string | null; groupeId: string | null }> {
+  if (!departementId) return { departementId: null, groupeId: null };
+
+  const departement = await prisma.departement.findUnique({ where: { id: departementId } });
+  if (!departement) return { status: 404, erreur: "Département introuvable" };
+
+  if (!groupeId) return { departementId, groupeId: null };
+
+  const groupe = await prisma.groupe.findUnique({ where: { id: groupeId } });
+  if (!groupe) return { status: 404, erreur: "Groupe introuvable" };
+  if (groupe.departementId !== departementId) {
+    return { status: 400, erreur: "Le groupe sélectionné n'appartient pas à ce département" };
+  }
+  return { departementId, groupeId };
+}
 
 type PresenceAvecRelations = Prisma.PresenceGetPayload<{
   include: {
@@ -108,12 +142,15 @@ travailleursRouter.post("/", requirePermission("TRAVAILLEURS", "ECRITURE"), asyn
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const { nom, telephone, poste, dateEmbauche, utilisateurId } = parsed.data;
+    const { nom, telephone, poste, dateEmbauche, utilisateurId, departementId, groupeId } = parsed.data;
 
     if (utilisateurId) {
       const invalide = await verifierCompteLie(utilisateurId);
       if (invalide) return res.status(invalide.status).json({ erreur: invalide.erreur });
     }
+
+    const depGroupe = await validerDepartementGroupe(departementId, groupeId ?? null);
+    if ("erreur" in depGroupe) return res.status(depGroupe.status).json({ erreur: depGroupe.erreur });
 
     const travailleur = await prisma.travailleur.create({
       data: {
@@ -122,6 +159,8 @@ travailleursRouter.post("/", requirePermission("TRAVAILLEURS", "ECRITURE"), asyn
         poste,
         dateEmbauche: new Date(dateEmbauche),
         utilisateurId: utilisateurId ?? null,
+        departementId: depGroupe.departementId,
+        groupeId: depGroupe.groupeId,
       },
       include: INCLUDE_TRAVAILLEUR,
     });
@@ -140,12 +179,19 @@ travailleursRouter.put("/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), as
     const existant = await prisma.travailleur.findUnique({ where: { id: req.params.id } });
     if (!existant) return res.status(404).json({ erreur: "Travailleur introuvable" });
 
-    const { nom, telephone, poste, dateEmbauche, utilisateurId } = parsed.data;
+    const { nom, telephone, poste, dateEmbauche, utilisateurId, departementId, groupeId } = parsed.data;
 
     if (utilisateurId) {
       const invalide = await verifierCompteLie(utilisateurId, existant.id);
       if (invalide) return res.status(invalide.status).json({ erreur: invalide.erreur });
     }
+
+    // undefined = champ non touché par cette requête ; on part alors de la
+    // valeur actuelle pour revalider la cohérence département/groupe.
+    const departementFinal = departementId !== undefined ? departementId : existant.departementId;
+    const groupeFinal = groupeId !== undefined ? groupeId : existant.groupeId;
+    const depGroupe = await validerDepartementGroupe(departementFinal, groupeFinal);
+    if ("erreur" in depGroupe) return res.status(depGroupe.status).json({ erreur: depGroupe.erreur });
 
     const travailleur = await prisma.travailleur.update({
       where: { id: existant.id },
@@ -156,6 +202,8 @@ travailleursRouter.put("/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), as
         dateEmbauche: dateEmbauche ? new Date(dateEmbauche) : undefined,
         // undefined = intact ; null = délier ; id = lier.
         utilisateurId,
+        departementId: depGroupe.departementId,
+        groupeId: depGroupe.groupeId,
       },
       include: INCLUDE_TRAVAILLEUR,
     });

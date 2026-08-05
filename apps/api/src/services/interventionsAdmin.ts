@@ -5,9 +5,11 @@ import { busEvenements } from "../lib/events.js";
 /**
  * Périmètre d'origine de l'Administrateur (section 2). Activation, État système
  * et Approbations sont gardés par le module EQUIPE : écrire dans ces modules ne
- * constitue donc pas une intervention hors périmètre.
+ * constitue donc pas une intervention hors périmètre. Travailleurs a rejoint ce
+ * périmètre avec le retrait du rôle Chargé du personnel (3.18) : c'est
+ * désormais l'écriture normale de l'Admin secondaire, pas une intervention.
  */
-const PERIMETRE_ADMIN: Module[] = ["PARAMETRES", "EQUIPE"];
+const PERIMETRE_ADMIN: Module[] = ["PARAMETRES", "EQUIPE", "TRAVAILLEURS"];
 
 export const estHorsPerimetreAdmin = (module: Module) => !PERIMETRE_ADMIN.includes(module);
 

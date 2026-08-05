@@ -57,6 +57,10 @@ const MODELE_MODULE: Record<string, string> = {
   // Travailleurs
   Travailleur: "TRAVAILLEURS",
   Presence: "TRAVAILLEURS",
+  // Départements & Groupes (3.18) — organisationnel, sans permission propre,
+  // gouverné par le module TRAVAILLEURS.
+  Departement: "TRAVAILLEURS",
+  Groupe: "TRAVAILLEURS",
 };
 
 // Champs sensibles jamais copiés dans les instantanés avant/après.
