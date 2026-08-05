@@ -437,7 +437,8 @@ Historique **immuable** de toute modification ou suppression (pas seulement les 
 ### 3.18 Travailleurs (Admin secondaire, écriture — scope résolu)
 Roster du personnel, plus large que les seuls comptes Utilisateur : couvre aussi le personnel sans accès à l'application (ex. livreur, agent d'entretien).
 - Fiche : nom, téléphone, poste, date d'embauche, lien optionnel vers un compte Utilisateur (si la personne a aussi un accès à l'app)
-- Présence/pointage quotidien : par travailleur et par date — statut (présent/absent/retard), heure d'arrivée/départ (optionnelles)
+- Pointage : horodatage réel d'entrée et de sortie (date + heure, pas juste une date) — gère nativement les équipes de nuit qui commencent un jour et finissent le lendemain
+- Absence : motif déclaré + décision distincte (justifiée / non justifiée / en attente), tranchée par l'Admin secondaire ou Principal — pas le chef de département (purement organisationnel)
 
 Filtres & affichage : par travailleur, par date, bouton "Tout afficher".
 DG : lecture seule, comme tous les modules métier.
@@ -528,8 +529,11 @@ LigneVente (…)     # ORPHELINE — idem
 ClotureCaisse (…)  # ORPHELINE — pas de clôture dans le registre journalier
 TauxDuJour (id, date, valeur, definiPar)                                  # une valeur par date (3.1)
 DepenseCaisse (id, date, motif, montant, origine, tauxApplique?, sacsUtilises?, enregistrePar)   # origine: MANUELLE | FARINE
-Travailleur (id, nom, téléphone, poste, dateEmbauche, utilisateurId)   # utilisateurId nullable
-Presence (id, travailleurId, date, statut, heureArrivee, heureDepart, enregistrePar)   # statut: present | absent | retard
+Travailleur (id, nom, téléphone, poste, dateEmbauche, utilisateurId, departementId, groupeId)   # utilisateurId/departementId/groupeId nullable
+Departement (id, nom, chefTravailleurId)   # chefTravailleurId nullable — simple référence, aucune permission (3.18)
+Groupe (id, departementId, nom)            # subdivision d'un Département
+Pointage (id, travailleurId, horodatageEntree, horodatageSortie, enregistrePar)   # horodatageSortie nullable (encore en poste) — date+heure réels, pas juste une date (équipes de nuit)
+Absence (id, travailleurId, date, motif, decisionStatut, decidePar, dateDecision)   # decisionStatut: en_attente | justifiee | non_justifiee ; decidePar/dateDecision nullables tant qu'en attente
 ```
 
 ## 7. Stack technique recommandée
