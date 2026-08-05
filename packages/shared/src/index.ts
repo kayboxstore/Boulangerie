@@ -1038,6 +1038,7 @@ export interface AbsenceDTO {
   travailleur: { id: string; nom: string; poste: string };
   date: string;
   motif: string;
+  declarePar: { id: string; nom: string } | null;
   decisionStatut: StatutDecisionAbsence;
   decidePar: { id: string; nom: string } | null;
   dateDecision: string | null;

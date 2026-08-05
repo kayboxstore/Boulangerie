@@ -617,6 +617,7 @@
     "colEntry": "Entrée",
     "colExit": "Sortie",
     "colMotive": "Motif",
+    "colDeclaredBy": "Déclaré par",
     "confirmDeleteAbsence": "Supprimer cette absence ?",
     "confirmDeleteClockIn": "Supprimer ce pointage ?",
     "declareAbsence": "Déclarer une absence",

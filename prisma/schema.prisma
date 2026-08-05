@@ -142,6 +142,7 @@ model Utilisateur {
   presencesEnregistrees       Presence[] // ORPHELINE (remplacée par pointages/absences, 3.18)
   pointagesEnregistres        Pointage[]            @relation("PointagesEnregistres")
   absencesDecidees            Absence[]             @relation("AbsencesDecidees")
+  absencesDeclarees           Absence[]             @relation("AbsencesDeclarees")
   demandesEmises              DemandeApprobation[]  @relation("DemandesEmises")
   demandesDecidees            DemandeApprobation[]  @relation("DemandesDecidees")
   delegationsRecues           DelegationRole[]      @relation("DelegationsRecues")
@@ -661,6 +662,10 @@ model Absence {
   travailleur    Travailleur           @relation(fields: [travailleurId], references: [id], onDelete: Cascade)
   date           DateTime              @db.Date
   motif          String
+  // Auteur de la déclaration initiale — distinct de decidePar, qui peut être
+  // la même personne ou une autre (3.18).
+  declareParId   String?
+  declarePar     Utilisateur?          @relation("AbsencesDeclarees", fields: [declareParId], references: [id], onDelete: SetNull)
   decisionStatut StatutDecisionAbsence @default(EN_ATTENTE)
   decideParId    String?
   decidePar      Utilisateur?          @relation("AbsencesDecidees", fields: [decideParId], references: [id], onDelete: SetNull)

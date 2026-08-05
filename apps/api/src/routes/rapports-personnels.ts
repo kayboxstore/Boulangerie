@@ -281,20 +281,38 @@ rapportsPersonnelsRouter.get("/", async (req, res, next) => {
       }
     }
 
-    // Décisions d'absence (pas la déclaration : l'entité Absence ne porte
-    // aucun auteur de déclaration, seulement decideParId une fois tranchée).
+    // Absences : deux entrées distinctes possibles par absence — la
+    // déclaration (declareParId, à la création) et la décision (decideParId,
+    // une fois tranchée), potentiellement par deux personnes différentes.
+    // Suffixe d'id différent pour ne jamais entrer en collision entre les deux.
     if (voulu("ABSENCE")) {
-      const absences = await prisma.absence.findMany({
+      const declarations = await prisma.absence.findMany({
+        where: { ...filtreAuteur("declareParId"), ...filtreDate("createdAt") },
+        include: { declarePar: AUTEUR, travailleur: { select: { nom: true } } },
+        orderBy: { createdAt: "desc" },
+        take: LIMITE_PAR_SOURCE,
+      });
+      for (const a of declarations) {
+        pousser(
+          "ABSENCE",
+          `${a.id}:declaration`,
+          a.createdAt,
+          `Absence de ${a.travailleur.nom} déclarée pour le ${a.date.toISOString().slice(0, 10)} — ${a.motif}`,
+          a.declarePar,
+        );
+      }
+
+      const decisions = await prisma.absence.findMany({
         where: { ...filtreAuteur("decideParId"), ...filtreDate("dateDecision") },
         include: { decidePar: AUTEUR, travailleur: { select: { nom: true } } },
         orderBy: { dateDecision: "desc" },
         take: LIMITE_PAR_SOURCE,
       });
-      for (const a of absences) {
+      for (const a of decisions) {
         if (!a.dateDecision) continue;
         pousser(
           "ABSENCE",
-          a.id,
+          `${a.id}:decision`,
           a.dateDecision,
           `Absence de ${a.travailleur.nom} le ${a.date.toISOString().slice(0, 10)} tranchée : ${STATUT_DECISION_ABSENCE_LABELS[a.decisionStatut as StatutDecisionAbsence]}`,
           a.decidePar,

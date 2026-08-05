@@ -649,6 +649,7 @@ export function TravailleursPage() {
                 <TableHead>{t("travailleurs.worker")}</TableHead>
                 <TableHead>{t("common.date")}</TableHead>
                 <TableHead>{t("travailleurs.colMotive")}</TableHead>
+                <TableHead>{t("travailleurs.colDeclaredBy")}</TableHead>
                 <TableHead>{t("travailleurs.colDecision")}</TableHead>
                 <TableHead>{t("travailleurs.colDecidedBy")}</TableHead>
                 {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
@@ -660,6 +661,7 @@ export function TravailleursPage() {
                   <TableCell className="font-medium">{a.travailleur.nom}</TableCell>
                   <TableCell className="whitespace-nowrap">{formatDate(a.date)}</TableCell>
                   <TableCell className="max-w-xs text-muted-foreground">{a.motif}</TableCell>
+                  <TableCell className="text-sm">{a.declarePar?.nom ?? "—"}</TableCell>
                   <TableCell>
                     <Badge className={cn(BADGE_DECISION[a.decisionStatut])}>{STATUT_DECISION_ABSENCE_LABELS[a.decisionStatut]}</Badge>
                   </TableCell>
@@ -704,7 +706,7 @@ export function TravailleursPage() {
               ))}
               {absences.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={editable ? 6 : 5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={editable ? 7 : 6} className="py-8 text-center text-muted-foreground">
                     {filtresActifs ? t("travailleurs.emptyFiltered") : t("travailleurs.emptyAbsence")}
                   </TableCell>
                 </TableRow>
@@ -721,6 +723,7 @@ export function TravailleursPage() {
                 </CarteLigneTitre>
                 <CarteLigneChamp label={t("common.date")} value={formatDate(a.date)} />
                 <CarteLigneChamp label={t("travailleurs.colMotive")} value={a.motif} />
+                <CarteLigneChamp label={t("travailleurs.colDeclaredBy")} value={a.declarePar?.nom ?? "—"} />
                 <CarteLigneChamp label={t("travailleurs.colDecidedBy")} value={a.decidePar?.nom ?? "—"} />
                 {editable && (
                   <CarteLigneActions>

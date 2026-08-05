@@ -617,6 +617,7 @@
     "colEntry": "Entry",
     "colExit": "Exit",
     "colMotive": "Reason",
+    "colDeclaredBy": "Declared by",
     "confirmDeleteAbsence": "Delete this absence?",
     "confirmDeleteClockIn": "Delete this clock-in?",
     "declareAbsence": "Declare an absence",

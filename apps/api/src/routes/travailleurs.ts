@@ -102,12 +102,14 @@ const versPointageDTO = (p: PointageAvecRelations): PointageDTO => ({
 type AbsenceAvecRelations = Prisma.AbsenceGetPayload<{
   include: {
     travailleur: { select: { id: true; nom: true; poste: true } };
+    declarePar: { select: { id: true; nom: true } };
     decidePar: { select: { id: true; nom: true } };
   };
 }>;
 
 const INCLUDE_ABSENCE = {
   travailleur: { select: { id: true, nom: true, poste: true } },
+  declarePar: { select: { id: true, nom: true } },
   decidePar: { select: { id: true, nom: true } },
 } as const;
 
@@ -116,6 +118,7 @@ const versAbsenceDTO = (a: AbsenceAvecRelations): AbsenceDTO => ({
   travailleur: a.travailleur,
   date: a.date.toISOString().slice(0, 10),
   motif: a.motif,
+  declarePar: a.declarePar,
   decisionStatut: a.decisionStatut as StatutDecisionAbsence,
   decidePar: a.decidePar,
   dateDecision: a.dateDecision?.toISOString() ?? null,
@@ -430,7 +433,7 @@ travailleursRouter.post("/absences", requirePermission("TRAVAILLEURS", "ECRITURE
     if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
 
     const absence = await prisma.absence.create({
-      data: { travailleurId, date: new Date(date), motif },
+      data: { travailleurId, date: new Date(date), motif, declareParId: req.utilisateur!.id },
       include: INCLUDE_ABSENCE,
     });
     res.status(201).json({ absence: versAbsenceDTO(absence) });
