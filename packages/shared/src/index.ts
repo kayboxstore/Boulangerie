@@ -880,6 +880,12 @@ export const travailleurCreateSchema = z.object({
   // existantes créées avant cette fonctionnalité. Groupe reste optionnel.
   departementId: z.string().min(1, "Le département est requis"),
   groupeId: z.string().optional(),
+  // Salaire & paie (3.18, nouveau) : obligatoires pour toute nouvelle fiche,
+  // même raison que departementId. joursTravaillesParMois est individuel par
+  // agent (26 jours, 13 jours…) — jamais une valeur fixe pour tous, sert de
+  // diviseur du taux journalier dans le calcul de paie.
+  salaireMensuel: z.number().int().positive("Le salaire doit être un montant positif"),
+  joursTravaillesParMois: z.number().int().min(1, "Au moins 1 jour").max(31, "Au plus 31 jours"),
 });
 export type TravailleurCreateInput = z.infer<typeof travailleurCreateSchema>;
 
@@ -909,6 +915,10 @@ export const travailleurUpdateSchema = travailleurCreateSchema.partial().extend(
   // département, ou réaffectation). undefined = laisser intact.
   departementId: z.string().nullable().optional(),
   groupeId: z.string().nullable().optional(),
+  // null = retirer explicitement (fiche revient à l'état "salaire non
+  // renseigné" — le calcul de paie sera alors bloqué pour ce Travailleur).
+  salaireMensuel: z.number().int().positive().nullable().optional(),
+  joursTravaillesParMois: z.number().int().min(1).max(31).nullable().optional(),
 });
 export type TravailleurUpdateInput = z.infer<typeof travailleurUpdateSchema>;
 
@@ -1058,6 +1068,73 @@ export interface TravailleurDTO {
   emailProErreur: string | null;
   departement: { id: string; nom: string } | null;
   groupe: { id: string; nom: string } | null;
+  salaireMensuel: number | null;
+  joursTravaillesParMois: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Sanction & calcul de paie (section 3.18, nouveau)
+// ---------------------------------------------------------------------------
+
+export const TYPES_SANCTION = ["PUNITION", "RETENUE"] as const;
+export type TypeSanction = (typeof TYPES_SANCTION)[number];
+
+export const TYPE_SANCTION_LABELS: Record<TypeSanction, string> = {
+  PUNITION: "Punition",
+  RETENUE: "Retenue",
+};
+
+// montant : requis pour une RETENUE (déduite de la paie), interdit pour une
+// PUNITION (jamais financière) — cf. spec 3.18.
+export const sanctionCreateSchema = z
+  .object({
+    travailleurId: z.string().min(1, "Le travailleur est requis"),
+    type: z.enum(TYPES_SANCTION),
+    motif: z.string().trim().min(1, "Le motif est requis").max(500),
+    date: dateISO,
+    montant: z.number().int().positive().optional(),
+  })
+  .refine((d) => d.type !== "RETENUE" || d.montant !== undefined, {
+    message: "Le montant est requis pour une retenue",
+    path: ["montant"],
+  })
+  .refine((d) => d.type !== "PUNITION" || d.montant === undefined, {
+    message: "Une punition n'a jamais de montant — c'est une retenue qu'il vous faut pour déduire un montant",
+    path: ["montant"],
+  });
+export type SanctionCreerInput = z.infer<typeof sanctionCreateSchema>;
+
+export interface SanctionDTO {
+  id: string;
+  travailleur: { id: string; nom: string; poste: string };
+  type: TypeSanction;
+  motif: string;
+  montant: number | null;
+  date: string;
+  enregistrePar: { id: string; nom: string } | null;
+}
+
+/** "AAAA-MM" — mois calendaire, utilisé pour filtrer le calcul de paie. */
+export const moisISO = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Mois invalide (AAAA-MM)");
+
+/**
+ * Calcul de paie (3.18) : AUCUN arrondi intermédiaire — tauxJournalier et
+ * retenueAbsences restent en précision complète (décimales) pour que la
+ * somme des lignes affichées corresponde exactement au détail. Seul
+ * salaireNet est arrondi (au Fc le plus proche), une fois, à la fin.
+ */
+export interface CalculPaieDTO {
+  travailleurId: string;
+  travailleurNom: string;
+  mois: string;
+  salaireMensuel: number;
+  joursTravaillesParMois: number;
+  tauxJournalier: number;
+  absencesNonJustifiees: { absenceId: string; date: string; motif: string }[];
+  retenueAbsences: number;
+  sanctionsRetenues: { sanctionId: string; date: string; motif: string; montant: number }[];
+  totalRetenuesDisciplinaires: number;
+  salaireNet: number;
 }
 
 // ---------------------------------------------------------------------------

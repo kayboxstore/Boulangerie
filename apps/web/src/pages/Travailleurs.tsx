@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { PanneauEmailPro } from "@/components/PanneauEmailPro";
 import { DepartementsCard } from "@/components/DepartementsCard";
+import { PaieCard } from "@/components/PaieCard";
 import { cn } from "@/lib/utils";
 
 function formatDate(iso: string): string {
@@ -142,6 +143,8 @@ export function TravailleursPage() {
   const [compteLie, setCompteLie] = useState("");
   const [departementId, setDepartementId] = useState("");
   const [groupeId, setGroupeId] = useState("");
+  const [salaireMensuel, setSalaireMensuel] = useState("");
+  const [joursTravaillesParMois, setJoursTravaillesParMois] = useState("");
   const [erreurFiche, setErreurFiche] = useState<string | null>(null);
 
   function ouvrirFiche(trav: TravailleurDTO | null) {
@@ -153,6 +156,8 @@ export function TravailleursPage() {
     setCompteLie(trav?.compte?.id ?? "");
     setDepartementId(trav?.departement?.id ?? "");
     setGroupeId(trav?.groupe?.id ?? "");
+    setSalaireMensuel(trav?.salaireMensuel != null ? String(trav.salaireMensuel) : "");
+    setJoursTravaillesParMois(trav?.joursTravaillesParMois != null ? String(trav.joursTravaillesParMois) : "");
     setErreurFiche(null);
     setDialogFiche(true);
   }
@@ -186,6 +191,8 @@ export function TravailleursPage() {
               utilisateurId: compteLie || null,
               departementId: departementId || null,
               groupeId: groupeId || null,
+              salaireMensuel: salaireMensuel ? Number(salaireMensuel) : null,
+              joursTravaillesParMois: joursTravaillesParMois ? Number(joursTravaillesParMois) : null,
             }),
           })
         : api("/api/travailleurs", {
@@ -195,6 +202,8 @@ export function TravailleursPage() {
               utilisateurId: compteLie || undefined,
               departementId,
               groupeId: groupeId || undefined,
+              salaireMensuel: Number(salaireMensuel),
+              joursTravaillesParMois: Number(joursTravaillesParMois),
             }),
           });
     },
@@ -343,6 +352,7 @@ export function TravailleursPage() {
       </div>
 
       <DepartementsCard travailleurs={travailleurs} editable={editable} />
+      <PaieCard travailleurs={travailleurs} editable={editable} />
 
       {/* Roster */}
       <Card>
@@ -824,6 +834,33 @@ export function TravailleursPage() {
                     </option>
                   ))}
                 </NativeSelect>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fiche-salaire">{t("travailleurs.monthlySalary")}</Label>
+                <Input
+                  id="fiche-salaire"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={salaireMensuel}
+                  onChange={(e) => setSalaireMensuel(e.target.value)}
+                  placeholder="300000"
+                  required={!ficheEditee}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fiche-jours">{t("travailleurs.workingDaysPerMonth")}</Label>
+                <Input
+                  id="fiche-jours"
+                  type="number"
+                  min={1}
+                  max={31}
+                  step={1}
+                  value={joursTravaillesParMois}
+                  onChange={(e) => setJoursTravaillesParMois(e.target.value)}
+                  placeholder="26"
+                  required={!ficheEditee}
+                />
               </div>
               <div className="col-span-2 space-y-1.5">
                 <Label htmlFor="fiche-compte">{t("travailleurs.appAccountOptional")}</Label>

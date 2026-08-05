@@ -4,16 +4,21 @@ import {
   absenceDeclarerSchema,
   absenceDecisionSchema,
   emailProCreerSchema,
+  moisISO,
   pointageCreerSchema,
   pointageModifierSchema,
   ROLE_ADMINISTRATEUR,
+  sanctionCreateSchema,
   travailleurCreateSchema,
   travailleurUpdateSchema,
   type AbsenceDTO,
+  type CalculPaieDTO,
   type PointageDTO,
+  type SanctionDTO,
   type StatutDecisionAbsence,
   type StatutEmailPro,
   type TravailleurDTO,
+  type TypeSanction,
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
@@ -51,6 +56,8 @@ export const versTravailleurDTO = (t: TravailleurAvecCompte): TravailleurDTO => 
   emailProErreur: t.emailProErreur,
   departement: t.departement,
   groupe: t.groupe,
+  salaireMensuel: t.salaireMensuel,
+  joursTravaillesParMois: t.joursTravaillesParMois,
 });
 
 /**
@@ -171,7 +178,7 @@ travailleursRouter.post("/", requirePermission("TRAVAILLEURS", "ECRITURE"), asyn
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const { nom, telephone, poste, dateEmbauche, utilisateurId, departementId, groupeId } = parsed.data;
+    const { nom, telephone, poste, dateEmbauche, utilisateurId, departementId, groupeId, salaireMensuel, joursTravaillesParMois } = parsed.data;
 
     if (utilisateurId) {
       const invalide = await verifierCompteLie(utilisateurId);
@@ -190,6 +197,8 @@ travailleursRouter.post("/", requirePermission("TRAVAILLEURS", "ECRITURE"), asyn
         utilisateurId: utilisateurId ?? null,
         departementId: depGroupe.departementId,
         groupeId: depGroupe.groupeId,
+        salaireMensuel,
+        joursTravaillesParMois,
       },
       include: INCLUDE_TRAVAILLEUR,
     });
@@ -208,7 +217,7 @@ travailleursRouter.put("/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), as
     const existant = await prisma.travailleur.findUnique({ where: { id: req.params.id } });
     if (!existant) return res.status(404).json({ erreur: "Travailleur introuvable" });
 
-    const { nom, telephone, poste, dateEmbauche, utilisateurId, departementId, groupeId } = parsed.data;
+    const { nom, telephone, poste, dateEmbauche, utilisateurId, departementId, groupeId, salaireMensuel, joursTravaillesParMois } = parsed.data;
 
     if (utilisateurId) {
       const invalide = await verifierCompteLie(utilisateurId, existant.id);
@@ -233,6 +242,8 @@ travailleursRouter.put("/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), as
         utilisateurId,
         departementId: depGroupe.departementId,
         groupeId: depGroupe.groupeId,
+        salaireMensuel,
+        joursTravaillesParMois,
       },
       include: INCLUDE_TRAVAILLEUR,
     });
@@ -499,6 +510,154 @@ travailleursRouter.put("/absences/:id/decision", requirePermission("TRAVAILLEURS
     }
 
     res.json({ absence: versAbsenceDTO(absence) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Sanction (section 3.18, nouveau) -----------------------------------------
+// Punition ou retenue disciplinaire — distincte des déductions automatiques
+// pour absence, s'additionne à elles dans le calcul de paie (montant réservé
+// aux retenues, jamais aux punitions non financières : validé par
+// sanctionCreateSchema).
+
+type SanctionAvecRelations = Prisma.SanctionGetPayload<{
+  include: {
+    travailleur: { select: { id: true; nom: true; poste: true } };
+    enregistrePar: { select: { id: true; nom: true } };
+  };
+}>;
+
+const INCLUDE_SANCTION = {
+  travailleur: { select: { id: true, nom: true, poste: true } },
+  enregistrePar: { select: { id: true, nom: true } },
+} as const;
+
+const versSanctionDTO = (s: SanctionAvecRelations): SanctionDTO => ({
+  id: s.id,
+  travailleur: s.travailleur,
+  type: s.type as TypeSanction,
+  motif: s.motif,
+  montant: s.montant,
+  date: s.date.toISOString().slice(0, 10),
+  enregistrePar: s.enregistrePar,
+});
+
+travailleursRouter.get("/sanctions", requirePermission("TRAVAILLEURS", "LECTURE"), async (req, res, next) => {
+  try {
+    const { travailleurId, du, au } = req.query as Record<string, string | undefined>;
+    const date: Prisma.DateTimeFilter = {};
+    if (du) date.gte = new Date(du);
+    if (au) date.lte = new Date(au);
+
+    const sanctions = await prisma.sanction.findMany({
+      where: {
+        ...(travailleurId ? { travailleurId } : {}),
+        ...(du || au ? { date } : {}),
+      },
+      include: INCLUDE_SANCTION,
+      orderBy: [{ date: "desc" }, { travailleur: { nom: "asc" } }],
+      take: 200,
+    });
+    res.json({ sanctions: sanctions.map(versSanctionDTO) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+travailleursRouter.post("/sanctions", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
+  try {
+    const parsed = sanctionCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const { travailleurId, type, motif, date, montant } = parsed.data;
+
+    const travailleur = await prisma.travailleur.findUnique({ where: { id: travailleurId } });
+    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
+
+    const sanction = await prisma.sanction.create({
+      data: { travailleurId, type, motif, date: new Date(date), montant: montant ?? null, enregistreParId: req.utilisateur!.id },
+      include: INCLUDE_SANCTION,
+    });
+    res.status(201).json({ sanction: versSanctionDTO(sanction) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+travailleursRouter.delete("/sanctions/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
+  try {
+    const sanction = await prisma.sanction.findUnique({ where: { id: req.params.id } });
+    if (!sanction) return res.status(404).json({ erreur: "Sanction introuvable" });
+    await prisma.sanction.delete({ where: { id: sanction.id } });
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Calcul de paie (section 3.18, nouveau) -----------------------------------
+// AUCUN arrondi intermédiaire : tauxJournalier et retenueAbsences restent en
+// précision complète (décimales) pour que la somme des lignes affichées
+// corresponde exactement au détail. Seul salaireNet est arrondi (au Fc le
+// plus proche), une seule fois, à la toute fin.
+
+travailleursRouter.get("/:id/paie", requirePermission("TRAVAILLEURS", "LECTURE"), async (req, res, next) => {
+  try {
+    const parsedMois = moisISO.safeParse(req.query.mois);
+    if (!parsedMois.success) {
+      return res.status(400).json({ erreur: "Mois invalide (AAAA-MM attendu, ex. 2026-02)" });
+    }
+    const mois = parsedMois.data;
+
+    const travailleur = await prisma.travailleur.findUnique({ where: { id: req.params.id } });
+    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
+    if (travailleur.salaireMensuel === null || travailleur.joursTravaillesParMois === null) {
+      return res.status(409).json({
+        erreur: "Le salaire mensuel et le nombre de jours travaillés doivent être renseignés sur la fiche avant de calculer la paie.",
+      });
+    }
+
+    // Bornes du mois en UTC — Absence.date/Sanction.date sont des colonnes
+    // DATE pures (@db.Date), sans fuseau : cohérent avec le reste de l'app.
+    const debut = new Date(`${mois}-01T00:00:00.000Z`);
+    const fin = new Date(debut);
+    fin.setUTCMonth(fin.getUTCMonth() + 1);
+
+    const absences = await prisma.absence.findMany({
+      where: { travailleurId: travailleur.id, decisionStatut: "NON_JUSTIFIEE", date: { gte: debut, lt: fin } },
+      orderBy: { date: "asc" },
+    });
+    const sanctions = await prisma.sanction.findMany({
+      where: { travailleurId: travailleur.id, type: "RETENUE", date: { gte: debut, lt: fin } },
+      orderBy: { date: "asc" },
+    });
+
+    const tauxJournalier = travailleur.salaireMensuel / travailleur.joursTravaillesParMois;
+    const retenueAbsences = absences.length * tauxJournalier;
+    const totalRetenuesDisciplinaires = sanctions.reduce((s, x) => s + (x.montant ?? 0), 0);
+    const salaireNet = Math.round(travailleur.salaireMensuel - retenueAbsences - totalRetenuesDisciplinaires);
+
+    const dto: CalculPaieDTO = {
+      travailleurId: travailleur.id,
+      travailleurNom: travailleur.nom,
+      mois,
+      salaireMensuel: travailleur.salaireMensuel,
+      joursTravaillesParMois: travailleur.joursTravaillesParMois,
+      tauxJournalier,
+      absencesNonJustifiees: absences.map((a) => ({ absenceId: a.id, date: a.date.toISOString().slice(0, 10), motif: a.motif })),
+      retenueAbsences,
+      sanctionsRetenues: sanctions.map((s) => ({
+        sanctionId: s.id,
+        date: s.date.toISOString().slice(0, 10),
+        motif: s.motif,
+        montant: s.montant!,
+      })),
+      totalRetenuesDisciplinaires,
+      salaireNet,
+    };
+    res.json({ paie: dto });
   } catch (e) {
     next(e);
   }

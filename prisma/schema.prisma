@@ -143,6 +143,7 @@ model Utilisateur {
   pointagesEnregistres        Pointage[]            @relation("PointagesEnregistres")
   absencesDecidees            Absence[]             @relation("AbsencesDecidees")
   absencesDeclarees           Absence[]             @relation("AbsencesDeclarees")
+  sanctionsEnregistrees       Sanction[]            @relation("SanctionsEnregistrees")
   demandesEmises              DemandeApprobation[]  @relation("DemandesEmises")
   demandesDecidees            DemandeApprobation[]  @relation("DemandesDecidees")
   delegationsRecues           DelegationRole[]      @relation("DelegationsRecues")
@@ -539,25 +540,25 @@ model ProductionDon {
 // le personnel sans accès à l'application (livreur, agent d'entretien…).
 // `utilisateurId` relie optionnellement la fiche à un compte de l'app.
 model Travailleur {
-  id                   String         @id @default(cuid())
-  nom                  String
-  telephone            String?
-  poste                String
-  dateEmbauche         DateTime       @db.Date
-  utilisateurId        String?        @unique
-  utilisateur          Utilisateur?   @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
-  presences            Presence[] // ORPHELINE (remplacée par pointages/absences, 3.18)
-  pointages            Pointage[]
-  absences             Absence[]
+  id                     String         @id @default(cuid())
+  nom                    String
+  telephone              String?
+  poste                  String
+  dateEmbauche           DateTime       @db.Date
+  utilisateurId          String?        @unique
+  utilisateur            Utilisateur?   @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
+  presences              Presence[] // ORPHELINE (remplacée par pointages/absences, 3.18)
+  pointages              Pointage[]
+  absences               Absence[]
   // Départements & Groupes (3.18, nouveau) — purement organisationnel, aucune
   // permission associée. Nullable en base pour ne pas casser les fiches
   // existantes créées avant cette fonctionnalité ; obligatoire côté schéma
   // applicatif pour toute NOUVELLE fiche (travailleurCreateSchema).
-  departementId        String?
-  departement          Departement?   @relation("TravailleursDuDepartement", fields: [departementId], references: [id], onDelete: SetNull)
-  groupeId             String?
-  groupe               Groupe?        @relation("TravailleursDuGroupe", fields: [groupeId], references: [id], onDelete: SetNull)
-  departementsDontChef Departement[]  @relation("ChefDepartement")
+  departementId          String?
+  departement            Departement?   @relation("TravailleursDuDepartement", fields: [departementId], references: [id], onDelete: SetNull)
+  groupeId               String?
+  groupe                 Groupe?        @relation("TravailleursDuGroupe", fields: [groupeId], references: [id], onDelete: SetNull)
+  departementsDontChef   Departement[]  @relation("ChefDepartement")
   // Adresse email professionnelle (3.18, nouveau) — Cloudflare Email Routing.
   // emailDestination = boîte perso existante de l'employé, saisie par le
   // Chargé du personnel. emailProAdresse = adresse générée
@@ -565,14 +566,22 @@ model Travailleur {
   // cas de collision de nom. Les deux identifiants Cloudflare sont internes
   // (jamais exposés au front) : ils permettent de reprendre la vérification
   // ou d'éviter de recréer une règle déjà posée.
-  emailDestination     String?
-  emailProAdresse      String?        @unique
-  emailProStatut       StatutEmailPro @default(AUCUNE)
-  emailProErreur       String?
-  cloudflareAdresseId  String?
-  cloudflareRegleId    String?
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  emailDestination       String?
+  emailProAdresse        String?        @unique
+  emailProStatut         StatutEmailPro @default(AUCUNE)
+  emailProErreur         String?
+  cloudflareAdresseId    String?
+  cloudflareRegleId      String?
+  // Salaire & paie (3.18, nouveau). Nullable en base pour ne pas casser les
+  // fiches existantes ; obligatoires côté schéma applicatif pour toute
+  // NOUVELLE fiche (travailleurCreateSchema). joursTravaillesParMois sert de
+  // diviseur du taux journalier — individuel par agent (26 jours, 13 jours…),
+  // jamais une valeur fixe pour tous.
+  salaireMensuel         Int?
+  joursTravaillesParMois Int?
+  sanctions              Sanction[]
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
 }
 
 enum StatutEmailPro {
@@ -680,6 +689,32 @@ enum StatutDecisionAbsence {
   EN_ATTENTE
   JUSTIFIEE
   NON_JUSTIFIEE
+}
+
+// Sanction (3.18, nouveau) : punition ou retenue disciplinaire — distincte
+// des déductions automatiques pour absence, s'additionne à elles dans le
+// calcul de paie. montant réservé aux retenues (une punition n'est jamais
+// financière) — contrainte appliquée côté schéma applicatif (zod), pas en
+// base : rien n'empêche techniquement une valeur, mais l'API la rejette.
+model Sanction {
+  id              String       @id @default(cuid())
+  travailleurId   String
+  travailleur     Travailleur  @relation(fields: [travailleurId], references: [id], onDelete: Cascade)
+  type            TypeSanction
+  motif           String
+  montant         Int?
+  date            DateTime     @db.Date
+  enregistreParId String?
+  enregistrePar   Utilisateur? @relation("SanctionsEnregistrees", fields: [enregistreParId], references: [id], onDelete: SetNull)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([travailleurId, date])
+}
+
+enum TypeSanction {
+  PUNITION
+  RETENUE
 }
 
 // --- Approbations (section 3.16) & délégation (section 3.7), Phase 10 ---------

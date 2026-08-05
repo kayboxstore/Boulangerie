@@ -87,6 +87,7 @@ export async function reinitialiserBase(raison: string | undefined): Promise<{ s
     prisma.presence.deleteMany(), // ORPHELINE (remplacée par pointages/absences, 3.18) — vidée par cohérence
     prisma.pointage.deleteMany(),
     prisma.absence.deleteMany(),
+    prisma.sanction.deleteMany(),
     prisma.groupe.deleteMany(),
     prisma.departement.deleteMany(),
     prisma.travailleur.deleteMany(),

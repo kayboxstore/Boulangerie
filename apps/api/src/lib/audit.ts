@@ -59,6 +59,7 @@ const MODELE_MODULE: Record<string, string> = {
   Presence: "TRAVAILLEURS", // ORPHELINE (remplacée par Pointage/Absence, 3.18)
   Pointage: "TRAVAILLEURS",
   Absence: "TRAVAILLEURS",
+  Sanction: "TRAVAILLEURS",
   // Départements & Groupes (3.18) — organisationnel, sans permission propre,
   // gouverné par le module TRAVAILLEURS.
   Departement: "TRAVAILLEURS",
