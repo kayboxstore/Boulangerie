@@ -114,7 +114,7 @@ export function LoginPage() {
                       id="email"
                       type="email"
                       autoComplete="email"
-                      placeholder="vous@lomoto.cd"
+                      placeholder="prenom.nom@boulangerie-lomoto.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required

@@ -196,7 +196,11 @@ export function Layout() {
     <div className="flex min-h-screen bg-background print:bg-white">
       {/* Barre latérale — marine, logo et navigation */}
       <aside className="hidden w-64 flex-col bg-marine text-creme md:flex">
-        <div className="flex items-center gap-3 border-b border-creme/10 px-5 py-4">
+        <NavLink
+          to="/"
+          end
+          className="flex items-center gap-3 border-b border-creme/10 px-5 py-4 transition-colors hover:bg-creme/5"
+        >
           <img
             src="/logo-lomoto.png"
             alt="Logo Boulangerie Lomoto"
@@ -206,7 +210,7 @@ export function Layout() {
             <p className="font-serif text-lg font-semibold leading-tight text-or">Boulangerie Lomoto</p>
             <p className="text-[11px] tracking-wide text-creme/60">{t("nav.gestionCommerciale")}</p>
           </div>
-        </div>
+        </NavLink>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           <ListeNavigation liens={liens} t={t} />
@@ -260,16 +264,23 @@ export function Layout() {
               </SheetTrigger>
               <SheetContent side="left" className="p-0">
                 <SheetTitle asChild>
-                  <div className="flex items-center gap-3 border-b border-creme/10 px-5 py-4">
-                    <img
-                      src="/logo-lomoto.png"
-                      alt="Logo Boulangerie Lomoto"
-                      className="h-11 w-11 rounded-full object-contain ring-2 ring-or/70"
-                    />
-                    <div>
-                      <p className="font-serif text-lg font-semibold leading-tight text-or">Boulangerie Lomoto</p>
-                      <p className="text-[11px] tracking-wide text-creme/60">{t("nav.gestionCommerciale")}</p>
-                    </div>
+                  <div className="border-b border-creme/10">
+                    <NavLink
+                      to="/"
+                      end
+                      onClick={() => setMenuOuvert(false)}
+                      className="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-creme/5"
+                    >
+                      <img
+                        src="/logo-lomoto.png"
+                        alt="Logo Boulangerie Lomoto"
+                        className="h-11 w-11 rounded-full object-contain ring-2 ring-or/70"
+                      />
+                      <div>
+                        <p className="font-serif text-lg font-semibold leading-tight text-or">Boulangerie Lomoto</p>
+                        <p className="text-[11px] tracking-wide text-creme/60">{t("nav.gestionCommerciale")}</p>
+                      </div>
+                    </NavLink>
                   </div>
                 </SheetTitle>
                 <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
@@ -299,8 +310,10 @@ export function Layout() {
                 </div>
               </SheetContent>
             </Sheet>
-            <img src="/logo-lomoto.png" alt="Logo Boulangerie Lomoto" className="h-9 w-9 rounded-full object-contain" />
-            <span className="font-serif font-semibold text-or">Boulangerie Lomoto</span>
+            <NavLink to="/" end className="flex items-center gap-2">
+              <img src="/logo-lomoto.png" alt="Logo Boulangerie Lomoto" className="h-9 w-9 rounded-full object-contain" />
+              <span className="font-serif font-semibold text-or">Boulangerie Lomoto</span>
+            </NavLink>
           </div>
           <div className="flex items-center gap-1 [&_button]:text-creme/80 [&_button:hover]:bg-creme/10 [&_button:hover]:text-creme">
             <BasculeTheme />
