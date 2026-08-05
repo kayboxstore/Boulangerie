@@ -13,16 +13,15 @@ Directeur Général (DG) — lecture seule sur tous les modules MÉTIER
 ├── Caissier(ère) — écriture Caisse ; lecture Commandes, Commissions, Production
 │    └── Chargé des commandes — écriture Commandes ; lecture Commissions
 ├── Responsable de production — écriture Production
-├── Responsable Stock/Achats et Fournisseurs — écriture Stocks + Fournisseurs/Achats
-└── Chargé du personnel — écriture Travailleurs
+└── Responsable Stock/Achats et Fournisseurs — écriture Stocks + Fournisseurs/Achats
 
 Administrateur — rôle technique séparé de la hiérarchie métier, jusqu'à 3 comptes
 ├── Admin Principal — SUPER UTILISATEUR : écriture sur ABSOLUMENT TOUS les modules,
 │                     métier compris ; approuve les tâches critiques
 └── Admin secondaire (0 à 2) — lecture sur ABSOLUMENT TOUT (comme le DG, y compris
                       État système et Approbations) ; écriture limitée à
-                      Paramètres/Équipe/Activation/État système, tâches critiques
-                      soumises à l'approbation de l'Admin Principal
+                      Paramètres/Équipe/Activation/État système/Travailleurs, tâches
+                      critiques soumises à l'approbation de l'Admin Principal
 ```
 
 **Règle par défaut** : un supérieur a un accès en lecture seule sur le périmètre de son subordonné direct, en plus de l'écriture sur son propre périmètre. Exceptions explicites :
@@ -31,7 +30,7 @@ Administrateur — rôle technique séparé de la hiérarchie métier, jusqu'à 
 - Le **Chargé des commandes** a un accès en lecture seule sur **Commissions**, en plus de l'écriture sur Commandes.
 - ~~Les **Admins** sont hors hiérarchie métier : aucune permission sur les modules métier, uniquement l'édition de Paramètres/Équipe/Activation/État système.~~ **Règle entièrement abrogée** — remplacée par les deux points ci-dessous.
 - L'**Admin Principal** est un **super utilisateur** : il a l'**écriture sur absolument tous les modules**, y compris les modules métier (Commandes, Caisse, Stocks, Production, Fournisseurs, Travailleurs), en plus de Paramètres/Équipe/Activation/État système/Approbations.
-- L'**Admin secondaire** a la **lecture sur absolument tout**, comme le DG — y compris État système et Approbations. Son **écriture** reste cantonnée à son périmètre d'origine (Paramètres/Équipe/Activation/État système), et ses tâches critiques restent soumises à l'approbation de l'Admin Principal. La lecture n'a jamais été soumise à approbation : ses nouveaux droits de consultation ne changent rien au workflow.
+- L'**Admin secondaire** a la **lecture sur absolument tout**, comme le DG — y compris État système et Approbations. Son **écriture** reste cantonnée à son périmètre d'origine (Paramètres/Équipe/Activation/État système/Travailleurs), et ses tâches critiques restent soumises à l'approbation de l'Admin Principal. La lecture n'a jamais été soumise à approbation : ses nouveaux droits de consultation ne changent rien au workflow.
 
 **Garde-fou — intervention de l'Admin Principal hors de son périmètre d'origine** : quand l'Admin Principal **écrit** dans un module métier qui n'est pas Paramètres/Équipe/Activation/État système/Approbations, le **rôle propriétaire de ce module** (celui qui y détient l'écriture — ex. Chargé des commandes pour Commandes) **et le DG** reçoivent une **notification temps réel** signalant l'intervention. Ce signal s'ajoute à la trace automatique au Journal d'audit (3.17), qui capte déjà toute modification ou suppression. Objectif : un pouvoir total reste possible, mais jamais discret.
 
@@ -52,12 +51,11 @@ Quand un Admin secondaire déclenche une de ces actions, une demande est créée
 |---|---|---|
 | Directeur Général | *(aucune)* | Tous les modules métier — PAS Paramètres |
 | Admin Principal | **TOUS les modules sans exception** (métier compris) + Paramètres, Équipe, Activation, État système, Approbations | — *(déjà tout en écriture)* |
-| Admin secondaire | Paramètres, Équipe, Activation, État système *(tâches critiques soumises à approbation)* | **TOUS les autres modules**, y compris État système et Approbations |
+| Admin secondaire | Paramètres, Équipe, Activation, État système, Travailleurs *(tâches critiques soumises à approbation)* | **TOUS les autres modules**, y compris État système et Approbations |
 | Caissier(ère) | Caisse | Commandes, Commissions, Production |
 | Chargé des commandes | Commandes | Commissions |
 | Responsable de production | Production | — |
 | Responsable Stock/Achats et Fournisseurs | Stocks, Fournisseurs & achats | — |
-| Chargé du personnel | Travailleurs | — |
 
 **À propos et Rapports** (3.12, 3.13) : accessibles à tous, portée par personne (voir 3.13).
 
@@ -436,7 +434,7 @@ File d'attente des demandes soumises par les Admins secondaires pour les tâches
 ### 3.17 Journal d'audit *(nouveau — DG et Admins uniquement, lecture seule)*
 Historique **immuable** de toute modification ou suppression (pas seulement les créations, déjà tracées via créePar/enregistrePar) : qui, quoi, quand, valeur avant/après. Protège l'ensemble de l'équipe — y compris les Admins, dont les actions y sont également journalisées. Filtrable par utilisateur, module, période.
 
-### 3.18 Travailleurs (Chargé du personnel, écriture — scope résolu)
+### 3.18 Travailleurs (Admin secondaire, écriture — scope résolu)
 Roster du personnel, plus large que les seuls comptes Utilisateur : couvre aussi le personnel sans accès à l'application (ex. livreur, agent d'entretien).
 - Fiche : nom, téléphone, poste, date d'embauche, lien optionnel vers un compte Utilisateur (si la personne a aussi un accès à l'app)
 - Présence/pointage quotidien : par travailleur et par date — statut (présent/absent/retard), heure d'arrivée/départ (optionnelles)
@@ -444,7 +442,9 @@ Roster du personnel, plus large que les seuls comptes Utilisateur : couvre aussi
 Filtres & affichage : par travailleur, par date, bouton "Tout afficher".
 DG : lecture seule, comme tous les modules métier.
 
-Adresse email professionnelle (nouveau) : sur une fiche Travailleur, le Chargé du personnel peut renseigner une adresse de destination (boîte mail personnelle existante de l'employé) et déclencher la création automatique d'une adresse pro (prenom.nom@boulangerie-lomoto.com) via Cloudflare Email Routing (gratuit, redirection — pas une boîte indépendante). Statut affiché sur la fiche : en attente de vérification / actif / échec. La vérification finale (clic sur le lien reçu par l'employé) reste hors du contrôle de l'app — Cloudflare l'exige côté destinataire, aucun moyen de l'automatiser davantage.
+Adresse email professionnelle (nouveau) : sur une fiche Travailleur, l'Admin secondaire peut renseigner une adresse de destination (boîte mail personnelle existante de l'employé) et déclencher la création automatique d'une adresse pro (prenom.nom@boulangerie-lomoto.com) via Cloudflare Email Routing (gratuit, redirection — pas une boîte indépendante). Statut affiché sur la fiche : en attente de vérification / actif / échec. La vérification finale (clic sur le lien reçu par l'employé) reste hors du contrôle de l'app — Cloudflare l'exige côté destinataire, aucun moyen de l'automatiser davantage.
+
+Départements & Groupes (nouveau — purement organisationnel, aucune permission associée) : chaque Travailleur est rattaché à un Département (ex. « Département de Production », « Département des finances »), qui a un chef désigné (un Travailleur, simple référence, pas de droits particuliers dans l'app). Un Département peut être subdivisé en Groupes (ex. « Groupe 1 », « Groupe 2 » au sein de la Production) — terme volontairement différent d'« Équipe » pour éviter la confusion avec le nom d'affichage des rôles (3.7).
 
 ### 3.19 Assistant (accessible à tous les rôles — mode humain, IA désactivée temporairement)
 Chat en temps réel (Socket.io) accessible à tout utilisateur connecté, pour écrire directement à un Admin et envoyer des captures d'écran. (La couche IA Gemini est codée et prête, mais désactivée pour l'instant — bloquée par la facturation Google Cloud à finaliser. Reprise prévue lors d'une prochaine mise à jour, sans travail de reconstruction : juste la réactiver une fois la facturation réglée.)
@@ -581,7 +581,7 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 6. **Fournisseurs & achats** — notification de réception
 7. **Tableau de bord & rapports** — vue KPI globale (DG), vue filtrée (autres rôles), résumé de clôture quotidien
 8. **Rapports personnels, À propos** — journal d'activité par utilisateur (3.13), page statique (3.12)
-9. **Travailleurs & Utilisateurs** — module du Chargé du personnel *(scope détaillé à définir — voir Questions ouvertes)*
+9. **Travailleurs & Utilisateurs** — module Travailleurs (Admin secondaire, écriture — scope résolu)
 10. **Admin : Activation, État système, Approbations, Délégation temporaire** — gestion des comptes, statut système, workflow d'approbation multi-admin, délégation de droits
 11. **Journal d'audit** — traçabilité des modifications/suppressions réussies ; couverture complète de l'application existante (toutes les phases sont désormais construites : les ~13 modules Commandes, Commissions, Caisse, Stocks, Production, Fournisseurs, Équipe, Travailleurs, Paramètres, Activation, Approbations, Délégation sont tous couverts)
 
@@ -675,9 +675,9 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - Alors l'action ne s'exécute pas immédiatement ; une demande est créée et l'Admin Principal reçoit une notification temps réel
 
 **Module grisé**
-- Étant donné un Chargé du personnel connecté
+- Étant donné un Responsable de production connecté
 - Quand il consulte le menu
-- Alors il voit tous les modules listés, mais seul "Travailleurs" (et À propos/Rapports) est cliquable — les autres apparaissent grisés
+- Alors il voit tous les modules listés, mais seul "Production" (et À propos/Rapports) est cliquable — les autres apparaissent grisés
 
 **Visibilité croisée — Caissier**
 - Étant donné qu'un rapport de production est publié par le Responsable de production
