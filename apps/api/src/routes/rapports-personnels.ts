@@ -3,12 +3,12 @@ import { Prisma } from "@prisma/client";
 import {
   formatFc,
   formatQuantite,
-  STATUT_PRESENCE_LABELS,
+  STATUT_DECISION_ABSENCE_LABELS,
   TYPE_MOUVEMENT_LABELS,
   TYPES_ACTIVITE,
   type ActiviteDTO,
   type PorteeRapportsDTO,
-  type StatutPresence,
+  type StatutDecisionAbsence,
   type TypeActivite,
   type TypeMouvementStock,
 } from "@lomoto/shared";
@@ -263,19 +263,41 @@ rapportsPersonnelsRouter.get("/", async (req, res, next) => {
     }
 
     if (voulu("POINTAGE")) {
-      const presences = await prisma.presence.findMany({
-        where: { ...filtreAuteur("enregistreParId"), ...filtreDate("updatedAt") },
+      const pointages = await prisma.pointage.findMany({
+        where: { ...filtreAuteur("enregistreParId"), ...filtreDate("horodatageEntree") },
         include: { enregistrePar: AUTEUR, travailleur: { select: { nom: true } } },
-        orderBy: { updatedAt: "desc" },
+        orderBy: { horodatageEntree: "desc" },
         take: LIMITE_PAR_SOURCE,
       });
-      for (const p of presences) {
+      for (const p of pointages) {
+        const formatHorodatage = (d: Date) => d.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
         pousser(
           "POINTAGE",
           p.id,
-          p.updatedAt,
-          `Pointage de ${p.travailleur.nom} le ${p.date.toISOString().slice(0, 10)} — ${STATUT_PRESENCE_LABELS[p.statut as StatutPresence]}${p.heureArrivee ? ` (arrivée ${p.heureArrivee})` : ""}`,
+          p.horodatageEntree,
+          `Pointage de ${p.travailleur.nom} — entrée ${formatHorodatage(p.horodatageEntree)}${p.horodatageSortie ? `, sortie ${formatHorodatage(p.horodatageSortie)}` : " (encore en poste)"}`,
           p.enregistrePar,
+        );
+      }
+    }
+
+    // Décisions d'absence (pas la déclaration : l'entité Absence ne porte
+    // aucun auteur de déclaration, seulement decideParId une fois tranchée).
+    if (voulu("ABSENCE")) {
+      const absences = await prisma.absence.findMany({
+        where: { ...filtreAuteur("decideParId"), ...filtreDate("dateDecision") },
+        include: { decidePar: AUTEUR, travailleur: { select: { nom: true } } },
+        orderBy: { dateDecision: "desc" },
+        take: LIMITE_PAR_SOURCE,
+      });
+      for (const a of absences) {
+        if (!a.dateDecision) continue;
+        pousser(
+          "ABSENCE",
+          a.id,
+          a.dateDecision,
+          `Absence de ${a.travailleur.nom} le ${a.date.toISOString().slice(0, 10)} tranchée : ${STATUT_DECISION_ABSENCE_LABELS[a.decisionStatut as StatutDecisionAbsence]}`,
+          a.decidePar,
         );
       }
     }

@@ -287,7 +287,6 @@ export function DashboardPage() {
         lignes: [
           [c("expected"), travailleurs.attendus],
           [c("present"), travailleurs.presents],
-          [c("late"), travailleurs.retards],
           [c("absent"), travailleurs.absents],
           [c("notClocked"), travailleurs.nonPointes],
         ],
@@ -566,11 +565,10 @@ export function DashboardPage() {
           <Card>
             <CardHeader>
               <TitreWidget icone={CalendarCheck}>{t("dashboard.presenceTitle")}</TitreWidget>
-              <CardDescription>{t("dashboard.presenceDesc", { count: travailleurs.presents + travailleurs.retards, total: travailleurs.attendus })}</CardDescription>
+              <CardDescription>{t("dashboard.presenceDesc", { count: travailleurs.presents, total: travailleurs.attendus })}</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-3">
+            <CardContent className="grid grid-cols-3 gap-3">
               <CarteKPI titre={t("dashboard.kpiPresent")} valeur={travailleurs.presents} accent />
-              <CarteKPI titre={t("dashboard.kpiLate")} valeur={travailleurs.retards} />
               <CarteKPI titre={t("dashboard.kpiAbsent")} valeur={travailleurs.absents} />
               <CarteKPI titre={t("dashboard.kpiNotClocked")} valeur={travailleurs.nonPointes} />
             </CardContent>

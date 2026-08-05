@@ -56,7 +56,9 @@ const MODELE_MODULE: Record<string, string> = {
   LigneCommandeFournisseur: "FOURNISSEURS",
   // Travailleurs
   Travailleur: "TRAVAILLEURS",
-  Presence: "TRAVAILLEURS",
+  Presence: "TRAVAILLEURS", // ORPHELINE (remplacée par Pointage/Absence, 3.18)
+  Pointage: "TRAVAILLEURS",
+  Absence: "TRAVAILLEURS",
   // Départements & Groupes (3.18) — organisationnel, sans permission propre,
   // gouverné par le module TRAVAILLEURS.
   Departement: "TRAVAILLEURS",

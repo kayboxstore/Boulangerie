@@ -166,6 +166,9 @@ export const TYPES_EVENEMENT = [
   // Réaffectation d'équipe (section 3.7) : le rôle/équipe d'un compte change —
   // notification au titulaire du compte concerné.
   "REAFFECTATION_EQUIPE",
+  // Absence tranchée non justifiée (section 3.18) : notifie le travailleur
+  // concerné (s'il a un compte) et les autres Admins.
+  "ABSENCE_NON_JUSTIFIEE",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -860,20 +863,10 @@ export function formatQuantite(quantite: number, unite: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Travailleurs & présence (section 3.18)
+// Travailleurs (section 3.18)
 // ---------------------------------------------------------------------------
 
-export const STATUTS_PRESENCE = ["PRESENT", "ABSENT", "RETARD"] as const;
-export type StatutPresence = (typeof STATUTS_PRESENCE)[number];
-
-export const STATUT_PRESENCE_LABELS: Record<StatutPresence, string> = {
-  PRESENT: "Présent",
-  ABSENT: "Absent",
-  RETARD: "Retard",
-};
-
 const dateISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)");
-const heureHHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide (HH:MM)");
 
 export const travailleurCreateSchema = z.object({
   nom: z.string().trim().min(1, "Le nom est requis").max(120),
@@ -980,15 +973,75 @@ export const emailProCreerSchema = z.object({
 });
 export type EmailProCreerInput = z.infer<typeof emailProCreerSchema>;
 
-// Pointage quotidien : re-pointer le même jour corrige la ligne existante.
-export const presencePointageSchema = z.object({
+// ---------------------------------------------------------------------------
+// Pointage & Absence (section 3.18, remplace Presence) — horodatage réel
+// d'entrée/sortie (gère les équipes de nuit à cheval sur deux jours) et
+// absence en entité séparée (motif + décision), voir plus bas.
+// ---------------------------------------------------------------------------
+
+// Format ISO 8601 complet avec offset (ex. via Date.toISOString() côté
+// client) — jamais un "datetime-local" brut sans fuseau, qui serait
+// interprété différemment selon le fuseau du navigateur vs du serveur.
+const horodatageISO = z.string().datetime({ message: "Horodatage invalide" });
+
+export const pointageCreerSchema = z.object({
+  travailleurId: z.string().min(1, "Le travailleur est requis"),
+  horodatageEntree: horodatageISO,
+  // Optionnel : un pointage peut être créé "ouvert" (personne encore en
+  // poste) ou complet d'emblée (saisie a posteriori).
+  horodatageSortie: horodatageISO.optional(),
+});
+export type PointageCreerInput = z.infer<typeof pointageCreerSchema>;
+
+export const pointageModifierSchema = z.object({
+  horodatageEntree: horodatageISO.optional(),
+  // null = rouvrir le pointage (retire la sortie) ; string = clôturer/corriger.
+  horodatageSortie: horodatageISO.nullable().optional(),
+});
+export type PointageModifierInput = z.infer<typeof pointageModifierSchema>;
+
+export interface PointageDTO {
+  id: string;
+  travailleur: { id: string; nom: string; poste: string };
+  horodatageEntree: string;
+  horodatageSortie: string | null;
+  enregistrePar: { id: string; nom: string } | null;
+}
+
+export const STATUTS_DECISION_ABSENCE = ["EN_ATTENTE", "JUSTIFIEE", "NON_JUSTIFIEE"] as const;
+export type StatutDecisionAbsence = (typeof STATUTS_DECISION_ABSENCE)[number];
+
+export const STATUT_DECISION_ABSENCE_LABELS: Record<StatutDecisionAbsence, string> = {
+  EN_ATTENTE: "En attente",
+  JUSTIFIEE: "Justifiée",
+  NON_JUSTIFIEE: "Non justifiée",
+};
+
+// Déclaration initiale (motif) — le decisionStatut démarre toujours à
+// EN_ATTENTE côté serveur, jamais choisi à la déclaration.
+export const absenceDeclarerSchema = z.object({
   travailleurId: z.string().min(1, "Le travailleur est requis"),
   date: dateISO,
-  statut: z.enum(STATUTS_PRESENCE),
-  heureArrivee: heureHHMM.optional(),
-  heureDepart: heureHHMM.optional(),
+  motif: z.string().trim().min(1, "Le motif est requis").max(500),
 });
-export type PresencePointageInput = z.infer<typeof presencePointageSchema>;
+export type AbsenceDeclarerInput = z.infer<typeof absenceDeclarerSchema>;
+
+// Décision — acte distinct de la déclaration (3.18) : jamais EN_ATTENTE ici,
+// c'est l'état initial automatique, pas une décision qu'on choisit.
+export const absenceDecisionSchema = z.object({
+  decisionStatut: z.enum(["JUSTIFIEE", "NON_JUSTIFIEE"]),
+});
+export type AbsenceDecisionInput = z.infer<typeof absenceDecisionSchema>;
+
+export interface AbsenceDTO {
+  id: string;
+  travailleur: { id: string; nom: string; poste: string };
+  date: string;
+  motif: string;
+  decisionStatut: StatutDecisionAbsence;
+  decidePar: { id: string; nom: string } | null;
+  dateDecision: string | null;
+}
 
 export interface TravailleurDTO {
   id: string;
@@ -1004,16 +1057,6 @@ export interface TravailleurDTO {
   emailProErreur: string | null;
   departement: { id: string; nom: string } | null;
   groupe: { id: string; nom: string } | null;
-}
-
-export interface PresenceDTO {
-  id: string;
-  travailleur: { id: string; nom: string; poste: string };
-  date: string;
-  statut: StatutPresence;
-  heureArrivee: string | null;
-  heureDepart: string | null;
-  enregistrePar: { id: string; nom: string } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1073,8 +1116,9 @@ export interface RapportFournisseursDTO {
 
 export interface RapportTravailleursDTO {
   attendus: number;
+  /** Pointage horodaté actif aujourd'hui (entré aujourd'hui, ou équipe de nuit encore en poste). */
   presents: number;
-  retards: number;
+  /** Absence déclarée pour aujourd'hui, quel que soit le statut de décision. */
   absents: number;
   nonPointes: number;
 }
@@ -1163,6 +1207,7 @@ export const TYPES_ACTIVITE = [
   "COMMANDE_FOURNISSEUR",
   "RECEPTION_FOURNISSEUR",
   "POINTAGE",
+  "ABSENCE",
 ] as const;
 export type TypeActivite = (typeof TYPES_ACTIVITE)[number];
 
@@ -1175,6 +1220,7 @@ export const TYPE_ACTIVITE_LABELS: Record<TypeActivite, string> = {
   COMMANDE_FOURNISSEUR: "Commande fournisseur",
   RECEPTION_FOURNISSEUR: "Réception fournisseur",
   POINTAGE: "Pointage",
+  ABSENCE: "Décision d'absence",
 };
 
 export interface ActiviteDTO {

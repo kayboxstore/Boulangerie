@@ -1,8 +1,15 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck, Link2, Pencil, Trash2, UserPlus } from "lucide-react";
+import { CalendarCheck, CalendarX, Link2, LogOut, Pencil, Trash2, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { STATUTS_PRESENCE, type DepartementDTO, type PresenceDTO, type StatutPresence, type TravailleurDTO } from "@lomoto/shared";
+import {
+  STATUT_DECISION_ABSENCE_LABELS,
+  type AbsenceDTO,
+  type DepartementDTO,
+  type PointageDTO,
+  type StatutDecisionAbsence,
+  type TravailleurDTO,
+} from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/components/FeedbackProvider";
@@ -12,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select";
 import {
@@ -34,10 +42,32 @@ function aujourdhui(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-const BADGE_STATUT: Record<StatutPresence, string> = {
-  PRESENT: "bg-or/15 text-terracotta dark:text-or border-transparent",
-  ABSENT: "bg-terracotta text-creme border-transparent",
-  RETARD: "bg-beige/60 text-marine dark:bg-beige/20 dark:text-creme border-transparent",
+/** Horodatage complet jour+heure — la différence de jour saute aux yeux (équipes de nuit à cheval sur minuit). */
+function formatHorodatage(iso: string): string {
+  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(
+    new Date(iso),
+  );
+}
+
+/** ISO -> valeur affichable dans un <input type="datetime-local"> (heure LOCALE du navigateur, pas UTC). */
+function versInputLocal(iso: string): string {
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+/** Valeur d'un <input type="datetime-local"> -> ISO complet (non ambigu, quel que soit le fuseau du serveur). */
+function versISO(valeurLocale: string): string {
+  return new Date(valeurLocale).toISOString();
+}
+
+function maintenantLocal(): string {
+  return versInputLocal(new Date().toISOString());
+}
+
+const BADGE_DECISION: Record<StatutDecisionAbsence, string> = {
+  EN_ATTENTE: "bg-beige/60 text-marine dark:bg-beige/20 dark:text-creme border-transparent",
+  JUSTIFIEE: "bg-or/15 text-terracotta dark:text-or border-transparent",
+  NON_JUSTIFIEE: "bg-terracotta text-creme border-transparent",
 };
 
 interface CompteLiable {
@@ -67,7 +97,7 @@ export function TravailleursPage() {
     queryFn: () => api<{ departements: DepartementDTO[] }>("/api/departements"),
   });
 
-  // --- Filtres présence (pattern Commandes : travailleur, dates, Tout afficher)
+  // --- Filtres pointage/absence (pattern Commandes : travailleur, dates, Tout afficher)
   const [filtreTravailleur, setFiltreTravailleur] = useState("");
   const [filtreDu, setFiltreDu] = useState("");
   const [filtreAu, setFiltreAu] = useState("");
@@ -78,20 +108,28 @@ export function TravailleursPage() {
   if (filtreAu) parametres.set("au", filtreAu);
   const chaineParams = parametres.toString();
 
-  const { data: presencesData } = useQuery({
-    queryKey: ["presences", chaineParams],
-    queryFn: () => api<{ presences: PresenceDTO[] }>(`/api/travailleurs/presences${chaineParams ? `?${chaineParams}` : ""}`),
+  const { data: pointagesData } = useQuery({
+    queryKey: ["pointages", chaineParams],
+    queryFn: () => api<{ pointages: PointageDTO[] }>(`/api/travailleurs/pointages${chaineParams ? `?${chaineParams}` : ""}`),
+  });
+  const { data: absencesData } = useQuery({
+    queryKey: ["absences", chaineParams],
+    queryFn: () => api<{ absences: AbsenceDTO[] }>(`/api/travailleurs/absences${chaineParams ? `?${chaineParams}` : ""}`),
   });
 
   const travailleurs = travailleursData?.travailleurs ?? [];
-  const presences = presencesData?.presences ?? [];
+  const pointages = pointagesData?.pointages ?? [];
+  const absences = absencesData?.absences ?? [];
   const comptes = comptesData?.comptes ?? [];
   const departements = departementsData?.departements ?? [];
   const filtresActifs = !!(filtreTravailleur || filtreDu || filtreAu);
 
   const rafraichir = () => {
     queryClient.invalidateQueries({ queryKey: ["travailleurs"] });
-    queryClient.invalidateQueries({ queryKey: ["presences"] });
+    queryClient.invalidateQueries({ queryKey: ["pointages"] });
+  };
+  const rafraichirAbsences = () => {
+    queryClient.invalidateQueries({ queryKey: ["absences"] });
   };
 
   // --- Dialog fiche travailleur ---------------------------------------------
@@ -173,42 +211,110 @@ export function TravailleursPage() {
     onError: (e) => toastErreur(e instanceof Error ? e.message : t("travailleurs.deleteError")),
   });
 
-  // --- Dialog pointage -------------------------------------------------------
+  // --- Dialog pointage (horodatage réel entrée/sortie, 3.18) -----------------
   const [dialogPointage, setDialogPointage] = useState(false);
+  const [pointageEditee, setPointageEditee] = useState<PointageDTO | null>(null);
   const [ptTravailleurId, setPtTravailleurId] = useState("");
-  const [ptDate, setPtDate] = useState(aujourdhui());
-  const [ptStatut, setPtStatut] = useState<StatutPresence>("PRESENT");
-  const [ptArrivee, setPtArrivee] = useState("");
-  const [ptDepart, setPtDepart] = useState("");
+  const [ptEntree, setPtEntree] = useState(maintenantLocal());
+  const [ptSortie, setPtSortie] = useState("");
   const [erreurPointage, setErreurPointage] = useState<string | null>(null);
 
-  function ouvrirPointage(travailleurId?: string) {
+  function ouvrirNouveauPointage(travailleurId?: string) {
+    setPointageEditee(null);
     setPtTravailleurId(travailleurId ?? travailleurs[0]?.id ?? "");
-    setPtDate(aujourdhui());
-    setPtStatut("PRESENT");
-    setPtArrivee("");
-    setPtDepart("");
+    setPtEntree(maintenantLocal());
+    setPtSortie("");
     setErreurPointage(null);
     setDialogPointage(true);
   }
 
-  const pointer = useMutation({
-    mutationFn: () =>
-      api("/api/travailleurs/presences", {
-        method: "POST",
-        body: JSON.stringify({
-          travailleurId: ptTravailleurId,
-          date: ptDate,
-          statut: ptStatut,
-          heureArrivee: ptStatut !== "ABSENT" && ptArrivee ? ptArrivee : undefined,
-          heureDepart: ptStatut !== "ABSENT" && ptDepart ? ptDepart : undefined,
-        }),
-      }),
+  function ouvrirModifierPointage(p: PointageDTO) {
+    setPointageEditee(p);
+    setPtTravailleurId(p.travailleur.id);
+    setPtEntree(versInputLocal(p.horodatageEntree));
+    setPtSortie(p.horodatageSortie ? versInputLocal(p.horodatageSortie) : "");
+    setErreurPointage(null);
+    setDialogPointage(true);
+  }
+
+  const sauverPointage = useMutation({
+    mutationFn: () => {
+      const horodatageSortie = ptSortie ? versISO(ptSortie) : undefined;
+      return pointageEditee
+        ? api(`/api/travailleurs/pointages/${pointageEditee.id}`, {
+            method: "PUT",
+            body: JSON.stringify({ horodatageEntree: versISO(ptEntree), horodatageSortie: horodatageSortie ?? null }),
+          })
+        : api("/api/travailleurs/pointages", {
+            method: "POST",
+            body: JSON.stringify({ travailleurId: ptTravailleurId, horodatageEntree: versISO(ptEntree), horodatageSortie }),
+          });
+    },
     onSuccess: () => {
       setDialogPointage(false);
       rafraichir();
     },
     onError: (e) => setErreurPointage(e instanceof Error ? e.message : t("travailleurs.clockInError")),
+  });
+
+  const cloturerMaintenant = useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/travailleurs/pointages/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ horodatageSortie: new Date().toISOString() }),
+      }),
+    onSuccess: rafraichir,
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("travailleurs.clockInError")),
+  });
+
+  const supprimerPointage = useMutation({
+    mutationFn: (id: string) => api(`/api/travailleurs/pointages/${id}`, { method: "DELETE" }),
+    onSuccess: rafraichir,
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("travailleurs.deleteError")),
+  });
+
+  // --- Dialog absence (motif + décision distincte, 3.18) ---------------------
+  const [dialogAbsence, setDialogAbsence] = useState(false);
+  const [abTravailleurId, setAbTravailleurId] = useState("");
+  const [abDate, setAbDate] = useState(aujourdhui());
+  const [abMotif, setAbMotif] = useState("");
+  const [erreurAbsence, setErreurAbsence] = useState<string | null>(null);
+
+  function ouvrirNouvelleAbsence() {
+    setAbTravailleurId(travailleurs[0]?.id ?? "");
+    setAbDate(aujourdhui());
+    setAbMotif("");
+    setErreurAbsence(null);
+    setDialogAbsence(true);
+  }
+
+  const declarerAbsence = useMutation({
+    mutationFn: () =>
+      api("/api/travailleurs/absences", {
+        method: "POST",
+        body: JSON.stringify({ travailleurId: abTravailleurId, date: abDate, motif: abMotif.trim() }),
+      }),
+    onSuccess: () => {
+      setDialogAbsence(false);
+      rafraichirAbsences();
+    },
+    onError: (e) => setErreurAbsence(e instanceof Error ? e.message : t("travailleurs.saveError")),
+  });
+
+  const trancherAbsence = useMutation({
+    mutationFn: ({ id, decisionStatut }: { id: string; decisionStatut: "JUSTIFIEE" | "NON_JUSTIFIEE" }) =>
+      api(`/api/travailleurs/absences/${id}/decision`, {
+        method: "PUT",
+        body: JSON.stringify({ decisionStatut }),
+      }),
+    onSuccess: rafraichirAbsences,
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("travailleurs.saveError")),
+  });
+
+  const supprimerAbsence = useMutation({
+    mutationFn: (id: string) => api(`/api/travailleurs/absences/${id}`, { method: "DELETE" }),
+    onSuccess: rafraichirAbsences,
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("travailleurs.deleteError")),
   });
 
   return (
@@ -220,9 +326,13 @@ export function TravailleursPage() {
         </div>
         {editable && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => ouvrirPointage()} disabled={travailleurs.length === 0}>
+            <Button variant="outline" onClick={() => ouvrirNouveauPointage()} disabled={travailleurs.length === 0}>
               <CalendarCheck className="h-4 w-4" />
               {t("travailleurs.clockIn")}
+            </Button>
+            <Button variant="outline" onClick={ouvrirNouvelleAbsence} disabled={travailleurs.length === 0}>
+              <CalendarX className="h-4 w-4" />
+              {t("travailleurs.declareAbsence")}
             </Button>
             <Button variant="cta" onClick={() => ouvrirFiche(null)}>
               <UserPlus className="h-4 w-4" />
@@ -282,7 +392,7 @@ export function TravailleursPage() {
                   </TableCell>
                   {editable && (
                     <TableCell className="text-right">
-                      <Button variant="outline" size="sm" className="mr-1" onClick={() => ouvrirPointage(trav.id)}>
+                      <Button variant="outline" size="sm" className="mr-1" onClick={() => ouvrirNouveauPointage(trav.id)}>
                         <CalendarCheck className="h-3.5 w-3.5" />
                         {t("travailleurs.clockIn")}
                       </Button>
@@ -343,7 +453,7 @@ export function TravailleursPage() {
                 />
                 {editable && (
                   <CarteLigneActions>
-                    <Button variant="outline" size="sm" onClick={() => ouvrirPointage(trav.id)}>
+                    <Button variant="outline" size="sm" onClick={() => ouvrirNouveauPointage(trav.id)}>
                       <CalendarCheck className="h-3.5 w-3.5" />
                       {t("travailleurs.clockIn")}
                     </Button>
@@ -373,76 +483,103 @@ export function TravailleursPage() {
         </CardContent>
       </Card>
 
-      {/* Présences */}
+      {/* Filtres partagés pointage/absence */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-full sm:w-56">
+          <Label htmlFor="filtre-travailleur">{t("travailleurs.worker")}</Label>
+          <NativeSelect id="filtre-travailleur" value={filtreTravailleur} onChange={(e) => setFiltreTravailleur(e.target.value)}>
+            <option value="">{t("travailleurs.filterAll")}</option>
+            {travailleurs.map((trav) => (
+              <option key={trav.id} value={trav.id}>
+                {trav.nom}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+        <div>
+          <Label htmlFor="filtre-du">{t("common.from")}</Label>
+          <Input id="filtre-du" type="date" value={filtreDu} onChange={(e) => setFiltreDu(e.target.value)} />
+        </div>
+        <div>
+          <Label htmlFor="filtre-au">{t("common.to")}</Label>
+          <Input id="filtre-au" type="date" value={filtreAu} onChange={(e) => setFiltreAu(e.target.value)} />
+        </div>
+        {filtresActifs && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setFiltreTravailleur("");
+              setFiltreDu("");
+              setFiltreAu("");
+            }}
+          >
+            {t("common.showAll")}
+          </Button>
+        )}
+      </div>
+
+      {/* Historique de pointage */}
       <Card>
         <CardHeader>
-          <CardTitle>{t("travailleurs.presenceTitle")}</CardTitle>
-          <CardDescription>{t("travailleurs.presenceDesc")}</CardDescription>
+          <CardTitle>{t("travailleurs.pointageTitle")}</CardTitle>
+          <CardDescription>{t("travailleurs.pointageDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="w-full sm:w-56">
-              <Label htmlFor="filtre-travailleur">{t("travailleurs.worker")}</Label>
-              <NativeSelect id="filtre-travailleur" value={filtreTravailleur} onChange={(e) => setFiltreTravailleur(e.target.value)}>
-                <option value="">{t("travailleurs.filterAll")}</option>
-                {travailleurs.map((trav) => (
-                  <option key={trav.id} value={trav.id}>
-                    {trav.nom}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-            <div>
-              <Label htmlFor="filtre-du">{t("common.from")}</Label>
-              <Input id="filtre-du" type="date" value={filtreDu} onChange={(e) => setFiltreDu(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="filtre-au">{t("common.to")}</Label>
-              <Input id="filtre-au" type="date" value={filtreAu} onChange={(e) => setFiltreAu(e.target.value)} />
-            </div>
-            {filtresActifs && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setFiltreTravailleur("");
-                  setFiltreDu("");
-                  setFiltreAu("");
-                }}
-              >
-                {t("common.showAll")}
-              </Button>
-            )}
-          </div>
-
           <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
-                <TableHead>{t("common.date")}</TableHead>
                 <TableHead>{t("travailleurs.worker")}</TableHead>
                 <TableHead>{t("travailleurs.post")}</TableHead>
-                <TableHead>{t("travailleurs.status")}</TableHead>
-                <TableHead>{t("travailleurs.colArrival")}</TableHead>
-                <TableHead>{t("travailleurs.colDeparture")}</TableHead>
+                <TableHead>{t("travailleurs.colEntry")}</TableHead>
+                <TableHead>{t("travailleurs.colExit")}</TableHead>
                 <TableHead>{t("travailleurs.colRecordedBy")}</TableHead>
+                {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {presences.map((p) => (
+              {pointages.map((p) => (
                 <TableRow key={p.id}>
-                  <TableCell className="whitespace-nowrap">{formatDate(p.date)}</TableCell>
                   <TableCell className="font-medium">{p.travailleur.nom}</TableCell>
                   <TableCell className="text-muted-foreground">{p.travailleur.poste}</TableCell>
-                  <TableCell>
-                    <Badge className={cn(BADGE_STATUT[p.statut])}>{t(`presence.${p.statut}`)}</Badge>
+                  <TableCell className="whitespace-nowrap">{formatHorodatage(p.horodatageEntree)}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {p.horodatageSortie ? (
+                      formatHorodatage(p.horodatageSortie)
+                    ) : (
+                      <Badge variant="outline">{t("travailleurs.stillOnDuty")}</Badge>
+                    )}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{p.heureArrivee ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{p.heureDepart ?? "—"}</TableCell>
                   <TableCell className="text-sm">{p.enregistrePar?.nom ?? "—"}</TableCell>
+                  {editable && (
+                    <TableCell className="text-right">
+                      {!p.horodatageSortie && (
+                        <Button variant="outline" size="sm" className="mr-1" onClick={() => cloturerMaintenant.mutate(p.id)}>
+                          <LogOut className="h-3.5 w-3.5" />
+                          {t("travailleurs.clockOutNow")}
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirModifierPointage(p)} aria-label={t("travailleurs.ariaEditClockIn")}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-terracotta hover:text-terracotta"
+                        onClick={async () => {
+                          if (await confirmer({ description: t("travailleurs.confirmDeleteClockIn"), destructive: true }))
+                            supprimerPointage.mutate(p.id);
+                        }}
+                        aria-label={t("travailleurs.ariaDeleteClockIn")}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
-              {presences.length === 0 && (
+              {pointages.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={editable ? 6 : 5} className="py-8 text-center text-muted-foreground">
                     {filtresActifs ? t("travailleurs.emptyFiltered") : t("travailleurs.empty")}
                   </TableCell>
                 </TableRow>
@@ -451,22 +588,171 @@ export function TravailleursPage() {
           </Table>
 
           <div className="space-y-2 md:hidden">
-            {presences.map((p) => (
+            {pointages.map((p) => (
               <CarteLigne key={p.id}>
                 <CarteLigneTitre>
                   <span>{p.travailleur.nom}</span>
-                  <Badge className={cn(BADGE_STATUT[p.statut])}>{t(`presence.${p.statut}`)}</Badge>
+                  <span className="text-sm font-normal text-muted-foreground">{p.travailleur.poste}</span>
                 </CarteLigneTitre>
-                <CarteLigneChamp label={t("common.date")} value={formatDate(p.date)} />
-                <CarteLigneChamp label={t("travailleurs.post")} value={p.travailleur.poste} />
-                <CarteLigneChamp label={t("travailleurs.colArrival")} value={p.heureArrivee ?? "—"} />
-                <CarteLigneChamp label={t("travailleurs.colDeparture")} value={p.heureDepart ?? "—"} />
+                <CarteLigneChamp label={t("travailleurs.colEntry")} value={formatHorodatage(p.horodatageEntree)} />
+                <CarteLigneChamp
+                  label={t("travailleurs.colExit")}
+                  value={p.horodatageSortie ? formatHorodatage(p.horodatageSortie) : <Badge variant="outline">{t("travailleurs.stillOnDuty")}</Badge>}
+                />
                 <CarteLigneChamp label={t("travailleurs.colRecordedBy")} value={p.enregistrePar?.nom ?? "—"} />
+                {editable && (
+                  <CarteLigneActions>
+                    {!p.horodatageSortie && (
+                      <Button variant="outline" size="sm" onClick={() => cloturerMaintenant.mutate(p.id)}>
+                        <LogOut className="h-3.5 w-3.5" />
+                        {t("travailleurs.clockOutNow")}
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirModifierPointage(p)} aria-label={t("travailleurs.ariaEditClockIn")}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-terracotta hover:text-terracotta"
+                      onClick={async () => {
+                        if (await confirmer({ description: t("travailleurs.confirmDeleteClockIn"), destructive: true }))
+                          supprimerPointage.mutate(p.id);
+                      }}
+                      aria-label={t("travailleurs.ariaDeleteClockIn")}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </CarteLigneActions>
+                )}
               </CarteLigne>
             ))}
-            {presences.length === 0 && (
+            {pointages.length === 0 && (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 {filtresActifs ? t("travailleurs.emptyFiltered") : t("travailleurs.empty")}
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Absences */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("travailleurs.absenceTitle")}</CardTitle>
+          <CardDescription>{t("travailleurs.absenceDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Table className="hidden md:table">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("travailleurs.worker")}</TableHead>
+                <TableHead>{t("common.date")}</TableHead>
+                <TableHead>{t("travailleurs.colMotive")}</TableHead>
+                <TableHead>{t("travailleurs.colDecision")}</TableHead>
+                <TableHead>{t("travailleurs.colDecidedBy")}</TableHead>
+                {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {absences.map((a) => (
+                <TableRow key={a.id}>
+                  <TableCell className="font-medium">{a.travailleur.nom}</TableCell>
+                  <TableCell className="whitespace-nowrap">{formatDate(a.date)}</TableCell>
+                  <TableCell className="max-w-xs text-muted-foreground">{a.motif}</TableCell>
+                  <TableCell>
+                    <Badge className={cn(BADGE_DECISION[a.decisionStatut])}>{STATUT_DECISION_ABSENCE_LABELS[a.decisionStatut]}</Badge>
+                  </TableCell>
+                  <TableCell className="text-sm">{a.decidePar?.nom ?? "—"}</TableCell>
+                  {editable && (
+                    <TableCell className="text-right">
+                      {a.decisionStatut === "EN_ATTENTE" && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mr-1"
+                            onClick={() => trancherAbsence.mutate({ id: a.id, decisionStatut: "JUSTIFIEE" })}
+                          >
+                            {t("travailleurs.markJustified")}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mr-1"
+                            onClick={() => trancherAbsence.mutate({ id: a.id, decisionStatut: "NON_JUSTIFIEE" })}
+                          >
+                            {t("travailleurs.markUnjustified")}
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-terracotta hover:text-terracotta"
+                        onClick={async () => {
+                          if (await confirmer({ description: t("travailleurs.confirmDeleteAbsence"), destructive: true }))
+                            supprimerAbsence.mutate(a.id);
+                        }}
+                        aria-label={t("travailleurs.ariaDeleteAbsence")}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+              {absences.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={editable ? 6 : 5} className="py-8 text-center text-muted-foreground">
+                    {filtresActifs ? t("travailleurs.emptyFiltered") : t("travailleurs.emptyAbsence")}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+
+          <div className="space-y-2 md:hidden">
+            {absences.map((a) => (
+              <CarteLigne key={a.id}>
+                <CarteLigneTitre>
+                  <span>{a.travailleur.nom}</span>
+                  <Badge className={cn(BADGE_DECISION[a.decisionStatut])}>{STATUT_DECISION_ABSENCE_LABELS[a.decisionStatut]}</Badge>
+                </CarteLigneTitre>
+                <CarteLigneChamp label={t("common.date")} value={formatDate(a.date)} />
+                <CarteLigneChamp label={t("travailleurs.colMotive")} value={a.motif} />
+                <CarteLigneChamp label={t("travailleurs.colDecidedBy")} value={a.decidePar?.nom ?? "—"} />
+                {editable && (
+                  <CarteLigneActions>
+                    {a.decisionStatut === "EN_ATTENTE" && (
+                      <>
+                        <Button variant="outline" size="sm" onClick={() => trancherAbsence.mutate({ id: a.id, decisionStatut: "JUSTIFIEE" })}>
+                          {t("travailleurs.markJustified")}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => trancherAbsence.mutate({ id: a.id, decisionStatut: "NON_JUSTIFIEE" })}>
+                          {t("travailleurs.markUnjustified")}
+                        </Button>
+                      </>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-terracotta hover:text-terracotta"
+                      onClick={async () => {
+                        if (await confirmer({ description: t("travailleurs.confirmDeleteAbsence"), destructive: true }))
+                          supprimerAbsence.mutate(a.id);
+                      }}
+                      aria-label={t("travailleurs.ariaDeleteAbsence")}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </CarteLigneActions>
+                )}
+              </CarteLigne>
+            ))}
+            {absences.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                {filtresActifs ? t("travailleurs.emptyFiltered") : t("travailleurs.emptyAbsence")}
               </p>
             )}
           </div>
@@ -578,69 +864,48 @@ export function TravailleursPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog pointage */}
+      {/* Dialog pointage — horodatage réel entrée/sortie */}
       <Dialog open={dialogPointage} onOpenChange={setDialogPointage}>
         <DialogContent>
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              pointer.mutate();
+              sauverPointage.mutate();
             }}
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle>{t("travailleurs.clockInTitle")}</DialogTitle>
+              <DialogTitle>{pointageEditee ? t("travailleurs.clockInEditTitle") : t("travailleurs.clockInTitle")}</DialogTitle>
               <DialogDescription>{t("travailleurs.clockInDesc")}</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="pt-travailleur">{t("travailleurs.worker")}</Label>
+                <NativeSelect
+                  id="pt-travailleur"
+                  value={ptTravailleurId}
+                  onChange={(e) => setPtTravailleurId(e.target.value)}
+                  disabled={!!pointageEditee}
+                  required
+                >
+                  {travailleurs.map((trav) => (
+                    <option key={trav.id} value={trav.id}>
+                      {trav.nom}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="pt-travailleur">{t("travailleurs.worker")}</Label>
-                  <NativeSelect id="pt-travailleur" value={ptTravailleurId} onChange={(e) => setPtTravailleurId(e.target.value)} required>
-                    {travailleurs.map((trav) => (
-                      <option key={trav.id} value={trav.id}>
-                        {trav.nom}
-                      </option>
-                    ))}
-                  </NativeSelect>
+                  <Label htmlFor="pt-entree">{t("travailleurs.colEntry")}</Label>
+                  <Input id="pt-entree" type="datetime-local" value={ptEntree} onChange={(e) => setPtEntree(e.target.value)} required />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pt-date">{t("common.date")}</Label>
-                  <Input id="pt-date" type="date" value={ptDate} onChange={(e) => setPtDate(e.target.value)} required />
+                  <Label htmlFor="pt-sortie">{t("travailleurs.exitOptional")}</Label>
+                  <Input id="pt-sortie" type="datetime-local" value={ptSortie} onChange={(e) => setPtSortie(e.target.value)} />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label>{t("travailleurs.status")}</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {STATUTS_PRESENCE.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setPtStatut(s)}
-                      className={cn(
-                        "rounded-lg border p-2 text-sm font-medium transition-colors",
-                        ptStatut === s
-                          ? "border-or bg-or/15 text-terracotta dark:text-or"
-                          : "border-input text-muted-foreground hover:bg-secondary",
-                      )}
-                    >
-                      {t(`presence.${s}`)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {ptStatut !== "ABSENT" && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="pt-arrivee">{t("travailleurs.arrivalOptional")}</Label>
-                    <Input id="pt-arrivee" type="time" value={ptArrivee} onChange={(e) => setPtArrivee(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="pt-depart">{t("travailleurs.departureOptional")}</Label>
-                    <Input id="pt-depart" type="time" value={ptDepart} onChange={(e) => setPtDepart(e.target.value)} />
-                  </div>
-                </div>
-              )}
+              <p className="text-xs text-muted-foreground">{t("travailleurs.nightShiftHint")}</p>
             </div>
             {erreurPointage && (
               <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
@@ -651,9 +916,63 @@ export function TravailleursPage() {
               <Button type="button" variant="outline" onClick={() => setDialogPointage(false)}>
                 {t("common.cancel")}
               </Button>
-              <Button type="submit" variant="cta" disabled={pointer.isPending}>
+              <Button type="submit" variant="cta" disabled={sauverPointage.isPending}>
                 <CalendarCheck className="h-4 w-4" />
                 {t("travailleurs.saveClockIn")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog absence */}
+      <Dialog open={dialogAbsence} onOpenChange={setDialogAbsence}>
+        <DialogContent>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              declarerAbsence.mutate();
+            }}
+            className="space-y-4"
+          >
+            <DialogHeader>
+              <DialogTitle>{t("travailleurs.declareAbsenceTitle")}</DialogTitle>
+              <DialogDescription>{t("travailleurs.declareAbsenceDesc")}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="ab-travailleur">{t("travailleurs.worker")}</Label>
+                  <NativeSelect id="ab-travailleur" value={abTravailleurId} onChange={(e) => setAbTravailleurId(e.target.value)} required>
+                    {travailleurs.map((trav) => (
+                      <option key={trav.id} value={trav.id}>
+                        {trav.nom}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ab-date">{t("common.date")}</Label>
+                  <Input id="ab-date" type="date" value={abDate} onChange={(e) => setAbDate(e.target.value)} required />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ab-motif">{t("travailleurs.colMotive")}</Label>
+                <Textarea id="ab-motif" value={abMotif} onChange={(e) => setAbMotif(e.target.value)} required maxLength={500} />
+              </div>
+            </div>
+            {erreurAbsence && (
+              <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
+                {erreurAbsence}
+              </p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDialogAbsence(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button type="submit" variant="cta" disabled={declarerAbsence.isPending}>
+                <CalendarX className="h-4 w-4" />
+                {t("travailleurs.saveAbsence")}
               </Button>
             </DialogFooter>
           </form>

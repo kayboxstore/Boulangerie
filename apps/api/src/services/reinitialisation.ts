@@ -19,7 +19,9 @@ import { ecrireSauvegardeLocale } from "./sauvegardeLocale.js";
  *    la spec, DOIVENT être effacées elles aussi : Vente.vendeurId et
  *    ClotureCaisse.caissierId pointent vers Utilisateur en ON DELETE
  *    RESTRICT — les laisser intactes ferait échouer la suppression des
- *    comptes dès qu'une seule ligne historique existe.
+ *    comptes dès qu'une seule ligne historique existe. Départements & Groupes
+ *    (3.18) sont eux aussi des données transactionnelles (organisation du
+ *    personnel, pas de la config structurelle) : effacés avant Travailleur.
  * 3. L'ordre des suppressions est dicté par les contraintes de clé étrangère
  *    (enfants avant parents) — voir les migrations pour le détail exact des
  *    ON DELETE. `deleteMany`/`updateMany` ne passent PAS par l'extension
@@ -82,7 +84,11 @@ export async function reinitialiserBase(raison: string | undefined): Promise<{ s
     prisma.delegationRole.deleteMany(),
     prisma.notification.deleteMany(),
     // Travailleurs
-    prisma.presence.deleteMany(),
+    prisma.presence.deleteMany(), // ORPHELINE (remplacée par pointages/absences, 3.18) — vidée par cohérence
+    prisma.pointage.deleteMany(),
+    prisma.absence.deleteMany(),
+    prisma.groupe.deleteMany(),
+    prisma.departement.deleteMany(),
     prisma.travailleur.deleteMany(),
     // Commandes clients
     prisma.paiementCommande.deleteMany(),

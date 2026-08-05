@@ -1,18 +1,24 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import {
+  absenceDeclarerSchema,
+  absenceDecisionSchema,
   emailProCreerSchema,
-  presencePointageSchema,
+  pointageCreerSchema,
+  pointageModifierSchema,
+  ROLE_ADMINISTRATEUR,
   travailleurCreateSchema,
   travailleurUpdateSchema,
-  type PresenceDTO,
+  type AbsenceDTO,
+  type PointageDTO,
+  type StatutDecisionAbsence,
   type StatutEmailPro,
-  type StatutPresence,
   type TravailleurDTO,
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { declencherEmailPro, verifierEmailPro } from "../services/emailPro.js";
+import { busEvenements } from "../lib/events.js";
 
 export const travailleursRouter = Router();
 
@@ -73,26 +79,46 @@ async function validerDepartementGroupe(
   return { departementId, groupeId };
 }
 
-type PresenceAvecRelations = Prisma.PresenceGetPayload<{
+type PointageAvecRelations = Prisma.PointageGetPayload<{
   include: {
     travailleur: { select: { id: true; nom: true; poste: true } };
     enregistrePar: { select: { id: true; nom: true } };
   };
 }>;
 
-const INCLUDE_PRESENCE = {
+const INCLUDE_POINTAGE = {
   travailleur: { select: { id: true, nom: true, poste: true } },
   enregistrePar: { select: { id: true, nom: true } },
 } as const;
 
-const versPresenceDTO = (p: PresenceAvecRelations): PresenceDTO => ({
+const versPointageDTO = (p: PointageAvecRelations): PointageDTO => ({
   id: p.id,
   travailleur: p.travailleur,
-  date: p.date.toISOString().slice(0, 10),
-  statut: p.statut as StatutPresence,
-  heureArrivee: p.heureArrivee,
-  heureDepart: p.heureDepart,
+  horodatageEntree: p.horodatageEntree.toISOString(),
+  horodatageSortie: p.horodatageSortie?.toISOString() ?? null,
   enregistrePar: p.enregistrePar,
+});
+
+type AbsenceAvecRelations = Prisma.AbsenceGetPayload<{
+  include: {
+    travailleur: { select: { id: true; nom: true; poste: true } };
+    decidePar: { select: { id: true; nom: true } };
+  };
+}>;
+
+const INCLUDE_ABSENCE = {
+  travailleur: { select: { id: true, nom: true, poste: true } },
+  decidePar: { select: { id: true, nom: true } },
+} as const;
+
+const versAbsenceDTO = (a: AbsenceAvecRelations): AbsenceDTO => ({
+  id: a.id,
+  travailleur: a.travailleur,
+  date: a.date.toISOString().slice(0, 10),
+  motif: a.motif,
+  decisionStatut: a.decisionStatut as StatutDecisionAbsence,
+  decidePar: a.decidePar,
+  dateDecision: a.dateDecision?.toISOString() ?? null,
 });
 
 /** Vérifie que le compte Utilisateur à lier existe et n'a pas déjà une fiche. */
@@ -262,59 +288,214 @@ travailleursRouter.post("/:id/email-pro/verifier", requirePermission("TRAVAILLEU
   }
 });
 
-// --- Présence / pointage quotidien ------------------------------------------
+// --- Pointage (section 3.18, remplace Presence) ------------------------------
+// Horodatage réel d'entrée/sortie (date + heure, pas juste une date) : gère
+// nativement les équipes de nuit à cheval sur deux jours calendaires — c'est
+// l'horodatage lui-même qui fait foi, jamais une "date du pointage" isolée.
 
-// Filtres : ?travailleurId, ?du, ?au (dates AAAA-MM-JJ) — « Tout afficher »
-// sans paramètres, même pattern que Commandes/Commissions.
-travailleursRouter.get("/presences", requirePermission("TRAVAILLEURS", "LECTURE"), async (req, res, next) => {
+// Filtres : ?travailleurId, ?du, ?au (AAAA-MM-JJ, bornent horodatageEntree) —
+// « Tout afficher » sans paramètres, même pattern que Commandes/Commissions.
+travailleursRouter.get("/pointages", requirePermission("TRAVAILLEURS", "LECTURE"), async (req, res, next) => {
+  try {
+    const { travailleurId, du, au } = req.query as Record<string, string | undefined>;
+    const horodatageEntree: Prisma.DateTimeFilter = {};
+    if (du) horodatageEntree.gte = new Date(du);
+    if (au) horodatageEntree.lte = new Date(`${au}T23:59:59.999Z`);
+
+    const pointages = await prisma.pointage.findMany({
+      where: {
+        ...(travailleurId ? { travailleurId } : {}),
+        ...(du || au ? { horodatageEntree } : {}),
+      },
+      include: INCLUDE_POINTAGE,
+      orderBy: { horodatageEntree: "desc" },
+      take: 200,
+    });
+    res.json({ pointages: pointages.map(versPointageDTO) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Création : entrée seule (pointage "ouvert", personne encore en poste) ou
+// entrée+sortie d'emblée (saisie a posteriori d'un pointage déjà complet).
+travailleursRouter.post("/pointages", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
+  try {
+    const parsed = pointageCreerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const { travailleurId, horodatageEntree, horodatageSortie } = parsed.data;
+
+    const travailleur = await prisma.travailleur.findUnique({ where: { id: travailleurId } });
+    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
+
+    if (horodatageSortie && new Date(horodatageSortie) <= new Date(horodatageEntree)) {
+      return res.status(400).json({ erreur: "L'horodatage de sortie doit être postérieur à l'horodatage d'entrée" });
+    }
+
+    const pointage = await prisma.pointage.create({
+      data: {
+        travailleurId,
+        horodatageEntree: new Date(horodatageEntree),
+        horodatageSortie: horodatageSortie ? new Date(horodatageSortie) : null,
+        enregistreParId: req.utilisateur!.id,
+      },
+      include: INCLUDE_POINTAGE,
+    });
+    res.status(201).json({ pointage: versPointageDTO(pointage) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Modification : clôturer la sortie d'un pointage encore ouvert, ou corriger
+// une saisie (horodatageSortie: null rouvre le pointage).
+travailleursRouter.put("/pointages/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
+  try {
+    const parsed = pointageModifierSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const existant = await prisma.pointage.findUnique({ where: { id: req.params.id } });
+    if (!existant) return res.status(404).json({ erreur: "Pointage introuvable" });
+
+    const { horodatageEntree, horodatageSortie } = parsed.data;
+    const entreeFinale = horodatageEntree ? new Date(horodatageEntree) : existant.horodatageEntree;
+    const sortieFinale = horodatageSortie === undefined ? existant.horodatageSortie : horodatageSortie ? new Date(horodatageSortie) : null;
+    if (sortieFinale && sortieFinale <= entreeFinale) {
+      return res.status(400).json({ erreur: "L'horodatage de sortie doit être postérieur à l'horodatage d'entrée" });
+    }
+
+    const pointage = await prisma.pointage.update({
+      where: { id: existant.id },
+      data: { horodatageEntree: entreeFinale, horodatageSortie: sortieFinale },
+      include: INCLUDE_POINTAGE,
+    });
+    res.json({ pointage: versPointageDTO(pointage) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+travailleursRouter.delete("/pointages/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
+  try {
+    const pointage = await prisma.pointage.findUnique({ where: { id: req.params.id } });
+    if (!pointage) return res.status(404).json({ erreur: "Pointage introuvable" });
+    await prisma.pointage.delete({ where: { id: pointage.id } });
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Absence (section 3.18, nouveau) -----------------------------------------
+// Entité distincte du Pointage : motif déclaré + décision séparée (en_attente/
+// justifiée/non_justifiée), tranchée par l'Admin secondaire ou Principal —
+// jamais par le chef de département (purement organisationnel, 3.18).
+
+travailleursRouter.get("/absences", requirePermission("TRAVAILLEURS", "LECTURE"), async (req, res, next) => {
   try {
     const { travailleurId, du, au } = req.query as Record<string, string | undefined>;
     const date: Prisma.DateTimeFilter = {};
     if (du) date.gte = new Date(du);
     if (au) date.lte = new Date(au);
 
-    const presences = await prisma.presence.findMany({
+    const absences = await prisma.absence.findMany({
       where: {
         ...(travailleurId ? { travailleurId } : {}),
         ...(du || au ? { date } : {}),
       },
-      include: INCLUDE_PRESENCE,
+      include: INCLUDE_ABSENCE,
       orderBy: [{ date: "desc" }, { travailleur: { nom: "asc" } }],
       take: 200,
     });
-    res.json({ presences: presences.map(versPresenceDTO) });
+    res.json({ absences: absences.map(versAbsenceDTO) });
   } catch (e) {
     next(e);
   }
 });
 
-// Pointage : une ligne par travailleur et par jour — re-pointer le même jour
-// corrige la ligne existante (upsert sur la contrainte unique), en gardant la
-// trace de qui a enregistré la dernière version.
-travailleursRouter.post("/presences", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
+// Déclaration initiale : motif + date, decisionStatut démarre à EN_ATTENTE
+// (jamais choisi ici — c'est la route de décision, plus bas, qui la tranche).
+travailleursRouter.post("/absences", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
   try {
-    const parsed = presencePointageSchema.safeParse(req.body);
+    const parsed = absenceDeclarerSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const { travailleurId, date, statut, heureArrivee, heureDepart } = parsed.data;
+    const { travailleurId, date, motif } = parsed.data;
 
     const travailleur = await prisma.travailleur.findUnique({ where: { id: travailleurId } });
     if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
 
-    const donnees = {
-      statut,
-      heureArrivee: heureArrivee ?? null,
-      heureDepart: heureDepart ?? null,
-      enregistreParId: req.utilisateur!.id,
-    };
-    const presence = await prisma.presence.upsert({
-      where: { travailleurId_date: { travailleurId, date: new Date(date) } },
-      update: donnees,
-      create: { travailleurId, date: new Date(date), ...donnees },
-      include: INCLUDE_PRESENCE,
+    const absence = await prisma.absence.create({
+      data: { travailleurId, date: new Date(date), motif },
+      include: INCLUDE_ABSENCE,
     });
-    res.status(201).json({ presence: versPresenceDTO(presence) });
+    res.status(201).json({ absence: versAbsenceDTO(absence) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+travailleursRouter.delete("/absences/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
+  try {
+    const absence = await prisma.absence.findUnique({ where: { id: req.params.id } });
+    if (!absence) return res.status(404).json({ erreur: "Absence introuvable" });
+    await prisma.absence.delete({ where: { id: absence.id } });
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Décision : acte distinct de la déclaration — réservé aux mêmes rôles
+// (TRAVAILLEURS écriture), sans exiger que ce soit une personne différente
+// de celle qui a déclaré l'absence. Notifie en temps réel quand la décision
+// est NON_JUSTIFIEE (le travailleur concerné, s'il a un compte, + les Admins).
+travailleursRouter.put("/absences/:id/decision", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
+  try {
+    const parsed = absenceDecisionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const existant = await prisma.absence.findUnique({ where: { id: req.params.id }, include: INCLUDE_ABSENCE });
+    if (!existant) return res.status(404).json({ erreur: "Absence introuvable" });
+
+    const absence = await prisma.absence.update({
+      where: { id: existant.id },
+      data: {
+        decisionStatut: parsed.data.decisionStatut,
+        decideParId: req.utilisateur!.id,
+        dateDecision: new Date(),
+      },
+      include: INCLUDE_ABSENCE,
+    });
+
+    if (parsed.data.decisionStatut === "NON_JUSTIFIEE") {
+      const autresAdmins = await prisma.utilisateur.findMany({
+        where: { actif: true, id: { not: req.utilisateur!.id }, role: { nom: ROLE_ADMINISTRATEUR } },
+        select: { id: true },
+      });
+      const destinataires = new Set(autresAdmins.map((a) => a.id));
+      const travailleurConcerne = await prisma.travailleur.findUnique({ where: { id: existant.travailleurId } });
+      if (travailleurConcerne?.utilisateurId) destinataires.add(travailleurConcerne.utilisateurId);
+      if (destinataires.size > 0) {
+        busEvenements.emettreEvenement({
+          type: "ABSENCE_NON_JUSTIFIEE",
+          module: "TRAVAILLEURS",
+          emetteurId: req.utilisateur!.id,
+          evenementRef: absence.id,
+          priorite: "HAUTE",
+          destinataireIdsDirects: [...destinataires],
+          message: `Absence de ${absence.travailleur.nom} le ${absence.date.toISOString().slice(0, 10)} tranchée non justifiée`,
+          donnees: { absenceId: absence.id, travailleurId: absence.travailleur.id },
+        });
+      }
+    }
+
+    res.json({ absence: versAbsenceDTO(absence) });
   } catch (e) {
     next(e);
   }

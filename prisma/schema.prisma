@@ -139,7 +139,9 @@ model Utilisateur {
   commandesFournisseurCreees  CommandeFournisseur[] @relation("CommandesFournisseurCreees")
   commandesFournisseurRecues  CommandeFournisseur[] @relation("CommandesFournisseurRecues")
   ficheTravailleur            Travailleur?
-  presencesEnregistrees       Presence[]
+  presencesEnregistrees       Presence[] // ORPHELINE (remplacée par pointages/absences, 3.18)
+  pointagesEnregistres        Pointage[]            @relation("PointagesEnregistres")
+  absencesDecidees            Absence[]             @relation("AbsencesDecidees")
   demandesEmises              DemandeApprobation[]  @relation("DemandesEmises")
   demandesDecidees            DemandeApprobation[]  @relation("DemandesDecidees")
   delegationsRecues           DelegationRole[]      @relation("DelegationsRecues")
@@ -543,7 +545,9 @@ model Travailleur {
   dateEmbauche         DateTime       @db.Date
   utilisateurId        String?        @unique
   utilisateur          Utilisateur?   @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
-  presences            Presence[]
+  presences            Presence[] // ORPHELINE (remplacée par pointages/absences, 3.18)
+  pointages            Pointage[]
+  absences             Absence[]
   // Départements & Groupes (3.18, nouveau) — purement organisationnel, aucune
   // permission associée. Nullable en base pour ne pas casser les fiches
   // existantes créées avant cette fonctionnalité ; obligatoire côté schéma
@@ -607,8 +611,11 @@ model Groupe {
   @@unique([departementId, nom])
 }
 
-// Pointage quotidien : une ligne par travailleur et par jour (re-pointer le
-// même jour corrige la ligne). Heures « HH:MM », optionnelles.
+// ORPHELINE (refonte 3.18) — remplacée par Pointage (horodatage réel
+// d'entrée/sortie, gère les équipes de nuit) et Absence (motif + décision).
+// Conservée en base pour préserver l'historique, plus rien ne l'écrit ni ne
+// la lit côté application (même politique que Vente/LigneVente/ClotureCaisse
+// après la refonte 3.1).
 model Presence {
   id              String         @id @default(cuid())
   travailleurId   String
@@ -624,6 +631,50 @@ model Presence {
 
   @@unique([travailleurId, date])
   @@index([date])
+}
+
+// Pointage (3.18, remplace Presence) : horodatage réel d'entrée/sortie
+// (date + heure, pas juste une date) — gère nativement les équipes de nuit
+// à cheval sur deux jours calendaires. horodatageSortie nul = la personne
+// est encore en poste.
+model Pointage {
+  id               String       @id @default(cuid())
+  travailleurId    String
+  travailleur      Travailleur  @relation(fields: [travailleurId], references: [id], onDelete: Cascade)
+  horodatageEntree DateTime
+  horodatageSortie DateTime?
+  enregistreParId  String?
+  enregistrePar    Utilisateur? @relation("PointagesEnregistres", fields: [enregistreParId], references: [id], onDelete: SetNull)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([travailleurId, horodatageEntree])
+}
+
+// Absence (3.18, nouveau) : motif déclaré + décision distincte, tranchée par
+// l'Admin secondaire ou Principal (pas le chef de département, purement
+// organisationnel — 3.18). decideParId/dateDecision restent nuls tant que
+// decisionStatut vaut EN_ATTENTE.
+model Absence {
+  id             String                @id @default(cuid())
+  travailleurId  String
+  travailleur    Travailleur           @relation(fields: [travailleurId], references: [id], onDelete: Cascade)
+  date           DateTime              @db.Date
+  motif          String
+  decisionStatut StatutDecisionAbsence @default(EN_ATTENTE)
+  decideParId    String?
+  decidePar      Utilisateur?          @relation("AbsencesDecidees", fields: [decideParId], references: [id], onDelete: SetNull)
+  dateDecision   DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([travailleurId, date])
+}
+
+enum StatutDecisionAbsence {
+  EN_ATTENTE
+  JUSTIFIEE
+  NON_JUSTIFIEE
 }
 
 // --- Approbations (section 3.16) & délégation (section 3.7), Phase 10 ---------

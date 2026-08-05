@@ -256,25 +256,41 @@ rapportsRouter.get("/fournisseurs", requirePermission("FOURNISSEURS", "LECTURE")
 });
 
 // --- Widget Travailleurs / présence du jour ---------------------------------
+// Depuis la refonte 3.18 (Pointage horodaté + Absence séparée) : « présent »
+// = un Pointage actif aujourd'hui, entré aujourd'hui OU entré avant et encore
+// ouvert (équipe de nuit à cheval sur deux jours). « Absent » = une Absence
+// déclarée pour la date du jour, quel que soit le statut de décision.
 
 rapportsRouter.get("/travailleurs", requirePermission("TRAVAILLEURS", "LECTURE"), async (_req, res, next) => {
   try {
+    const debut = debutJour();
+    const fin = new Date(debut);
+    fin.setDate(fin.getDate() + 1);
+
     const attendus = await prisma.travailleur.count();
-    const duJour = await prisma.presence.groupBy({
-      by: ["statut"],
-      where: { date: debutJour() },
-      _count: { _all: true },
+    const pointagesActifs = await prisma.pointage.findMany({
+      where: {
+        OR: [
+          { horodatageEntree: { gte: debut, lt: fin } },
+          { AND: [{ horodatageEntree: { lt: debut } }, { OR: [{ horodatageSortie: null }, { horodatageSortie: { gte: debut } }] }] },
+        ],
+      },
+      select: { travailleurId: true },
+      distinct: ["travailleurId"],
     });
-    const nb = (statut: string) => duJour.find((p) => p.statut === statut)?._count._all ?? 0;
-    const presents = nb("PRESENT");
-    const retards = nb("RETARD");
-    const absents = nb("ABSENT");
+    const absencesDuJour = await prisma.absence.findMany({
+      where: { date: debut },
+      select: { travailleurId: true },
+      distinct: ["travailleurId"],
+    });
+
+    const presents = pointagesActifs.length;
+    const absents = absencesDuJour.length;
     const dto: RapportTravailleursDTO = {
       attendus,
       presents,
-      retards,
       absents,
-      nonPointes: Math.max(0, attendus - presents - retards - absents),
+      nonPointes: Math.max(0, attendus - presents - absents),
     };
     res.json(dto);
   } catch (e) {
