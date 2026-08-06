@@ -333,6 +333,8 @@ Registre de caisse du jour/semaine/mois, activité par module, export comptable 
 
 Composition par rôle : chaque widget (Caisse, Commandes, Commissions, Stock, Production, Fournisseurs, Travailleurs/Présence) n'apparaît que si le rôle connecté a au moins la lecture sur le module correspondant. Le DG les voit tous — et **depuis la refonte des permissions Admin (section 2), les deux niveaux d'Admin aussi** : l'Admin Principal en écriture, l'Admin secondaire en lecture. L'ancien **état vide « aucune donnée métier »** réservé aux Admins est **supprimé** : ils voient désormais les widgets normalement, comme n'importe quel autre rôle, selon leurs permissions.
 
+Masse salariale (nouveau) : somme des salaireMensuel de tous les Travailleurs enregistrés — coût salarial mensuel théorique (brut), visible par les mêmes rôles que le reste du module Travailleurs (Admins et DG).
+
 Marge par produit (état actuel et décision) : non calculable proprement aujourd'hui (pas de coût systématique par matière première, et depuis la refonte de 3.3 il n'existe plus de nomenclature par produit — les ingrédients sont consommés globalement sur la journée) — le widget affiche volume + CA par produit en attendant, limitation explicite dans l'UI et l'export. Décision pour plus tard : le coût utilisé sera un Coût Moyen Pondéré (CUMP) dérivé des réceptions fournisseurs réelles (LigneCommandeFournisseur), pas un coût de référence saisi à la main. Une marge *par produit* supposerait de réintroduire une clé de répartition des ingrédients journaliers entre produits — à trancher le moment venu ; une marge globale journalière, elle, reste calculable.
 
 **Résumé de clôture quotidien** *(nouveau)* : en fin de journée, un digest auto-généré — registre de caisse du jour (entrées, dettes payées, dépenses, solde), nombre de commandes, dettes en cours, alertes stock actives. Objectif : réduire la dépendance au fil temps réel pour une vue d'ensemble, sans avoir à rejouer toute la journée de notifications. **Portée étendue** : disponible pour le **DG et les deux niveaux d'Admin**, en lecture seule pour tous (cohérent avec leurs permissions depuis la refonte de la section 2 ; l'État système, 3.15, reste le pendant technique).
@@ -439,6 +441,8 @@ Roster du personnel, plus large que les seuls comptes Utilisateur : couvre aussi
 - Fiche : nom, téléphone, poste, date d'embauche, lien optionnel vers un compte Utilisateur (si la personne a aussi un accès à l'app)
 - Pointage : horodatage réel d'entrée et de sortie (date + heure, pas juste une date) — gère nativement les équipes de nuit qui commencent un jour et finissent le lendemain
 - Absence : motif déclaré + décision distincte (justifiée / non justifiée / en attente), tranchée par l'Admin secondaire ou Principal — pas le chef de département (purement organisationnel)
+
+Rappel absence en attente (nouveau) : même mécanisme que l'alerte dette non payée (3.4) — une alerte ponctuelle, le jour suivant la déclaration d'une absence encore en_attente, jamais répétée une fois envoyée. Cloche + affichage dans le module, reçue par l'Admin secondaire et Principal.
 
 Filtres & affichage : par travailleur, par date, bouton "Tout afficher".
 DG : lecture seule, comme tous les modules métier.
