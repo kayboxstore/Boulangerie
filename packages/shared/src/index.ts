@@ -1137,6 +1137,30 @@ export interface CalculPaieDTO {
   salaireNet: number;
 }
 
+/**
+ * Bulletin de paie (3.18, nouveau) : document PDF par Travailleur/mois,
+ * généré à partir du calcul de paie. UNE FOIS ÉMIS, c'est un instantané
+ * FIGÉ — jamais recalculé depuis Absence/Sanction après coup.
+ */
+export const bulletinPaieGenererSchema = z.object({ mois: moisISO });
+export type BulletinPaieGenererInput = z.infer<typeof bulletinPaieGenererSchema>;
+
+export interface BulletinPaieDTO {
+  id: string;
+  travailleur: { id: string; nom: string; poste: string };
+  mois: string;
+  salaireMensuel: number;
+  joursTravaillesParMois: number;
+  tauxJournalier: number;
+  absencesNonJustifiees: { date: string; motif: string }[];
+  retenueAbsences: number;
+  sanctionsRetenues: { date: string; motif: string; montant: number }[];
+  totalRetenuesDisciplinaires: number;
+  salaireNet: number;
+  generePar: { id: string; nom: string } | null;
+  dateGeneration: string;
+}
+
 // ---------------------------------------------------------------------------
 // Tableau de bord & rapports (section 3.8) — un DTO par widget, chaque widget
 // étant conditionné à la lecture du module correspondant.

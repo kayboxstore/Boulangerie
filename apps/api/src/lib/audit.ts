@@ -60,6 +60,7 @@ const MODELE_MODULE: Record<string, string> = {
   Pointage: "TRAVAILLEURS",
   Absence: "TRAVAILLEURS",
   Sanction: "TRAVAILLEURS",
+  BulletinPaie: "TRAVAILLEURS",
   // Départements & Groupes (3.18) — organisationnel, sans permission propre,
   // gouverné par le module TRAVAILLEURS.
   Departement: "TRAVAILLEURS",

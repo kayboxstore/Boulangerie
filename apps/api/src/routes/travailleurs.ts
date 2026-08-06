@@ -1,6 +1,8 @@
 import { Router } from "express";
+import type { Request } from "express";
 import { Prisma } from "@prisma/client";
 import {
+  aAcces,
   absenceDeclarerSchema,
   absenceDecisionSchema,
   emailProCreerSchema,
@@ -12,7 +14,9 @@ import {
   travailleurCreateSchema,
   travailleurUpdateSchema,
   type AbsenceDTO,
+  type BulletinPaieDTO,
   type CalculPaieDTO,
+  type DocumentExportInput,
   type PointageDTO,
   type SanctionDTO,
   type StatutDecisionAbsence,
@@ -23,6 +27,7 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { declencherEmailPro, verifierEmailPro } from "../services/emailPro.js";
+import { construirePdf, nomFichierPdf } from "../services/pdf.js";
 import { busEvenements } from "../lib/events.js";
 
 export const travailleursRouter = Router();
@@ -601,7 +606,32 @@ travailleursRouter.delete("/sanctions/:id", requirePermission("TRAVAILLEURS", "E
 // AUCUN arrondi intermédiaire : tauxJournalier et retenueAbsences restent en
 // précision complète (décimales) pour que la somme des lignes affichées
 // corresponde exactement au détail. Seul salaireNet est arrondi (au Fc le
-// plus proche), une seule fois, à la toute fin.
+// plus proche), une seule fois, à la toute fin. Factorisé ici : réutilisé à
+// la fois par la vue dynamique (GET .../paie) et par la génération d'un
+// Bulletin de paie (instantané figé, plus bas).
+async function calculerPaieBrute(travailleurId: string, salaireMensuel: number, joursTravaillesParMois: number, mois: string) {
+  // Bornes du mois en UTC — Absence.date/Sanction.date sont des colonnes
+  // DATE pures (@db.Date), sans fuseau : cohérent avec le reste de l'app.
+  const debut = new Date(`${mois}-01T00:00:00.000Z`);
+  const fin = new Date(debut);
+  fin.setUTCMonth(fin.getUTCMonth() + 1);
+
+  const absences = await prisma.absence.findMany({
+    where: { travailleurId, decisionStatut: "NON_JUSTIFIEE", date: { gte: debut, lt: fin } },
+    orderBy: { date: "asc" },
+  });
+  const sanctions = await prisma.sanction.findMany({
+    where: { travailleurId, type: "RETENUE", date: { gte: debut, lt: fin } },
+    orderBy: { date: "asc" },
+  });
+
+  const tauxJournalier = salaireMensuel / joursTravaillesParMois;
+  const retenueAbsences = absences.length * tauxJournalier;
+  const totalRetenuesDisciplinaires = sanctions.reduce((s, x) => s + (x.montant ?? 0), 0);
+  const salaireNet = Math.round(salaireMensuel - retenueAbsences - totalRetenuesDisciplinaires);
+
+  return { absences, sanctions, tauxJournalier, retenueAbsences, totalRetenuesDisciplinaires, salaireNet };
+}
 
 travailleursRouter.get("/:id/paie", requirePermission("TRAVAILLEURS", "LECTURE"), async (req, res, next) => {
   try {
@@ -619,25 +649,7 @@ travailleursRouter.get("/:id/paie", requirePermission("TRAVAILLEURS", "LECTURE")
       });
     }
 
-    // Bornes du mois en UTC — Absence.date/Sanction.date sont des colonnes
-    // DATE pures (@db.Date), sans fuseau : cohérent avec le reste de l'app.
-    const debut = new Date(`${mois}-01T00:00:00.000Z`);
-    const fin = new Date(debut);
-    fin.setUTCMonth(fin.getUTCMonth() + 1);
-
-    const absences = await prisma.absence.findMany({
-      where: { travailleurId: travailleur.id, decisionStatut: "NON_JUSTIFIEE", date: { gte: debut, lt: fin } },
-      orderBy: { date: "asc" },
-    });
-    const sanctions = await prisma.sanction.findMany({
-      where: { travailleurId: travailleur.id, type: "RETENUE", date: { gte: debut, lt: fin } },
-      orderBy: { date: "asc" },
-    });
-
-    const tauxJournalier = travailleur.salaireMensuel / travailleur.joursTravaillesParMois;
-    const retenueAbsences = absences.length * tauxJournalier;
-    const totalRetenuesDisciplinaires = sanctions.reduce((s, x) => s + (x.montant ?? 0), 0);
-    const salaireNet = Math.round(travailleur.salaireMensuel - retenueAbsences - totalRetenuesDisciplinaires);
+    const calcul = await calculerPaieBrute(travailleur.id, travailleur.salaireMensuel, travailleur.joursTravaillesParMois, mois);
 
     const dto: CalculPaieDTO = {
       travailleurId: travailleur.id,
@@ -645,19 +657,237 @@ travailleursRouter.get("/:id/paie", requirePermission("TRAVAILLEURS", "LECTURE")
       mois,
       salaireMensuel: travailleur.salaireMensuel,
       joursTravaillesParMois: travailleur.joursTravaillesParMois,
-      tauxJournalier,
-      absencesNonJustifiees: absences.map((a) => ({ absenceId: a.id, date: a.date.toISOString().slice(0, 10), motif: a.motif })),
-      retenueAbsences,
-      sanctionsRetenues: sanctions.map((s) => ({
+      tauxJournalier: calcul.tauxJournalier,
+      absencesNonJustifiees: calcul.absences.map((a) => ({ absenceId: a.id, date: a.date.toISOString().slice(0, 10), motif: a.motif })),
+      retenueAbsences: calcul.retenueAbsences,
+      sanctionsRetenues: calcul.sanctions.map((s) => ({
         sanctionId: s.id,
         date: s.date.toISOString().slice(0, 10),
         motif: s.motif,
         montant: s.montant!,
       })),
-      totalRetenuesDisciplinaires,
-      salaireNet,
+      totalRetenuesDisciplinaires: calcul.totalRetenuesDisciplinaires,
+      salaireNet: calcul.salaireNet,
     };
     res.json({ paie: dto });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Bulletin de paie (section 3.18, nouveau) ---------------------------------
+// Document PDF par Travailleur/mois — instantané FIGÉ du calcul de paie au
+// moment de la génération (jamais recalculé depuis Absence/Sanction après
+// coup). Réutilise le mécanisme d'export PDF déjà en place (logo en
+// filigrane, sans crédit développeur — services/pdf.ts).
+
+const MOIS_LABELS_FR = [
+  "janvier",
+  "février",
+  "mars",
+  "avril",
+  "mai",
+  "juin",
+  "juillet",
+  "août",
+  "septembre",
+  "octobre",
+  "novembre",
+  "décembre",
+];
+const formatMoisLisible = (mois: string): string => {
+  const [annee, m] = mois.split("-");
+  return `${MOIS_LABELS_FR[Number(m) - 1]} ${annee}`;
+};
+const formatMontantPdf = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+
+/**
+ * Accès aux bulletins de paie (3.18) : un Admin (lecture TRAVAILLEURS) voit
+ * tout ; un Travailleur avec compte lié voit UNIQUEMENT les siens — aucun
+ * autre rôle, même un autre Travailleur avec compte, n'y accède. Vérification
+ * manuelle (pas via requirePermission) car un compte sans aucun accès au
+ * module Travailleurs doit tout de même pouvoir lire SES PROPRES bulletins.
+ */
+function peutConsulterBulletinsDe(req: Request, travailleur: { utilisateurId: string | null }): boolean {
+  const permissions = req.utilisateur?.role.permissions ?? [];
+  if (aAcces(permissions, "TRAVAILLEURS", "LECTURE")) return true;
+  return !!req.utilisateur && travailleur.utilisateurId === req.utilisateur.id;
+}
+
+type BulletinAvecRelations = Prisma.BulletinPaieGetPayload<{
+  include: {
+    travailleur: { select: { id: true; nom: true; poste: true } };
+    generePar: { select: { id: true; nom: true } };
+  };
+}>;
+
+const versBulletinDTO = (b: BulletinAvecRelations): BulletinPaieDTO => ({
+  id: b.id,
+  travailleur: b.travailleur,
+  mois: b.mois,
+  salaireMensuel: b.salaireMensuel,
+  joursTravaillesParMois: b.joursTravaillesParMois,
+  tauxJournalier: b.tauxJournalier,
+  absencesNonJustifiees: b.absencesNonJustifiees as { date: string; motif: string }[],
+  retenueAbsences: b.retenueAbsences,
+  sanctionsRetenues: b.sanctionsRetenues as { date: string; motif: string; montant: number }[],
+  totalRetenuesDisciplinaires: b.totalRetenuesDisciplinaires,
+  salaireNet: b.salaireNet,
+  generePar: b.generePar,
+  dateGeneration: b.dateGeneration.toISOString(),
+});
+
+const INCLUDE_BULLETIN = {
+  travailleur: { select: { id: true, nom: true, poste: true } },
+  generePar: { select: { id: true, nom: true } },
+} as const;
+
+// Génération : réservée à Admin secondaire/Principal, comme le reste du
+// module. Chaque appel crée un NOUVEL instantané — aucune contrainte
+// d'unicité sur (travailleurId, mois), régénérer ne modifie jamais un
+// bulletin déjà émis.
+travailleursRouter.post("/:id/bulletins-paie", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
+  try {
+    const parsedMois = moisISO.safeParse(req.query.mois);
+    if (!parsedMois.success) {
+      return res.status(400).json({ erreur: "Mois invalide (AAAA-MM attendu, ex. 2026-02)" });
+    }
+    const mois = parsedMois.data;
+
+    const travailleur = await prisma.travailleur.findUnique({ where: { id: req.params.id } });
+    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
+    if (travailleur.salaireMensuel === null || travailleur.joursTravaillesParMois === null) {
+      return res.status(409).json({
+        erreur: "Le salaire mensuel et le nombre de jours travaillés doivent être renseignés sur la fiche avant de générer un bulletin.",
+      });
+    }
+
+    const calcul = await calculerPaieBrute(travailleur.id, travailleur.salaireMensuel, travailleur.joursTravaillesParMois, mois);
+
+    const bulletin = await prisma.bulletinPaie.create({
+      data: {
+        travailleurId: travailleur.id,
+        mois,
+        salaireMensuel: travailleur.salaireMensuel,
+        joursTravaillesParMois: travailleur.joursTravaillesParMois,
+        tauxJournalier: calcul.tauxJournalier,
+        absencesNonJustifiees: calcul.absences.map((a) => ({ date: a.date.toISOString().slice(0, 10), motif: a.motif })),
+        retenueAbsences: calcul.retenueAbsences,
+        sanctionsRetenues: calcul.sanctions.map((s) => ({ date: s.date.toISOString().slice(0, 10), motif: s.motif, montant: s.montant! })),
+        totalRetenuesDisciplinaires: calcul.totalRetenuesDisciplinaires,
+        salaireNet: calcul.salaireNet,
+        genereParId: req.utilisateur!.id,
+      },
+      include: INCLUDE_BULLETIN,
+    });
+    res.status(201).json({ bulletin: versBulletinDTO(bulletin) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Raccourci pour le Travailleur connecté (fiche liée à son compte) : évite au
+// frontend de devoir connaître son propre travailleurId. Ouvert à TOUT
+// utilisateur authentifié — sans fiche liée, retourne simplement une liste
+// vide (pas une erreur : rien à cacher, il n'y a rien à voir).
+travailleursRouter.get("/mes-bulletins-paie", requireAuth, async (req, res, next) => {
+  try {
+    const travailleur = await prisma.travailleur.findUnique({ where: { utilisateurId: req.utilisateur!.id } });
+    if (!travailleur) return res.json({ bulletins: [] });
+
+    const bulletins = await prisma.bulletinPaie.findMany({
+      where: { travailleurId: travailleur.id },
+      include: INCLUDE_BULLETIN,
+      orderBy: { dateGeneration: "desc" },
+    });
+    res.json({ bulletins: bulletins.map(versBulletinDTO) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Liste : Admin (tous) ou le Travailleur concerné lui-même (les siens).
+travailleursRouter.get("/:id/bulletins-paie", requireAuth, async (req, res, next) => {
+  try {
+    const travailleur = await prisma.travailleur.findUnique({ where: { id: req.params.id } });
+    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
+    if (!peutConsulterBulletinsDe(req, travailleur)) {
+      return res.status(403).json({ erreur: "Accès refusé : vous ne pouvez consulter que vos propres bulletins de paie" });
+    }
+
+    const bulletins = await prisma.bulletinPaie.findMany({
+      where: { travailleurId: travailleur.id },
+      include: INCLUDE_BULLETIN,
+      orderBy: { dateGeneration: "desc" },
+    });
+    res.json({ bulletins: bulletins.map(versBulletinDTO) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Téléchargement PDF d'un bulletin précis — reconstruit le document
+// UNIQUEMENT à partir des chiffres figés stockés (jamais un recalcul), pour
+// que le PDF reste identique quels que soient les changements intervenus
+// depuis la génération.
+travailleursRouter.get("/bulletins-paie/:bulletinId/pdf", requireAuth, async (req, res, next) => {
+  try {
+    const bulletin = await prisma.bulletinPaie.findUnique({
+      where: { id: req.params.bulletinId },
+      include: {
+        travailleur: { select: { id: true, nom: true, poste: true, utilisateurId: true, departement: { select: { nom: true } } } },
+      },
+    });
+    if (!bulletin) return res.status(404).json({ erreur: "Bulletin introuvable" });
+    if (!peutConsulterBulletinsDe(req, bulletin.travailleur)) {
+      return res.status(403).json({ erreur: "Accès refusé : vous ne pouvez consulter que vos propres bulletins de paie" });
+    }
+
+    const absences = bulletin.absencesNonJustifiees as { date: string; motif: string }[];
+    const sanctions = bulletin.sanctionsRetenues as { date: string; motif: string; montant: number }[];
+
+    const document: DocumentExportInput = {
+      titre: `Bulletin de paie — ${bulletin.travailleur.nom}`,
+      sousTitre: `${formatMoisLisible(bulletin.mois)} — ${bulletin.travailleur.poste}${bulletin.travailleur.departement ? ` — ${bulletin.travailleur.departement.nom}` : ""}`,
+      modules: [],
+      sections: [
+        {
+          titre: "Rémunération",
+          entetes: ["Élément", "Montant (Fc)"],
+          lignes: [
+            ["Salaire de base", formatMontantPdf(bulletin.salaireMensuel)],
+            [`Taux journalier (${bulletin.joursTravaillesParMois} jours/mois)`, formatMontantPdf(bulletin.tauxJournalier)],
+          ],
+        },
+        {
+          titre: `Absences non justifiées retenues (${absences.length})`,
+          entetes: ["Date", "Motif"],
+          lignes: absences.map((a) => [a.date, a.motif]),
+        },
+        {
+          titre: "Retenue absences",
+          entetes: ["Élément", "Montant (Fc)"],
+          lignes: [["Total retenue absences", formatMontantPdf(bulletin.retenueAbsences)]],
+        },
+        {
+          titre: `Retenues disciplinaires (${sanctions.length})`,
+          entetes: ["Date", "Motif", "Montant (Fc)"],
+          lignes: sanctions.map((s) => [s.date, s.motif, formatMontantPdf(s.montant)]),
+        },
+        {
+          titre: "Salaire net",
+          entetes: ["Élément", "Montant (Fc)"],
+          lignes: [["Salaire net à payer", formatMontantPdf(bulletin.salaireNet)]],
+        },
+      ],
+    };
+
+    const pdf = await construirePdf(document, req.utilisateur!.nom);
+    const nom = nomFichierPdf(`bulletin-paie-${bulletin.travailleur.nom}-${bulletin.mois}`);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${nom}"`);
+    res.setHeader("Content-Length", String(pdf.length));
+    res.end(pdf);
   } catch (e) {
     next(e);
   }

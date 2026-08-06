@@ -25,7 +25,8 @@
     "name": "Name",
     "phone": "Phone",
     "email": "E-mail",
-    "role": "Role"
+    "role": "Role",
+    "download": "Download"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -84,7 +85,11 @@
     "passwordMismatch": "The confirmation doesn't match the new password",
     "passwordChanged": "Password changed.",
     "changePasswordButton": "Change password",
-    "changeImpossible": "Change failed"
+    "changeImpossible": "Change failed",
+    "bulletinPdfError": "Could not download the payslip",
+    "myPayslips": "My payslips",
+    "myPayslipsDesc": "Your own payslips already issued — read only.",
+    "payslipGeneratedOn": "generated on {{date}}"
   },
   "apropos": {
     "subtitle": "Business management application — v{{version}}",
@@ -655,7 +660,12 @@
     "paieSanctionsTitle": "{{count}} disciplinary deduction(s)",
     "paieNoSanctions": "No disciplinary deduction this month.",
     "paieSanctionsRetenue": "Disciplinary deductions",
-    "paieNet": "Net salary"
+    "paieNet": "Net salary",
+    "bulletinsIssued": "Payslips issued",
+    "generateBulletin": "Generate payslip",
+    "generatedOn": "generated on {{date}}",
+    "noBulletins": "No payslip issued for this worker.",
+    "paiePdfError": "Could not download the payslip"
   },
   "departements": {
     "title": "Departments & Groups",

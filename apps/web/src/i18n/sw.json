@@ -26,7 +26,8 @@
     "name": "Jina",
     "phone": "Simu",
     "email": "Barua pepe",
-    "role": "Wadhifa"
+    "role": "Wadhifa",
+    "download": "Pakua"
   },
   "nav": {
     "dashboard": "Dashibodi",
@@ -85,7 +86,11 @@
     "passwordMismatch": "Uthibitisho hauendani na nywila mpya",
     "passwordChanged": "Nywila imebadilishwa.",
     "changePasswordButton": "Badilisha nywila",
-    "changeImpossible": "Mabadiliko yameshindikana"
+    "changeImpossible": "Mabadiliko yameshindikana",
+    "bulletinPdfError": "Imeshindwa kupakua stakabadhi",
+    "myPayslips": "Stakabadhi zangu za mshahara",
+    "myPayslipsDesc": "Stakabadhi zako mwenyewe zilizotolewa — kusoma tu.",
+    "payslipGeneratedOn": "imetengenezwa tarehe {{date}}"
   },
   "apropos": {
     "subtitle": "Programu ya usimamizi wa biashara — v{{version}}",
@@ -656,7 +661,12 @@
     "paieSanctionsTitle": "Makato {{count}} ya kinidhamu",
     "paieNoSanctions": "Hakuna makato ya kinidhamu mwezi huu.",
     "paieSanctionsRetenue": "Makato ya kinidhamu",
-    "paieNet": "Mshahara halisi"
+    "paieNet": "Mshahara halisi",
+    "bulletinsIssued": "Stakabadhi za mshahara zilizotolewa",
+    "generateBulletin": "Tengeneza stakabadhi ya mshahara",
+    "generatedOn": "imetengenezwa tarehe {{date}}",
+    "noBulletins": "Hakuna stakabadhi ya mshahara iliyotolewa kwa mfanyakazi huyu.",
+    "paiePdfError": "Imeshindwa kupakua stakabadhi"
   },
   "departements": {
     "title": "Idara na Vikundi",

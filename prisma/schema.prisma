@@ -144,6 +144,7 @@ model Utilisateur {
   absencesDecidees            Absence[]             @relation("AbsencesDecidees")
   absencesDeclarees           Absence[]             @relation("AbsencesDeclarees")
   sanctionsEnregistrees       Sanction[]            @relation("SanctionsEnregistrees")
+  bulletinsGeneres            BulletinPaie[]        @relation("BulletinsGeneres")
   demandesEmises              DemandeApprobation[]  @relation("DemandesEmises")
   demandesDecidees            DemandeApprobation[]  @relation("DemandesDecidees")
   delegationsRecues           DelegationRole[]      @relation("DelegationsRecues")
@@ -580,6 +581,7 @@ model Travailleur {
   salaireMensuel         Int?
   joursTravaillesParMois Int?
   sanctions              Sanction[]
+  bulletinsPaie          BulletinPaie[]
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
 }
@@ -715,6 +717,34 @@ model Sanction {
 enum TypeSanction {
   PUNITION
   RETENUE
+}
+
+// Bulletin de paie (3.18, nouveau) : instantané FIGÉ du calcul de paie au
+// moment de la génération — absencesNonJustifiees/sanctionsRetenues en JSON,
+// jamais recalculés depuis Absence/Sanction après coup. Un ajustement
+// ultérieur (nouvelle sanction, décision d'absence changée) n'altère jamais
+// rétroactivement un bulletin déjà émis ; seul un nouveau calcul (ou une
+// nouvelle génération) en tient compte. Aucune contrainte d'unicité sur
+// (travailleurId, mois) : régénérer produit un nouvel instantané distinct,
+// l'ancien reste inchangé et consultable.
+model BulletinPaie {
+  id                          String       @id @default(cuid())
+  travailleurId               String
+  travailleur                 Travailleur  @relation(fields: [travailleurId], references: [id], onDelete: Cascade)
+  mois                        String
+  salaireMensuel              Int
+  joursTravaillesParMois      Int
+  tauxJournalier              Float
+  absencesNonJustifiees       Json
+  retenueAbsences             Float
+  sanctionsRetenues           Json
+  totalRetenuesDisciplinaires Int
+  salaireNet                  Int
+  genereParId                 String?
+  generePar                   Utilisateur? @relation("BulletinsGeneres", fields: [genereParId], references: [id], onDelete: SetNull)
+  dateGeneration              DateTime     @default(now())
+
+  @@index([travailleurId, mois])
 }
 
 // --- Approbations (section 3.16) & délégation (section 3.7), Phase 10 ---------

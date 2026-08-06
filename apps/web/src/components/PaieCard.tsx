@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { Download, FileText, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   TYPE_SANCTION_LABELS,
+  type BulletinPaieDTO,
   type CalculPaieDTO,
   type SanctionDTO,
   type TravailleurDTO,
   type TypeSanction,
 } from "@lomoto/shared";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, getToken } from "@/lib/api";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -122,6 +123,43 @@ export function PaieCard({ travailleurs, editable }: { travailleurs: Travailleur
   });
   const paie = paieData?.paie ?? null;
   const messageErreurPaie = paieErreur instanceof ApiError ? paieErreur.message : null;
+
+  // --- Bulletins de paie (instantané figé, 3.18) ----------------------------
+  const { data: bulletinsData } = useQuery({
+    queryKey: ["bulletinsPaie", paieTravailleurId],
+    queryFn: () => api<{ bulletins: BulletinPaieDTO[] }>(`/api/travailleurs/${paieTravailleurId}/bulletins-paie`),
+    enabled: !!paieTravailleurId,
+  });
+  const bulletins = bulletinsData?.bulletins ?? [];
+
+  const genererBulletin = useMutation({
+    mutationFn: () => api(`/api/travailleurs/${paieTravailleurId}/bulletins-paie?mois=${paieMois}`, { method: "POST" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bulletinsPaie", paieTravailleurId] }),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("travailleurs.saveError")),
+  });
+
+  // Le PDF revient en binaire : fetch direct + Authorization manuel plutôt
+  // que le helper JSON (même pattern que BarreExport.tsx).
+  const telechargerBulletin = useMutation({
+    mutationFn: async (bulletinId: string) => {
+      const res = await fetch(`/api/travailleurs/bulletins-paie/${bulletinId}/pdf`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!res.ok) {
+        const corps = await res.json().catch(() => null);
+        throw new Error(corps?.erreur ?? t("travailleurs.paiePdfError"));
+      }
+      const blob = await res.blob();
+      const nom = res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ?? "bulletin-paie.pdf";
+      const url = URL.createObjectURL(blob);
+      const a = window.document.createElement("a");
+      a.href = url;
+      a.download = nom;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("travailleurs.paiePdfError")),
+  });
 
   return (
     <>
@@ -335,6 +373,53 @@ export function PaieCard({ travailleurs, editable }: { travailleurs: Travailleur
                 <span className="text-marine dark:text-creme">{t("travailleurs.paieNet")}</span>
                 <span className="text-terracotta dark:text-or">{formatFc(paie.salaireNet)}</span>
               </div>
+
+              {editable && (
+                <Button
+                  type="button"
+                  variant="cta"
+                  size="sm"
+                  onClick={() => genererBulletin.mutate()}
+                  disabled={genererBulletin.isPending}
+                >
+                  <FileText className="h-4 w-4" />
+                  {t("travailleurs.generateBulletin")}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Bulletins déjà émis pour le travailleur sélectionné (tous mois confondus) —
+              chacun est un instantané figé, jamais modifié par un calcul ultérieur. */}
+          {paieTravailleurId && (
+            <div className="space-y-2 border-t border-border pt-4">
+              <p className="text-sm font-medium text-marine dark:text-creme">{t("travailleurs.bulletinsIssued")}</p>
+              {bulletins.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("travailleurs.noBulletins")}</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {bulletins.map((b) => (
+                    <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                      <span>
+                        {b.mois} — {formatFc(b.salaireNet)}{" "}
+                        <span className="text-muted-foreground">
+                          ({t("travailleurs.generatedOn", { date: formatDate(b.dateGeneration.slice(0, 10)) })})
+                        </span>
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => telechargerBulletin.mutate(b.id)}
+                        disabled={telechargerBulletin.isPending}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        {t("common.download")}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </CardContent>

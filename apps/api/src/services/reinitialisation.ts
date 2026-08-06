@@ -88,6 +88,7 @@ export async function reinitialiserBase(raison: string | undefined): Promise<{ s
     prisma.pointage.deleteMany(),
     prisma.absence.deleteMany(),
     prisma.sanction.deleteMany(),
+    prisma.bulletinPaie.deleteMany(),
     prisma.groupe.deleteMany(),
     prisma.departement.deleteMany(),
     prisma.travailleur.deleteMany(),

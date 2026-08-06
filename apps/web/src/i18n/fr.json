@@ -25,7 +25,8 @@
     "name": "Nom",
     "phone": "Téléphone",
     "email": "E-mail",
-    "role": "Rôle"
+    "role": "Rôle",
+    "download": "Télécharger"
   },
   "nav": {
     "dashboard": "Tableau de bord",
@@ -84,7 +85,11 @@
     "passwordMismatch": "La confirmation ne correspond pas au nouveau mot de passe",
     "passwordChanged": "Mot de passe changé.",
     "changePasswordButton": "Changer le mot de passe",
-    "changeImpossible": "Changement impossible"
+    "changeImpossible": "Changement impossible",
+    "bulletinPdfError": "Téléchargement du bulletin impossible",
+    "myPayslips": "Mes bulletins de paie",
+    "myPayslipsDesc": "Vos propres bulletins déjà émis — lecture seule.",
+    "payslipGeneratedOn": "généré le {{date}}"
   },
   "apropos": {
     "subtitle": "Application de gestion commerciale — v{{version}}",
@@ -655,7 +660,12 @@
     "paieSanctionsTitle": "{{count}} retenue(s) disciplinaire(s)",
     "paieNoSanctions": "Aucune retenue disciplinaire ce mois-ci.",
     "paieSanctionsRetenue": "Retenues disciplinaires",
-    "paieNet": "Salaire net"
+    "paieNet": "Salaire net",
+    "bulletinsIssued": "Bulletins émis",
+    "generateBulletin": "Générer le bulletin",
+    "generatedOn": "généré le {{date}}",
+    "noBulletins": "Aucun bulletin émis pour ce travailleur.",
+    "paiePdfError": "Téléchargement du bulletin impossible"
   },
   "departements": {
     "title": "Départements & Groupes",

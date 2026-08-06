@@ -26,7 +26,8 @@
     "name": "Nkombo",
     "phone": "Telefone",
     "email": "E-mail",
-    "role": "Mokumba"
+    "role": "Mokumba",
+    "download": "Kokitisa"
   },
   "nav": {
     "dashboard": "Etando ya mosala",
@@ -85,7 +86,11 @@
     "passwordMismatch": "Kondimisa ekokani na mot ya sika te",
     "passwordChanged": "Mot ya koleka ebongolami.",
     "changePasswordButton": "Kobongola mot ya koleka",
-    "changeImpossible": "Kobongola ekoki te"
+    "changeImpossible": "Kobongola ekoki te",
+    "bulletinPdfError": "Kokoki te kokitisa bavolo",
+    "myPayslips": "Bavolo na ngai ya lifuta",
+    "myPayslipsDesc": "Bavolo na yo moko oyo esilaki kobimisama — kotala kaka.",
+    "payslipGeneratedOn": "ebimisami na {{date}}"
   },
   "apropos": {
     "subtitle": "Application ya bokambi ya mombongo — v{{version}}",
@@ -656,7 +661,12 @@
     "paieSanctionsTitle": "Bokati {{count}} ya etumbu",
     "paieNoSanctions": "Bokati ya etumbu moko te na sanza oyo.",
     "paieSanctionsRetenue": "Bokati ya etumbu",
-    "paieNet": "Lifuta ya suka"
+    "paieNet": "Lifuta ya suka",
+    "bulletinsIssued": "Bavolo ya lifuta ebimisami",
+    "generateBulletin": "Kobimisa bavolo ya lifuta",
+    "generatedOn": "ebimisami na {{date}}",
+    "noBulletins": "Bavolo ya lifuta moko te ebimisami mpo na mosali oyo.",
+    "paiePdfError": "Kokoki te kokitisa bavolo"
   },
   "departements": {
     "title": "Départements & Groupes",
