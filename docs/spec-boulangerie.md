@@ -453,6 +453,8 @@ Sanction (nouveau, distincte des déductions automatiques pour absence) : puniti
 
 Calcul de paie (nouveau), par Travailleur et par mois : salaire de base (salaireMensuel) − retenue pour absences non justifiées de ce mois (nombre de jours × taux journalier) − retenues disciplinaires (somme des Sanction de type retenue de ce mois) = salaire net. Aucun arrondi intermédiaire : le calcul reste en précision complète jusqu'au résultat final, arrondi au Fc le plus proche une seule fois. Seules les absences au statut « non justifiée » sont retenues — une absence en attente ou justifiée n'a aucun impact. Le calcul est bloqué, avec message explicite, pour un Travailleur dont le salaire ou les jours travaillés ne sont pas encore renseignés (fiches créées avant cette fonctionnalité). Écriture (salaire, jours travaillés, sanctions) réservée à l'Admin secondaire/Principal, comme le reste du module Travailleurs.
 
+Bulletins de paie (nouveau) : document PDF par Travailleur et par mois, généré à partir du calcul de paie — réutilise le mécanisme d'export déjà en place (logo en filigrane, sans le crédit développeur, retiré des exports). Une fois émis, le bulletin est figé (photo des chiffres à cet instant) — un ajustement ultérieur (nouvelle sanction, décision d'absence changée) n'altère jamais rétroactivement un bulletin déjà généré, seul un nouveau calcul en tient compte. Si le Travailleur a un compte Utilisateur lié, il peut consulter et télécharger ses propres bulletins (lecture seule, les siens uniquement) ; les Admins voient et génèrent ceux de tout le monde.
+
 ### 3.19 Assistant (accessible à tous les rôles — mode humain, IA désactivée temporairement)
 Chat en temps réel (Socket.io) accessible à tout utilisateur connecté, pour écrire directement à un Admin et envoyer des captures d'écran. (La couche IA Gemini est codée et prête, mais désactivée pour l'instant — bloquée par la facturation Google Cloud à finaliser. Reprise prévue lors d'une prochaine mise à jour, sans travail de reconstruction : juste la réactiver une fois la facturation réglée.)
 
@@ -541,6 +543,7 @@ Groupe (id, departementId, nom)            # subdivision d'un Département
 Pointage (id, travailleurId, horodatageEntree, horodatageSortie, enregistrePar)   # horodatageSortie nullable (encore en poste) — date+heure réels, pas juste une date (équipes de nuit)
 Absence (id, travailleurId, date, motif, declareParId, decisionStatut, decidePar, dateDecision)   # declareParId = auteur de la déclaration, distinct de decidePar qui tranche ; decisionStatut: en_attente | justifiee | non_justifiee ; decidePar/dateDecision nullables tant qu'en attente
 Sanction (id, travailleurId, type, motif, montant, date, enregistrePar)   # type: punition | retenue ; montant nullable (uniquement pour une retenue)
+BulletinPaie (id, travailleurId, mois, salaireMensuel, joursTravaillesParMois, tauxJournalier, absencesNonJustifiees, retenueAbsences, sanctionsRetenues, totalRetenuesDisciplinaires, salaireNet, genereParId, dateGeneration)   # instantané figé du calcul de paie au moment de la génération (absencesNonJustifiees/sanctionsRetenues en JSON) — jamais recalculé depuis Absence/Sanction après coup
 ```
 
 ## 7. Stack technique recommandée
