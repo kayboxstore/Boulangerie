@@ -665,7 +665,9 @@
     "generateBulletin": "Generate payslip",
     "generatedOn": "generated on {{date}}",
     "noBulletins": "No payslip issued for this worker.",
-    "paiePdfError": "Could not download the payslip"
+    "paiePdfError": "Could not download the payslip",
+    "pendingAbsenceTitle": "{{count}} absence(s) still awaiting a decision",
+    "pendingAbsenceSince": "for {{count}} day(s)"
   },
   "departements": {
     "title": "Departments & Groups",
@@ -833,7 +835,8 @@
       "balance7": "7-day balance",
       "balance30": "30-day balance",
       "topExpensesTitle": "Top expenses",
-      "colReason": "Reason"
+      "colReason": "Reason",
+      "payrollMass": "Payroll mass"
     },
     "bacsSuffix": "crate(s)",
     "kpiBalanceDay": "Today's balance",
@@ -848,7 +851,8 @@
     "noExpensePeriod": "No expenses for the period.",
     "expenseTooltip": "Expense",
     "caTooltip": "Balance of the day",
-    "reportTitle": "Management report"
+    "reportTitle": "Management report",
+    "kpiPayroll": "Payroll mass"
   },
   "langue": {
     "FR": "Français",

@@ -289,6 +289,7 @@ export function DashboardPage() {
           [c("present"), travailleurs.presents],
           [c("absent"), travailleurs.absents],
           [c("notClocked"), travailleurs.nonPointes],
+          [c("payrollMass"), travailleurs.masseSalariale],
         ],
       });
     }
@@ -567,10 +568,11 @@ export function DashboardPage() {
               <TitreWidget icone={CalendarCheck}>{t("dashboard.presenceTitle")}</TitreWidget>
               <CardDescription>{t("dashboard.presenceDesc", { count: travailleurs.presents, total: travailleurs.attendus })}</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-3 gap-3">
+            <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <CarteKPI titre={t("dashboard.kpiPresent")} valeur={travailleurs.presents} accent />
               <CarteKPI titre={t("dashboard.kpiAbsent")} valeur={travailleurs.absents} />
               <CarteKPI titre={t("dashboard.kpiNotClocked")} valeur={travailleurs.nonPointes} />
+              <CarteKPI titre={t("dashboard.kpiPayroll")} valeur={travailleurs.masseSalariale} format={formatFc} />
             </CardContent>
           </Card>
         )}

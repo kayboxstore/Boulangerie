@@ -14,6 +14,7 @@ import {
   travailleurCreateSchema,
   travailleurUpdateSchema,
   type AbsenceDTO,
+  type AlerteAbsenceDTO,
   type BulletinPaieDTO,
   type CalculPaieDTO,
   type DocumentExportInput,
@@ -134,6 +135,7 @@ const versAbsenceDTO = (a: AbsenceAvecRelations): AbsenceDTO => ({
   decisionStatut: a.decisionStatut as StatutDecisionAbsence,
   decidePar: a.decidePar,
   dateDecision: a.dateDecision?.toISOString() ?? null,
+  alerteEnvoyeeLe: a.alerteEnvoyeeLe?.toISOString() ?? null,
 });
 
 /** Vérifie que le compte Utilisateur à lier existe et n'a pas déjà une fiche. */
@@ -515,6 +517,84 @@ travailleursRouter.put("/absences/:id/decision", requirePermission("TRAVAILLEURS
     }
 
     res.json({ absence: versAbsenceDTO(absence) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const debutAujourdhui = (): Date => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+/**
+ * Rappel « absence en attente » (section 3.18, nouveau) — vérification
+ * PARESSEUSE au chargement de l'app, même pattern exact que l'alerte « dette
+ * non payée » (3.4, `verifierAlertesDette` dans routes/commandes.ts) : pas de
+ * tâche planifiée, `updateMany` gardé sur `alerteEnvoyeeLe: null` en
+ * compare-and-set atomique pour ne jamais renvoyer deux fois.
+ *
+ * Concernées : les absences déclarées avant aujourd'hui, encore EN_ATTENTE.
+ * Événement SYSTÈME (aucun émetteur humain), restreint aux Admins (secondaire
+ * + Principal) — pas le DG, qui a pourtant lecture sur Travailleurs.
+ */
+async function verifierAlertesAbsenceEnAttente(): Promise<void> {
+  const debut = debutAujourdhui();
+
+  const enAttente = await prisma.absence.findMany({
+    where: { decisionStatut: "EN_ATTENTE", date: { lt: debut }, alerteEnvoyeeLe: null },
+    include: { travailleur: { select: { nom: true } } },
+    take: 200,
+  });
+
+  for (const a of enAttente) {
+    const { count } = await prisma.absence.updateMany({
+      where: { id: a.id, alerteEnvoyeeLe: null },
+      data: { alerteEnvoyeeLe: new Date() },
+    });
+    if (count !== 1) continue;
+
+    busEvenements.emettreEvenement({
+      type: "ABSENCE_EN_ATTENTE",
+      module: "TRAVAILLEURS",
+      emetteurId: null, // déclenchée par le système
+      evenementRef: a.id,
+      priorite: "HAUTE",
+      restreindreAuxRoles: [ROLE_ADMINISTRATEUR],
+      message: `Absence de ${a.travailleur.nom} le ${a.date.toISOString().slice(0, 10)} toujours en attente de décision`,
+      donnees: { absenceId: a.id, travailleurId: a.travailleurId },
+    });
+  }
+}
+
+/**
+ * Déclenche la vérification paresseuse puis renvoie les absences en attente
+ * antérieures à aujourd'hui, toujours ouvertes. La notification ne part
+ * qu'une fois ; la liste, elle, reste affichée tant que la décision n'est
+ * pas tranchée.
+ */
+travailleursRouter.get("/alertes-absence", requirePermission("TRAVAILLEURS", "LECTURE"), async (_req, res, next) => {
+  try {
+    await verifierAlertesAbsenceEnAttente();
+
+    const debut = debutAujourdhui();
+    const enAttente = await prisma.absence.findMany({
+      where: { decisionStatut: "EN_ATTENTE", date: { lt: debut } },
+      include: { travailleur: { select: { nom: true } } },
+      orderBy: { date: "asc" },
+      take: 100,
+    });
+
+    const alertes: AlerteAbsenceDTO[] = enAttente.map((a) => ({
+      absenceId: a.id,
+      travailleurNom: a.travailleur.nom,
+      motif: a.motif,
+      date: a.date.toISOString().slice(0, 10),
+      joursDepuis: Math.max(1, Math.floor((debut.getTime() - a.date.getTime()) / 86_400_000)),
+      alerteEnvoyeeLe: a.alerteEnvoyeeLe?.toISOString() ?? null,
+    }));
+    res.json({ alertes });
   } catch (e) {
     next(e);
   }

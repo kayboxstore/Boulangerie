@@ -666,7 +666,9 @@
     "generateBulletin": "Tengeneza stakabadhi ya mshahara",
     "generatedOn": "imetengenezwa tarehe {{date}}",
     "noBulletins": "Hakuna stakabadhi ya mshahara iliyotolewa kwa mfanyakazi huyu.",
-    "paiePdfError": "Imeshindwa kupakua stakabadhi"
+    "paiePdfError": "Imeshindwa kupakua stakabadhi",
+    "pendingAbsenceTitle": "Utoro {{count}} bado unasubiri uamuzi",
+    "pendingAbsenceSince": "tangu siku {{count}}"
   },
   "departements": {
     "title": "Idara na Vikundi",
@@ -834,7 +836,8 @@
       "balance7": "Salio la siku 7",
       "balance30": "Salio la siku 30",
       "topExpensesTitle": "Matumizi makubwa zaidi",
-      "colReason": "Sababu"
+      "colReason": "Sababu",
+      "payrollMass": "Jumla ya mishahara"
     },
     "bacsSuffix": "kreti",
     "kpiBalanceDay": "Salio la leo",
@@ -849,7 +852,8 @@
     "noExpensePeriod": "Hakuna matumizi kwa kipindi hiki.",
     "expenseTooltip": "Matumizi",
     "caTooltip": "Salio la siku",
-    "reportTitle": "Ripoti ya usimamizi"
+    "reportTitle": "Ripoti ya usimamizi",
+    "kpiPayroll": "Jumla ya mishahara"
   },
   "langue": {
     "FR": "Français",

@@ -268,6 +268,10 @@ rapportsRouter.get("/travailleurs", requirePermission("TRAVAILLEURS", "LECTURE")
     fin.setDate(fin.getDate() + 1);
 
     const attendus = await prisma.travailleur.count();
+    // Masse salariale (3.8, nouveau) : somme brute des salaireMensuel — les
+    // fiches sans salaire renseigné (créées avant cette fonctionnalité, ou
+    // valeur explicitement retirée) comptent pour 0, pas d'erreur.
+    const salaires = await prisma.travailleur.aggregate({ _sum: { salaireMensuel: true } });
     const pointagesActifs = await prisma.pointage.findMany({
       where: {
         OR: [
@@ -291,6 +295,7 @@ rapportsRouter.get("/travailleurs", requirePermission("TRAVAILLEURS", "LECTURE")
       presents,
       absents,
       nonPointes: Math.max(0, attendus - presents - absents),
+      masseSalariale: salaires._sum.salaireMensuel ?? 0,
     };
     res.json(dto);
   } catch (e) {

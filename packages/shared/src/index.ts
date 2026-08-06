@@ -169,6 +169,10 @@ export const TYPES_EVENEMENT = [
   // Absence tranchée non justifiée (section 3.18) : notifie le travailleur
   // concerné (s'il a un compte) et les autres Admins.
   "ABSENCE_NON_JUSTIFIEE",
+  // Rappel absence en attente (3.18, nouveau) : émis par le SYSTÈME, même
+  // mécanisme que DETTE_NON_PAYEE — le jour suivant une absence encore
+  // EN_ATTENTE, jamais renvoyé une fois parti (alerteEnvoyeeLe).
+  "ABSENCE_EN_ATTENTE",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -1052,6 +1056,19 @@ export interface AbsenceDTO {
   decisionStatut: StatutDecisionAbsence;
   decidePar: { id: string; nom: string } | null;
   dateDecision: string | null;
+  /** Rappel "absence en attente" (3.18, nouveau) : non-null dès que l'alerte est partie, jamais renvoyée. */
+  alerteEnvoyeeLe: string | null;
+}
+
+/** Rappel « absence en attente » (3.18, nouveau) — même forme que AlerteDetteDTO (3.4). */
+export interface AlerteAbsenceDTO {
+  absenceId: string;
+  travailleurNom: string;
+  motif: string;
+  date: string;
+  /** Jours écoulés depuis la date de l'absence. */
+  joursDepuis: number;
+  alerteEnvoyeeLe: string | null;
 }
 
 export interface TravailleurDTO {
@@ -1223,6 +1240,8 @@ export interface RapportTravailleursDTO {
   /** Absence déclarée pour aujourd'hui, quel que soit le statut de décision. */
   absents: number;
   nonPointes: number;
+  /** Masse salariale (3.8, nouveau) : somme des salaireMensuel de tous les Travailleurs enregistrés. */
+  masseSalariale: number;
 }
 
 /** Résumé de clôture quotidien (3.8) — DG uniquement via la matrice (RAPPORTS). */

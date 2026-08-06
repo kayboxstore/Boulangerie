@@ -665,7 +665,9 @@
     "generateBulletin": "Générer le bulletin",
     "generatedOn": "généré le {{date}}",
     "noBulletins": "Aucun bulletin émis pour ce travailleur.",
-    "paiePdfError": "Téléchargement du bulletin impossible"
+    "paiePdfError": "Téléchargement du bulletin impossible",
+    "pendingAbsenceTitle": "{{count}} absence(s) toujours en attente de décision",
+    "pendingAbsenceSince": "depuis {{count}} jour(s)"
   },
   "departements": {
     "title": "Départements & Groupes",
@@ -833,7 +835,8 @@
       "balance7": "Solde 7 jours",
       "balance30": "Solde 30 jours",
       "topExpensesTitle": "Principales dépenses",
-      "colReason": "Motif"
+      "colReason": "Motif",
+      "payrollMass": "Masse salariale"
     },
     "bacsSuffix": "bac(s)",
     "kpiBalanceDay": "Solde du jour",
@@ -848,7 +851,8 @@
     "noExpensePeriod": "Aucune dépense sur la période.",
     "expenseTooltip": "Dépense",
     "caTooltip": "Solde du jour",
-    "reportTitle": "Rapport de gestion"
+    "reportTitle": "Rapport de gestion",
+    "kpiPayroll": "Masse salariale"
   },
   "langue": {
     "FR": "Français",

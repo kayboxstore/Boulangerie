@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck, CalendarX, Link2, LogOut, Pencil, Trash2, UserPlus } from "lucide-react";
+import { CalendarCheck, CalendarX, Link2, LogOut, Pencil, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   STATUT_DECISION_ABSENCE_LABELS,
   type AbsenceDTO,
+  type AlerteAbsenceDTO,
   type DepartementDTO,
   type PointageDTO,
   type StatutDecisionAbsence,
@@ -97,6 +98,15 @@ export function TravailleursPage() {
     queryKey: ["departements"],
     queryFn: () => api<{ departements: DepartementDTO[] }>("/api/departements"),
   });
+  // Rappel « absence en attente » (3.18) — même clé de cache que la
+  // vérification paresseuse déclenchée au chargement de l'app (Layout.tsx),
+  // réservée aux rôles avec écriture (Admin secondaire + Principal).
+  const { data: alertesAbsenceData } = useQuery({
+    queryKey: ["alertes-absence"],
+    queryFn: () => api<{ alertes: AlerteAbsenceDTO[] }>("/api/travailleurs/alertes-absence"),
+    enabled: editable,
+  });
+  const alertesAbsence = alertesAbsenceData?.alertes ?? [];
 
   // --- Filtres pointage/absence (pattern Commandes : travailleur, dates, Tout afficher)
   const [filtreTravailleur, setFiltreTravailleur] = useState("");
@@ -350,6 +360,27 @@ export function TravailleursPage() {
           </div>
         )}
       </div>
+
+      {/* Rappel absence en attente (3.18) — bandeau visible tant que la décision n'est pas tranchée */}
+      {alertesAbsence.length > 0 && (
+        <div role="status" className="rounded-lg border-2 border-rouge-alerte bg-rouge-alerte/10 px-4 py-3">
+          <p className="flex items-center gap-2 font-semibold text-rouge-alerte">
+            <TriangleAlert className="h-4 w-4" />
+            {t("travailleurs.pendingAbsenceTitle", { count: alertesAbsence.length })}
+          </p>
+          <ul className="mt-1.5 space-y-0.5 text-sm">
+            {alertesAbsence.map((a) => (
+              <li key={a.absenceId} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium text-marine dark:text-creme">{a.travailleurNom}</span>
+                <span className="text-muted-foreground">{a.motif}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t("travailleurs.pendingAbsenceSince", { count: a.joursDepuis })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <DepartementsCard travailleurs={travailleurs} editable={editable} />
       <PaieCard travailleurs={travailleurs} editable={editable} />

@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { TAGLINE, type AlerteDetteDTO, type Module } from "@lomoto/shared";
+import { TAGLINE, type AlerteAbsenceDTO, type AlerteDetteDTO, type Module } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
@@ -173,6 +173,16 @@ export function Layout() {
     queryKey: ["alertes-dette"],
     queryFn: () => api<{ alertes: AlerteDetteDTO[] }>("/api/commandes/alertes-dette"),
     enabled: peutLire("COMMANDES"),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Rappel « absence en attente » (3.18) : même mécanisme paresseux, mais
+  // réservé aux rôles avec écriture sur Travailleurs (Admin secondaire +
+  // Principal) — le DG, lecture seule, n'est pas destinataire de ce rappel.
+  useQuery({
+    queryKey: ["alertes-absence"],
+    queryFn: () => api<{ alertes: AlerteAbsenceDTO[] }>("/api/travailleurs/alertes-absence"),
+    enabled: peutEcrire("TRAVAILLEURS"),
     staleTime: 5 * 60 * 1000,
   });
   const { t } = useTranslation();

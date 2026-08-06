@@ -666,7 +666,9 @@
     "generateBulletin": "Kobimisa bavolo ya lifuta",
     "generatedOn": "ebimisami na {{date}}",
     "noBulletins": "Bavolo ya lifuta moko te ebimisami mpo na mosali oyo.",
-    "paiePdfError": "Kokoki te kokitisa bavolo"
+    "paiePdfError": "Kokoki te kokitisa bavolo",
+    "pendingAbsenceTitle": "Bozangi {{count}} bazali kozela mokano",
+    "pendingAbsenceSince": "banda mikolo {{count}}"
   },
   "departements": {
     "title": "Départements & Groupes",
@@ -834,7 +836,8 @@
       "balance7": "Oyo etikali mikolo 7",
       "balance30": "Oyo etikali mikolo 30",
       "topExpensesTitle": "Badepanse ya minene",
-      "colReason": "Ntina"
+      "colReason": "Ntina",
+      "payrollMass": "Lifuta ya basali nyonso"
     },
     "bacsSuffix": "ba-bac",
     "kpiBalanceDay": "Oyo etikali lelo",
@@ -849,7 +852,8 @@
     "noExpensePeriod": "Depanse ezali te na ntango wana.",
     "expenseTooltip": "Depanse",
     "caTooltip": "Oyo etikali mokolo",
-    "reportTitle": "Lapolo ya bokambi"
+    "reportTitle": "Lapolo ya bokambi",
+    "kpiPayroll": "Lifuta ya basali nyonso"
   },
   "langue": {
     "FR": "Français",

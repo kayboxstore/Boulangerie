@@ -14,14 +14,12 @@ import { ecrireSauvegardeLocale } from "./sauvegardeLocale.js";
  *    la configuration structurelle (rôles/permissions, catalogue produits,
  *    matières premières — stock remis à 0 mais catalogue conservé pour ne pas
  *    casser la décrémentation auto en Production —, recettes, types de
- *    clients, paramètres boutique). Vente/LigneVente/ClotureCaisse, bien
- *    qu'orphelines depuis la refonte de la Caisse (3.1) et non listées dans
- *    la spec, DOIVENT être effacées elles aussi : Vente.vendeurId et
- *    ClotureCaisse.caissierId pointent vers Utilisateur en ON DELETE
- *    RESTRICT — les laisser intactes ferait échouer la suppression des
- *    comptes dès qu'une seule ligne historique existe. Départements & Groupes
- *    (3.18) sont eux aussi des données transactionnelles (organisation du
- *    personnel, pas de la config structurelle) : effacés avant Travailleur.
+ *    clients, paramètres boutique). Départements & Groupes (3.18) sont eux
+ *    aussi des données transactionnelles (organisation du personnel, pas de
+ *    la config structurelle) : effacés avant Travailleur.
+ *    (Vente/LigneVente/ClotureCaisse/Presence, orphelines depuis les refontes
+ *    3.1/3.18, ont été supprimées du schéma — nettoyage confirmé vide avant
+ *    suppression — donc plus rien à effacer ici pour elles.)
  * 3. L'ordre des suppressions est dicté par les contraintes de clé étrangère
  *    (enfants avant parents) — voir les migrations pour le détail exact des
  *    ON DELETE. `deleteMany`/`updateMany` ne passent PAS par l'extension
@@ -84,7 +82,6 @@ export async function reinitialiserBase(raison: string | undefined): Promise<{ s
     prisma.delegationRole.deleteMany(),
     prisma.notification.deleteMany(),
     // Travailleurs
-    prisma.presence.deleteMany(), // ORPHELINE (remplacée par pointages/absences, 3.18) — vidée par cohérence
     prisma.pointage.deleteMany(),
     prisma.absence.deleteMany(),
     prisma.sanction.deleteMany(),
@@ -107,11 +104,7 @@ export async function reinitialiserBase(raison: string | undefined): Promise<{ s
     prisma.production.deleteMany(),
     prisma.planningLigneProduit.deleteMany(),
     prisma.planningProduction.deleteMany(),
-    // Caisse — le registre (3.1) et les tables orphelines de l'ancienne vente
-    // au comptoir (voir commentaire ci-dessus : RESTRICT sur Utilisateur)
-    prisma.ligneVente.deleteMany(),
-    prisma.vente.deleteMany(),
-    prisma.clotureCaisse.deleteMany(),
+    // Caisse — le registre (3.1)
     prisma.tauxDuJour.deleteMany(),
     prisma.depenseCaisse.deleteMany(),
     // Comptes — en dernier, référencé par (presque) tout ce qui précède.
