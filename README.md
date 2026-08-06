@@ -50,13 +50,13 @@ Mot de passe commun : `Lomoto2026!`
 
 | Rôle | E-mail | Écriture | Lecture seule supplémentaire |
 |---|---|---|---|
-| Directeur Général | dg@lomoto.cd | *(aucune)* | Tous les modules **sauf Paramètres** (aucun accès) |
-| Administrateur (principal) | admin@lomoto.cd | Paramètres, Équipe | — |
-| Caissier(ère) | caisse@lomoto.cd | Caisse | Commandes, Commissions, Production |
-| Chargé des commandes | commandes@lomoto.cd | Commandes | Commissions |
-| Responsable de production | production@lomoto.cd | Production | — |
-| Responsable Stock/Achats et Fournisseurs | achats@lomoto.cd, stock@lomoto.cd | Stocks, Fournisseurs | — |
-| Chargé du personnel | personnel@lomoto.cd | Travailleurs *(module à venir)* | — |
+| Directeur Général | dg@boulangerie-lomoto.com | *(aucune)* | Tous les modules **sauf Paramètres** (aucun accès) |
+| Administrateur (principal) | admin@boulangerie-lomoto.com | Paramètres, Équipe, Travailleurs | — |
+| Administrateur (secondaire) | admin2@boulangerie-lomoto.com | Paramètres, Équipe, Travailleurs | — |
+| Caissier(ère) | caisse@boulangerie-lomoto.com | Caisse | Commandes, Commissions, Production |
+| Chargé des commandes | commandes@boulangerie-lomoto.com | Commandes | Commissions |
+| Responsable de production | production@boulangerie-lomoto.com | Production | — |
+| Responsable Stock/Achats et Fournisseurs | achats@boulangerie-lomoto.com, stock@boulangerie-lomoto.com | Stocks, Fournisseurs | — |
 
 Le rôle Administrateur peut avoir jusqu'à 3 comptes (1 principal + 2 secondaires) — champ `Utilisateur.estAdminPrincipal`, unicité du principal garantie par index partiel ; le workflow d'approbation arrive en Phase 10.
 

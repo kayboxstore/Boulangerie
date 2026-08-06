@@ -111,11 +111,11 @@ Comptes de démonstration (mot de passe commun **`Lomoto2026!`**) :
 
 | Rôle | E-mail |
 |------|--------|
-| Administrateur principal | `admin@lomoto.cd` |
-| Administrateur secondaire | `admin2@lomoto.cd` |
-| Directeur Général | `dg@lomoto.cd` |
-| Caissière | `caisse@lomoto.cd` |
-| Chargé des commandes | `commandes@lomoto.cd` |
+| Administrateur principal | `admin@boulangerie-lomoto.com` |
+| Administrateur secondaire | `admin2@boulangerie-lomoto.com` |
+| Directeur Général | `dg@boulangerie-lomoto.com` |
+| Caissière | `caisse@boulangerie-lomoto.com` |
+| Chargé des commandes | `commandes@boulangerie-lomoto.com` |
 
 > ⚠️ **Change ces mots de passe** (ou supprime les comptes de démo) si le
 > déploiement est exposé publiquement — l'URL est accessible à tous.

@@ -5,7 +5,7 @@ import { TAGLINE } from "@lomoto/shared";
  * Envoi d'email (section 3.13) via Gmail / Google Workspace, avec un MOT DE PASSE
  * D'APPLICATION — jamais de secret en dur ici. Variables d'environnement :
  *
- *   GMAIL_USER          adresse expéditrice (ex. contact@lomoto.cd)
+ *   GMAIL_USER          adresse expéditrice (ex. contact@boulangerie-lomoto.com)
  *   GMAIL_APP_PASSWORD  mot de passe d'application Google (16 caractères)
  *
  * Surcharges facultatives, utiles pour tester sans passer par Gmail :

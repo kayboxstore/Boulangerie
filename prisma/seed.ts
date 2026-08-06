@@ -83,7 +83,7 @@ async function fusionnerRolesStockAchats(nomFusionne: string) {
  * Travailleurs passe à l'écriture de l'Admin secondaire. Les comptes qui
  * portaient encore ce rôle sont rebasculés sur « Administrateur » (en tant
  * que secondaire : `estAdminPrincipal` n'est jamais touché ici, il ne devient
- * `true` que pour le compte admin@lomoto.cd plus bas). Idempotent : ne fait
+ * `true` que pour le compte admin@boulangerie-lomoto.com plus bas). Idempotent : ne fait
  * rien si le rôle n'existe plus.
  */
 async function retirerRoleChargeDuPersonnel() {
@@ -105,6 +105,39 @@ async function retirerRoleChargeDuPersonnel() {
   console.log(`Retrofit : rôle « Chargé du personnel » supprimé (${count} compte(s) rebasculé(s) sur Administrateur)`);
 }
 
+/**
+ * Retrofit : migration du domaine des comptes de démonstration, de l'ancien
+ * lomoto.cd vers boulangerie-lomoto.com (3.18). Ces comptes sont seedés
+ * directement (pas de fiche Travailleur associée), donc hors du flux email
+ * pro/Cloudflare : un simple renommage de l'identifiant de connexion suffit.
+ * Idempotent : ne fait rien si l'ancienne adresse n'existe plus.
+ */
+const MIGRATION_EMAILS_DEMO: [string, string][] = [
+  ["dg@lomoto.cd", "dg@boulangerie-lomoto.com"],
+  ["admin@lomoto.cd", "admin@boulangerie-lomoto.com"],
+  ["admin2@lomoto.cd", "admin2@boulangerie-lomoto.com"],
+  ["caisse@lomoto.cd", "caisse@boulangerie-lomoto.com"],
+  ["commandes@lomoto.cd", "commandes@boulangerie-lomoto.com"],
+  ["production@lomoto.cd", "production@boulangerie-lomoto.com"],
+  ["achats@lomoto.cd", "achats@boulangerie-lomoto.com"],
+  ["stock@lomoto.cd", "stock@boulangerie-lomoto.com"],
+  // Compte résiduel du rôle « Chargé du personnel » supprimé (retrofit
+  // ci-dessus) : le rôle n'existe plus mais le compte, lui, reste — même
+  // politique « jamais de suppression » que pour les tables ORPHELINE.
+  ["personnel@lomoto.cd", "personnel@boulangerie-lomoto.com"],
+];
+
+async function migrerEmailsDemoVersNouveauDomaine() {
+  for (const [ancien, nouveau] of MIGRATION_EMAILS_DEMO) {
+    const existant = await prisma.utilisateur.findUnique({ where: { email: ancien } });
+    if (!existant) continue;
+    const cible = await prisma.utilisateur.findUnique({ where: { email: nouveau } });
+    if (cible) continue;
+    await prisma.utilisateur.update({ where: { id: existant.id }, data: { email: nouveau } });
+    console.log(`Retrofit : compte de démo migré ${ancien} → ${nouveau}`);
+  }
+}
+
 async function upsertUtilisateur(nom: string, email: string, roleNom: string) {
   const role = await prisma.role.findUniqueOrThrow({ where: { nom: roleNom } });
   const motDePasseHash = await bcrypt.hash(MOT_DE_PASSE_DEMO, 10);
@@ -120,6 +153,8 @@ async function main() {
   await fusionnerRolesStockAchats("Responsable Stock/Achats et Fournisseurs");
   // --- Retrofit : suppression du rôle Chargé du personnel (3.18) ---
   await retirerRoleChargeDuPersonnel();
+  // --- Retrofit : migration des comptes de démo vers boulangerie-lomoto.com ---
+  await migrerEmailsDemoVersNouveauDomaine();
 
   // --- Rôles, hiérarchie et matrice de permissions (section 2, à jour) ---
 
@@ -186,24 +221,24 @@ async function main() {
   }
 
   // --- Utilisateurs de démonstration (un par rôle) ---
-  await upsertUtilisateur("Directeur Général", "dg@lomoto.cd", "Directeur Général");
-  await upsertUtilisateur("Administrateur", "admin@lomoto.cd", "Administrateur");
+  await upsertUtilisateur("Directeur Général", "dg@boulangerie-lomoto.com", "Directeur Général");
+  await upsertUtilisateur("Administrateur", "admin@boulangerie-lomoto.com", "Administrateur");
   // Admin secondaire (démo Phase 10) : ses tâches critiques passent par une
   // demande d'approbation à l'Admin Principal, il n'exécute jamais directement.
-  await upsertUtilisateur("Administrateur secondaire", "admin2@lomoto.cd", "Administrateur");
-  await upsertUtilisateur("Caissière", "caisse@lomoto.cd", "Caissier(ère)");
-  await upsertUtilisateur("Chargé des commandes", "commandes@lomoto.cd", "Chargé des commandes");
-  await upsertUtilisateur("Responsable de production", "production@lomoto.cd", "Responsable de production");
-  await upsertUtilisateur("Responsable Fournisseurs", "achats@lomoto.cd", "Responsable Stock/Achats et Fournisseurs");
-  await upsertUtilisateur("Chargé du stock", "stock@lomoto.cd", "Responsable Stock/Achats et Fournisseurs");
+  await upsertUtilisateur("Administrateur secondaire", "admin2@boulangerie-lomoto.com", "Administrateur");
+  await upsertUtilisateur("Caissière", "caisse@boulangerie-lomoto.com", "Caissier(ère)");
+  await upsertUtilisateur("Chargé des commandes", "commandes@boulangerie-lomoto.com", "Chargé des commandes");
+  await upsertUtilisateur("Responsable de production", "production@boulangerie-lomoto.com", "Responsable de production");
+  await upsertUtilisateur("Responsable Fournisseurs", "achats@boulangerie-lomoto.com", "Responsable Stock/Achats et Fournisseurs");
+  await upsertUtilisateur("Chargé du stock", "stock@boulangerie-lomoto.com", "Responsable Stock/Achats et Fournisseurs");
 
   // Le compte admin seedé est le compte Administrateur principal (unique).
   await prisma.utilisateur.updateMany({
-    where: { estAdminPrincipal: true, email: { not: "admin@lomoto.cd" } },
+    where: { estAdminPrincipal: true, email: { not: "admin@boulangerie-lomoto.com" } },
     data: { estAdminPrincipal: false },
   });
   await prisma.utilisateur.update({
-    where: { email: "admin@lomoto.cd" },
+    where: { email: "admin@boulangerie-lomoto.com" },
     data: { estAdminPrincipal: true },
   });
 
