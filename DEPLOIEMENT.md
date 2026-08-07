@@ -105,6 +105,52 @@ PostgreSQL n'est pas installé sur l'hôte (variable `PG_DUMP_PATH` si l'outil e
 installé ailleurs que dans le `PATH`). Dans ce cas, s'appuyer en attendant sur les
 sauvegardes de la base managée fournies par l'hébergeur.
 
+### Restaurer une sauvegarde
+
+Une sauvegarde ne sert à rien si elle n'a jamais été restaurée avec succès —
+la procédure ci-dessous a été **testée réellement** (dump produit avec les
+mêmes options que l'application, restauré sur une base PostgreSQL vide,
+comptages et contenu vérifiés identiques à la source).
+
+Volontairement **un script à lancer à la main, jamais un bouton dans
+l'application** : une restauration remplace le contenu de la base cible, un
+clic malheureux sur une page web serait bien trop facile sur les données
+réelles de l'entreprise. Nécessite un accès à l'environnement où tourne
+l'API (mêmes prérequis que `npx prisma migrate deploy`).
+
+```bash
+# 1. Récupérer un fichier .dump (bouton "Télécharger..." de l'écran État
+#    système, ou un fichier déjà copié sur un support externe)
+
+# 2. Se placer à la racine du dépôt, avec DATABASE_URL pointant vers la base
+#    À RESTAURER (jamais la production, sauf sinistre confirmé) :
+export DATABASE_URL="postgresql://utilisateur:motdepasse@hote:5432/base"
+
+# 3. Vérification à blanc — affiche la base ciblée sans toucher à rien :
+npm run restore:backup -- chemin/vers/fichier.dump
+
+# 4. Restauration réelle (ATTENTION : --clean --if-exists supprime les
+#    tables existantes de la base ciblée avant d'y recharger le dump) :
+npm run restore:backup -- chemin/vers/fichier.dump --confirmer
+
+# 5. Vérifier après coup (obligatoire) : se connecter à l'application ou
+#    interroger la base pour confirmer que les données attendues sont bien
+#    là (ex. compter les lignes de quelques tables clés).
+```
+
+**Piège rencontré en testant** : sur un hôte où plusieurs versions du client
+PostgreSQL sont installées (ex. 16 et 18 en parallèle), l'outil peut résoudre
+vers une version différente de celle utilisée pour la sauvegarde ou du
+serveur cible, et `pg_restore` affiche alors une erreur du type
+`unrecognized configuration parameter "transaction_timeout"` ou
+`unsupported version (x.xx) in file header`. Dans le premier cas (paramètre
+de session inconnu), la restauration réussit quand même en pratique — c'est
+justement pourquoi l'étape 5 (vérification après coup) n'est pas optionnelle.
+Dans le second cas (format de fichier), utiliser `PG_RESTORE_PATH` pour
+pointer explicitement vers le binaire de la bonne version (ex.
+`PG_RESTORE_PATH=/usr/lib/postgresql/16/bin/pg_restore`). Sur Render, une
+seule version du client est installée : ce piège ne s'y pose pas.
+
 ## Se connecter
 
 Comptes de démonstration (mot de passe commun **`Lomoto2026!`**) :
