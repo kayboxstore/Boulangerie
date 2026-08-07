@@ -14,7 +14,8 @@
     "build": "npm run typecheck --workspace apps/api && npm run build --workspace apps/web",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "test": "vitest run"
   },
   "prisma": {
     "schema": "prisma/schema.prisma",
@@ -24,6 +25,7 @@
     "npm-run-all2": "^7.0.2",
     "prisma": "^6.8.0",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "3.2.7"
   }
 }

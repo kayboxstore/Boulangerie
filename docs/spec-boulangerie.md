@@ -567,6 +567,8 @@ Calcul de paie (nouveau), par Travailleur et par mois : salaire de base (salaire
 
 Bulletins de paie (nouveau) : document PDF par Travailleur et par mois, généré à partir du calcul de paie — réutilise le mécanisme d'export déjà en place (logo en filigrane, sans le crédit développeur, retiré des exports). Une fois émis, le bulletin est figé (photo des chiffres à cet instant) — un ajustement ultérieur (nouvelle sanction, décision d'absence changée) n'altère jamais rétroactivement un bulletin déjà généré, seul un nouveau calcul en tient compte. Si le Travailleur a un compte Utilisateur lié, il peut consulter et télécharger ses propres bulletins (lecture seule, les siens uniquement) ; les Admins voient et génèrent ceux de tout le monde.
 
+Suppression d'une fiche Travailleur : bloquée (409) si des bulletins de paie ont déjà été générés pour cette personne — même principe que la suppression d'un Client bloquée par ses commandes (3.4), l'historique de paie officiel ne doit jamais disparaître silencieusement avec la fiche. Pointages, absences et sanctions, eux, restent purement opérationnels : ils sont supprimés en cascade avec la fiche, sans blocage. *(Correction apportée après coup : la suppression n'effectuait initialement aucune vérification.)*
+
 ### 3.19 Assistant (accessible à tous les rôles — mode humain, IA désactivée temporairement)
 Chat en temps réel (Socket.io) accessible à tout utilisateur connecté, pour écrire directement à un Admin et envoyer des captures d'écran. (La couche IA Gemini est codée et prête, mais désactivée pour l'instant — bloquée par la facturation Google Cloud à finaliser. Reprise prévue lors d'une prochaine mise à jour, sans travail de reconstruction : juste la réactiver une fois la facturation réglée.)
 

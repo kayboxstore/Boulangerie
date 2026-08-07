@@ -260,11 +260,22 @@ travailleursRouter.put("/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), as
   }
 });
 
-// La suppression retire aussi les pointages (cascade) — la fiche fait foi.
+// La suppression retire aussi pointages/absences/sanctions (cascade, purement
+// opérationnel) — la fiche fait foi. Les bulletins de paie, eux, sont un
+// historique officiel (mêmes principe que les commandes d'un client, voir
+// clients.ts) : jamais supprimés silencieusement avec la fiche.
 travailleursRouter.delete("/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
   try {
-    const travailleur = await prisma.travailleur.findUnique({ where: { id: req.params.id } });
+    const travailleur = await prisma.travailleur.findUnique({
+      where: { id: req.params.id },
+      include: { _count: { select: { bulletinsPaie: true } } },
+    });
     if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
+    if (travailleur._count.bulletinsPaie > 0) {
+      return res.status(409).json({
+        erreur: `Suppression impossible : ${travailleur._count.bulletinsPaie} bulletin(s) de paie enregistré(s) pour ce travailleur`,
+      });
+    }
     await prisma.travailleur.delete({ where: { id: travailleur.id } });
     res.status(204).end();
   } catch (e) {

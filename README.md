@@ -44,6 +44,20 @@ npx prisma db seed
 npm run dev
 ```
 
+## Tests
+
+```bash
+npm test
+```
+
+Tests unitaires (Vitest) sur les chemins critiques du package partagé
+(`packages/shared/src/index.test.ts`) : calcul d'une commande (avance,
+dette, trop-perçu — section 3.4), dépense farine (section 3.1) et matrice de
+permissions (`aAcces`). Ne couvre pas les routes API ni le frontend — les
+parcours complets restent vérifiés manuellement (voir historique des
+commits pour les vérifications E2E Playwright réalisées à chaque
+fonctionnalité).
+
 ## Comptes de démonstration
 
 Mot de passe commun : `Lomoto2026!`
