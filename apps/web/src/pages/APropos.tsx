@@ -12,6 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
+// Défense en profondeur : le schéma serveur (packages/shared) rejette déjà
+// tout lien qui ne commence pas par http(s)://, mais un lien enregistré avant
+// ce durcissement ne doit pas non plus être rendu en <a href> (schéma
+// javascript: exécutable au clic sur cette page, visible par tous les rôles).
+const estLienHttpSur = (lien: string) => /^https?:\/\//i.test(lien);
+
 // Page À propos (section 3.12) — accessible à tous les rôles ; nom/adresse/
 // contact/présentation/horaires/réseaux sociaux éditables par l'Admin
 // (Principal ou secondaire — pas une tâche critique de la section 2).
@@ -302,7 +308,7 @@ export function AProposPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2">
-                {apropos.reseauxSociaux.map((reseau, i) => (
+                {apropos.reseauxSociaux.filter((reseau) => estLienHttpSur(reseau.lien)).map((reseau, i) => (
                   <a
                     key={i}
                     href={reseau.lien}

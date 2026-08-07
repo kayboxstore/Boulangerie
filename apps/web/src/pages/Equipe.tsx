@@ -276,7 +276,7 @@ export function EquipePage() {
                   </TableCell>
                   {editable && (
                     <TableCell className="text-right">
-                      {c.role.nom === ROLE_ADMINISTRATEUR && !c.estAdminPrincipal && (
+                      {utilisateur?.estAdminPrincipal && c.role.nom === ROLE_ADMINISTRATEUR && !c.estAdminPrincipal && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -373,7 +373,7 @@ export function EquipePage() {
                 />
                 {editable && (
                   <CarteLigneActions className="flex-wrap">
-                    {c.role.nom === ROLE_ADMINISTRATEUR && !c.estAdminPrincipal && (
+                    {utilisateur?.estAdminPrincipal && c.role.nom === ROLE_ADMINISTRATEUR && !c.estAdminPrincipal && (
                       <Button
                         variant="outline"
                         size="sm"

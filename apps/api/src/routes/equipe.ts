@@ -203,10 +203,18 @@ equipeRouter.put("/:id", requirePermission("EQUIPE", "ECRITURE"), async (req, re
 });
 
 // Transfert du statut d'Administrateur principal (section 3.7 : un seul
-// Principal à la fois). La cible doit être un Administrateur ; l'index unique
-// partiel en base garantit l'unicité, la transaction retire puis attribue.
+// Principal à la fois). Réservé au Principal EN EXERCICE : contrairement aux
+// autres actions sensibles du module (suppression, permissions), ce transfert
+// s'exécute immédiatement sans passer par traiterActionCritique — il doit
+// donc être verrouillé ici, sinon un Admin secondaire (même rôle, même
+// EQUIPE écriture) pourrait se l'attribuer lui-même. La cible doit être un
+// Administrateur ; l'index unique partiel en base garantit l'unicité, la
+// transaction retire puis attribue.
 equipeRouter.post("/:id/principal", requirePermission("EQUIPE", "ECRITURE"), async (req, res, next) => {
   try {
+    if (!req.utilisateur!.estAdminPrincipal) {
+      return res.status(403).json({ erreur: "Seul l'Administrateur principal peut transférer ce statut" });
+    }
     const cible = await prisma.utilisateur.findUnique({ where: { id: req.params.id }, include: INCLUDE_COMPTE });
     if (!cible) return res.status(404).json({ erreur: "Compte introuvable" });
     if (cible.role.nom !== ROLE_ADMINISTRATEUR) {

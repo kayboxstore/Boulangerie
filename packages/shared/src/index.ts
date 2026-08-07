@@ -1568,7 +1568,15 @@ export interface ReseauSocial {
 
 const reseauSocialSchema = z.object({
   plateforme: z.string().trim().min(1, "Le nom du réseau est requis").max(60),
-  lien: z.string().trim().min(1, "Le lien est requis").max(300),
+  // Le lien est rendu tel quel en `href` sur la page À propos (accessible à
+  // tous les rôles) : un schéma non http(s) (ex. javascript:) y exécuterait
+  // du code au clic. On restreint donc explicitement le schéma accepté.
+  lien: z
+    .string()
+    .trim()
+    .min(1, "Le lien est requis")
+    .max(300)
+    .regex(/^https?:\/\//i, "Le lien doit commencer par http:// ou https://"),
 });
 
 export const aProposEditSchema = z.object({
