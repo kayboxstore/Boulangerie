@@ -21,9 +21,11 @@ import {
 
 /**
  * Zones de dépôt (section 3.3 d) : purement organisationnel, aucune
- * permission propre — gouverné par le module COMMANDES (rattachées à la
- * fiche Client). Card autonome (requête react-query partagée via la clé
- * "zones-depositaires"), montée sur l'écran Schéma de commande.
+ * permission propre. L'écriture est déléguée au parent via `editable` — vraie
+ * si COMMANDES écriture (rattachées à la fiche Client) OU PRODUCTION écriture
+ * (seul écran d'où la carte est atteignable pour le Responsable de
+ * production). Card autonome (requête react-query partagée via la clé
+ * "zones-depositaires"), montée sur l'écran Production.
  */
 export function ZonesDepositaireCard({ editable }: { editable: boolean }) {
   const { t } = useTranslation();

@@ -367,7 +367,7 @@ export function ProductionPage() {
       )}
 
       {/* --- d) Zones de dépôt --- */}
-      <ZonesDepositaireCard editable={peutEcrire("COMMANDES")} />
+      <ZonesDepositaireCard editable={peutEcrire("COMMANDES") || peutEcrire("PRODUCTION")} />
 
       {/* --- d) Schéma de commande --- */}
       <Card>

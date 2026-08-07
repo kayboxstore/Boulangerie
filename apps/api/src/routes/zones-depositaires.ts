@@ -1,21 +1,33 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
-import {
-  zoneDepositaireCreateSchema,
-  zoneDepositaireUpdateSchema,
-  type ZoneDepositaireDTO,
-} from "@lomoto/shared";
+import { aAcces, zoneDepositaireCreateSchema, zoneDepositaireUpdateSchema, type ZoneDepositaireDTO } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import type { NextFunction, Request, Response } from "express";
 
 /**
  * Zones de dépôt (section 3.3 d) : purement organisationnel, aucune
  * permission propre. La lecture est ouverte à tout utilisateur authentifié
- * (donnée de référence pour les menus déroulants, comme Produit/TypeClient) —
- * le Responsable de production, qui n'a aucun accès Commandes, doit pouvoir
- * afficher les zones dans le Schéma de commande. L'écriture, elle, reste
- * réservée au module COMMANDES (rattachée à la fiche Client).
+ * (donnée de référence pour les menus déroulants, comme Produit/TypeClient).
+ *
+ * L'écriture est rattachée à la fiche Client (module COMMANDES) OU à l'écran
+ * de Production qui héberge la carte de gestion (module PRODUCTION) — les
+ * deux seuls écrans d'où une zone est réellement gérable. Un seul des deux
+ * suffit : ni le Chargé des commandes (aucun accès Production, donc aucun
+ * moyen d'atteindre l'écran) ni le Responsable de production (aucun accès
+ * Commandes) ne pouvaient sinon jamais créer de zone, alors que l'un comme
+ * l'autre en a l'usage quotidien.
  */
+function ecritureZones(req: Request, res: Response, next: NextFunction) {
+  const permissions = req.utilisateur?.role.permissions ?? [];
+  if (aAcces(permissions, "COMMANDES", "ECRITURE") || aAcces(permissions, "PRODUCTION", "ECRITURE")) {
+    return next();
+  }
+  return res.status(403).json({
+    erreur: "Accès refusé : écriture requise sur le module Commandes ou Production",
+  });
+}
+
 export const zonesDepositaireRouter = Router();
 
 zonesDepositaireRouter.use(requireAuth);
@@ -35,7 +47,7 @@ zonesDepositaireRouter.get("/", async (_req, res, next) => {
   }
 });
 
-zonesDepositaireRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
+zonesDepositaireRouter.post("/", ecritureZones, async (req, res, next) => {
   try {
     const parsed = zoneDepositaireCreateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -51,7 +63,7 @@ zonesDepositaireRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), asy
   }
 });
 
-zonesDepositaireRouter.put("/:id", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
+zonesDepositaireRouter.put("/:id", ecritureZones, async (req, res, next) => {
   try {
     const parsed = zoneDepositaireUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -74,7 +86,7 @@ zonesDepositaireRouter.put("/:id", requirePermission("COMMANDES", "ECRITURE"), a
 
 // Suppression : les clients rattachés retombent simplement sans zone
 // (onDelete: SetNull sur Client.zoneDepositaireId) — pas de blocage.
-zonesDepositaireRouter.delete("/:id", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
+zonesDepositaireRouter.delete("/:id", ecritureZones, async (req, res, next) => {
   try {
     const zone = await prisma.zoneDepositaire.findUnique({ where: { id: req.params.id } });
     if (!zone) return res.status(404).json({ erreur: "Zone introuvable" });

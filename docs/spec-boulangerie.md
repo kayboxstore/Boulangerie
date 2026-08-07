@@ -233,12 +233,18 @@ liste à part, non zonée.
   gérées depuis l'écran du Schéma. La zone n'a **aucune permission propre** —
   sa **lecture** est ouverte à tout utilisateur authentifié (donnée de
   référence pour les listes déroulantes, au même titre que `Produit` ou
-  `TypeClient` : le Responsable de production, qui n'a aucun accès au module
-  Commandes, doit pouvoir afficher les regroupements dans son Schéma), tandis
-  que son **écriture** (créer/modifier/supprimer une zone, ou l'assigner à un
-  client) reste réservée au module Commandes (3.4), puisqu'elle se règle
-  depuis la fiche Client. Supprimer une zone ne bloque rien : les clients
-  rattachés perdent simplement leur zone (`onDelete: SetNull`).
+  `TypeClient`). Son **écriture** (créer/modifier/supprimer une zone, ou
+  l'assigner à un client) exige l'écriture sur le module **Commandes** (3.4,
+  puisqu'elle se règle aussi depuis la fiche Client) **OU** sur le module
+  **Production** (seul écran d'où la carte de gestion des zones est
+  atteignable) — l'un des deux suffit. *Correction apportée après coup* : le
+  premier découpage (écriture réservée à Commandes seul) rendait la création
+  de zone injoignable pour le Responsable de production (aucun accès
+  Commandes) **et** pour le Chargé des commandes (aucun accès Production,
+  donc aucun moyen d'atteindre l'écran) — seul l'Admin Principal, qui cumule
+  les deux en écriture, pouvait alors créer une zone. Supprimer une zone ne
+  bloque rien : les clients rattachés perdent simplement leur zone
+  (`onDelete: SetNull`).
 - **Permissions** : identiques au Planning (a) — écriture Responsable de
   production, lecture Caissier(ère)/DG.
 
