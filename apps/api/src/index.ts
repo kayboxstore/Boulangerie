@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { createServer } from "node:http";
 import { createApp } from "./app.js";
+import { logger } from "./lib/logger.js";
 import { initRealtime } from "./lib/realtime.js";
 import { initNotificationService } from "./services/notifications.js";
 import { initPlanificateurSauvegarde } from "./services/planificateurSauvegarde.js";
@@ -13,5 +14,5 @@ initNotificationService();
 initPlanificateurSauvegarde();
 
 httpServer.listen(port, () => {
-  console.log(`API Boulangerie Lomoto démarrée sur http://localhost:${port} (HTTP + Socket.io)`);
+  logger.info("API Boulangerie Lomoto démarrée", { url: `http://localhost:${port}`, transport: "HTTP + Socket.io" });
 });

@@ -4,6 +4,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { DOMAINE_A_REDIRIGER, DOMAINE_CANONIQUE, verifierOrigine } from "./lib/origines.js";
+import { logger } from "./lib/logger.js";
 import { authRouter } from "./routes/auth.js";
 import { produitsRouter } from "./routes/produits.js";
 import { rolesRouter } from "./routes/roles.js";
@@ -115,8 +116,8 @@ export function createApp() {
   });
 
   // Gestion d'erreurs centralisée
-  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error(err);
+  app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    logger.error("Erreur non gérée", { erreur: err, methode: req.method, chemin: req.path });
     res.status(500).json({ erreur: "Erreur interne du serveur" });
   });
 

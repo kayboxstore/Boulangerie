@@ -1,5 +1,6 @@
 import type { PrismaClient, Prisma } from "@prisma/client";
 import { contexteRequete } from "./contexteRequete.js";
+import { logger } from "./logger.js";
 
 /**
  * Journal d'audit centralisé (section 3.17).
@@ -153,7 +154,7 @@ export function extensionAudit(base: PrismaClient) {
       });
     } catch (e) {
       // Un échec de journalisation ne doit jamais faire échouer l'action métier.
-      console.error("Échec d'écriture du journal d'audit :", e);
+      logger.error("Échec d'écriture du journal d'audit", { erreur: e });
     }
   }
 

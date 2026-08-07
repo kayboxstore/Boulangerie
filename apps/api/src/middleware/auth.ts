@@ -5,6 +5,7 @@ import { aAcces } from "@lomoto/shared";
 import { verifyToken } from "../lib/jwt.js";
 import { prisma } from "../lib/prisma.js";
 import { contexteRequete } from "../lib/contexteRequete.js";
+import { logger } from "../lib/logger.js";
 import { estHorsPerimetreAdmin, notifierInterventionAdmin } from "../services/interventionsAdmin.js";
 
 declare global {
@@ -144,7 +145,7 @@ export function requirePermission(module: Module, niveau: Exclude<NiveauAcces, "
           auteurNom: auteur.nom,
           methode: req.method,
           chemin: req.originalUrl,
-        }).catch((e) => console.error("Échec de notification d'intervention Admin :", e));
+        }).catch((e) => logger.error("Échec de notification d'intervention Admin", { erreur: e }));
       });
     }
 

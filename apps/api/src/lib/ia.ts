@@ -5,6 +5,7 @@
  * silence côté appelant (voir routes/assistant.ts) — jamais d'exception qui
  * romprait l'envoi du message de l'utilisateur.
  */
+import { logger } from "./logger.js";
 
 const MODELE = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
 const URL_GEMINI = () =>
@@ -98,25 +99,28 @@ export async function repondreAssistantIA(historique: TourEchange[]): Promise<st
 
   switch (resultat.motif) {
     case "CLE_ABSENTE":
-      console.error("[assistant-ia] GEMINI_API_KEY absente de l'environnement — vérifier la config Render.");
+      logger.error("[assistant-ia] GEMINI_API_KEY absente de l'environnement — vérifier la config Render.");
       break;
     case "HTTP":
-      console.error(
-        `[assistant-ia] Gemini a répondu ${resultat.status} (modèle="${MODELE}", clé=${clientKeyMasquee()}) — corps :`,
-        resultat.corps,
-      );
+      logger.error("[assistant-ia] Gemini a répondu en échec", {
+        status: resultat.status,
+        modele: MODELE,
+        cle: clientKeyMasquee(),
+        corps: resultat.corps,
+      });
       break;
     case "REPONSE_VIDE":
-      console.error(
-        `[assistant-ia] Réponse Gemini 200 mais sans texte exploitable (modèle="${MODELE}") — brut :`,
-        JSON.stringify(resultat.brut),
-      );
+      logger.error("[assistant-ia] Réponse Gemini 200 mais sans texte exploitable", {
+        modele: MODELE,
+        brut: resultat.brut,
+      });
       break;
     case "EXCEPTION":
-      console.error(
-        `[assistant-ia] Appel Gemini a levé une exception (modèle="${MODELE}", clé=${clientKeyMasquee()}) :`,
-        resultat.erreur,
-      );
+      logger.error("[assistant-ia] Appel Gemini a levé une exception", {
+        modele: MODELE,
+        cle: clientKeyMasquee(),
+        erreur: resultat.erreur,
+      });
       break;
   }
   return null;

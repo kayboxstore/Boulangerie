@@ -4,6 +4,7 @@ import type { Notification, Utilisateur } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { getIo, roomUtilisateur } from "../lib/realtime.js";
 import { busEvenements, type EvenementMetier } from "../lib/events.js";
+import { logger } from "../lib/logger.js";
 
 /**
  * Détermine les rôles destinataires d'un événement (section 2 + 3.10) :
@@ -137,8 +138,6 @@ export async function publierEvenement(evenement: EvenementMetier): Promise<Noti
 /** Branche le service sur le bus d'événements interne (appelé au démarrage). */
 export function initNotificationService() {
   busEvenements.surEvenement((evenement) => {
-    publierEvenement(evenement).catch((e) =>
-      console.error("Échec de publication de notification :", e),
-    );
+    publierEvenement(evenement).catch((e) => logger.error("Échec de publication de notification", { erreur: e }));
   });
 }

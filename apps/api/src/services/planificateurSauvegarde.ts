@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import { prisma } from "../lib/prisma.js";
+import { logger } from "../lib/logger.js";
 import { construireDump, nomFichierSauvegarde } from "./sauvegarde.js";
 import { ecrireSauvegardeLocale } from "./sauvegardeLocale.js";
 
@@ -55,7 +56,7 @@ export async function executerSauvegardeAutomatique(): Promise<void> {
         dureeMs: Date.now() - t0,
       },
     });
-    console.log(`Sauvegarde automatique écrite localement : ${chemin} (${dump.length} octets)`);
+    logger.info("Sauvegarde automatique écrite localement", { chemin, octets: dump.length });
   } catch (e) {
     await journaliserEchec(nomFichier, e, Date.now() - t0, dump.length);
   }
@@ -68,7 +69,7 @@ async function journaliserEchec(
   tailleOctets: number | null,
 ): Promise<void> {
   const message = e instanceof Error ? e.message : "erreur inconnue";
-  console.error(`Sauvegarde automatique en échec : ${message}`);
+  logger.error("Sauvegarde automatique en échec", { erreur: message });
   try {
     await prisma.sauvegardeBase.create({
       data: {
@@ -84,7 +85,7 @@ async function journaliserEchec(
   } catch (erreurJournal) {
     // Si même la journalisation échoue (base injoignable), il ne reste que la
     // sortie standard — mais le process ne doit pas tomber pour autant.
-    console.error("Impossible de journaliser l'échec de sauvegarde :", erreurJournal);
+    logger.error("Impossible de journaliser l'échec de sauvegarde", { erreur: erreurJournal });
   }
 }
 
@@ -92,7 +93,7 @@ async function journaliserEchec(
 export function initPlanificateurSauvegarde(): void {
   if (tache) return;
   if (!cron.validate(EXPRESSION)) {
-    console.error(`Expression cron de sauvegarde invalide (${EXPRESSION}) : planification désactivée.`);
+    logger.error("Expression cron de sauvegarde invalide : planification désactivée", { expression: EXPRESSION });
     return;
   }
   // noOverlap : si un dump prend anormalement longtemps, la planification du
@@ -102,7 +103,7 @@ export function initPlanificateurSauvegarde(): void {
     noOverlap: true,
     name: "sauvegarde-quotidienne",
   });
-  console.log(`Sauvegarde automatique planifiée (${EXPRESSION}, ${FUSEAU}), stockage local`);
+  logger.info("Sauvegarde automatique planifiée", { expression: EXPRESSION, fuseau: FUSEAU, stockage: "local" });
 }
 
 /** Arrête la planification (tests, extinction propre). */

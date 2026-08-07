@@ -11,6 +11,7 @@ import {
 } from "@lomoto/shared";
 import type { SauvegardeBase, Utilisateur } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { logger } from "../lib/logger.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import {
   construireDump,
@@ -171,7 +172,7 @@ etatSystemeRouter.post("/sauvegarde", async (req, res, next) => {
           declencheParId: req.utilisateur!.id,
         },
       })
-      .catch((erreurJournal) => console.error("Journalisation de l'échec impossible :", erreurJournal));
+      .catch((erreurJournal) => logger.error("Journalisation de l'échec impossible", { erreur: erreurJournal }));
 
     if (e instanceof ErreurSauvegarde) return res.status(e.status).json({ erreur: e.message });
     next(e);
