@@ -23,6 +23,8 @@ const PremierLancementPage = lazy(() =>
 const DashboardPage = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.DashboardPage })));
 const ProduitsPage = lazy(() => import("@/pages/Produits").then((m) => ({ default: m.ProduitsPage })));
 const CommandesPage = lazy(() => import("@/pages/Commandes").then((m) => ({ default: m.CommandesPage })));
+// Sous-module de Commandes (3.4) : fiche client, écran à part pour ne pas encombrer /commandes.
+const ClientsPage = lazy(() => import("@/pages/Clients").then((m) => ({ default: m.ClientsPage })));
 const CommissionsPage = lazy(() => import("@/pages/Commissions").then((m) => ({ default: m.CommissionsPage })));
 const CaissePage = lazy(() => import("@/pages/Caisse").then((m) => ({ default: m.CaissePage })));
 const StocksPage = lazy(() => import("@/pages/Stocks").then((m) => ({ default: m.StocksPage })));
@@ -126,6 +128,14 @@ function AppAuthentifiee() {
           element={
             <RequiertLecture module="COMMANDES">
               <CommandesPage />
+            </RequiertLecture>
+          }
+        />
+        <Route
+          path="/commandes/clients"
+          element={
+            <RequiertLecture module="COMMANDES">
+              <ClientsPage />
             </RequiertLecture>
           }
         />

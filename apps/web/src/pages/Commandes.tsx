@@ -1,7 +1,8 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HandCoins, Layers, Pencil, Plus, RotateCcw, Trash2, TriangleAlert, UserPlus, Users } from "lucide-react";
+import { HandCoins, Layers, Plus, RotateCcw, TriangleAlert, UserPlus, Users } from "lucide-react";
 // TriangleAlert sert au doublon ET au bandeau de dettes non payées.
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   calculerCommande,
@@ -17,7 +18,6 @@ import {
 } from "@lomoto/shared";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useFeedback } from "@/components/FeedbackProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,7 +51,6 @@ export function CommandesPage() {
   const { peutEcrire } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { confirmer, toastErreur } = useFeedback();
   const editable = peutEcrire("COMMANDES");
 
   const [filtres, setFiltres] = useState<Filtres>(FILTRES_VIDES);
@@ -60,8 +59,8 @@ export function CommandesPage() {
     queryKey: ["type-clients"],
     queryFn: () => api<{ typeClients: TypeClientDTO[] }>("/api/type-clients"),
   });
-  // Non gaté sur `editable` : lu par tout utilisateur ayant accès au module
-  // (COMMANDES lecture), pour la carte Clients comme pour le tableau des commandes.
+  // La liste des clients (gérée sur l'écran dédié /commandes/clients, 3.4) reste
+  // lue ici pour le menu déroulant de la nouvelle commande.
   const { data: clientsData } = useQuery({
     queryKey: ["clients"],
     queryFn: () => api<{ clients: ClientDTO[] }>("/api/clients"),
@@ -216,17 +215,11 @@ export function CommandesPage() {
     enregistrerReglement.mutate();
   }
 
-  // --- Liste des clients : recherche + dialogue création/édition ---------
-  const [rechercheClient, setRechercheClient] = useState("");
-  const clientsFiltres = useMemo(() => {
-    const tous = clientsData?.clients ?? [];
-    const terme = rechercheClient.trim().toLowerCase();
-    if (!terme) return tous;
-    return tous.filter((c) => c.nom.toLowerCase().includes(terme));
-  }, [clientsData, rechercheClient]);
-
+  // --- Dialogue nouveau client (création rapide depuis la commande) -------
+  // La gestion complète (recherche, édition, suppression) vit sur l'écran
+  // dédié /commandes/clients (3.4, sous-module de Commandes) — ici on garde
+  // juste la création rapide, pour ne pas interrompre la saisie d'une commande.
   const [dialogClient, setDialogClient] = useState(false);
-  const [clientEnEdition, setClientEnEdition] = useState<ClientDTO | null>(null);
   const [nomClient, setNomClient] = useState("");
   const [telClient, setTelClient] = useState("");
   const [qualiteClient, setQualiteClient] = useState("");
@@ -238,7 +231,6 @@ export function CommandesPage() {
     typesData?.typeClients.find((tc) => tc.id === qualiteClient)?.nom === "Dépositaire";
 
   function ouvrirNouveauClient() {
-    setClientEnEdition(null);
     setNomClient("");
     setTelClient("");
     setQualiteClient("");
@@ -247,51 +239,23 @@ export function CommandesPage() {
     setDialogClient(true);
   }
 
-  function ouvrirModifierClient(c: ClientDTO) {
-    setClientEnEdition(c);
-    setNomClient(c.nom);
-    setTelClient(c.telephone ?? "");
-    setQualiteClient(c.typeClient.id);
-    setZoneClient(c.zoneDepositaireId ?? "");
-    setErreurClient(null);
-    setDialogClient(true);
-  }
-
-  const sauvegarderClient = useMutation({
-    mutationFn: () => {
-      const corps = {
-        nom: nomClient.trim(),
-        telephone: telClient.trim() || undefined,
-        typeClientId: qualiteClient,
-        // En édition, une qualité qui n'est plus Dépositaire (ou une zone
-        // désélectionnée) doit effacer explicitement la zone (null) — à la
-        // création, l'omettre suffit (le champ est simplement absent).
-        zoneDepositaireId: qualiteClientEstDepositaire
-          ? zoneClient || null
-          : clientEnEdition
-            ? null
-            : undefined,
-      };
-      return clientEnEdition
-        ? api<{ client: ClientDTO }>(`/api/clients/${clientEnEdition.id}`, {
-            method: "PUT",
-            body: JSON.stringify(corps),
-          })
-        : api<{ client: ClientDTO }>("/api/clients", { method: "POST", body: JSON.stringify(corps) });
-    },
+  const creerClient = useMutation({
+    mutationFn: () =>
+      api<{ client: ClientDTO }>("/api/clients", {
+        method: "POST",
+        body: JSON.stringify({
+          nom: nomClient.trim(),
+          telephone: telClient.trim() || undefined,
+          typeClientId: qualiteClient,
+          zoneDepositaireId: qualiteClientEstDepositaire && zoneClient ? zoneClient : undefined,
+        }),
+      }),
     onSuccess: (r) => {
       setDialogClient(false);
       queryClient.invalidateQueries({ queryKey: ["clients"] });
-      if (!clientEnEdition) setClientId(r.client.id); // pré-sélectionne le client créé dans le formulaire de commande
-      setClientEnEdition(null);
+      setClientId(r.client.id); // pré-sélectionne le client créé dans le formulaire de commande
     },
     onError: (e) => setErreurClient(e instanceof Error ? e.message : t("commandes.clientCreateError")),
-  });
-
-  const supprimerClient = useMutation({
-    mutationFn: (id: string) => api(`/api/clients/${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["clients"] }),
-    onError: (e) => toastErreur(e instanceof Error ? e.message : t("commandes.clientDeleteError")),
   });
 
   function soumettreClient(e: FormEvent) {
@@ -299,7 +263,7 @@ export function CommandesPage() {
     setErreurClient(null);
     if (!nomClient.trim()) return setErreurClient(t("commandes.errNameRequired"));
     if (!qualiteClient) return setErreurClient(t("commandes.errChooseQuality"));
-    sauvegarderClient.mutate();
+    creerClient.mutate();
   }
 
   return (
@@ -309,161 +273,21 @@ export function CommandesPage() {
           <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("commandes.title")}</h1>
           <p className="mt-1 text-muted-foreground">{t("commandes.subtitle")}</p>
         </div>
-        {editable && (
-          <Button variant="cta" onClick={ouvrirDialogCommande}>
-            <Plus className="h-4 w-4" />
-            {t("commandes.newOrder")}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/commandes/clients">
+              <Users className="h-4 w-4" />
+              {t("commandes.manageClients")}
+            </Link>
           </Button>
-        )}
+          {editable && (
+            <Button variant="cta" onClick={ouvrirDialogCommande}>
+              <Plus className="h-4 w-4" />
+              {t("commandes.newOrder")}
+            </Button>
+          )}
+        </div>
       </div>
-
-      {/* Clients — liste, recherche, édition et suppression */}
-      <Card>
-        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-or" />
-              {t("commandes.clientsCardTitle")}
-            </CardTitle>
-            <CardDescription>{t("commandes.clientsCardDesc")}</CardDescription>
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="w-56 space-y-1.5">
-              <Label htmlFor="client-recherche">{t("commandes.searchClient")}</Label>
-              <Input
-                id="client-recherche"
-                value={rechercheClient}
-                onChange={(e) => setRechercheClient(e.target.value)}
-                placeholder={t("commandes.searchClientPlaceholder")}
-              />
-            </div>
-            {editable && (
-              <Button variant="outline" onClick={ouvrirNouveauClient}>
-                <UserPlus className="h-4 w-4" />
-                {t("commandes.newClient")}
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table className="hidden md:table">
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("common.name")}</TableHead>
-                <TableHead>{t("commandes.colPhone")}</TableHead>
-                <TableHead>{t("commandes.colQuality")}</TableHead>
-                <TableHead>{t("commandes.colZone")}</TableHead>
-                <TableHead className="text-right">{t("commandes.colAdvance")}</TableHead>
-                {editable && <TableHead className="w-24 text-right">{t("common.actions")}</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {clientsFiltres.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.nom}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.telephone ?? "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{c.typeClient.nom}</Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{c.zoneDepositaireNom ?? "—"}</TableCell>
-                  <TableCell className="text-right">
-                    {c.avanceDisponible > 0 ? (
-                      <Badge variant="gold">{formatFc(c.avanceDisponible)}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  {editable && (
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => ouvrirModifierClient(c)}
-                          aria-label={t("commandes.ariaEditClient", { nom: c.nom })}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-terracotta hover:text-terracotta"
-                          onClick={async () => {
-                            if (
-                              await confirmer({
-                                description: t("commandes.confirmDeleteClient", { nom: c.nom }),
-                                destructive: true,
-                              })
-                            )
-                              supprimerClient.mutate(c.id);
-                          }}
-                          aria-label={t("commandes.ariaDeleteClient", { nom: c.nom })}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-              {clientsFiltres.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={editable ? 6 : 5} className="py-8 text-center text-muted-foreground">
-                    {rechercheClient ? t("commandes.noClientsFiltered") : t("commandes.noClients")}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-
-          <div className="space-y-2 md:hidden">
-            {clientsFiltres.map((c) => (
-              <CarteLigne key={c.id}>
-                <CarteLigneTitre>
-                  <span>{c.nom}</span>
-                  <Badge variant="secondary">{c.typeClient.nom}</Badge>
-                </CarteLigneTitre>
-                <CarteLigneChamp label={t("commandes.colPhone")} value={c.telephone ?? "—"} />
-                {c.zoneDepositaireNom && <CarteLigneChamp label={t("commandes.colZone")} value={c.zoneDepositaireNom} />}
-                {c.avanceDisponible > 0 && (
-                  <CarteLigneChamp label={t("commandes.colAdvance")} value={<Badge variant="gold">{formatFc(c.avanceDisponible)}</Badge>} />
-                )}
-                {editable && (
-                  <CarteLigneActions>
-                    <Button variant="outline" size="sm" onClick={() => ouvrirModifierClient(c)} className="gap-1">
-                      <Pencil className="h-3.5 w-3.5" />
-                      {t("commandes.editClient")}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-terracotta hover:text-terracotta"
-                      onClick={async () => {
-                        if (
-                          await confirmer({
-                            description: t("commandes.confirmDeleteClient", { nom: c.nom }),
-                            destructive: true,
-                          })
-                        )
-                          supprimerClient.mutate(c.id);
-                      }}
-                      aria-label={t("commandes.ariaDeleteClient", { nom: c.nom })}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </CarteLigneActions>
-                )}
-              </CarteLigne>
-            ))}
-            {clientsFiltres.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                {rechercheClient ? t("commandes.noClientsFiltered") : t("commandes.noClients")}
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Dettes non payées (3.4) — bandeau visible tant que la dette dure */}
       {alertesDette.length > 0 && (
@@ -982,19 +806,11 @@ export function CommandesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialogue nouveau client / modification client */}
-      <Dialog
-        open={dialogClient}
-        onOpenChange={(o) => {
-          setDialogClient(o);
-          if (!o) setClientEnEdition(null);
-        }}
-      >
+      {/* Dialogue nouveau client (création rapide) */}
+      <Dialog open={dialogClient} onOpenChange={setDialogClient}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {clientEnEdition ? t("commandes.editClientTitle", { nom: clientEnEdition.nom }) : t("commandes.newClientTitle")}
-            </DialogTitle>
+            <DialogTitle>{t("commandes.newClientTitle")}</DialogTitle>
             <DialogDescription>{t("commandes.newClientDesc")}</DialogDescription>
           </DialogHeader>
           <form onSubmit={soumettreClient} className="space-y-4">
@@ -1048,8 +864,8 @@ export function CommandesPage() {
               <Button type="button" variant="outline" onClick={() => setDialogClient(false)}>
                 {t("common.cancel")}
               </Button>
-              <Button type="submit" variant="cta" disabled={sauvegarderClient.isPending}>
-                {clientEnEdition ? t("common.save") : t("commandes.createClient")}
+              <Button type="submit" variant="cta" disabled={creerClient.isPending}>
+                {t("commandes.createClient")}
               </Button>
             </DialogFooter>
           </form>

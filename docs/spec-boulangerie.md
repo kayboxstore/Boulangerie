@@ -263,9 +263,18 @@ circuit de notification temps réel à l'enregistrement d'une production.
 - **Mamans** : prix par bac 6.000 Fc, commission de 1.650 Fc/bac (27,5 %)
 
 Un client de qualité **Dépositaire** peut en outre être rattaché à une **zone
-de dépôt** (`zoneDepositaireId`, optionnel) — champ géré ici, sur la fiche
-client, mais consommé côté Production pour grouper l'affichage du Schéma de
-commande (3.3 d).
+de dépôt** (`zoneDepositaireId`, optionnel) — champ géré ici, mais consommé
+côté Production pour grouper l'affichage du Schéma de commande (3.3 d).
+
+**Fiche client — écran dédié `/commandes/clients`** *(sous-module de
+Commandes, même permission COMMANDES, pas de module à part)* : liste
+complète des clients (recherche par nom, modifier, supprimer — bloqué si le
+client a déjà des commandes), volontairement **séparée** de l'écran principal
+des commandes pour ne pas l'encombrer avec des informations de gestion. Une
+création rapide de client reste possible directement depuis le formulaire de
+nouvelle commande, pour ne pas interrompre la saisie ; la gestion complète
+(recherche, modification, suppression) ne vit que sur cet écran dédié,
+accessible via un bouton « Gérer les clients » sur l'écran Commandes.
 
 **Champs d'une commande** (numérotation automatique, date) :
 

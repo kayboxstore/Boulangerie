@@ -421,6 +421,8 @@
     "errChooseQuality": "Choose a quality",
     "clientCreateError": "Creation failed",
     "createClient": "Create client",
+    "manageClients": "Manage clients",
+    "backToCommandes": "Back to orders",
     "clientsCardTitle": "Clients",
     "clientsCardDesc": "List of registered clients — name, phone, quality and delivery zone.",
     "searchClient": "Search",

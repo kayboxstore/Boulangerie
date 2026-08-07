@@ -421,6 +421,8 @@
     "errChooseQuality": "Choisissez une qualité",
     "clientCreateError": "Création impossible",
     "createClient": "Créer le client",
+    "manageClients": "Gérer les clients",
+    "backToCommandes": "Retour aux commandes",
     "clientsCardTitle": "Clients",
     "clientsCardDesc": "Liste des clients enregistrés — nom, téléphone, qualité et zone de dépôt.",
     "searchClient": "Rechercher",
