@@ -443,7 +443,39 @@
       "REMPLACER": "Écrase l'ancienne saisie, qui est oubliée — pour corriger une erreur."
     },
     "unpaidDebtTitle": "{{count}} dette(s) non payée(s)",
-    "unpaidDebtSince": "depuis {{count}} jour(s)"
+    "unpaidDebtSince": "depuis {{count}} jour(s)",
+    "depositZoneOptional": "Zone de dépôt (optionnel)",
+    "noDepositZone": "— Aucune zone —"
+  },
+  "zonesDepot": {
+    "title": "Zones de dépôt",
+    "subtitle": "Regroupement géographique des Dépositaires, utilisé dans le Schéma de commande.",
+    "newZone": "Nouvelle zone",
+    "noZones": "Aucune zone définie.",
+    "ariaDelete": "Supprimer la zone {{nom}}",
+    "confirmDelete": "Supprimer la zone « {{nom}} » ? Les clients rattachés perdront simplement leur zone.",
+    "editZone": "Modifier la zone « {{nom}} »",
+    "dialogDesc": "Le nom identifie la zone ; l'ordre détermine sa position dans les listes.",
+    "nameLabel": "Nom",
+    "namePlaceholder": "Ex. : Centre-ville",
+    "orderLabel": "Ordre",
+    "saveError": "Enregistrement impossible",
+    "deleteError": "Suppression impossible"
+  },
+  "schemaCommande": {
+    "title": "Schéma de commande",
+    "desc": "Fiche de commande du soir : détail par client et par produit, alimente automatiquement le Planning de production de la date choisie.",
+    "noProducts": "Aucun des produits du Schéma n'est configuré dans le catalogue (Carré 1.500 Fc, Carré 1.000 Fc, Baguette 500 Fc, Baguette 1.000 Fc).",
+    "depositairesTitle": "Dépositaires",
+    "mamansTitle": "Mamans",
+    "colClient": "Client",
+    "colTotal": "Total",
+    "noZone": "Sans zone",
+    "noDepositaires": "Aucun Dépositaire enregistré.",
+    "noMamans": "Aucune Maman enregistrée.",
+    "totalGeneral": "Total général : {{total}} bac(s)",
+    "saveAndPlan": "Enregistrer et planifier",
+    "saveError": "Enregistrement impossible"
   },
   "production": {
     "title": "Production",

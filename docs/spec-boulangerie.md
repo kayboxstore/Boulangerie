@@ -160,7 +160,7 @@ nomenclature par produit. Les tables `Recette`/`IngredientRecette` sont laissée
 **orphelines en base** (aucune route, aucune UI ne les expose) plutôt que
 supprimées, pour ne pas risquer les données existantes.
 
-Le module s'articule désormais en trois volets, plus une vue d'écarts.
+Le module s'articule désormais en quatre volets, plus une vue d'écarts.
 
 **a) Planning de production** — ce qui est prévu pour le **jour suivant** :
 
@@ -207,6 +207,46 @@ transaction** et avec le **même mécanisme d'alerte de seuil** que les mouvemen
 manuels (section 3.2) — c'est le mécanisme mis en place en Phase 5, seule sa
 source de calcul change (quantités saisies au lieu de recette × quantité).
 
+**d) Schéma de commande** *(digitalisation de la « Fiche de commande » papier,
+remplie la veille au soir)* — pour une date donnée, une ligne par client
+Dépositaire ou Maman, avec le détail par produit (les mêmes quatre `Produit`
+que le Planning : Carré 1.500 Fc, Carré 1.000 Fc, Baguette 500 Fc,
+Baguette 1.000 Fc, résolus **par nom** via une liste blanche partagée plutôt
+que par ID codé en dur). Les Dépositaires sont affichés **groupés par zone de
+dépôt** (voir ci-dessous), comme sur la fiche papier ; les Mamans forment une
+liste à part, non zonée.
+
+- **Alimentation automatique du Planning (a)** : enregistrer un Schéma pour
+  une date **remplace** le nombre de bacs commandés et le détail par produit
+  du Planning de cette même date (somme des lignes du Schéma). Les prévisions
+  d'ingrédients et les observations du Planning, saisies à la main, **ne sont
+  pas touchées**. Un Schéma sans aucune ligne saisie ne crée pas de Planning
+  vide ; un Planning déjà créé manuellement pour cette date est mis à jour, pas
+  remplacé dans son ensemble — c'est le même idiome « supprimer puis
+  recréer les lignes, dans une transaction » que le Planning lui-même.
+- **Enregistrement** : un Schéma est **remplacé intégralement** pour la date
+  choisie à chaque sauvegarde (pas de diff ligne à ligne), avec une ligne
+  `SchemaCommande` par client ayant au moins une quantité saisie, et ses
+  `SchemaCommandeLigne` associées.
+- **Zones de dépôt** *(nouveau, purement organisationnel)* : un Dépositaire
+  peut être rattaché à une zone (`ZoneDepositaire` : nom, ordre d'affichage),
+  gérées depuis l'écran du Schéma. La zone n'a **aucune permission propre** —
+  sa **lecture** est ouverte à tout utilisateur authentifié (donnée de
+  référence pour les listes déroulantes, au même titre que `Produit` ou
+  `TypeClient` : le Responsable de production, qui n'a aucun accès au module
+  Commandes, doit pouvoir afficher les regroupements dans son Schéma), tandis
+  que son **écriture** (créer/modifier/supprimer une zone, ou l'assigner à un
+  client) reste réservée au module Commandes (3.4), puisqu'elle se règle
+  depuis la fiche Client. Supprimer une zone ne bloque rien : les clients
+  rattachés perdent simplement leur zone (`onDelete: SetNull`).
+- **Permissions** : identiques au Planning (a) — écriture Responsable de
+  production, lecture Caissier(ère)/DG.
+- *Hors périmètre pour l'instant* : le **Bon de livraison** (fiche de livraison
+  papier remplie au moment de la livraison — bacs vides repris, observations)
+  est **volontairement différé à une phase ultérieure** ; ce sera, par
+  décision explicite, un écran de saisie dédié (pas un simple export PDF des
+  données déjà enregistrées).
+
 **Écarts** — pour une date donnée, vue comparant prévisions (a) et réalisations
 (b + c) sur : bacs, sacs de farine, levure, huile, sel. Chaque paire affiche
 `écart = réalisé − prévu`.
@@ -221,6 +261,11 @@ circuit de notification temps réel à l'enregistrement d'une production.
 - **Dépositaires** : prix par bac 4.100 Fc, pas de commission
 - **Vente cash (VC)** : prix par bac 4.350 Fc, pas de commission (**confirmé — 0 Fc**)
 - **Mamans** : prix par bac 6.000 Fc, commission de 1.650 Fc/bac (27,5 %)
+
+Un client de qualité **Dépositaire** peut en outre être rattaché à une **zone
+de dépôt** (`zoneDepositaireId`, optionnel) — champ géré ici, sur la fiche
+client, mais consommé côté Production pour grouper l'affichage du Schéma de
+commande (3.3 d).
 
 **Champs d'une commande** (numérotation automatique, date) :
 
@@ -526,6 +571,9 @@ IngredientRecette (recetteId, matierePremiereId, quantité)  # ORPHELINE — plu
 PlanningProduction (id, datePrevue, nombreBacsCommandes, sacsFarinePrevus, paquetsLevurePrevus, quantiteHuilePrevue, kgSelPrevus, observations, créePar)
 PlanningLigneProduit (planningId, produitId, quantitePrevue)   # détail par produit du catalogue Caisse
 MotifDon (id, nom)                                             # liste fixe extensible : Police, Baraka…
+ZoneDepositaire (id, nom, ordre)                               # organisationnel, aucune permission propre (3.3 d)
+SchemaCommande (id, date, clientId, créePar)                   # une ligne par (date, client) — Dépositaire ou Maman
+SchemaCommandeLigne (schemaCommandeId, produitId, quantite)    # détail par produit, alimente PlanningLigneProduit
 Production (id, numero, date, bacsProduits, bacsLivresDepositaires, bacsLivresMamans, bacsVendusVC, bacsRestants, bacsFoutus, kgFarineAbimes?, sacsUtilises, paquetsLevureUtilises, kgSelUtilises, quantiteHuileUtilisee, observations, enregistrePar)
 ProductionDon (productionId, motifDonId, nombreBacs)           # répartition des bacs donnés par motif
 MatierePremiere (id, nom, code?, unité, quantitéStock, seuilAlerte)   # code = FARINE|LEVURE|SEL|HUILE, relie les ingrédients saisis en production au stock

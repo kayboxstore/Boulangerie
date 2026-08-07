@@ -444,7 +444,39 @@
       "REMPLACER": "Elongoli makomi ya kala, ebosani — mpo na kobongisa libunga."
     },
     "unpaidDebtTitle": "Banyongo {{count}} efutami te",
-    "unpaidDebtSince": "banda mikolo {{count}}"
+    "unpaidDebtSince": "banda mikolo {{count}}",
+    "depositZoneOptional": "Zone ya kotika biloko (na esengo)",
+    "noDepositZone": "— Zone te —"
+  },
+  "zonesDepot": {
+    "title": "Bazone ya kotika biloko",
+    "subtitle": "Bosangisi ya bisika mpo na ba-Dépositaire, esalelami na Fiche ya komande.",
+    "newZone": "Zone ya sika",
+    "noZones": "Zone moko te ekomami.",
+    "ariaDelete": "Kolongola zone {{nom}}",
+    "confirmDelete": "Kolongola zone « {{nom}} » ? Baklient oyo bazalaki na zone yango bakotikala kaka na zone te.",
+    "editZone": "Kobongisa zone « {{nom}} »",
+    "dialogDesc": "Nkombo eyebisi zone ; molongo epesi esika na yango na milongo.",
+    "nameLabel": "Nkombo",
+    "namePlaceholder": "Ndakisa : Katikati ya engumba",
+    "orderLabel": "Molongo",
+    "saveError": "Kobomba ekoki te",
+    "deleteError": "Kolongola ekoki te"
+  },
+  "schemaCommande": {
+    "title": "Fiche ya komande",
+    "desc": "Fiche ya komande ya mpokwa : bokabwani na klient na klient mpe na produit na produit, ekotondisa yango moko Mwango ya bosali ya mokolo oyo eponami.",
+    "noProducts": "Ata produit moko ya Fiche ya komande esalemi te na catalogue (Carré 1.500 Fc, Carré 1.000 Fc, Baguette 500 Fc, Baguette 1.000 Fc).",
+    "depositairesTitle": "Ba-Dépositaire",
+    "mamansTitle": "Ba-Maman",
+    "colClient": "Klient",
+    "colTotal": "Motango nyonso",
+    "noZone": "Zone te",
+    "noDepositaires": "Dépositaire moko te akomami.",
+    "noMamans": "Maman moko te akomami.",
+    "totalGeneral": "Motango nyonso : {{total}} bac",
+    "saveAndPlan": "Kobomba mpe kokana",
+    "saveError": "Kobomba ekoki te"
   },
   "production": {
     "title": "Bosali",

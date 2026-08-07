@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ClipboardList, Factory, Scale, Trash2, TriangleAlert } from "lucide-react";
+import { CalendarDays, ClipboardList, Factory, Save, Scale, Trash2, TriangleAlert, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   totalDestinationsBacs,
@@ -9,10 +9,14 @@ import {
   type PlanningProductionDTO,
   type ProduitDTO,
   type ProductionDTO,
+  type SchemaCommandeClientDTO,
+  type SchemaCommandeJourDTO,
+  type ZoneDepositaireDTO,
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/components/FeedbackProvider";
+import { ZonesDepositaireCard } from "@/components/ZonesDepositaireCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +40,14 @@ const demain = () => {
   return jourISO(d);
 };
 const nombre = (v: string) => (v.trim() === "" ? 0 : Number(v));
+
+const cleLigne = (clientId: string, produitId: string) => `${clientId}:${produitId}`;
+
+/** Valeur affichée dans une cellule du Schéma : l'édition locale si présente, sinon la valeur serveur (vide si 0). */
+function valeurLigne(editions: Record<string, string>, clientId: string, produitId: string, quantiteServeur: number): string {
+  const cle = cleLigne(clientId, produitId);
+  return cle in editions ? editions[cle] : quantiteServeur > 0 ? String(quantiteServeur) : "";
+}
 
 /** Champ numérique compact, réutilisé par les deux formulaires. */
 function ChampNombre({
@@ -87,6 +99,81 @@ export function ProductionPage() {
   const plannings = planningsData?.plannings ?? [];
   const productions = productionsData?.productions ?? [];
   const motifs = motifsData?.motifs ?? [];
+
+  // --- d) Schéma de commande --------------------------------------------------
+  const [schemaDate, setSchemaDate] = useState(demain());
+  const { data: schemaData } = useQuery({
+    queryKey: ["schema-commande", schemaDate],
+    queryFn: () => api<SchemaCommandeJourDTO>(`/api/production/schema-commande?date=${schemaDate}`),
+  });
+  const { data: zonesData } = useQuery({
+    queryKey: ["zones-depositaires"],
+    queryFn: () => api<{ zones: ZoneDepositaireDTO[] }>("/api/zones-depositaires"),
+  });
+  const zones = zonesData?.zones ?? [];
+
+  const [editionsSchema, setEditionsSchema] = useState<Record<string, string>>({});
+  const [erreurSchema, setErreurSchema] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEditionsSchema({});
+    setErreurSchema(null);
+  }, [schemaDate]);
+
+  const produitsSchema = schemaData?.totauxParProduit ?? [];
+  const clientsDepositaires = (schemaData?.clients ?? []).filter((c) => c.typeClientNom === "Dépositaire");
+  const clientsMamans = (schemaData?.clients ?? []).filter((c) => c.typeClientNom === "Maman");
+
+  const groupesDepositaires = useMemo(() => {
+    const parZone = new Map<string, SchemaCommandeClientDTO[]>();
+    for (const c of clientsDepositaires) {
+      const cle = c.zoneDepositaireId ?? "__sans_zone__";
+      if (!parZone.has(cle)) parZone.set(cle, []);
+      parZone.get(cle)!.push(c);
+    }
+    const groupes = zones
+      .filter((z) => parZone.has(z.id))
+      .map((z) => ({ id: z.id, nom: z.nom, clients: parZone.get(z.id)! }));
+    const sansZone = parZone.get("__sans_zone__");
+    if (sansZone) groupes.push({ id: "__sans_zone__", nom: t("schemaCommande.noZone"), clients: sansZone });
+    return groupes;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientsDepositaires, zones, t]);
+
+  const totauxLive = useMemo(() => {
+    const parProduit = new Map<string, number>();
+    for (const c of schemaData?.clients ?? []) {
+      for (const l of c.lignes) {
+        const q = nombre(valeurLigne(editionsSchema, c.clientId, l.produitId, l.quantite));
+        parProduit.set(l.produitId, (parProduit.get(l.produitId) ?? 0) + q);
+      }
+    }
+    return parProduit;
+  }, [schemaData, editionsSchema]);
+  const totalGeneralLive = [...totauxLive.values()].reduce((s, q) => s + q, 0);
+
+  const enregistrerSchema = useMutation({
+    mutationFn: () => {
+      const clients = (schemaData?.clients ?? []).map((c) => ({
+        clientId: c.clientId,
+        lignes: c.lignes.map((l) => ({
+          produitId: l.produitId,
+          quantite: nombre(valeurLigne(editionsSchema, c.clientId, l.produitId, l.quantite)),
+        })),
+      }));
+      return api<SchemaCommandeJourDTO>("/api/production/schema-commande", {
+        method: "PUT",
+        body: JSON.stringify({ date: schemaDate, clients }),
+      });
+    },
+    onSuccess: (r) => {
+      queryClient.setQueryData(["schema-commande", schemaDate], r);
+      setEditionsSchema({});
+      queryClient.invalidateQueries({ queryKey: ["plannings"] });
+      queryClient.invalidateQueries({ queryKey: ["ecarts"] });
+    },
+    onError: (e) => setErreurSchema(e instanceof Error ? e.message : t("schemaCommande.saveError")),
+  });
 
   // --- a) Planning ----------------------------------------------------------
   const [dialogPlanning, setDialogPlanning] = useState(false);
@@ -269,6 +356,181 @@ export function ProductionPage() {
           </ul>
         </div>
       )}
+
+      {/* --- d) Zones de dépôt --- */}
+      <ZonesDepositaireCard editable={peutEcrire("COMMANDES")} />
+
+      {/* --- d) Schéma de commande --- */}
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-or" />
+              {t("schemaCommande.title")}
+            </CardTitle>
+            <CardDescription>{t("schemaCommande.desc")}</CardDescription>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="date-schema">{t("production.forDate")}</Label>
+            <Input id="date-schema" type="date" value={schemaDate} onChange={(e) => setSchemaDate(e.target.value)} />
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {produitsSchema.length === 0 ? (
+            <p className="py-6 text-center text-muted-foreground">{t("schemaCommande.noProducts")}</p>
+          ) : (
+            <>
+              <div>
+                <h3 className="mb-2 text-sm font-semibold text-marine dark:text-creme">{t("schemaCommande.depositairesTitle")}</h3>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("schemaCommande.colClient")}</TableHead>
+                        {produitsSchema.map((p) => (
+                          <TableHead key={p.produitId} className="text-right">
+                            {p.produitNom}
+                          </TableHead>
+                        ))}
+                        <TableHead className="text-right">{t("schemaCommande.colTotal")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {groupesDepositaires.map((groupe) => (
+                        <Fragment key={groupe.id}>
+                          <TableRow className="bg-secondary/50 hover:bg-secondary/50">
+                            <TableCell
+                              colSpan={produitsSchema.length + 2}
+                              className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                            >
+                              {groupe.nom}
+                            </TableCell>
+                          </TableRow>
+                          {groupe.clients.map((c) => {
+                            const total = c.lignes.reduce(
+                              (s, l) => s + nombre(valeurLigne(editionsSchema, c.clientId, l.produitId, l.quantite)),
+                              0,
+                            );
+                            return (
+                              <TableRow key={c.clientId}>
+                                <TableCell className="font-medium">{c.clientNom}</TableCell>
+                                {c.lignes.map((l) => (
+                                  <TableCell key={l.produitId} className="text-right">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      disabled={!editable}
+                                      value={valeurLigne(editionsSchema, c.clientId, l.produitId, l.quantite)}
+                                      onChange={(e) =>
+                                        setEditionsSchema((prev) => ({
+                                          ...prev,
+                                          [cleLigne(c.clientId, l.produitId)]: e.target.value,
+                                        }))
+                                      }
+                                      className="ml-auto w-16 text-right"
+                                    />
+                                  </TableCell>
+                                ))}
+                                <TableCell className="text-right font-semibold">{total}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </Fragment>
+                      ))}
+                      {groupesDepositaires.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={produitsSchema.length + 2} className="py-6 text-center text-muted-foreground">
+                            {t("schemaCommande.noDepositaires")}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-2 text-sm font-semibold text-marine dark:text-creme">{t("schemaCommande.mamansTitle")}</h3>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("schemaCommande.colClient")}</TableHead>
+                        {produitsSchema.map((p) => (
+                          <TableHead key={p.produitId} className="text-right">
+                            {p.produitNom}
+                          </TableHead>
+                        ))}
+                        <TableHead className="text-right">{t("schemaCommande.colTotal")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {clientsMamans.map((c) => {
+                        const total = c.lignes.reduce(
+                          (s, l) => s + nombre(valeurLigne(editionsSchema, c.clientId, l.produitId, l.quantite)),
+                          0,
+                        );
+                        return (
+                          <TableRow key={c.clientId}>
+                            <TableCell className="font-medium">{c.clientNom}</TableCell>
+                            {c.lignes.map((l) => (
+                              <TableCell key={l.produitId} className="text-right">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  disabled={!editable}
+                                  value={valeurLigne(editionsSchema, c.clientId, l.produitId, l.quantite)}
+                                  onChange={(e) =>
+                                    setEditionsSchema((prev) => ({
+                                      ...prev,
+                                      [cleLigne(c.clientId, l.produitId)]: e.target.value,
+                                    }))
+                                  }
+                                  className="ml-auto w-16 text-right"
+                                />
+                              </TableCell>
+                            ))}
+                            <TableCell className="text-right font-semibold">{total}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {clientsMamans.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={produitsSchema.length + 2} className="py-6 text-center text-muted-foreground">
+                            {t("schemaCommande.noMamans")}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+                <div className="text-sm">
+                  <span className="font-semibold text-marine dark:text-creme">
+                    {t("schemaCommande.totalGeneral", { total: totalGeneralLive })}
+                  </span>
+                  <span className="ml-2 text-muted-foreground">
+                    {produitsSchema.map((p) => `${totauxLive.get(p.produitId) ?? 0} × ${p.produitNom}`).join(", ")}
+                  </span>
+                </div>
+                {editable && (
+                  <Button variant="cta" onClick={() => enregistrerSchema.mutate()} disabled={enregistrerSchema.isPending}>
+                    <Save className="h-4 w-4" />
+                    {t("schemaCommande.saveAndPlan")}
+                  </Button>
+                )}
+              </div>
+              {erreurSchema && (
+                <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
+                  {erreurSchema}
+                </p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* --- Écarts prévu / réalisé --- */}
       <Card>

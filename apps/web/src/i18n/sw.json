@@ -444,7 +444,39 @@
       "REMPLACER": "Inafuta uingizaji wa awali, ambao unasahauliwa — kurekebisha kosa."
     },
     "unpaidDebtTitle": "Madeni {{count}} hayajalipwa",
-    "unpaidDebtSince": "kwa siku {{count}}"
+    "unpaidDebtSince": "kwa siku {{count}}",
+    "depositZoneOptional": "Eneo la kuachia bidhaa (si lazima)",
+    "noDepositZone": "— Hakuna eneo —"
+  },
+  "zonesDepot": {
+    "title": "Maeneo ya kuachia bidhaa",
+    "subtitle": "Ugawaji wa kijiografia wa Wawakilishi (Dépositaires), unaotumika kwenye Fomu ya agizo.",
+    "newZone": "Eneo jipya",
+    "noZones": "Hakuna eneo lililowekwa.",
+    "ariaDelete": "Futa eneo {{nom}}",
+    "confirmDelete": "Futa eneo « {{nom}} » ? Wateja waliounganishwa nalo watabaki tu bila eneo.",
+    "editZone": "Hariri eneo « {{nom}} »",
+    "dialogDesc": "Jina hutambulisha eneo; mpangilio huamua nafasi yake kwenye orodha.",
+    "nameLabel": "Jina",
+    "namePlaceholder": "Mfano: Katikati ya mji",
+    "orderLabel": "Mpangilio",
+    "saveError": "Imeshindwa kuhifadhi",
+    "deleteError": "Imeshindwa kufuta"
+  },
+  "schemaCommande": {
+    "title": "Fomu ya agizo",
+    "desc": "Fomu ya agizo la jioni: maelezo kwa kila mteja na kila bidhaa, hulisha moja kwa moja Ratiba ya uzalishaji ya tarehe iliyochaguliwa.",
+    "noProducts": "Hakuna hata bidhaa moja ya Fomu ya agizo iliyowekwa kwenye orodha ya bidhaa (Carré 1.500 Fc, Carré 1.000 Fc, Baguette 500 Fc, Baguette 1.000 Fc).",
+    "depositairesTitle": "Wawakilishi (Dépositaires)",
+    "mamansTitle": "Mama (Mamans)",
+    "colClient": "Mteja",
+    "colTotal": "Jumla",
+    "noZone": "Hakuna eneo",
+    "noDepositaires": "Hakuna Mwakilishi aliyesajiliwa.",
+    "noMamans": "Hakuna Mama aliyesajiliwa.",
+    "totalGeneral": "Jumla kuu: {{total}} beseni",
+    "saveAndPlan": "Hifadhi na panga",
+    "saveError": "Imeshindwa kuhifadhi"
   },
   "production": {
     "title": "Uzalishaji",

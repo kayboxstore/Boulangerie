@@ -2,6 +2,7 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import {
   clientCreateSchema,
+  clientUpdateSchema,
   typeClientCreateSchema,
   typeClientUpdateSchema,
   type ClientDTO,
@@ -22,6 +23,8 @@ const versClientDTO = (c: {
   telephone: string | null;
   avanceDisponible: number;
   typeClient: { id: string; nom: string; prixParBac: number; commissionParBac: number };
+  zoneDepositaireId: string | null;
+  zoneDepositaire: { nom: string } | null;
 }): ClientDTO => ({
   id: c.id,
   nom: c.nom,
@@ -33,7 +36,11 @@ const versClientDTO = (c: {
     prixParBac: c.typeClient.prixParBac,
     commissionParBac: c.typeClient.commissionParBac,
   },
+  zoneDepositaireId: c.zoneDepositaireId,
+  zoneDepositaireNom: c.zoneDepositaire?.nom ?? null,
 });
+
+const INCLUDE_CLIENT = { typeClient: true, zoneDepositaire: { select: { nom: true } } } as const;
 
 const versTypeClientDTO = (t: {
   id: string;
@@ -127,7 +134,7 @@ typeClientsRouter.delete("/:id", ecritureParametres, async (req, res, next) => {
 clientsRouter.get("/", requirePermission("COMMANDES", "LECTURE"), async (_req, res, next) => {
   try {
     const clients = await prisma.client.findMany({
-      include: { typeClient: true },
+      include: INCLUDE_CLIENT,
       orderBy: { nom: "asc" },
     });
     res.json({ clients: clients.map(versClientDTO) });
@@ -144,17 +151,82 @@ clientsRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req, 
     }
     const typeClient = await prisma.typeClient.findUnique({ where: { id: parsed.data.typeClientId } });
     if (!typeClient) return res.status(400).json({ erreur: "Qualité inconnue" });
+    if (parsed.data.zoneDepositaireId) {
+      const zone = await prisma.zoneDepositaire.findUnique({ where: { id: parsed.data.zoneDepositaireId } });
+      if (!zone) return res.status(400).json({ erreur: "Zone de dépôt inconnue" });
+    }
 
     const client = await prisma.client.create({
       data: {
         nom: parsed.data.nom,
         telephone: parsed.data.telephone || null,
         typeClientId: typeClient.id,
+        zoneDepositaireId: parsed.data.zoneDepositaireId || null,
       },
-      include: { typeClient: true },
+      include: INCLUDE_CLIENT,
     });
     res.status(201).json({ client: versClientDTO(client) });
   } catch (e) {
+    next(e);
+  }
+});
+
+// Nom, téléphone, qualité et zone de dépôt (aucun impact sur les commandes
+// déjà enregistrées, qui figent leur montant à la création — 3.4).
+clientsRouter.put("/:id", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
+  try {
+    const parsed = clientUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const existant = await prisma.client.findUnique({ where: { id: req.params.id } });
+    if (!existant) return res.status(404).json({ erreur: "Client introuvable" });
+
+    if (parsed.data.typeClientId) {
+      const typeClient = await prisma.typeClient.findUnique({ where: { id: parsed.data.typeClientId } });
+      if (!typeClient) return res.status(400).json({ erreur: "Qualité inconnue" });
+    }
+    if (parsed.data.zoneDepositaireId) {
+      const zone = await prisma.zoneDepositaire.findUnique({ where: { id: parsed.data.zoneDepositaireId } });
+      if (!zone) return res.status(400).json({ erreur: "Zone de dépôt inconnue" });
+    }
+
+    const client = await prisma.client.update({
+      where: { id: existant.id },
+      data: {
+        nom: parsed.data.nom,
+        telephone: parsed.data.telephone === undefined ? undefined : parsed.data.telephone || null,
+        typeClientId: parsed.data.typeClientId,
+        zoneDepositaireId: parsed.data.zoneDepositaireId === undefined ? undefined : parsed.data.zoneDepositaireId,
+      },
+      include: INCLUDE_CLIENT,
+    });
+    res.json({ client: versClientDTO(client) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Suppression bloquée si le client a déjà des commandes (FK) — l'historique
+// des commandes ne doit jamais se retrouver orphelin.
+clientsRouter.delete("/:id", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
+  try {
+    const client = await prisma.client.findUnique({
+      where: { id: req.params.id },
+      include: { _count: { select: { commandes: true } } },
+    });
+    if (!client) return res.status(404).json({ erreur: "Client introuvable" });
+    if (client._count.commandes > 0) {
+      return res.status(409).json({
+        erreur: `Suppression impossible : ${client._count.commandes} commande(s) enregistrée(s) pour ce client`,
+      });
+    }
+    await prisma.client.delete({ where: { id: client.id } });
+    res.status(204).end();
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+      return res.status(409).json({ erreur: "Suppression impossible : des données sont encore liées à ce client" });
+    }
     next(e);
   }
 });

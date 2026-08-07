@@ -37,6 +37,9 @@ const MODELE_MODULE: Record<string, string> = {
   Client: "COMMANDES",
   CommandeClient: "COMMANDES",
   PaiementCommande: "COMMANDES",
+  // Zones de dépôt (3.3 d) — organisationnel, sans permission propre,
+  // gouverné par le module COMMANDES (rattachées à la fiche Client).
+  ZoneDepositaire: "COMMANDES",
   // Caisse — registre journalier (3.1). Vente/LigneVente/ClotureCaisse sont
   // orphelines depuis la refonte : plus rien ne les écrit, rien à auditer.
   TauxDuJour: "CAISSE",
@@ -50,6 +53,9 @@ const MODELE_MODULE: Record<string, string> = {
   ProductionDon: "PRODUCTION",
   MotifDon: "PRODUCTION",
   Production: "PRODUCTION",
+  // Schéma de commande (3.3 d)
+  SchemaCommande: "PRODUCTION",
+  SchemaCommandeLigne: "PRODUCTION",
   // Fournisseurs & achats
   Fournisseur: "FOURNISSEURS",
   CommandeFournisseur: "FOURNISSEURS",

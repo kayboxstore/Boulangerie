@@ -443,7 +443,39 @@
       "REMPLACER": "Overwrites the previous entry, which is discarded — to fix a mistake."
     },
     "unpaidDebtTitle": "{{count}} unpaid debt(s)",
-    "unpaidDebtSince": "for {{count}} day(s)"
+    "unpaidDebtSince": "for {{count}} day(s)",
+    "depositZoneOptional": "Delivery zone (optional)",
+    "noDepositZone": "— No zone —"
+  },
+  "zonesDepot": {
+    "title": "Delivery zones",
+    "subtitle": "Geographic grouping of Dépositaires, used in the Order sheet.",
+    "newZone": "New zone",
+    "noZones": "No zone defined.",
+    "ariaDelete": "Delete zone {{nom}}",
+    "confirmDelete": "Delete zone \"{{nom}}\"? Attached clients will simply lose their zone.",
+    "editZone": "Edit zone \"{{nom}}\"",
+    "dialogDesc": "The name identifies the zone; the order sets its position in lists.",
+    "nameLabel": "Name",
+    "namePlaceholder": "E.g.: Downtown",
+    "orderLabel": "Order",
+    "saveError": "Could not save",
+    "deleteError": "Could not delete"
+  },
+  "schemaCommande": {
+    "title": "Order sheet",
+    "desc": "Evening order sheet: detail by client and by product, automatically feeds the Production plan for the chosen date.",
+    "noProducts": "None of the Order sheet's products is configured in the catalog (Carré 1.500 Fc, Carré 1.000 Fc, Baguette 500 Fc, Baguette 1.000 Fc).",
+    "depositairesTitle": "Dépositaires",
+    "mamansTitle": "Mamans",
+    "colClient": "Client",
+    "colTotal": "Total",
+    "noZone": "No zone",
+    "noDepositaires": "No Dépositaire registered.",
+    "noMamans": "No Maman registered.",
+    "totalGeneral": "Grand total: {{total}} crate(s)",
+    "saveAndPlan": "Save and plan",
+    "saveError": "Could not save"
   },
   "production": {
     "title": "Production",

@@ -224,6 +224,9 @@ export const clientCreateSchema = z.object({
   nom: z.string().trim().min(1, "Le nom est requis").max(120),
   telephone: z.string().trim().max(30).optional(),
   typeClientId: z.string().min(1, "La qualité est requise"),
+  // Zone de dépôt (section 3.3 d) — n'a de sens que pour la Qualité
+  // Dépositaire ; ignorée côté API pour les autres Qualités.
+  zoneDepositaireId: z.string().min(1).optional(),
 });
 export type ClientCreateInput = z.infer<typeof clientCreateSchema>;
 
@@ -317,12 +320,34 @@ export type TypeClientCreateInput = z.infer<typeof typeClientCreateSchema>;
 export const typeClientUpdateSchema = typeClientCreateSchema.partial();
 export type TypeClientUpdateInput = z.infer<typeof typeClientUpdateSchema>;
 
+export const clientUpdateSchema = clientCreateSchema.partial().extend({
+  zoneDepositaireId: z.string().min(1).nullable().optional(),
+});
+export type ClientUpdateInput = z.infer<typeof clientUpdateSchema>;
+
+export interface ZoneDepositaireDTO {
+  id: string;
+  nom: string;
+  ordre: number;
+}
+
+export const zoneDepositaireCreateSchema = z.object({
+  nom: z.string().trim().min(1, "Le nom est requis").max(80),
+  ordre: z.number().int().min(0).max(10_000).default(0),
+});
+export type ZoneDepositaireCreateInput = z.infer<typeof zoneDepositaireCreateSchema>;
+
+export const zoneDepositaireUpdateSchema = zoneDepositaireCreateSchema.partial();
+export type ZoneDepositaireUpdateInput = z.infer<typeof zoneDepositaireUpdateSchema>;
+
 export interface ClientDTO {
   id: string;
   nom: string;
   telephone: string | null;
   typeClient: TypeClientDTO;
   avanceDisponible: number;
+  zoneDepositaireId: string | null;
+  zoneDepositaireNom: string | null;
 }
 
 export interface ReglementDTO {
@@ -645,6 +670,61 @@ export interface PlanningProductionDTO {
   kgSelPrevus: number;
   observations: string | null;
   creePar: { id: string; nom: string } | null;
+}
+
+// --- d) Schéma de commande ---------------------------------------------------
+
+/**
+ * Les 4 variantes suivies par le Schéma de commande — reprises telles quelles
+ * de la fiche papier historique. Rattachées au catalogue Produit existant par
+ * leur nom (pas d'ID en dur, différents selon l'environnement) : ajouter une
+ * variante au Schéma se fait en complétant cette liste, sans migration.
+ */
+export const NOMS_PRODUITS_SCHEMA_COMMANDE = [
+  "Carré 1.500 Fc",
+  "Carré 1.000 Fc",
+  "Baguette 500 Fc",
+  "Baguette 1.000 Fc",
+] as const;
+
+/**
+ * Une ligne du Schéma pour un client donné : la commande d'un Dépositaire ou
+ * d'une Maman pour une date, détaillée par produit. `total` est dérivé
+ * (somme des lignes) mais renvoyé pré-calculé pour éviter de le refaire à
+ * l'identique dans chaque écran.
+ */
+export const schemaCommandeLigneClientSchema = z.object({
+  clientId: z.string().min(1),
+  lignes: z
+    .array(z.object({ produitId: z.string().min(1), quantite: nbBacs }))
+    .max(20)
+    .default([]),
+});
+export type SchemaCommandeLigneClientInput = z.infer<typeof schemaCommandeLigneClientSchema>;
+
+/** Remplace, pour une date donnée, l'ensemble des commandes clients du Schéma. */
+export const schemaCommandeJourSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+  clients: z.array(schemaCommandeLigneClientSchema).max(200).default([]),
+});
+export type SchemaCommandeJourInput = z.infer<typeof schemaCommandeJourSchema>;
+
+export interface SchemaCommandeClientDTO {
+  clientId: string;
+  clientNom: string;
+  typeClientNom: string;
+  zoneDepositaireId: string | null;
+  zoneDepositaireNom: string | null;
+  lignes: { produitId: string; produitNom: string; quantite: number }[];
+  total: number;
+}
+
+/** Vue du Schéma pour une date : les clients déjà saisis + le total par produit (celui qui alimente le Planning). */
+export interface SchemaCommandeJourDTO {
+  date: string;
+  clients: SchemaCommandeClientDTO[];
+  totauxParProduit: { produitId: string; produitNom: string; quantite: number }[];
+  totalGeneral: number;
 }
 
 // --- b + c) Production enregistrée -----------------------------------------

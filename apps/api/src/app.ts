@@ -9,6 +9,7 @@ import { produitsRouter } from "./routes/produits.js";
 import { rolesRouter } from "./routes/roles.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { clientsRouter, typeClientsRouter } from "./routes/clients.js";
+import { zonesDepositaireRouter } from "./routes/zones-depositaires.js";
 import { commandesRouter } from "./routes/commandes.js";
 import { commissionsRouter } from "./routes/commissions.js";
 import { caisseRouter } from "./routes/caisse.js";
@@ -65,6 +66,7 @@ export function createApp() {
   app.use("/api/notifications", notificationsRouter);
   app.use("/api/clients", clientsRouter);
   app.use("/api/type-clients", typeClientsRouter);
+  app.use("/api/zones-depositaires", zonesDepositaireRouter);
   app.use("/api/commandes", commandesRouter);
   app.use("/api/commissions", commissionsRouter);
   app.use("/api/caisse", caisseRouter);

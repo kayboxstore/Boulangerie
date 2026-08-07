@@ -13,6 +13,7 @@ import {
   type ResumeCommandesJourDTO,
   type StrategieDoublon,
   type TypeClientDTO,
+  type ZoneDepositaireDTO,
 } from "@lomoto/shared";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -60,6 +61,11 @@ export function CommandesPage() {
   const { data: clientsData } = useQuery({
     queryKey: ["clients"],
     queryFn: () => api<{ clients: ClientDTO[] }>("/api/clients"),
+    enabled: editable,
+  });
+  const { data: zonesData } = useQuery({
+    queryKey: ["zones-depositaires"],
+    queryFn: () => api<{ zones: ZoneDepositaireDTO[] }>("/api/zones-depositaires"),
     enabled: editable,
   });
 
@@ -213,7 +219,12 @@ export function CommandesPage() {
   const [nomClient, setNomClient] = useState("");
   const [telClient, setTelClient] = useState("");
   const [qualiteClient, setQualiteClient] = useState("");
+  const [zoneClient, setZoneClient] = useState("");
   const [erreurClient, setErreurClient] = useState<string | null>(null);
+
+  // La zone de dépôt (3.3 d) n'a de sens que pour la Qualité Dépositaire.
+  const qualiteClientEstDepositaire =
+    typesData?.typeClients.find((tc) => tc.id === qualiteClient)?.nom === "Dépositaire";
 
   const creerClient = useMutation({
     mutationFn: () =>
@@ -223,6 +234,7 @@ export function CommandesPage() {
           nom: nomClient.trim(),
           telephone: telClient.trim() || undefined,
           typeClientId: qualiteClient,
+          zoneDepositaireId: qualiteClientEstDepositaire && zoneClient ? zoneClient : undefined,
         }),
       }),
     onSuccess: (r) => {
@@ -530,6 +542,7 @@ export function CommandesPage() {
                     setNomClient("");
                     setTelClient("");
                     setQualiteClient("");
+                    setZoneClient("");
                     setErreurClient(null);
                     setDialogClient(true);
                   }}
@@ -812,6 +825,20 @@ export function CommandesPage() {
                 </NativeSelect>
               </div>
             </div>
+
+            {qualiteClientEstDepositaire && (
+              <div className="space-y-2">
+                <Label htmlFor="client-zone">{t("commandes.depositZoneOptional")}</Label>
+                <NativeSelect id="client-zone" value={zoneClient} onChange={(e) => setZoneClient(e.target.value)}>
+                  <option value="">{t("commandes.noDepositZone")}</option>
+                  {zonesData?.zones.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.nom}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+            )}
 
             {erreurClient && (
               <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">

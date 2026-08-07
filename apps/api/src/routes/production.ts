@@ -2,8 +2,10 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import {
   formatQuantite,
+  NOMS_PRODUITS_SCHEMA_COMMANDE,
   planningCreateSchema,
   productionCreateSchema,
+  schemaCommandeJourSchema,
   totalDestinationsBacs,
   type CodeIngredient,
   type EcartsProductionDTO,
@@ -11,6 +13,8 @@ import {
   type MotifDonDTO,
   type PlanningProductionDTO,
   type ProductionDTO,
+  type SchemaCommandeClientDTO,
+  type SchemaCommandeJourDTO,
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
@@ -129,6 +133,163 @@ productionRouter.delete("/planning/:id", ecriture, async (req, res, next) => {
     if (!planning) return res.status(404).json({ erreur: "Planification introuvable" });
     await prisma.planningProduction.delete({ where: { id: planning.id } });
     res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Schéma de commande (section 3.3 d) -------------------------------------
+//
+// Digitalise la « Fiche de commande » papier : pour une date donnée, chaque
+// Dépositaire et chaque Maman apparaît en ligne, avec son détail par produit.
+// Enregistrer un Schéma remplace AUTOMATIQUEMENT le nombre de bacs et les
+// lignes du Planning de production de cette même date — les prévisions
+// d'ingrédients et les observations du Planning restent, elles, saisies à la
+// main (voir /planning ci-dessus).
+
+/** Un seul chemin de lecture pour le GET et pour la réponse du PUT (source unique de vérité). */
+async function chargerSchemaCommandeJour(date: string): Promise<SchemaCommandeJourDTO> {
+  const dateObj = new Date(date);
+
+  const [produitsCatalogue, clients, schemasExistants] = await Promise.all([
+    prisma.produit.findMany({ where: { nom: { in: [...NOMS_PRODUITS_SCHEMA_COMMANDE] } } }),
+    prisma.client.findMany({
+      where: { typeClient: { nom: { in: ["Dépositaire", "Maman"] } } },
+      include: { typeClient: { select: { nom: true } }, zoneDepositaire: { select: { nom: true } } },
+      orderBy: { nom: "asc" },
+    }),
+    prisma.schemaCommande.findMany({ where: { date: dateObj }, include: { lignes: true } }),
+  ]);
+
+  // Ordre fixe (celui de la fiche papier), pas l'ordre alphabétique renvoyé par la requête.
+  const produits = NOMS_PRODUITS_SCHEMA_COMMANDE.map((nom) => produitsCatalogue.find((p) => p.nom === nom)).filter(
+    (p): p is (typeof produitsCatalogue)[number] => !!p,
+  );
+
+  const schemaParClientId = new Map(schemasExistants.map((s) => [s.clientId, s]));
+
+  const clientsDTO: SchemaCommandeClientDTO[] = clients.map((c) => {
+    const existant = schemaParClientId.get(c.id);
+    const quantiteParProduitId = new Map((existant?.lignes ?? []).map((l) => [l.produitId, l.quantite]));
+    const lignes = produits.map((p) => ({
+      produitId: p.id,
+      produitNom: p.nom,
+      quantite: quantiteParProduitId.get(p.id) ?? 0,
+    }));
+    return {
+      clientId: c.id,
+      clientNom: c.nom,
+      typeClientNom: c.typeClient.nom,
+      zoneDepositaireId: c.zoneDepositaireId,
+      zoneDepositaireNom: c.zoneDepositaire?.nom ?? null,
+      lignes,
+      total: lignes.reduce((s, l) => s + l.quantite, 0),
+    };
+  });
+
+  const totauxParProduit = produits.map((p) => ({
+    produitId: p.id,
+    produitNom: p.nom,
+    quantite: clientsDTO.reduce((s, c) => s + (c.lignes.find((l) => l.produitId === p.id)?.quantite ?? 0), 0),
+  }));
+
+  return {
+    date,
+    clients: clientsDTO,
+    totauxParProduit,
+    totalGeneral: totauxParProduit.reduce((s, t) => s + t.quantite, 0),
+  };
+}
+
+productionRouter.get("/schema-commande", lecture, async (req, res, next) => {
+  try {
+    const { date } = req.query as Record<string, string | undefined>;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ erreur: "Date requise (AAAA-MM-JJ)" });
+    }
+    res.json(await chargerSchemaCommandeJour(date));
+  } catch (e) {
+    next(e);
+  }
+});
+
+productionRouter.put("/schema-commande", ecriture, async (req, res, next) => {
+  try {
+    const parsed = schemaCommandeJourSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const { date, clients } = parsed.data;
+
+    const clientIds = clients.map((c) => c.clientId);
+    if (new Set(clientIds).size !== clientIds.length) {
+      return res.status(400).json({ erreur: "Un client apparaît deux fois dans le schéma" });
+    }
+    const produitIds = [...new Set(clients.flatMap((c) => c.lignes.map((l) => l.produitId)))];
+    if (clientIds.length > 0) {
+      const clientsConnus = await prisma.client.count({ where: { id: { in: clientIds } } });
+      if (clientsConnus !== clientIds.length) {
+        return res.status(400).json({ erreur: "Client inconnu dans le schéma" });
+      }
+    }
+    if (produitIds.length > 0) {
+      const produitsConnus = await prisma.produit.count({ where: { id: { in: produitIds } } });
+      if (produitsConnus !== produitIds.length) {
+        return res.status(400).json({ erreur: "Produit inconnu dans le schéma" });
+      }
+    }
+
+    const dateObj = new Date(date);
+
+    await prisma.$transaction(async (tx) => {
+      // Remplace intégralement le Schéma de cette date : plus simple et plus
+      // sûr qu'un diff ligne à ligne (même idiome que le Planning ci-dessus).
+      await tx.schemaCommande.deleteMany({ where: { date: dateObj } });
+      for (const c of clients) {
+        const lignesUtiles = c.lignes.filter((l) => l.quantite > 0);
+        if (lignesUtiles.length === 0) continue;
+        await tx.schemaCommande.create({
+          data: { date: dateObj, clientId: c.clientId, creeParId: req.utilisateur!.id, lignes: { create: lignesUtiles } },
+        });
+      }
+
+      // Alimentation automatique du Planning de production : le nombre de
+      // bacs et le détail par produit deviennent ceux du Schéma. Un Planning
+      // déjà existant pour cette date garde ses prévisions d'ingrédients et
+      // ses observations, saisies à part.
+      const totauxParProduitId = new Map<string, number>();
+      for (const c of clients) {
+        for (const l of c.lignes) {
+          if (l.quantite <= 0) continue;
+          totauxParProduitId.set(l.produitId, (totauxParProduitId.get(l.produitId) ?? 0) + l.quantite);
+        }
+      }
+      const lignesPlanning = [...totauxParProduitId.entries()].map(([produitId, quantitePrevue]) => ({
+        produitId,
+        quantitePrevue,
+      }));
+      const nombreBacsCommandes = lignesPlanning.reduce((s, l) => s + l.quantitePrevue, 0);
+
+      const planningExistant = await tx.planningProduction.findUnique({ where: { datePrevue: dateObj } });
+      if (planningExistant) {
+        await tx.planningLigneProduit.deleteMany({ where: { planningId: planningExistant.id } });
+        await tx.planningProduction.update({
+          where: { id: planningExistant.id },
+          data: { nombreBacsCommandes, lignes: { create: lignesPlanning } },
+        });
+      } else if (lignesPlanning.length > 0) {
+        await tx.planningProduction.create({
+          data: {
+            datePrevue: dateObj,
+            nombreBacsCommandes,
+            creeParId: req.utilisateur!.id,
+            lignes: { create: lignesPlanning },
+          },
+        });
+      }
+    });
+
+    res.json(await chargerSchemaCommandeJour(date));
   } catch (e) {
     next(e);
   }
