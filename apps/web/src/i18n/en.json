@@ -494,9 +494,28 @@
     "saveAndPlan": "Save and plan",
     "saveError": "Could not save"
   },
+  "bonsLivraison": {
+    "title": "Delivery notes",
+    "desc": "Today's delivery slip, per Dépositaire: detail by product delivered, empty crates collected and observations — entered independently from the Order sheet.",
+    "backToProduction": "Back to production",
+    "noProducts": "None of the Delivery note's products is configured in the catalog (Carré 1.500 Fc, Carré 1.000 Fc, Baguette 500 Fc, Baguette 1.000 Fc).",
+    "noZone": "No zone",
+    "noDepositaires": "No Dépositaire registered.",
+    "colDepositaire": "Dépositaire",
+    "colTotal": "Total",
+    "colEmptyCrates": "Empty crates",
+    "colDeliveredBy": "Delivered by",
+    "colObs": "Notes",
+    "totalGeneral": "Grand total: {{total}} crate(s)",
+    "totalEmptyCrates": "{{total}} empty crate(s) collected",
+    "print": "Print",
+    "printError": "Could not print",
+    "saveError": "Could not save"
+  },
   "production": {
     "title": "Production",
     "subtitle": "Next day's schedule, recorded productions and planned/actual gaps.",
+    "deliveryNotes": "Delivery notes",
     "plan": "Schedule",
     "recordProduction": "Record a production",
     "savedWithWarnings": "Production recorded — points to check:",

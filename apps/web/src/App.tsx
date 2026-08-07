@@ -29,6 +29,8 @@ const CommissionsPage = lazy(() => import("@/pages/Commissions").then((m) => ({ 
 const CaissePage = lazy(() => import("@/pages/Caisse").then((m) => ({ default: m.CaissePage })));
 const StocksPage = lazy(() => import("@/pages/Stocks").then((m) => ({ default: m.StocksPage })));
 const ProductionPage = lazy(() => import("@/pages/Production").then((m) => ({ default: m.ProductionPage })));
+// Sous-module de Production (3.3 e) : Bon de livraison, écran à part pour ne pas encombrer /production.
+const BonsLivraisonPage = lazy(() => import("@/pages/BonsLivraison").then((m) => ({ default: m.BonsLivraisonPage })));
 const FournisseursPage = lazy(() => import("@/pages/Fournisseurs").then((m) => ({ default: m.FournisseursPage })));
 const EquipePage = lazy(() => import("@/pages/Equipe").then((m) => ({ default: m.EquipePage })));
 const ProfilPage = lazy(() => import("@/pages/Profil").then((m) => ({ default: m.ProfilPage })));
@@ -152,6 +154,14 @@ function AppAuthentifiee() {
           element={
             <RequiertLecture module="PRODUCTION">
               <ProductionPage />
+            </RequiertLecture>
+          }
+        />
+        <Route
+          path="/production/bons-livraison"
+          element={
+            <RequiertLecture module="PRODUCTION">
+              <BonsLivraisonPage />
             </RequiertLecture>
           }
         />

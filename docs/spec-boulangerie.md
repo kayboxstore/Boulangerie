@@ -160,7 +160,7 @@ nomenclature par produit. Les tables `Recette`/`IngredientRecette` sont laissée
 **orphelines en base** (aucune route, aucune UI ne les expose) plutôt que
 supprimées, pour ne pas risquer les données existantes.
 
-Le module s'articule désormais en quatre volets, plus une vue d'écarts.
+Le module s'articule désormais en cinq volets, plus une vue d'écarts.
 
 **a) Planning de production** — ce qui est prévu pour le **jour suivant** :
 
@@ -241,11 +241,35 @@ liste à part, non zonée.
   rattachés perdent simplement leur zone (`onDelete: SetNull`).
 - **Permissions** : identiques au Planning (a) — écriture Responsable de
   production, lecture Caissier(ère)/DG.
-- *Hors périmètre pour l'instant* : le **Bon de livraison** (fiche de livraison
-  papier remplie au moment de la livraison — bacs vides repris, observations)
-  est **volontairement différé à une phase ultérieure** ; ce sera, par
-  décision explicite, un écran de saisie dédié (pas un simple export PDF des
-  données déjà enregistrées).
+
+**e) Bon de livraison** *(digitalisation de la fiche papier remplie à la
+livraison, écran dédié `/production/bons-livraison`, sous-module de
+Production — comme `/commandes/clients` pour Commandes, pour ne pas
+encombrer l'écran principal)* — pour une date donnée, une ligne par
+Dépositaire **livré** (les Mamans n'apparaissent pas sur cette fiche, la
+livraison par camion ne concerne que les Dépositaires), groupées par zone de
+dépôt comme le Schéma. Par ligne : détail par produit **livré** (mêmes quatre
+`Produit` que le Schéma), bacs vides repris, « Livré par » (texte libre) et
+observations.
+
+- **Indépendance volontaire du Schéma de commande** : décision explicite,
+  aucun pré-remplissage à partir des quantités commandées — la quantité
+  livrée peut différer (rupture, ajustement de dernière minute), et
+  inversement le Bon de livraison n'alimente ni le Planning ni les Commandes.
+  Même idiome de sauvegarde que le Schéma (remplacement intégral du jour dans
+  une transaction) ; un Dépositaire sans aucune valeur saisie (produits à
+  zéro, pas de bacs vides, pas de livreur, pas d'observation) n'est
+  simplement pas enregistré ce jour-là.
+- **PDF imprimable** (décision explicite) : bouton « Imprimer » générant une
+  fiche par Dépositaire livré, reprenant la mise en page papier (logo,
+  tableau produits/total/bacs vides/observations, et des lignes de signature
+  Chauffeur / Dépositaire) — les signatures restent physiques, apposées sur
+  le papier imprimé, **non capturées en base**. Export en lecture seule
+  (comme les rapports, 3.13), aucune permission d'écriture requise pour
+  imprimer des bons déjà enregistrés.
+- **Permissions** : identiques au Schéma et au Planning — écriture
+  Responsable de production, lecture Caissier(ère)/DG ; l'impression, elle,
+  ne demande que la lecture.
 
 **Écarts** — pour une date donnée, vue comparant prévisions (a) et réalisations
 (b + c) sur : bacs, sacs de farine, levure, huile, sel. Chaque paire affiche
@@ -583,6 +607,8 @@ MotifDon (id, nom)                                             # liste fixe exte
 ZoneDepositaire (id, nom, ordre)                               # organisationnel, aucune permission propre (3.3 d)
 SchemaCommande (id, date, clientId, créePar)                   # une ligne par (date, client) — Dépositaire ou Maman
 SchemaCommandeLigne (schemaCommandeId, produitId, quantite)    # détail par produit, alimente PlanningLigneProduit
+BonLivraison (id, date, clientId, bacsVides, livrePar?, observations?, créePar)  # une ligne par (date, Dépositaire), indépendant du Schéma
+BonLivraisonLigne (bonLivraisonId, produitId, quantite)        # détail par produit LIVRÉ
 Production (id, numero, date, bacsProduits, bacsLivresDepositaires, bacsLivresMamans, bacsVendusVC, bacsRestants, bacsFoutus, kgFarineAbimes?, sacsUtilises, paquetsLevureUtilises, kgSelUtilises, quantiteHuileUtilisee, observations, enregistrePar)
 ProductionDon (productionId, motifDonId, nombreBacs)           # répartition des bacs donnés par motif
 MatierePremiere (id, nom, code?, unité, quantitéStock, seuilAlerte)   # code = FARINE|LEVURE|SEL|HUILE, relie les ingrédients saisis en production au stock

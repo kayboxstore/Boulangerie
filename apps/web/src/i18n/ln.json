@@ -495,9 +495,28 @@
     "saveAndPlan": "Kobomba mpe kokana",
     "saveError": "Kobomba ekoki te"
   },
+  "bonsLivraison": {
+    "title": "Ba bon ya kotinda biloko",
+    "desc": "Fiche ya kotinda biloko ya mokolo, na Dépositaire moko na moko : bokabwani na produit oyo etindami, bacs pamba oyo ezongisami mpe makomi — esalemi na bonkolo na Fiche ya komande.",
+    "backToProduction": "Kozonga na bosali",
+    "noProducts": "Ata produit moko ya Bon ya kotinda biloko esalemi te na catalogue (Carré 1.500 Fc, Carré 1.000 Fc, Baguette 500 Fc, Baguette 1.000 Fc).",
+    "noZone": "Zone te",
+    "noDepositaires": "Dépositaire moko te akomami.",
+    "colDepositaire": "Dépositaire",
+    "colTotal": "Motango nyonso",
+    "colEmptyCrates": "Bacs pamba",
+    "colDeliveredBy": "Etindami na",
+    "colObs": "Makomi",
+    "totalGeneral": "Motango nyonso : {{total}} bac",
+    "totalEmptyCrates": "Bacs pamba {{total}} ezongisami",
+    "print": "Kobimisa na papier",
+    "printError": "Kobimisa na papier ekoki te",
+    "saveError": "Kobomba ekoki te"
+  },
   "production": {
     "title": "Bosali",
     "subtitle": "Mwango ya mokolo elandi, bosali ekomami mpe bokeseni ya mwango na oyo esalemi.",
+    "deliveryNotes": "Ba bon ya kotinda biloko",
     "plan": "Kobongisa mwango",
     "recordProduction": "Kokoma bosali",
     "savedWithWarnings": "Bosali ekomami — makambo ya kotala :",

@@ -495,9 +495,28 @@
     "saveAndPlan": "Hifadhi na panga",
     "saveError": "Imeshindwa kuhifadhi"
   },
+  "bonsLivraison": {
+    "title": "Hati za usafirishaji",
+    "desc": "Hati ya usafirishaji ya siku, kwa kila Mwakilishi (Dépositaire): maelezo ya bidhaa zilizosafirishwa, beseni tupu zilizorudishwa na maoni — huingizwa kwa kujitegemea kutoka kwa Fomu ya agizo.",
+    "backToProduction": "Rudi kwenye uzalishaji",
+    "noProducts": "Hakuna hata bidhaa moja ya Hati ya usafirishaji iliyowekwa kwenye orodha ya bidhaa (Carré 1.500 Fc, Carré 1.000 Fc, Baguette 500 Fc, Baguette 1.000 Fc).",
+    "noZone": "Hakuna eneo",
+    "noDepositaires": "Hakuna Mwakilishi aliyesajiliwa.",
+    "colDepositaire": "Mwakilishi",
+    "colTotal": "Jumla",
+    "colEmptyCrates": "Beseni tupu",
+    "colDeliveredBy": "Imesafirishwa na",
+    "colObs": "Maoni",
+    "totalGeneral": "Jumla kuu: {{total}} beseni",
+    "totalEmptyCrates": "Beseni tupu {{total}} zimerudishwa",
+    "print": "Chapisha",
+    "printError": "Imeshindwa kuchapisha",
+    "saveError": "Imeshindwa kuhifadhi"
+  },
   "production": {
     "title": "Uzalishaji",
     "subtitle": "Ratiba ya siku inayofuata, uzalishaji uliorekodiwa na tofauti kati ya lililopangwa na lililotimizwa.",
+    "deliveryNotes": "Hati za usafirishaji",
     "plan": "Panga",
     "recordProduction": "Rekodi uzalishaji",
     "savedWithWarnings": "Uzalishaji umerekodiwa — mambo ya kuangalia :",

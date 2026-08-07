@@ -56,6 +56,9 @@ const MODELE_MODULE: Record<string, string> = {
   // Schéma de commande (3.3 d)
   SchemaCommande: "PRODUCTION",
   SchemaCommandeLigne: "PRODUCTION",
+  // Bon de livraison (3.3 e)
+  BonLivraison: "PRODUCTION",
+  BonLivraisonLigne: "PRODUCTION",
   // Fournisseurs & achats
   Fournisseur: "FOURNISSEURS",
   CommandeFournisseur: "FOURNISSEURS",

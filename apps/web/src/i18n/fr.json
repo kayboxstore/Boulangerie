@@ -494,9 +494,28 @@
     "saveAndPlan": "Enregistrer et planifier",
     "saveError": "Enregistrement impossible"
   },
+  "bonsLivraison": {
+    "title": "Bons de livraison",
+    "desc": "Fiche de livraison du jour, par Dépositaire : détail par produit livré, bacs vides repris et observations — saisie indépendante du Schéma de commande.",
+    "backToProduction": "Retour à la production",
+    "noProducts": "Aucun des produits du Bon de livraison n'est configuré dans le catalogue (Carré 1.500 Fc, Carré 1.000 Fc, Baguette 500 Fc, Baguette 1.000 Fc).",
+    "noZone": "Sans zone",
+    "noDepositaires": "Aucun Dépositaire enregistré.",
+    "colDepositaire": "Dépositaire",
+    "colTotal": "Total",
+    "colEmptyCrates": "Bacs vides",
+    "colDeliveredBy": "Livré par",
+    "colObs": "Obs",
+    "totalGeneral": "Total général : {{total}} bac(s)",
+    "totalEmptyCrates": "{{total}} bac(s) vide(s) repris",
+    "print": "Imprimer",
+    "printError": "Impression impossible",
+    "saveError": "Enregistrement impossible"
+  },
   "production": {
     "title": "Production",
     "subtitle": "Planning du jour suivant, productions enregistrées et écarts prévu / réalisé.",
+    "deliveryNotes": "Bons de livraison",
     "plan": "Planifier",
     "recordProduction": "Enregistrer une production",
     "savedWithWarnings": "Production enregistrée — points à vérifier :",

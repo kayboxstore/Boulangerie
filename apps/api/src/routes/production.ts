@@ -1,12 +1,15 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import {
+  bonLivraisonJourSchema,
   formatQuantite,
   NOMS_PRODUITS_SCHEMA_COMMANDE,
   planningCreateSchema,
   productionCreateSchema,
   schemaCommandeJourSchema,
   totalDestinationsBacs,
+  type BonLivraisonClientDTO,
+  type BonLivraisonJourDTO,
   type CodeIngredient,
   type EcartsProductionDTO,
   type LigneEcartDTO,
@@ -19,6 +22,7 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
+import { construirePdfBonsLivraison, nomFichierPdf } from "../services/pdf.js";
 import { appliquerMouvement, emettreAlerteSeuil, ErreurStock } from "../services/stocks.js";
 
 export const productionRouter = Router();
@@ -290,6 +294,165 @@ productionRouter.put("/schema-commande", ecriture, async (req, res, next) => {
     });
 
     res.json(await chargerSchemaCommandeJour(date));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Bon de livraison (section 3.3 e) ----------------------------------------
+//
+// Digitalise le « Bon de livraison » papier : pour une date donnée, chaque
+// Dépositaire livré apparaît en ligne, avec son détail par produit LIVRÉ, les
+// bacs vides repris et les observations relevées à la livraison. Saisie
+// VOLONTAIREMENT INDÉPENDANTE du Schéma de commande — aucune alimentation
+// automatique dans un sens ni dans l'autre, la quantité livrée pouvant
+// différer de la quantité commandée (rupture, ajustement de dernière minute).
+
+async function chargerBonLivraisonJour(date: string): Promise<BonLivraisonJourDTO> {
+  const dateObj = new Date(date);
+
+  const [produitsCatalogue, clients, bonsExistants] = await Promise.all([
+    prisma.produit.findMany({ where: { nom: { in: [...NOMS_PRODUITS_SCHEMA_COMMANDE] } } }),
+    prisma.client.findMany({
+      where: { typeClient: { nom: "Dépositaire" } },
+      include: { zoneDepositaire: { select: { nom: true } } },
+      orderBy: { nom: "asc" },
+    }),
+    prisma.bonLivraison.findMany({ where: { date: dateObj }, include: { lignes: true } }),
+  ]);
+
+  const produits = NOMS_PRODUITS_SCHEMA_COMMANDE.map((nom) => produitsCatalogue.find((p) => p.nom === nom)).filter(
+    (p): p is (typeof produitsCatalogue)[number] => !!p,
+  );
+
+  const bonParClientId = new Map(bonsExistants.map((b) => [b.clientId, b]));
+
+  const clientsDTO: BonLivraisonClientDTO[] = clients.map((c) => {
+    const existant = bonParClientId.get(c.id);
+    const quantiteParProduitId = new Map((existant?.lignes ?? []).map((l) => [l.produitId, l.quantite]));
+    const lignes = produits.map((p) => ({
+      produitId: p.id,
+      produitNom: p.nom,
+      quantite: quantiteParProduitId.get(p.id) ?? 0,
+    }));
+    return {
+      clientId: c.id,
+      clientNom: c.nom,
+      zoneDepositaireId: c.zoneDepositaireId,
+      zoneDepositaireNom: c.zoneDepositaire?.nom ?? null,
+      lignes,
+      bacsVides: existant?.bacsVides ?? 0,
+      livrePar: existant?.livrePar ?? null,
+      observations: existant?.observations ?? null,
+      total: lignes.reduce((s, l) => s + l.quantite, 0),
+    };
+  });
+
+  const totauxParProduit = produits.map((p) => ({
+    produitId: p.id,
+    produitNom: p.nom,
+    quantite: clientsDTO.reduce((s, c) => s + (c.lignes.find((l) => l.produitId === p.id)?.quantite ?? 0), 0),
+  }));
+
+  return {
+    date,
+    clients: clientsDTO,
+    totauxParProduit,
+    totalGeneral: totauxParProduit.reduce((s, t) => s + t.quantite, 0),
+    totalBacsVides: clientsDTO.reduce((s, c) => s + c.bacsVides, 0),
+  };
+}
+
+productionRouter.get("/bons-livraison", lecture, async (req, res, next) => {
+  try {
+    const { date } = req.query as Record<string, string | undefined>;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ erreur: "Date requise (AAAA-MM-JJ)" });
+    }
+    res.json(await chargerBonLivraisonJour(date));
+  } catch (e) {
+    next(e);
+  }
+});
+
+productionRouter.put("/bons-livraison", ecriture, async (req, res, next) => {
+  try {
+    const parsed = bonLivraisonJourSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const { date, clients } = parsed.data;
+
+    const clientIds = clients.map((c) => c.clientId);
+    if (new Set(clientIds).size !== clientIds.length) {
+      return res.status(400).json({ erreur: "Un client apparaît deux fois dans le bon de livraison" });
+    }
+    const produitIds = [...new Set(clients.flatMap((c) => c.lignes.map((l) => l.produitId)))];
+    if (clientIds.length > 0) {
+      const clientsConnus = await prisma.client.count({
+        where: { id: { in: clientIds }, typeClient: { nom: "Dépositaire" } },
+      });
+      if (clientsConnus !== clientIds.length) {
+        return res.status(400).json({ erreur: "Client inconnu ou non Dépositaire dans le bon de livraison" });
+      }
+    }
+    if (produitIds.length > 0) {
+      const produitsConnus = await prisma.produit.count({ where: { id: { in: produitIds } } });
+      if (produitsConnus !== produitIds.length) {
+        return res.status(400).json({ erreur: "Produit inconnu dans le bon de livraison" });
+      }
+    }
+
+    const dateObj = new Date(date);
+
+    await prisma.$transaction(async (tx) => {
+      // Remplace intégralement les bons de cette date — même idiome que le
+      // Schéma de commande (plus simple et plus sûr qu'un diff ligne à ligne).
+      await tx.bonLivraison.deleteMany({ where: { date: dateObj } });
+      for (const c of clients) {
+        const lignesUtiles = c.lignes.filter((l) => l.quantite > 0);
+        const aUneValeur = lignesUtiles.length > 0 || c.bacsVides > 0 || !!c.livrePar || !!c.observations;
+        if (!aUneValeur) continue;
+        await tx.bonLivraison.create({
+          data: {
+            date: dateObj,
+            clientId: c.clientId,
+            bacsVides: c.bacsVides,
+            livrePar: c.livrePar || null,
+            observations: c.observations || null,
+            creeParId: req.utilisateur!.id,
+            lignes: { create: lignesUtiles },
+          },
+        });
+      }
+    });
+
+    res.json(await chargerBonLivraisonJour(date));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// PDF imprimable (une fiche par Dépositaire livré) : lecture seule (comme
+// l'export de rapports, section 3.13) — ne modifie rien, juste un export des
+// données déjà enregistrées.
+productionRouter.get("/bons-livraison/pdf", lecture, async (req, res, next) => {
+  try {
+    const { date } = req.query as Record<string, string | undefined>;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ erreur: "Date requise (AAAA-MM-JJ)" });
+    }
+    const jour = await chargerBonLivraisonJour(date);
+    const aLivrer = jour.clients.filter((c) => c.total > 0 || c.bacsVides > 0 || c.livrePar || c.observations);
+    if (aLivrer.length === 0) {
+      return res.status(404).json({ erreur: "Aucun bon de livraison saisi pour cette date" });
+    }
+    const pdf = await construirePdfBonsLivraison(aLivrer, date, req.utilisateur!.nom);
+    const nom = nomFichierPdf(`bons-de-livraison-${date}`);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${nom}"`);
+    res.setHeader("Content-Length", String(pdf.length));
+    res.end(pdf);
   } catch (e) {
     next(e);
   }

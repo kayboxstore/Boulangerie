@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ClipboardList, Factory, Save, Scale, Trash2, TriangleAlert, Users } from "lucide-react";
+import { CalendarDays, ClipboardList, Factory, Save, Scale, Trash2, TriangleAlert, Truck, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   totalDestinationsBacs,
@@ -329,18 +330,26 @@ export function ProductionPage() {
           <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("production.title")}</h1>
           <p className="mt-1 text-muted-foreground">{t("production.subtitle")}</p>
         </div>
-        {editable && (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={ouvrirPlanning}>
-              <CalendarDays className="h-4 w-4" />
-              {t("production.plan")}
-            </Button>
-            <Button variant="cta" onClick={ouvrirProduction}>
-              <Factory className="h-4 w-4" />
-              {t("production.recordProduction")}
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/production/bons-livraison">
+              <Truck className="h-4 w-4" />
+              {t("production.deliveryNotes")}
+            </Link>
+          </Button>
+          {editable && (
+            <>
+              <Button variant="outline" onClick={ouvrirPlanning}>
+                <CalendarDays className="h-4 w-4" />
+                {t("production.plan")}
+              </Button>
+              <Button variant="cta" onClick={ouvrirProduction}>
+                <Factory className="h-4 w-4" />
+                {t("production.recordProduction")}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {avertissements.length > 0 && (

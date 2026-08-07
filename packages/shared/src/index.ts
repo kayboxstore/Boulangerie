@@ -727,6 +727,55 @@ export interface SchemaCommandeJourDTO {
   totalGeneral: number;
 }
 
+// --- e) Bon de livraison ------------------------------------------------------
+
+/**
+ * Une ligne du Bon de livraison pour un Dépositaire donné : le détail livré
+ * par produit (mêmes variantes que le Schéma), les bacs vides repris et les
+ * observations relevées à la livraison. Volontairement indépendant du Schéma
+ * de commande — aucune alimentation automatique dans un sens ni dans
+ * l'autre, la quantité livrée pouvant différer de la quantité commandée.
+ */
+export const bonLivraisonLigneClientSchema = z.object({
+  clientId: z.string().min(1),
+  lignes: z
+    .array(z.object({ produitId: z.string().min(1), quantite: nbBacs }))
+    .max(20)
+    .default([]),
+  bacsVides: nbBacs.default(0),
+  livrePar: z.string().trim().max(120).optional(),
+  observations: z.string().trim().max(500).optional(),
+});
+export type BonLivraisonLigneClientInput = z.infer<typeof bonLivraisonLigneClientSchema>;
+
+/** Remplace, pour une date donnée, l'ensemble des bons de livraison. */
+export const bonLivraisonJourSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+  clients: z.array(bonLivraisonLigneClientSchema).max(200).default([]),
+});
+export type BonLivraisonJourInput = z.infer<typeof bonLivraisonJourSchema>;
+
+export interface BonLivraisonClientDTO {
+  clientId: string;
+  clientNom: string;
+  zoneDepositaireId: string | null;
+  zoneDepositaireNom: string | null;
+  lignes: { produitId: string; produitNom: string; quantite: number }[];
+  bacsVides: number;
+  livrePar: string | null;
+  observations: string | null;
+  total: number;
+}
+
+/** Vue du Bon de livraison pour une date : un Dépositaire par ligne (tous les Dépositaires, saisis ou non). */
+export interface BonLivraisonJourDTO {
+  date: string;
+  clients: BonLivraisonClientDTO[];
+  totauxParProduit: { produitId: string; produitNom: string; quantite: number }[];
+  totalGeneral: number;
+  totalBacsVides: number;
+}
+
 // --- b + c) Production enregistrée -----------------------------------------
 
 export const productionCreateSchema = z.object({

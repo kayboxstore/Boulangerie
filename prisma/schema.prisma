@@ -122,6 +122,7 @@ model Utilisateur {
   productions                 Production[]
   planningsCrees              PlanningProduction[]
   schemasCommandeCrees        SchemaCommande[]
+  bonsLivraisonCrees          BonLivraison[]
   commandesFournisseurCreees  CommandeFournisseur[] @relation("CommandesFournisseurCreees")
   commandesFournisseurRecues  CommandeFournisseur[] @relation("CommandesFournisseurRecues")
   ficheTravailleur            Travailleur?
@@ -197,6 +198,7 @@ model Client {
   zoneDepositaireId String?
   zoneDepositaire   ZoneDepositaire? @relation(fields: [zoneDepositaireId], references: [id], onDelete: SetNull)
   schemasCommande   SchemaCommande[]
+  bonsLivraison     BonLivraison[]
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
@@ -264,17 +266,18 @@ model PaiementCommande {
 // Catalogue produits. Montants en Fc. Le pain est exonéré de TVA (tauxTaxe = 0) ;
 // le taux reste configurable par produit pour d'éventuels articles hors pain.
 model Produit {
-  id             String                 @id @default(cuid())
-  nom            String                 @unique
-  prixVente      Int
-  tauxTaxe       Float                  @default(0)
-  categorie      String
-  actif          Boolean                @default(true)
-  recette        Recette?
-  lignesPlanning PlanningLigneProduit[]
-  lignesSchema   SchemaCommandeLigne[]
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
+  id              String                 @id @default(cuid())
+  nom             String                 @unique
+  prixVente       Int
+  tauxTaxe        Float                  @default(0)
+  categorie       String
+  actif           Boolean                @default(true)
+  recette         Recette?
+  lignesPlanning  PlanningLigneProduit[]
+  lignesSchema    SchemaCommandeLigne[]
+  lignesLivraison BonLivraisonLigne[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
 }
 
 // --- Stocks & matières premières (section 3.2) ------------------------------
@@ -466,6 +469,43 @@ model SchemaCommandeLigne {
   quantite         Int
 
   @@unique([schemaCommandeId, produitId])
+}
+
+// Bon de livraison (section 3.3 e) — digitalise la fiche papier remplie à la
+// livraison chez chaque Dépositaire : détail par produit LIVRÉ (peut différer
+// du Schéma de commande, saisie volontairement indépendante — aucune
+// alimentation automatique dans un sens ni dans l'autre), bacs vides repris et
+// observations. Le nom du livreur est un texte libre (« Livré par » sur la
+// fiche papier) ; les signatures Chauffeur/Dépositaire restent physiques,
+// apposées sur le PDF imprimé — non capturées en base.
+model BonLivraison {
+  id           String              @id @default(cuid())
+  date         DateTime            @db.Date
+  clientId     String
+  client       Client              @relation(fields: [clientId], references: [id])
+  lignes       BonLivraisonLigne[]
+  bacsVides    Int                 @default(0)
+  livrePar     String?
+  observations String?
+  creeParId    String?
+  creePar      Utilisateur?        @relation(fields: [creeParId], references: [id], onDelete: SetNull)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([date, clientId])
+  @@index([date])
+}
+
+// Détail par produit livré — mêmes produits que le Schéma de commande.
+model BonLivraisonLigne {
+  id             String       @id @default(cuid())
+  bonLivraisonId String
+  bonLivraison   BonLivraison @relation(fields: [bonLivraisonId], references: [id], onDelete: Cascade)
+  produitId      String
+  produit        Produit      @relation(fields: [produitId], references: [id])
+  quantite       Int
+
+  @@unique([bonLivraisonId, produitId])
 }
 
 // Motif d'un don de bacs (section 3.3 b) — liste fixe mais extensible,

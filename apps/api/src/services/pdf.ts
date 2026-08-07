@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
-import { TAGLINE, VERSION_APP, type DocumentExportInput } from "@lomoto/shared";
+import { TAGLINE, VERSION_APP, type BonLivraisonClientDTO, type DocumentExportInput } from "@lomoto/shared";
 
 // Palette de marque (section 3.8)
 const MARINE = "#0F1923";
@@ -185,6 +185,162 @@ export function construirePdf(document: DocumentExportInput, auteurNom: string):
         align: "right",
         lineBreak: false,
       });
+      doc.restore();
+    }
+
+    doc.end();
+  });
+}
+
+const tronquer = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+
+/**
+ * PDF du Bon de livraison (section 3.3 e) : une fiche par Dépositaire livré,
+ * reprenant la mise en page de la fiche papier — logo, détail par produit,
+ * bacs vides, observations, et des lignes de signature Chauffeur/Dépositaire
+ * (signatures physiques, non capturées en base). Plusieurs fiches empilées
+ * par page, comme sur le document papier d'origine.
+ */
+export function construirePdfBonsLivraison(
+  clients: BonLivraisonClientDTO[],
+  dateLabel: string,
+  auteurNom: string,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A4", margin: MARGE, bufferPages: true });
+    const morceaux: Buffer[] = [];
+    doc.on("data", (c: Buffer) => morceaux.push(c));
+    doc.on("error", reject);
+    doc.on("end", () => resolve(Buffer.concat(morceaux)));
+
+    let logo: unknown = null;
+    if (LOGO) {
+      try {
+        logo = (doc as unknown as { openImage: (s: string) => unknown }).openImage(LOGO);
+      } catch {
+        logo = LOGO;
+      }
+    }
+
+    const largeurUtile = doc.page.width - 2 * MARGE;
+    const basUtile = doc.page.height - MARGE - 20;
+    const HAUTEUR_FICHE = 140;
+    let y = MARGE;
+
+    const nouvellePage = () => {
+      doc.addPage();
+      y = MARGE;
+    };
+
+    clients.forEach((c, index) => {
+      if (y + HAUTEUR_FICHE > basUtile) nouvellePage();
+
+      // --- En-tête (répété par fiche, comme sur le papier) ---
+      if (logo) doc.image(logo as string, MARGE, y, { width: 32, height: 32 });
+      const xTitre = logo ? MARGE + 40 : MARGE;
+      doc.font("Helvetica-Bold").fontSize(13).fillColor(MARINE);
+      doc.text("Boulangerie Lomoto", xTitre, y, { lineBreak: false });
+      doc.font("Helvetica-Oblique").fontSize(8).fillColor(TERRACOTTA);
+      doc.text(`« ${TAGLINE} »`, xTitre, y + 15, { lineBreak: false });
+      doc.font("Helvetica-Bold").fontSize(12).fillColor(MARINE);
+      doc.text("BON DE LIVRAISON", MARGE, y + 2, { width: largeurUtile, align: "right", lineBreak: false });
+      y += 36;
+
+      // --- Dépositaire / Date ---
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(MARINE);
+      doc.text(`Dépositaire : ${c.clientNom}`, MARGE, y, { width: largeurUtile * 0.6, lineBreak: false });
+      doc.text(`Date : ${dateLabel}`, MARGE, y, { width: largeurUtile, align: "right", lineBreak: false });
+      y += 16;
+
+      // --- Tableau : produits, total, bacs vides, obs ---
+      const entetes = [...c.lignes.map((l) => l.produitNom), "Total", "Bacs vides", "Obs"];
+      const nbCol = entetes.length;
+      const largeurCol = largeurUtile / nbCol;
+
+      doc.save().rect(MARGE, y, largeurUtile, H_LIGNE).fillColor(MARINE).fill().restore();
+      doc.font("Helvetica-Bold").fontSize(7).fillColor(CREME);
+      entetes.forEach((h, i) =>
+        doc.text(h, MARGE + i * largeurCol + 3, y + 4, { width: largeurCol - 6, align: "center", lineBreak: false }),
+      );
+      y += H_LIGNE;
+
+      const valeurs = [
+        ...c.lignes.map((l) => String(l.quantite)),
+        String(c.total),
+        String(c.bacsVides),
+        c.observations ? tronquer(c.observations, 70) : "",
+      ];
+      const hauteurLigne = 22;
+      doc.save().rect(MARGE, y, largeurUtile, hauteurLigne).strokeColor(GRIS).lineWidth(0.5).stroke().restore();
+      for (let i = 1; i < nbCol; i++) {
+        doc
+          .moveTo(MARGE + i * largeurCol, y)
+          .lineTo(MARGE + i * largeurCol, y + hauteurLigne)
+          .strokeColor(GRIS)
+          .lineWidth(0.5)
+          .stroke();
+      }
+      doc.font("Helvetica").fontSize(8).fillColor(MARINE);
+      valeurs.forEach((v, i) =>
+        doc.text(v, MARGE + i * largeurCol + 3, y + 6, {
+          width: largeurCol - 6,
+          align: i === nbCol - 1 ? "left" : "center",
+          lineBreak: false,
+        }),
+      );
+      y += hauteurLigne + 8;
+
+      // --- Livré par + lignes de signature (physiques, non capturées) ---
+      const tiers = largeurUtile / 3;
+      const xChauffeur = MARGE + tiers;
+      const xDepositaire = MARGE + 2 * tiers;
+      doc.font("Helvetica").fontSize(8).fillColor(GRIS);
+      doc.text(`Livré par : ${c.livrePar ?? "…………………………"}`, MARGE, y, { width: tiers - 8, lineBreak: false });
+      doc
+        .moveTo(xChauffeur, y + 14)
+        .lineTo(xChauffeur + tiers - 12, y + 14)
+        .strokeColor(GRIS)
+        .lineWidth(0.5)
+        .stroke();
+      doc
+        .moveTo(xDepositaire, y + 14)
+        .lineTo(doc.page.width - MARGE, y + 14)
+        .strokeColor(GRIS)
+        .lineWidth(0.5)
+        .stroke();
+      doc.font("Helvetica").fontSize(7).fillColor(GRIS);
+      doc.text("Signature Chauffeur", xChauffeur, y + 17, { width: tiers - 12, align: "center", lineBreak: false });
+      doc.text("Signature Dépositaire", xDepositaire, y + 17, { width: tiers - 12, align: "center", lineBreak: false });
+      y += 34;
+
+      // --- Séparateur entre deux fiches ---
+      if (index < clients.length - 1) {
+        doc.save();
+        doc
+          .dash(3, { space: 2 })
+          .moveTo(MARGE, y)
+          .lineTo(doc.page.width - MARGE, y)
+          .strokeColor(OR)
+          .lineWidth(0.8)
+          .stroke();
+        doc.undash();
+        doc.restore();
+        y += 14;
+      }
+    });
+
+    const pages = doc.bufferedPageRange();
+    for (let i = 0; i < pages.count; i++) {
+      doc.switchToPage(pages.start + i);
+      const bas = doc.page.height - MARGE - 12;
+      doc.save();
+      doc.font("Helvetica").fontSize(7).fillColor(GRIS);
+      doc.text(
+        `Édité par ${auteurNom} le ${new Date().toLocaleString("fr-FR")} — Page ${i + 1} / ${pages.count}`,
+        MARGE,
+        bas,
+        { width: largeurUtile, align: "right", lineBreak: false },
+      );
       doc.restore();
     }
 
