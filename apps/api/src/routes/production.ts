@@ -311,7 +311,7 @@ productionRouter.put("/schema-commande", ecriture, async (req, res, next) => {
 async function chargerBonLivraisonJour(date: string): Promise<BonLivraisonJourDTO> {
   const dateObj = new Date(date);
 
-  const [produitsCatalogue, clients, bonsExistants] = await Promise.all([
+  const [produitsCatalogue, clients, bonsExistants, schemasExistants] = await Promise.all([
     prisma.produit.findMany({ where: { nom: { in: [...NOMS_PRODUITS_SCHEMA_COMMANDE] } } }),
     prisma.client.findMany({
       where: { typeClient: { nom: "Dépositaire" } },
@@ -319,6 +319,7 @@ async function chargerBonLivraisonJour(date: string): Promise<BonLivraisonJourDT
       orderBy: { nom: "asc" },
     }),
     prisma.bonLivraison.findMany({ where: { date: dateObj }, include: { lignes: true } }),
+    prisma.schemaCommande.findMany({ where: { date: dateObj }, include: { lignes: true } }),
   ]);
 
   const produits = NOMS_PRODUITS_SCHEMA_COMMANDE.map((nom) => produitsCatalogue.find((p) => p.nom === nom)).filter(
@@ -326,6 +327,9 @@ async function chargerBonLivraisonJour(date: string): Promise<BonLivraisonJourDT
   );
 
   const bonParClientId = new Map(bonsExistants.map((b) => [b.clientId, b]));
+  const totalCommandeParClientId = new Map(
+    schemasExistants.map((s) => [s.clientId, s.lignes.reduce((sum, l) => sum + l.quantite, 0)]),
+  );
 
   const clientsDTO: BonLivraisonClientDTO[] = clients.map((c) => {
     const existant = bonParClientId.get(c.id);
@@ -345,6 +349,7 @@ async function chargerBonLivraisonJour(date: string): Promise<BonLivraisonJourDT
       livrePar: existant?.livrePar ?? null,
       observations: existant?.observations ?? null,
       total: lignes.reduce((s, l) => s + l.quantite, 0),
+      totalCommande: totalCommandeParClientId.get(c.id) ?? 0,
     };
   });
 

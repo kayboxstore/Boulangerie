@@ -404,6 +404,16 @@ export interface AlerteDetteDTO {
   alerteEnvoyeeLe: string | null;
 }
 
+/**
+ * Totaux livrés du jour, par client (Bon de livraison — module Production),
+ * utilisés pour pré-remplir « Nombre de bacs reçus » à la création d'une
+ * commande, sans lier rigidement les deux modules.
+ */
+export interface LivraisonsDuJourDTO {
+  date: string;
+  totauxParClientId: Record<string, number>;
+}
+
 /** Résumé du jour du module Commandes (section 3.4). */
 export interface ResumeCommandesJourDTO {
   date: string;
@@ -765,6 +775,12 @@ export interface BonLivraisonClientDTO {
   livrePar: string | null;
   observations: string | null;
   total: number;
+  /**
+   * Total commandé (Schéma de commande, module Production) pour ce client à
+   * cette même date — simple indice visuel en cas d'écart, aucun lien rigide
+   * ni blocage entre les deux écrans, saisis volontairement indépendamment.
+   */
+  totalCommande: number;
 }
 
 /** Vue du Bon de livraison pour une date : un Dépositaire par ligne (tous les Dépositaires, saisis ou non). */

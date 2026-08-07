@@ -390,6 +390,7 @@
     "clientHintPrice": "{{qualite}} — {{prix}}/bac",
     "clientHintAdvance": " · avance disponible {{montant}} (déduite automatiquement)",
     "bacsReceived": "Nombre de bacs reçus",
+    "bacsPreRemplisHint": "Pré-rempli depuis le Bon de livraison du jour — modifiable",
     "amountReceived": "Montant reçu (Fc)",
     "previewGross": "Montant brut ({{bacs}} × {{prix}})",
     "previewAdvanceUsed": "Avance utilisée",
@@ -508,6 +509,7 @@
     "colObs": "Obs",
     "totalGeneral": "Total général : {{total}} bac(s)",
     "totalEmptyCrates": "{{total}} bac(s) vide(s) repris",
+    "gapTooltip": "Commandé (Schéma de commande) : {{commande}} — Livré : {{livre}}",
     "print": "Imprimer",
     "printError": "Impression impossible",
     "saveError": "Enregistrement impossible"

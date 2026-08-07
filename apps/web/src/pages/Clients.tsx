@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { DialogNouvelleZone } from "@/components/DialogNouvelleZone";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { formatFc, type ClientDTO, type TypeClientDTO, type ZoneDepositaireDTO } from "@lomoto/shared";
@@ -64,6 +65,7 @@ export function ClientsPage() {
   const [qualiteClient, setQualiteClient] = useState("");
   const [zoneClient, setZoneClient] = useState("");
   const [erreurClient, setErreurClient] = useState<string | null>(null);
+  const [dialogNouvelleZone, setDialogNouvelleZone] = useState(false);
 
   // La zone de dépôt (3.3 d) n'a de sens que pour la Qualité Dépositaire.
   const qualiteClientEstDepositaire =
@@ -326,14 +328,30 @@ export function ClientsPage() {
             {qualiteClientEstDepositaire && (
               <div className="space-y-2">
                 <Label htmlFor="client-zone">{t("commandes.depositZoneOptional")}</Label>
-                <NativeSelect id="client-zone" value={zoneClient} onChange={(e) => setZoneClient(e.target.value)}>
-                  <option value="">{t("commandes.noDepositZone")}</option>
-                  {zonesData?.zones.map((z) => (
-                    <option key={z.id} value={z.id}>
-                      {z.nom}
-                    </option>
-                  ))}
-                </NativeSelect>
+                <div className="flex gap-2">
+                  <NativeSelect
+                    id="client-zone"
+                    value={zoneClient}
+                    onChange={(e) => setZoneClient(e.target.value)}
+                    className="flex-1"
+                  >
+                    <option value="">{t("commandes.noDepositZone")}</option>
+                    {zonesData?.zones.map((z) => (
+                      <option key={z.id} value={z.id}>
+                        {z.nom}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={t("zonesDepot.newZone")}
+                    onClick={() => setDialogNouvelleZone(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -354,6 +372,12 @@ export function ClientsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <DialogNouvelleZone
+        open={dialogNouvelleZone}
+        onOpenChange={setDialogNouvelleZone}
+        onCreated={(zone) => setZoneClient(zone.id)}
+      />
     </div>
   );
 }

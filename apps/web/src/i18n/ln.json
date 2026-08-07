@@ -391,6 +391,7 @@
     "clientHintPrice": "{{qualite}} — {{prix}}/bac",
     "clientHintAdvance": " · avanse ezali {{montant}} (elongwami yango moko)",
     "bacsReceived": "Motango ya ba-bac eyambami",
+    "bacsPreRemplisHint": "Etondisami banda na Bon de livraison ya lelo — okoki kobongola",
     "amountReceived": "Motuya ezwami (Fc)",
     "previewGross": "Motuya mobimba ({{bacs}} × {{prix}})",
     "previewAdvanceUsed": "Avanse esalelami",
@@ -509,6 +510,7 @@
     "colObs": "Makomi",
     "totalGeneral": "Motango nyonso : {{total}} bac",
     "totalEmptyCrates": "Bacs pamba {{total}} ezongisami",
+    "gapTooltip": "Esengami (Schéma de commande) : {{commande}} — Epesami : {{livre}}",
     "print": "Kobimisa na papier",
     "printError": "Kobimisa na papier ekoki te",
     "saveError": "Kobomba ekoki te"

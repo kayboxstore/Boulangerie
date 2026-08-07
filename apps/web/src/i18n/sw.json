@@ -391,6 +391,7 @@
     "clientHintPrice": "{{qualite}} — {{prix}}/kreti",
     "clientHintAdvance": " · malipo ya awali yanayopatikana {{montant}} (yanatolewa kiotomatiki)",
     "bacsReceived": "Idadi ya kreti zilizopokelewa",
+    "bacsPreRemplisHint": "Imejazwa awali kutoka Hati ya utoaji ya leo — inaweza kubadilishwa",
     "amountReceived": "Kiasi kilichopokelewa (Fc)",
     "previewGross": "Kiasi jumla ({{bacs}} × {{prix}})",
     "previewAdvanceUsed": "Malipo ya awali yaliyotumika",
@@ -509,6 +510,7 @@
     "colObs": "Maoni",
     "totalGeneral": "Jumla kuu: {{total}} beseni",
     "totalEmptyCrates": "Beseni tupu {{total}} zimerudishwa",
+    "gapTooltip": "Iliyoagizwa (Fomu ya agizo) : {{commande}} — Iliyotolewa : {{livre}}",
     "print": "Chapisha",
     "printError": "Imeshindwa kuchapisha",
     "saveError": "Imeshindwa kuhifadhi"

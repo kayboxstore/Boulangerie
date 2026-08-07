@@ -7,6 +7,7 @@ import type { BonLivraisonClientDTO, BonLivraisonJourDTO, ZoneDepositaireDTO } f
 import { api, getToken } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/components/FeedbackProvider";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -234,7 +235,17 @@ export function BonsLivraisonPage() {
                                   />
                                 </TableCell>
                               ))}
-                              <TableCell className="text-right font-semibold">{total}</TableCell>
+                              <TableCell className="text-right font-semibold">
+                                {total}
+                                {total !== c.totalCommande && (
+                                  <Badge
+                                    className="ml-2 border-transparent bg-terracotta text-creme"
+                                    title={t("bonsLivraison.gapTooltip", { commande: c.totalCommande, livre: total })}
+                                  >
+                                    {total - c.totalCommande > 0 ? `+${total - c.totalCommande}` : total - c.totalCommande}
+                                  </Badge>
+                                )}
+                              </TableCell>
                               <TableCell className="text-right">
                                 <Input
                                   type="number"

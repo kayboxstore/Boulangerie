@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { HandCoins, Layers, Plus, RotateCcw, TriangleAlert, UserPlus, Users } from "lucide-react";
 // TriangleAlert sert au doublon ET au bandeau de dettes non payées.
@@ -11,6 +11,7 @@ import {
   type AlerteDetteDTO,
   type CommandeDTO,
   type ConflitCommandeDTO,
+  type LivraisonsDuJourDTO,
   type ResumeCommandesJourDTO,
   type StrategieDoublon,
   type TypeClientDTO,
@@ -101,6 +102,30 @@ export function CommandesPage() {
   const [erreurCommande, setErreurCommande] = useState<string | null>(null);
 
   const clientChoisi = clientsData?.clients.find((c) => c.id === clientId);
+
+  // Pré-remplissage optionnel (amélioration proactive) : si le client a déjà
+  // une livraison du jour (Bon de livraison, module Production), on suggère
+  // ce total pour « Nombre de bacs reçus » — simple indice modifiable, aucun
+  // lien rigide entre les deux modules.
+  const { data: livraisonsJour } = useQuery({
+    queryKey: ["commandes-livraisons-du-jour"],
+    queryFn: () => api<LivraisonsDuJourDTO>("/api/commandes/livraisons-du-jour"),
+    enabled: dialogCommande,
+  });
+  const [bacsPreRemplis, setBacsPreRemplis] = useState(false);
+  useEffect(() => {
+    if (!clientId || bacs) {
+      setBacsPreRemplis(false);
+      return;
+    }
+    const totalLivre = livraisonsJour?.totauxParClientId[clientId];
+    if (totalLivre && totalLivre > 0) {
+      setBacs(String(totalLivre));
+      setBacsPreRemplis(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, livraisonsJour]);
+
   const apercu = useMemo(() => {
     const nbBacs = Number(bacs);
     if (!clientChoisi || !Number.isInteger(nbBacs) || nbBacs < 1) return null;
@@ -158,6 +183,7 @@ export function CommandesPage() {
     setRecu("");
     setErreurCommande(null);
     setConflit(null);
+    setBacsPreRemplis(false);
     setDialogCommande(true);
   }
 
@@ -596,10 +622,16 @@ export function CommandesPage() {
                   min={1}
                   step={1}
                   value={bacs}
-                  onChange={(e) => setBacs(e.target.value)}
+                  onChange={(e) => {
+                    setBacs(e.target.value);
+                    setBacsPreRemplis(false);
+                  }}
                   placeholder="3"
                   required
                 />
+                {bacsPreRemplis && (
+                  <p className="text-xs text-terracotta">{t("commandes.bacsPreRemplisHint")}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="commande-recu">{t("commandes.amountReceived")}</Label>

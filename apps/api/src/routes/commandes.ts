@@ -8,6 +8,7 @@ import {
   reglementCreateSchema,
   type AlerteDetteDTO,
   type CommandeDTO,
+  type LivraisonsDuJourDTO,
   type ResumeCommandesJourDTO,
   type StrategieDoublon,
 } from "@lomoto/shared";
@@ -93,6 +94,33 @@ commandesRouter.get("/resume-jour", requirePermission("COMMANDES", "LECTURE"), a
       nbAvecDette: avecDette.length,
       totalDettes: avecDette.reduce((s, c) => s + c.dette, 0),
     };
+    res.json(dto);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Totaux livrés du jour par client (Bon de livraison — module Production),
+// pour pré-remplir « Nombre de bacs reçus » à la création d'une commande. Pas
+// de lien rigide entre les deux modules : simple indice, modifiable par
+// l'utilisateur. ?date= optionnel (AAAA-MM-JJ), sinon aujourd'hui.
+commandesRouter.get("/livraisons-du-jour", requirePermission("COMMANDES", "LECTURE"), async (req, res, next) => {
+  try {
+    const { date } = req.query as Record<string, string | undefined>;
+    const dateStr = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : jourISO(new Date());
+    const dateObj = new Date(dateStr);
+
+    const bons = await prisma.bonLivraison.findMany({
+      where: { date: dateObj },
+      include: { lignes: true },
+    });
+
+    const totauxParClientId: Record<string, number> = {};
+    for (const bon of bons) {
+      totauxParClientId[bon.clientId] = bon.lignes.reduce((s, l) => s + l.quantite, 0);
+    }
+
+    const dto: LivraisonsDuJourDTO = { date: dateStr, totauxParClientId };
     res.json(dto);
   } catch (e) {
     next(e);

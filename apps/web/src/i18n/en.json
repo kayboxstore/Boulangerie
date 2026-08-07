@@ -390,6 +390,7 @@
     "clientHintPrice": "{{qualite}} — {{prix}}/crate",
     "clientHintAdvance": " · advance available {{montant}} (deducted automatically)",
     "bacsReceived": "Number of crates received",
+    "bacsPreRemplisHint": "Pre-filled from today's Delivery note — editable",
     "amountReceived": "Amount received (Fc)",
     "previewGross": "Gross amount ({{bacs}} × {{prix}})",
     "previewAdvanceUsed": "Advance used",
@@ -508,6 +509,7 @@
     "colObs": "Notes",
     "totalGeneral": "Grand total: {{total}} crate(s)",
     "totalEmptyCrates": "{{total}} empty crate(s) collected",
+    "gapTooltip": "Ordered (Order form): {{commande}} — Delivered: {{livre}}",
     "print": "Print",
     "printError": "Could not print",
     "saveError": "Could not save"

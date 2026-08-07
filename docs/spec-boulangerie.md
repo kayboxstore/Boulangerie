@@ -245,6 +245,13 @@ liste à part, non zonée.
   les deux en écriture, pouvait alors créer une zone. Supprimer une zone ne
   bloque rien : les clients rattachés perdent simplement leur zone
   (`onDelete: SetNull`).
+- **Création rapide depuis la fiche client** *(amélioration proactive)* : un
+  bouton « + » à côté du sélecteur de zone, sur la fiche client (3.4), ouvre
+  un dialogue de création minimal (`DialogNouvelleZone`, composant
+  réutilisable) — la zone créée est immédiatement sélectionnée pour ce
+  client. Le Chargé des commandes n'a ainsi plus besoin de passer par l'écran
+  Production pour créer une zone ; la gestion complète (renommer, supprimer)
+  reste sur la carte Zones de dépôt de Production.
 - **Permissions** : identiques au Planning (a) — écriture Responsable de
   production, lecture Caissier(ère)/DG.
 
@@ -276,6 +283,14 @@ observations.
 - **Permissions** : identiques au Schéma et au Planning — écriture
   Responsable de production, lecture Caissier(ère)/DG ; l'impression, elle,
   ne demande que la lecture.
+- **Badge d'écart livré/commandé** *(amélioration proactive, purement
+  visuelle)* : la colonne Total de chaque ligne affiche un badge
+  (`+N`/`-N`, même style que le badge de Réconciliation des commandes en 3.3
+  b+c) dès que le total livré diffère du total commandé pour ce client à
+  cette date (`totalCommande`, calculé depuis le Schéma de commande, ajouté à
+  `BonLivraisonClientDTO`). Aucun blocage, aucune alimentation automatique —
+  toujours l'indépendance volontaire décrite ci-dessus, juste une visibilité
+  immédiate en cas d'écart.
 
 **Écarts** — pour une date donnée, vue comparant prévisions (a) et réalisations
 (b + c) sur : bacs, sacs de farine, levure, huile, sel. Chaque paire affiche
@@ -314,7 +329,7 @@ accessible via un bouton « Gérer les clients » sur l'écran Commandes.
 | 2 | Date | — |
 | 3 | Nom du client | — |
 | 4 | Qualité | Dépositaire / Maman / VC |
-| 5 | Nombre de bacs reçus | Saisi |
+| 5 | Nombre de bacs reçus | Saisi *(pré-rempli si le client a une livraison du jour — voir ci-dessous)* |
 | 6 | **Montant à percevoir** | `(bacs × prix unitaire) − Avance utilisée` *(l'avance du client est déduite automatiquement AVANT affichage — voir exemple)* |
 | 7 | Montant reçu | Saisi |
 | 8 | **Dette** | `max(0, Montant à percevoir − Montant reçu)` |
@@ -330,6 +345,15 @@ accessible via un bouton « Gérer les clients » sur l'écran Commandes.
 | Commande #2 (lendemain) | 5 | 30.000 | 2.000 | **28.000** | 28.000 | 0 | 0 | **0** |
 
 Le solde d'avance est porté par le **client** (pas par la commande) et se reporte automatiquement d'une commande à l'autre.
+
+**Pré-remplissage optionnel depuis le Bon de livraison** *(amélioration
+proactive, aucun lien rigide entre les deux modules)* : à l'ouverture du
+formulaire « Nouvelle commande », si le client choisi a un Bon de livraison
+enregistré ce jour-là (3.3 e), le champ « Nombre de bacs reçus » se
+pré-remplit avec le total livré — un indice visuel (`commandes.bacsPreRemplisHint`)
+signale le pré-remplissage, et le champ reste librement modifiable. Route
+dédiée `GET /api/commandes/livraisons-du-jour` (lecture module Commandes),
+sans écriture ni blocage d'aucune sorte.
 
 **Détection de doublon — une seule commande par client et par jour**
 
