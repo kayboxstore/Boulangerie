@@ -56,16 +56,16 @@
 | `apps/api/src/routes/equipe.ts` | 1 | `equipeRouter` (comptes, `verifierQuotaAdmins`, `/principal`) | `volumes/11d-equipe-roles-permissions.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/etat-systeme.ts` | 2 | `etatSystemeRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/export.ts` | 2 | `exportRouter` | À déterminer | À analyser | — | — |
-| `apps/api/src/routes/fournisseurs.ts` | 2 | `fournisseursRouter` | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/fournisseurs.ts` | 2 | `fournisseursRouter` (fournisseurs, commandes, réception) | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/notifications.ts` | 2 | `notificationsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/parametres.ts` | 2 | `parametresRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/premierLancement.ts` | 2 | `premierLancementRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/production.ts` | 2 | `productionRouter` (planning, Schéma, Bon de livraison) | À déterminer | À analyser | — | — |
-| `apps/api/src/routes/produits.ts` | 2 | `produitsRouter` | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/produits.ts` | 2 | `produitsRouter` (catalogue, `MODIFIER_TAUX_TAXE` via action critique) | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | UI `ProduitsPage` n'envoie jamais de changement de `tauxTaxe` — chemin serveur non atteint par l'UI actuelle | Aucun |
 | `apps/api/src/routes/rapports-personnels.ts` | 2 | `rapportsPersonnelsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/rapports.ts` | 2 | `rapportsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/roles.ts` | 1 | `rolesRouter` | `volumes/11d-equipe-roles-permissions.md` | Vérifié | — | Oui — voir `annexes/ecarts-spec-code.md` (aucune UI trouvée pour `PUT /:id/permissions`) |
-| `apps/api/src/routes/stocks.ts` | 2 | `stocksRouter` | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/stocks.ts` | 2 | `stocksRouter` (matières premières, journal des mouvements) | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/travailleurs.ts` | 1 | `travailleursRouter` (fiches, e-mail pro, pointages, absences, sanctions, `calculerPaieBrute`, bulletins) | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md`, `volumes/11k-3-travailleurs-paie-bulletins.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/zones-depositaires.ts` | 2 | `zonesDepositaireRouter` | À déterminer | À analyser | — | — |
 
@@ -83,7 +83,7 @@
 | `apps/api/src/services/reinitialisation.ts` | 2 | `reinitialiserBase` | À déterminer | À analyser | — | — |
 | `apps/api/src/services/sauvegarde.ts` | 2 | `construireDump`, `outilSauvegardeDisponible` | À déterminer | À analyser | — | — |
 | `apps/api/src/services/sauvegardeLocale.ts` | 2 | `ecrireSauvegardeLocale`, `lireSauvegardeLocale` | À déterminer | À analyser | — | — |
-| `apps/api/src/services/stocks.ts` | 2 | fonctions de mouvement de stock | À déterminer | À analyser | — | — |
+| `apps/api/src/services/stocks.ts` | 2 | `appliquerMouvement`, `emettreAlerteSeuil`, `ErreurStock` | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | — | Aucun |
 
 ## E. `packages/shared/src/`
 
@@ -145,15 +145,15 @@
 | `apps/web/src/pages/Dashboard.tsx` | 2 | `DashboardPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Equipe.tsx` | 1 | `EquipePage`, `messageApprobation` | `volumes/11d-equipe-roles-permissions.md` | Vérifié | Section délégations couverte sommairement, détail complet au 11e | Aucun (côté ce fichier) |
 | `apps/web/src/pages/EtatSysteme.tsx` | 2 | `EtatSystemePage` | À déterminer | À analyser | — | — |
-| `apps/web/src/pages/Fournisseurs.tsx` | 2 | `FournisseursPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Fournisseurs.tsx` | 2 | `FournisseursPage` | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Login.tsx` | 1 | `LoginPage` | `volumes/11c-connexion.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Parametres.tsx` | 2 | `ParametresPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/PremierLancement.tsx` | 2 | `PremierLancementPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Production.tsx` | 2 | `ProductionPage` | À déterminer | À analyser | — | — |
-| `apps/web/src/pages/Produits.tsx` | 2 | `ProduitsPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Produits.tsx` | 2 | `ProduitsPage` | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | N'envoie jamais de changement de `tauxTaxe` (chemin serveur non atteint) | Aucun |
 | `apps/web/src/pages/Profil.tsx` | 2 | `ProfilPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/RapportsPersonnels.tsx` | 2 | `RapportsPersonnelsPage` | À déterminer | À analyser | — | — |
-| `apps/web/src/pages/Stocks.tsx` | 2 | `StocksPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Stocks.tsx` | 2 | `StocksPage` | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Travailleurs.tsx` | 1 | `TravailleursPage` (fiches, pointages, absences) | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md` | Vérifié | — | Aucun |
 
 ## K. `apps/web/src/components/` (hors `ui/`)
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 103 |
+| À analyser | 96 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 51 |
+| Vérifié | 58 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

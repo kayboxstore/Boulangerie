@@ -69,6 +69,13 @@
 | `apps/web/src/components/ui/sheet.tsx` | `volumes/09-ui-composants.md` |
 | `apps/web/src/components/ui/table.tsx` | `volumes/09-ui-composants.md` |
 | `apps/web/src/components/ui/textarea.tsx` | `volumes/09-ui-composants.md` |
+| `apps/api/src/routes/stocks.ts` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| `apps/api/src/services/stocks.ts` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| `apps/api/src/routes/fournisseurs.ts` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| `apps/api/src/routes/produits.ts` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| `apps/web/src/pages/Stocks.tsx` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| `apps/web/src/pages/Fournisseurs.tsx` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| `apps/web/src/pages/Produits.tsx` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -127,6 +134,10 @@
 | `CarteLigne` / `CarteLigneTitre` / `CarteLigneChamp` / `CarteLigneActions` | `apps/web/src/components/ui/carte-ligne.tsx` | `volumes/09-ui-composants.md` |
 | `NativeSelect` | `apps/web/src/components/ui/select.tsx` | `volumes/09-ui-composants.md` |
 | `Sheet` (réutilise `@radix-ui/react-dialog`) | `apps/web/src/components/ui/sheet.tsx` | `volumes/09-ui-composants.md` |
+| `appliquerMouvement` / `emettreAlerteSeuil` / `ErreurStock` | `apps/api/src/services/stocks.ts` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| `stocksRouter` (`/matieres`, `/mouvements`) | `apps/api/src/routes/stocks.ts` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| `fournisseursRouter` (`/`, `/commandes`, `/commandes/:id/reception`) | `apps/api/src/routes/fournisseurs.ts` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| `produitsRouter` | `apps/api/src/routes/produits.ts` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
@@ -144,6 +155,9 @@
 | 3.14 (activation/désactivation d'un compte) | Connexion | `volumes/11c-connexion.md` |
 | 2 (5 tâches critiques : créer/supprimer un compte Admin, modifier permissions/taux/qualité) | Équipe, rôles et permissions | `volumes/11d-equipe-roles-permissions.md` |
 | 3.7 (quota de 3 Admins, réaffectation) | Équipe, rôles et permissions | `volumes/11d-equipe-roles-permissions.md` |
+| 3.2 (matières premières, mouvements, seuils) | Stocks | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| 3.6 (fournisseurs, bons de commande, réception) | Fournisseurs | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| 3.9 (catalogue produits, prix, taxes) | Produits/Paramètres | `volumes/11z-1-stocks-fournisseurs-produits.md` |
 
 ---
 

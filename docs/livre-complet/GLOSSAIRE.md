@@ -70,6 +70,8 @@
 
 ## J
 
+**Journal append-only** — Table où les lignes ne sont jamais modifiées ni supprimées après coup, seulement ajoutées : le Journal d'audit (Volume 11g) et le journal des mouvements de stock (`MouvementStock`, Volume 11z-1) en sont les deux exemples du projet. L'état courant (quantité en stock, diff affiché) est alors dérivé de ce journal plutôt que stocké séparément et modifié directement.
+
 **JWT (JSON Web Token)** — Jeton signé cryptographiquement contenant l'identité d'un utilisateur connecté (`sub`, `roleId`, `sid`), envoyé par le client à chaque requête dans l'en-tête `Authorization: Bearer <jeton>`. Signé par `lib/jwt.ts`.
 
 ## L

@@ -167,6 +167,14 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Exemple chiffré complet (350 000 Fc, 26 jours, 2 absences NJ, 1 retenue 10 000 Fc → 313 077 Fc net)
 - 25/26 fichiers Niveau 1 couverts à l'issue de ce volume (`schema.prisma`, également Niveau 1, restait à traiter — voir Volume 13, qui referme réellement le Niveau 1 à 26/26 ; correction d'une annonce prématurée faite ici initialement)
 
+### 11z-1 — Stocks, Fournisseurs et Catalogue produits ✅
+- `services/stocks.ts` : `appliquerMouvement` (point de passage unique de toute variation de stock, dans une transaction fournie par l'appelant), `franchitSeuil` (détection de transition, pas d'état), `emettreAlerteSeuil`
+- `routes/stocks.ts` : CRUD matières premières (stock initial via mouvement `ENTREE`, suppression bloquée par l'historique), journal des mouvements (`GET` plafonné à 100, `POST` manuel)
+- `routes/fournisseurs.ts` : CRUD fournisseurs, bons de commande (`CommandeFournisseur`, total en vue dérivée), réception (`updateMany` conditionnel + transaction `Serializable`, notification `RECEPTION_FOURNISSEUR`)
+- `routes/produits.ts` : catalogue sous permission `PARAMETRES` (conforme à la spec 3.9 et à la matrice de `seed.ts`), `MODIFIER_TAUX_TAXE` via `traiterActionCritique` (deuxième occurrence concrète du mécanisme du 11f)
+- Observation : `ProduitsPage` n'envoie jamais de changement de `tauxTaxe` — le chemin serveur existe mais n'est atteint par aucune UI actuelle
+- Écart repéré : aucun
+
 ## Volume 12 — API et communications réseau ⬜
 - Convention REST du projet (verbes, codes de statut, forme des erreurs `{ erreur: string }`)
 - Socket.io : événements émis/écoutés, salles par utilisateur

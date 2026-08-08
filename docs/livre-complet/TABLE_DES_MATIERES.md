@@ -52,7 +52,8 @@ Ce volume est scindé en un chapitre par domaine fonctionnel, dans l'ordre de pr
 | `11k-1-travailleurs-fiches-pointage.md` | `apps/api/src/routes/travailleurs.ts` (fiches, e-mail pro, pointage), `apps/web/src/pages/Travailleurs.tsx` (partiel) | 1 | ✅ |
 | `11k-2-travailleurs-absences-sanctions.md` | `apps/api/src/routes/travailleurs.ts` (absences, sanctions), `apps/web/src/pages/Travailleurs.tsx` (partiel) | 1 | ✅ |
 | `11k-3-travailleurs-paie-bulletins.md` | `apps/api/src/routes/travailleurs.ts` (paie, bulletins), `apps/web/src/components/PaieCard.tsx` | 1 | ✅ |
-| `11z-modules-niveau2.md` (ou plusieurs fichiers) | Stocks, Fournisseurs, Production, Départements, Notifications, À propos, Assistant, Paramètres, Export, Rapports, Zones de dépôt, Clients, Premier lancement, État système | 2 | ⬜ |
+| `11z-1-stocks-fournisseurs-produits.md` | `routes/stocks.ts`, `services/stocks.ts`, `routes/fournisseurs.ts`, `routes/produits.ts`, `pages/Stocks.tsx`, `pages/Fournisseurs.tsx`, `pages/Produits.tsx` | 2 | ✅ |
+| `11z-2` à `11z-n` (à venir) | Production, Départements, Notifications, À propos, Assistant, Paramètres, Export, Rapports, Zones de dépôt, Clients, Premier lancement, État système | 2 | ⬜ |
 
 ## Détail du Volume 22 (Guide complet d'utilisation)
 
