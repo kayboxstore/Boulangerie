@@ -34,10 +34,13 @@
 - `render.yaml` : un seul service Node sert API + frontend compilé, chaîne de build (`--include=dev`, génération Prisma, migrations, seed, build web), `healthCheckPath`
 - Écart repéré : aucun
 
-## Volume 6 — Architecture générale ⬜
-- Schéma Mermaid de l'architecture globale (client/serveur/base/Socket.io/services externes)
-- Le monorepo et la circulation d'un type depuis `packages/shared` jusqu'au rendu React
-- Séparation des responsabilités (routes → services → Prisma)
+## Volume 6 — Architecture générale ✅
+- Chapitre de synthèse (aucun nouveau fichier lu — assemble les Volumes 7, 8, 11b, 12, 13 déjà rédigés)
+- Schéma Mermaid de l'architecture globale : un seul processus Node.js sert API REST + frontend compilé + Socket.io (pas de microservices)
+- Le monorepo et la circulation d'un type depuis `packages/shared` jusqu'au rendu React (exemple `mouvementCreateSchema`/`MatierePremiereDTO`)
+- Séparation des responsabilités (routes → services → Prisma), triangle répété à l'identique dans ~26 routeurs
+- Diagramme de séquence condensé du cycle d'une requête authentifiée (permission revérifiée serveur, DTO partagé, notification synchronisée)
+- Écart repéré : aucun (section 7 de la spec)
 
 ## Volume 7 — Arborescence détaillée du projet ✅
 - Explication dossier par dossier, avec renvoi vers `INVENTAIRE_DU_PROJET.md` pour le détail fichier par fichier

@@ -11,7 +11,7 @@
 | 3 | Technologies, langages et dépendances | `03-technologies.md` | ✅ |
 | 4 | Installation de l'environnement | `04-installation.md` | ✅ |
 | 5 | Configuration et variables d'environnement | `05-configuration.md` | ✅ |
-| 6 | Architecture générale | `06-architecture.md` | ⬜ |
+| 6 | Architecture générale | `06-architecture.md` | ✅ |
 | 7 | Arborescence détaillée du projet | `07-arborescence.md` | ✅ |
 | 8 | Cycle de démarrage de l'application | `08-cycle-demarrage.md` | ✅ |
 | 9 | Interface utilisateur et composants | `09-ui-composants.md` | ✅ |
