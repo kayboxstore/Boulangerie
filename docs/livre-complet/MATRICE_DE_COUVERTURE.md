@@ -20,7 +20,6 @@
 | `apps/api/src/app.ts` | 2 | `createApp` (middlewares, montage des 26 routeurs, repli SPA, gestion d'erreurs) | `volumes/08-cycle-demarrage.md` | Vérifié | — | Aucun |
 | `apps/api/src/index.ts` | 3 | point d'entrée (serveur HTTP, Socket.io, notifications, planificateur) | `volumes/08-cycle-demarrage.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/audit.ts` | 1 | `extensionAudit`, `normaliser`, `alignerCles` | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
-| `apps/api/src/services/actionsCritiques.ts` | 1 | `EXECUTEURS`, `executerAction`, `traiterActionCritique`, `ErreurAction` | `volumes/11f-approbations.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/cloudflareEmail.ts` | 2 | `creerOuObtenirDestination`, `obtenirDestination`, `creerRegleRoutage` | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/contexteRequete.ts` | 2 | `contexteRequete` (AsyncLocalStorage) | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/events.ts` | 2 | `busEvenements`, `EvenementMetier` | `volumes/12-api-reseau.md` | Vérifié | — | Aucun |
@@ -73,7 +72,7 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `apps/api/src/services/actionsCritiques.ts` | 1 | `traiterActionCritique` | À déterminer | À analyser | — | — |
+| `apps/api/src/services/actionsCritiques.ts` | 1 | `EXECUTEURS`, `executerAction`, `traiterActionCritique`, `ErreurAction` | `volumes/11f-approbations.md` | Vérifié | — | Aucun |
 | `apps/api/src/services/email.ts` | 2 | `envoyerRapport`, `emailConfigure` (Nodemailer/Gmail) | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/api/src/services/emailPro.ts` | 2 | `declencherEmailPro`, `verifierEmailPro`, `genererAdresseProUnique` | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/api/src/services/interventionsAdmin.ts` | 2 | `notifierInterventionAdmin`, `estHorsPerimetreAdmin` | À déterminer | À analyser | — | — |
@@ -219,11 +218,18 @@
 
 ## Statistiques globales de la matrice
 
+> Audit du 2026-08-08 : la matrice ne comptait que 128 lignes de tableau pour 155 fichiers réels. Écart résolu et expliqué ci-dessous — les chiffres suivants comptent les **fichiers réels**, pas les lignes de tableau.
+
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 46 |
+| À analyser | 18 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 108 |
+| Vérifié | 136 |
+
+Méthodologie de comptage (pour que ce tableau reste vérifiable) :
+- La section F regroupe volontairement les 29 fichiers `prisma/migrations/*.sql` sur **une seule ligne de tableau** (conforme au mandat : « couvertes de façon groupée, pas ligne à ligne »). Cette ligne, à l'état Vérifié, compte donc pour **29 fichiers Vérifié**, pas pour 1 — d'où l'écart entre 128 lignes de tableau et 155 fichiers.
+- Une ligne fantôme dupliquait `apps/api/src/services/actionsCritiques.ts` (une copie correcte « Vérifié » en section A, mal placée, et une copie fantôme « À analyser » en section D). Corrigé le 2026-08-08 : une seule ligne subsiste, à sa place correcte (section D), à l'état Vérifié.
+- Les 18 fichiers réellement « À analyser » restants : `apps/api/src/lib/parametres.ts`, `apps/api/src/services/interventionsAdmin.ts`, `scripts/restaurer-sauvegarde.ts`, `apps/web/src/lib/theme.tsx`, `apps/web/src/lib/csv.ts`, `apps/web/src/lib/utils.ts`, `apps/web/src/pages/Dashboard.tsx`, `apps/web/src/pages/Profil.tsx`, `apps/web/src/components/FeedbackProvider.tsx`, et les 9 fichiers de configuration de la section M (`package.json` racine, `apps/api/package.json`, `apps/api/tsconfig.json`, `apps/web/package.json`, `apps/web/tsconfig.json`, `apps/web/vite.config.ts`, `apps/web/components.json`, `packages/shared/package.json`, `vitest.config.ts`). C'est exactement la liste couverte par le Volume 18.
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*
