@@ -229,11 +229,13 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Historique résumé des 29 migrations (chronologie par étapes, pas ligne à ligne)
 - `prisma/seed.ts` : `upsertRole` autoritatif sur la matrice de permissions, fonctions de retrofit idempotentes
 
-## Volume 14 — Authentification, autorisations et sécurité (synthèse) ⬜
-- Récapitulatif transversal (renvoie au Volume 11b pour le détail)
-- JWT : cycle de vie, secret, expiration, session unique
-- CORS (`lib/origines.ts`)
-- Constat de l'audit de sécurité réalisé dans ce dépôt (faille corrigée sur `equipe.ts`, XSS corrigé sur `APropos.tsx`) — présenté comme fait acquis, pas comme audit à refaire
+## Volume 14 — Authentification, autorisations et sécurité (synthèse) ✅
+- Récapitulatif transversal en 4 couches (origine → identité → session unique → permission), diagramme Mermaid
+- `lib/origines.ts` (nouveau) : CORS Express + Socket.io partagé, domaine canonique `www` dicté par une contrainte Render (boucle de redirection évitée)
+- JWT : cycle de vie, secret obligatoire en production, expiration 12h, `roleId` jamais utilisé pour les permissions (vérifié aussi côté Socket.io)
+- Session unique : 3 points d'entrée (HTTP, handshake Socket.io, déconnexion forcée d'un socket déjà ouvert)
+- Constat de l'audit de sécurité réalisé dans ce dépôt (faille corrigée sur `equipe.ts`/11d, XSS corrigé sur `APropos.tsx`/11z-5) — présenté comme fait acquis, pas comme audit à refaire
+- Écart repéré : aucun
 
 ## Volume 15 — Validation des données ⬜
 - Zod : schémas de `packages/shared/src/index.ts`, réutilisation front/back

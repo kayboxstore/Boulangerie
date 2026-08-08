@@ -120,6 +120,7 @@
 | `apps/web/src/lib/socket.tsx` | `volumes/12-api-reseau.md` |
 | `apps/web/src/components/ActivityFeed.tsx` | `volumes/12-api-reseau.md` |
 | `apps/web/src/components/IndicateurConnexion.tsx` | `volumes/12-api-reseau.md` |
+| `apps/api/src/lib/origines.ts` | `volumes/14-authentification-securite.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -204,6 +205,7 @@
 | `initRealtime` / `getIo` / `roomUtilisateur` / `roomRole` / `invaliderSessionUtilisateur` | `apps/api/src/lib/realtime.ts` | `volumes/12-api-reseau.md` |
 | `busEvenements` (`EvenementMetier`) | `apps/api/src/lib/events.ts` | `volumes/12-api-reseau.md` |
 | `SocketProvider` / `useSocket` | `apps/web/src/lib/socket.tsx` | `volumes/12-api-reseau.md` |
+| `verifierOrigine` | `apps/api/src/lib/origines.ts` | `volumes/14-authentification-securite.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 

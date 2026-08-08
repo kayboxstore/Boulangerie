@@ -19,7 +19,7 @@
 | 11 | Back-end, services et règles métier | `11a` à `11z` (voir détail ci-dessous) | 🟡 |
 | 12 | API et communications réseau | `12-api-reseau.md` | ✅ |
 | 13 | Base de données et migrations | `13-base-de-donnees.md` | ✅ |
-| 14 | Authentification, autorisations et sécurité (synthèse transversale) | `14-authentification-securite.md` | ⬜ |
+| 14 | Authentification, autorisations et sécurité (synthèse transversale) | `14-authentification-securite.md` | ✅ |
 | 15 | Validation des données | `15-validation.md` | ⬜ |
 | 16 | Gestion des erreurs et journalisation | `16-erreurs-journalisation.md` | ⬜ |
 | 17 | Internationalisation | `17-i18n.md` | ⬜ |
