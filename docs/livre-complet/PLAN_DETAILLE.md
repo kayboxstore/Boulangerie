@@ -244,10 +244,12 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - **Précision** : les schémas Zod ne sont jamais invoqués côté client (vérifié) — seuls les types et fonctions pures traversent, jamais la validation elle-même
 - Écart repéré : aucun
 
-## Volume 16 — Gestion des erreurs et journalisation ⬜
-- Middleware d'erreur central (`app.ts`)
-- `lib/logger.ts`
+## Volume 16 — Gestion des erreurs et journalisation ✅
+- `lib/logger.ts` (nouveau) : logging JSON structuré minimal, sans dépendance externe, `remplacantErreur` (sérialisation des `Error`, non énumérables par défaut)
+- Middleware d'erreur central de `app.ts` (détaillé) : signature à 4 paramètres, toujours journalisé avec contexte, toujours un message générique renvoyé au client
+- Motif `catch (e) { next(e); }` : hiérarchie à deux niveaux (erreurs métier nommées avec statut/message dédié vs filet générique)
 - `lib/audit.ts` (renvoi au 11g)
+- Écart repéré : aucun
 
 ## Volume 17 — Internationalisation ⬜
 - Structure des clés de traduction (`i18n/*.json`)

@@ -121,6 +121,8 @@
 | `apps/web/src/components/ActivityFeed.tsx` | `volumes/12-api-reseau.md` |
 | `apps/web/src/components/IndicateurConnexion.tsx` | `volumes/12-api-reseau.md` |
 | `apps/api/src/lib/origines.ts` | `volumes/14-authentification-securite.md` |
+| `apps/api/src/lib/logger.ts` | `volumes/16-erreurs-journalisation.md` |
+| `apps/api/src/app.ts` — middleware d'erreur centralisé | `volumes/16-erreurs-journalisation.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -206,6 +208,7 @@
 | `busEvenements` (`EvenementMetier`) | `apps/api/src/lib/events.ts` | `volumes/12-api-reseau.md` |
 | `SocketProvider` / `useSocket` | `apps/web/src/lib/socket.tsx` | `volumes/12-api-reseau.md` |
 | `verifierOrigine` | `apps/api/src/lib/origines.ts` | `volumes/14-authentification-securite.md` |
+| `logger` (`info`/`warn`/`error`) / `remplacantErreur` | `apps/api/src/lib/logger.ts` | `volumes/16-erreurs-journalisation.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 

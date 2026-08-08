@@ -26,7 +26,7 @@
 | `apps/api/src/lib/events.ts` | 2 | `busEvenements`, `EvenementMetier` | `volumes/12-api-reseau.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/ia.ts` | 2 | `repondreAssistantIA`, `appelerGemini`, `testerConnexionIA` | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/jwt.ts` | 1 | `signToken`, `verifyToken`, `JwtPayload` | `volumes/11b-authentification-permissions-bout-en-bout.md` | Vérifié | — | Aucun |
-| `apps/api/src/lib/logger.ts` | 3 | `logger` | À déterminer | À analyser | — | — |
+| `apps/api/src/lib/logger.ts` | 3 | `logger` (`info`/`warn`/`error`), `remplacantErreur` | `volumes/16-erreurs-journalisation.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/origines.ts` | 2 | `verifierOrigine`, `APEX`, `DOMAINE_CANONIQUE` | `volumes/14-authentification-securite.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/parametres.ts` | 2 | `lireParametre`, `ecrireParametre` | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/prisma.ts` | 3 | client Prisma singleton | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 52 |
+| À analyser | 51 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 102 |
+| Vérifié | 103 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*
