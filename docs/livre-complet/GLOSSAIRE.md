@@ -26,6 +26,8 @@
 
 ## C
 
+**Compare-and-set** — Technique de concurrence où une écriture n'est effectuée que si une condition sur l'état actuel est encore vraie au moment précis de l'écriture (ex. `updateMany` gardé sur une valeur `null`) — garantit qu'une seule tentative parmi plusieurs concurrentes réussit, sans verrou explicite. Utilisé pour l'alerte de dette non payée, voir Volume 11h.
+
 **CORS (Cross-Origin Resource Sharing)** — Mécanisme du navigateur qui bloque par défaut les requêtes entre deux origines différentes (domaines/ports). `lib/origines.ts` définit la liste des origines autorisées à appeler l'API.
 
 **Commission** — Somme reversée à une cliente de qualité « Maman » pour chaque bac reçu (1 650 Fc/bac au moment de l'audit). Calculée automatiquement à l'enregistrement d'une commande.

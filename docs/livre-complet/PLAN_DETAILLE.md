@@ -114,7 +114,18 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Exemple chiffré (suite du 11f) : qui apparaît comme auteur d'une action critique différée puis approuvée — l'approbateur, pas le demandeur initial
 - Écart repéré : aucun
 
-### 11h à 11k ⬜ *(prochain chapitre : 11h — Commandes)*
+### 11h — Commandes ✅
+- `bornesDuJour`, `GET /resume-jour` (tableau de bord journalier), `GET /livraisons-du-jour` (pré-remplissage optionnel)
+- `verifierAlertesDette` : vérification paresseuse, compare-and-set via `updateMany` gardé (jamais deux notifications)
+- `GET /` : liste filtrée, sans pagination (constat, pas un correctif)
+- `POST /` : les 3 cas (création, conflit, mise à jour avec Modifier/Remplacer), transaction `Serializable`, refus de Remplacer sur commande réglée, `avanceAvantCommande` enfin appliquée en pratique
+- `POST /:id/reglements` : reconstruction du prix unitaire d'origine, logique différentielle (`deltaAvance`) pour ne pas écraser l'avance déjà mouvementée par d'autres commandes
+- Côté client : `calculerCommande` réutilisée telle quelle pour l'aperçu instantané (bénéfice concret du monorepo), dialogue de conflit piloté par le `409` structuré du serveur
+- Exemple chiffré : reprise exacte de l'exemple « commande n°12 » de la spec (50→60 bacs Modifier vs 10 bacs Remplacer)
+- Écart repéré : aucun
+- Hors périmètre (renvoyé au Volume 18, Niveau 2) : fiche Client, Schéma de commande, Bon de livraison, Zones de dépôt
+
+### 11i à 11k ⬜ *(prochain chapitre : 11i — Commissions)*
 Voir `TABLE_DES_MATIERES.md`.
 
 ## Volume 12 — API et communications réseau ⬜
