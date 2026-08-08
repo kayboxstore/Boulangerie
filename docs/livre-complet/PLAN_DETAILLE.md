@@ -64,13 +64,14 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - `calculerDepenseFarine` : formule, exemple chiffré (section 3.1)
 - `aAcces` : table de vérité complète
 
-### 11b — Authentification et permissions bout en bout ⬜ *(prochain chapitre)*
-- `middleware/auth.ts` : `requireAuth`, `requirePermission`, `chargerUtilisateur` (fusion permissions + délégations + bump Admin Principal)
-- `lib/auth.tsx` (frontend) : `AuthProvider`, cycle de vie du jeton
+### 11b — Authentification et permissions bout en bout ✅
+- `lib/jwt.ts` : `signToken`, `verifyToken`, garde de démarrage sur `JWT_SECRET`
+- `middleware/auth.ts` : `requireAuth`, `requirePermission`, `chargerUtilisateur` (fusion permissions + délégations + bump Admin Principal), garde-fou de transparence de l'Admin Principal
+- `lib/auth.tsx` (frontend) : `AuthProvider`, cycle de vie du jeton, `deconnexionForcee`
 - `lib/api.ts` (frontend) : intercepteur de requêtes, gestion du 401 `SESSION_REMPLACEE`
-- Diagramme de séquence Mermaid : de la saisie du mot de passe à l'affichage du tableau de bord
+- Diagramme de séquence Mermaid : de la saisie du mot de passe à une requête protégée, y compris le cas de session remplacée
 
-### 11c à 11k ⬜
+### 11c à 11k ⬜ *(prochain chapitre : 11c — Connexion)*
 Voir `TABLE_DES_MATIERES.md`.
 
 ## Volume 12 — API et communications réseau ⬜

@@ -10,6 +10,10 @@
 |---|---|
 | `packages/shared/src/index.ts` — fonctions `calculerCommande`, `avanceAvantCommande`, `calculerDepenseFarine`, `aAcces` | `volumes/11a-noyau-financier-permissions.md` |
 | `packages/shared/src/index.test.ts` | `volumes/11a-noyau-financier-permissions.md` |
+| `apps/api/src/lib/jwt.ts` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| `apps/api/src/middleware/auth.ts` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| `apps/web/src/lib/api.ts` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| `apps/web/src/lib/auth.tsx` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -22,6 +26,13 @@
 | `calculerDepenseFarine` | `packages/shared/src/index.ts` | `volumes/11a-noyau-financier-permissions.md` |
 | `aAcces` | `packages/shared/src/index.ts` | `volumes/11a-noyau-financier-permissions.md` |
 | `CalculCommande` (type de retour) | `packages/shared/src/index.ts` | `volumes/11a-noyau-financier-permissions.md` |
+| `signToken` / `verifyToken` | `apps/api/src/lib/jwt.ts` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| `requireAuth` | `apps/api/src/middleware/auth.ts` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| `requirePermission` | `apps/api/src/middleware/auth.ts` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| `chargerUtilisateur` | `apps/api/src/middleware/auth.ts` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| `api` / `ApiError` | `apps/web/src/lib/api.ts` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| `AuthProvider` / `useAuth` | `apps/web/src/lib/auth.tsx` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| `peutLire` / `peutEcrire` | `apps/web/src/lib/auth.tsx` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
@@ -29,6 +40,8 @@
 |---|---|---|
 | 3.1 (dépense farine) | Registre de Caisse | `volumes/11a-noyau-financier-permissions.md` (formule), `volumes/11j-caisse.md` (à venir, écran complet) |
 | 3.4 (commandes, avance/dette) | Commandes clients | `volumes/11a-noyau-financier-permissions.md` (formule), `volumes/11h-commandes.md` (à venir, écran complet) |
+| 2 (rôles, hiérarchie, permissions, garde-fou Admin Principal) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| 3.7 (session unique, délégations) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md` |
 
 ---
 

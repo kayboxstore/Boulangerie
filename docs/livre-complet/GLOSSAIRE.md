@@ -56,6 +56,12 @@
 
 **Monorepo** — Dépôt Git unique contenant plusieurs paquets npm distincts (`apps/api`, `apps/web`, `packages/shared`) gérés ensemble via les *workspaces* npm.
 
+## M
+
+**Middleware** (Express) — Une fonction `(req, res, next)` insérée dans la chaîne de traitement d'une requête HTTP, exécutée avant le gestionnaire final de la route. Peut soit continuer la chaîne (`next()`), soit renvoyer directement une réponse (ex. un refus 401/403), interrompant la suite. `requireAuth` et `requirePermission` (`middleware/auth.ts`) en sont les exemples centraux de ce projet — voir Volume 11b.
+
+**Middleware factory** (fabrique de middleware) — Une fonction qui ne prend pas `(req, res, next)` directement, mais des paramètres de configuration, et **renvoie** une fonction middleware construite à partir de ces paramètres. `requirePermission(module, niveau)` en est l'exemple : elle prend un module et un niveau, et renvoie le middleware qui vérifiera précisément ce couple. Voir Volume 11b.
+
 ## N
 
 **NiveauAcces** — Le niveau d'une permission sur un module : `AUCUN`, `LECTURE` ou `ECRITURE`. `ECRITURE` implique toujours `LECTURE` (voir la fonction `aAcces`, Volume 11a).

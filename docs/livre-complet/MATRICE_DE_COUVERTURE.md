@@ -24,7 +24,7 @@
 | `apps/api/src/lib/contexteRequete.ts` | 2 | `contexteRequete` (AsyncLocalStorage) | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/events.ts` | 2 | `busEvenements` | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/ia.ts` | 2 | `repondreAssistantIA`, `appelerGemini` | À déterminer | À analyser | — | — |
-| `apps/api/src/lib/jwt.ts` | 1 | `signToken`, `verifyToken` | À déterminer | À analyser | — | — |
+| `apps/api/src/lib/jwt.ts` | 1 | `signToken`, `verifyToken`, `JwtPayload` | `volumes/11b-authentification-permissions-bout-en-bout.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/logger.ts` | 3 | `logger` | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/origines.ts` | 2 | `verifierOrigine` | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/parametres.ts` | 2 | `lireParametre`, `ecrireParametre` | À déterminer | À analyser | — | — |
@@ -35,7 +35,7 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `apps/api/src/middleware/auth.ts` | 1 | `requireAuth`, `requirePermission`, `chargerUtilisateur` | À déterminer | À analyser | — | — |
+| `apps/api/src/middleware/auth.ts` | 1 | `requireAuth`, `requirePermission`, `chargerUtilisateur` | `volumes/11b-authentification-permissions-bout-en-bout.md` | Vérifié | — | Aucun |
 
 ## C. `apps/api/src/routes/`
 
@@ -111,8 +111,8 @@
 |---|:---:|---|---|---|---|---|
 | `apps/web/src/App.tsx` | 2 | `App`, `AppAuthentifiee`, `RequiertLecture`, `RequiertEcriture` | À déterminer | À analyser | — | — |
 | `apps/web/src/main.tsx` | 3 | montage React | À déterminer | À analyser | — | — |
-| `apps/web/src/lib/api.ts` | 1 | `api`, `getToken`, `setToken`, `surSessionRemplacee` | À déterminer | À analyser | — | — |
-| `apps/web/src/lib/auth.tsx` | 1 | `AuthProvider`, `useAuth`, `peutLire`, `peutEcrire` | À déterminer | À analyser | — | — |
+| `apps/web/src/lib/api.ts` | 1 | `api`, `getToken`, `setToken`, `surSessionRemplacee`, `ApiError` | `volumes/11b-authentification-permissions-bout-en-bout.md` | Vérifié | — | Aucun |
+| `apps/web/src/lib/auth.tsx` | 1 | `AuthProvider`, `useAuth`, `peutLire`, `peutEcrire`, `login`, `logout`, `deconnexionForcee` | `volumes/11b-authentification-permissions-bout-en-bout.md` | Vérifié | — | Aucun |
 | `apps/web/src/lib/socket.tsx` | 2 | connexion Socket.io client | À déterminer | À analyser | — | — |
 | `apps/web/src/lib/theme.tsx` | 3 | thème clair/sombre | À déterminer | À analyser | — | — |
 | `apps/web/src/lib/csv.ts` | 3 | export CSV | À déterminer | À analyser | — | — |
@@ -220,9 +220,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 153 |
+| À analyser | 149 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 1 |
+| Vérifié | 5 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*
