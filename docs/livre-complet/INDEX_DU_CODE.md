@@ -40,6 +40,10 @@
 | `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
 | `apps/web/src/pages/Caisse.tsx` | `volumes/11j-caisse.md` |
 | `packages/shared/src/index.ts` — `tauxDuJourSchema`, `depenseCreateSchema`, `depenseFarineSchema`, `RegistreCaisseDTO`, `DepenseCaisseDTO` | `volumes/11j-caisse.md` |
+| `apps/api/src/routes/travailleurs.ts` | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md`, `volumes/11k-3-travailleurs-paie-bulletins.md` |
+| `apps/web/src/pages/Travailleurs.tsx` | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md` |
+| `apps/web/src/components/PaieCard.tsx` | `volumes/11k-3-travailleurs-paie-bulletins.md` |
+| `packages/shared/src/index.ts` — `travailleurCreateSchema`/`UpdateSchema`, `pointageCreerSchema`/`ModifierSchema`, `absenceDeclarerSchema`/`DecisionSchema`, `sanctionCreateSchema`, `moisISO`, `CalculPaieDTO`, `BulletinPaieDTO` | `volumes/11k-1/2/3-travailleurs-*.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -86,12 +90,18 @@
 | `caisseRouter` (`GET /registre`, `PUT /taux`, `POST /depenses`, `DELETE /depenses/:id`, `PUT /depenses/farine`) | `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
 | `construireRegistre` / `sacsUtilisesLe` | `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
 | `CaissePage` / `Poste` | `apps/web/src/pages/Caisse.tsx` | `volumes/11j-caisse.md` |
+| `versTravailleurDTO` / `validerDepartementGroupe` / `verifierCompteLie` | `apps/api/src/routes/travailleurs.ts` | `volumes/11k-1-travailleurs-fiches-pointage.md` |
+| `verifierAlertesAbsenceEnAttente` | `apps/api/src/routes/travailleurs.ts` | `volumes/11k-2-travailleurs-absences-sanctions.md` |
+| `calculerPaieBrute` / `peutConsulterBulletinsDe` | `apps/api/src/routes/travailleurs.ts` | `volumes/11k-3-travailleurs-paie-bulletins.md` |
+| `TravailleursPage` | `apps/web/src/pages/Travailleurs.tsx` | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md` |
+| `PaieCard` | `apps/web/src/components/PaieCard.tsx` | `volumes/11k-3-travailleurs-paie-bulletins.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
 | Section de `docs/spec-boulangerie.md` | Sujet | Chapitre du livre |
 |---|---|---|
 | 3.1 (registre journalier, dépense farine) | Caisse | `volumes/11a-noyau-financier-permissions.md` (formule farine), `volumes/11j-caisse.md` (écran complet) |
+| 3.18 (fiche, pointage, absence, sanction, salaire/paie, bulletins) | Travailleurs | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md`, `volumes/11k-3-travailleurs-paie-bulletins.md` |
 | 3.4 (commandes, avance/dette, doublon) | Commandes clients | `volumes/11a-noyau-financier-permissions.md` (formule), `volumes/11h-commandes.md` (écran complet) |
 | 3.11 (Commissions) | Commissions | `volumes/11i-commissions.md` |
 | 2 (rôles, hiérarchie, permissions, garde-fou Admin Principal) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md` |

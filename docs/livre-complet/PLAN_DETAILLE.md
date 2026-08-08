@@ -139,8 +139,25 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Côté client : tuile `Poste` avec alerte rouge sur solde négatif, réutilisation de `calculerDepenseFarine` pour l'estimation
 - Écart repéré : aucun
 
-### 11k ⬜ *(prochain chapitre : 11k — Travailleurs et Paie)*
-Voir `TABLE_DES_MATIERES.md`.
+### 11k-1 — Travailleurs : fiches et pointage ✅
+- `versTravailleurDTO`/`validerDepartementGroupe`/`verifierCompteLie` : garde-fous de cohérence (compte déjà lié, groupe hors département)
+- CRUD fiches ; suppression asymétrique (bloquée par les bulletins, cascade silencieuse sur pointages/absences/sanctions) — correctif documenté (spec elle-même le mentionne)
+- E-mail professionnel : délégation pure vers `services/emailPro.ts` (Niveau 2, Volume 18)
+- Pointage : horodatage complet gérant nativement les équipes de nuit ; trois états de `horodatageSortie` (absent/null/valeur) à la modification
+
+### 11k-2 — Travailleurs : absences et sanctions ✅
+- Absence : déclaration et décision comme deux actes distincts, `EN_ATTENTE` par défaut
+- Alerte « absence en attente » : même compare-and-set que `verifierAlertesDette` (11h), restreinte aux Admins malgré la lecture du DG
+- Sanction : validation croisée type/montant portée par le schéma Zod partagé, pas par la route
+- Précision : l'UI des sanctions vit dans `PaieCard.tsx`, pas `TravailleursPage`
+
+### 11k-3 — Calcul de paie et bulletins ✅
+- `calculerPaieBrute` : aucun arrondi intermédiaire, un seul arrondi final sur `salaireNet` ; bornage du mois via `setUTCMonth`
+- Vue dynamique (`GET .../paie`) vs bulletin figé (`POST .../bulletins-paie`) — même fonction, deux usages, JSON copié (pas référencé)
+- `peutConsulterBulletinsDe` : accès personnel aux bulletins hors permission de module
+- Export PDF reconstruit uniquement depuis les chiffres figés, jamais recalculé
+- Exemple chiffré complet (350 000 Fc, 26 jours, 2 absences NJ, 1 retenue 10 000 Fc → 313 077 Fc net)
+- **Clôture du Niveau 1 : les 26 fichiers Niveau 1 sont désormais tous couverts.**
 
 ## Volume 12 — API et communications réseau ⬜
 - Convention REST du projet (verbes, codes de statut, forme des erreurs `{ erreur: string }`)

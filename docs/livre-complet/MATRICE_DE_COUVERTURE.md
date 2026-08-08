@@ -66,7 +66,7 @@
 | `apps/api/src/routes/rapports.ts` | 2 | `rapportsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/roles.ts` | 1 | `rolesRouter` | `volumes/11d-equipe-roles-permissions.md` | Vérifié | — | Oui — voir `annexes/ecarts-spec-code.md` (aucune UI trouvée pour `PUT /:id/permissions`) |
 | `apps/api/src/routes/stocks.ts` | 2 | `stocksRouter` | À déterminer | À analyser | — | — |
-| `apps/api/src/routes/travailleurs.ts` | 1 | `travailleursRouter` (fiches, pointages, absences, sanctions, salaire, bulletins) | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/travailleurs.ts` | 1 | `travailleursRouter` (fiches, e-mail pro, pointages, absences, sanctions, `calculerPaieBrute`, bulletins) | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md`, `volumes/11k-3-travailleurs-paie-bulletins.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/zones-depositaires.ts` | 2 | `zonesDepositaireRouter` | À déterminer | À analyser | — | — |
 
 ## D. `apps/api/src/services/`
@@ -89,7 +89,7 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `packages/shared/src/index.ts` | 1 | `calculerCommande`, `calculerDepenseFarine`, `avanceAvantCommande`, `aAcces`, `delegationCreateSchema`, `DelegationDTO`, `TYPES_ACTION_CRITIQUE`, `STATUTS_DEMANDE`, `DemandeApprobationDTO`, `ResultatActionCritique`, `ACTIONS_AUDIT`, `AuditLogDTO`, `commandeCreateSchema`, `reglementCreateSchema`, `STRATEGIES_DOUBLON`, `CommandeDTO`, `ConflitCommandeDTO`, `montantTotalPaye`, `CommissionLigneDTO`, `calculerDepenseFarine` (application), `tauxDuJourSchema`, `depenseCreateSchema`, `depenseFarineSchema`, `RegistreCaisseDTO`, `DepenseCaisseDTO` **(couverts)** ; `formatFc`, DTO/Zod des autres modules (restant) | `volumes/11a-noyau-financier-permissions.md`, `volumes/11e-delegations.md`, `volumes/11f-approbations.md`, `volumes/11g-journal-audit.md`, `volumes/11h-commandes.md`, `volumes/11i-commissions.md`, `volumes/11j-caisse.md` (partiel) | En cours | Le fichier sert plusieurs domaines ; seules quelques fonctions/schémas financiers, permissions, délégations, actions critiques, audit, commandes, commissions et caisse sont couverts à ce stade — le reste (DTO, schémas Zod des autres modules) sera couvert au fil des chapitres correspondants | Aucun repéré sur la partie couverte |
+| `packages/shared/src/index.ts` | 1 | `calculerCommande`, `calculerDepenseFarine`, `avanceAvantCommande`, `aAcces`, `delegationCreateSchema`, `DelegationDTO`, `TYPES_ACTION_CRITIQUE`, `STATUTS_DEMANDE`, `DemandeApprobationDTO`, `ResultatActionCritique`, `ACTIONS_AUDIT`, `AuditLogDTO`, `commandeCreateSchema`, `reglementCreateSchema`, `STRATEGIES_DOUBLON`, `CommandeDTO`, `ConflitCommandeDTO`, `montantTotalPaye`, `CommissionLigneDTO`, `calculerDepenseFarine` (application), `tauxDuJourSchema`, `depenseCreateSchema`, `depenseFarineSchema`, `RegistreCaisseDTO`, `DepenseCaisseDTO`, `travailleurCreateSchema`/`UpdateSchema`, `pointageCreerSchema`/`ModifierSchema`, `absenceDeclarerSchema`/`DecisionSchema`, `sanctionCreateSchema`, `moisISO`, `CalculPaieDTO`, `BulletinPaieDTO`, `TravailleurDTO`, `PointageDTO`, `AbsenceDTO`, `SanctionDTO` **(couverts)** ; `formatFc`, DTO/Zod des autres modules (restant) | `volumes/11a-noyau-financier-permissions.md`, `volumes/11e-delegations.md`, `volumes/11f-approbations.md`, `volumes/11g-journal-audit.md`, `volumes/11h-commandes.md`, `volumes/11i-commissions.md`, `volumes/11j-caisse.md`, `volumes/11k-1/2/3-travailleurs-*.md` (partiel) | En cours | Le fichier sert plusieurs domaines ; les portions Niveau 1 (financier, permissions, délégations, actions critiques, audit, commandes, commissions, caisse, travailleurs/paie) sont désormais toutes couvertes — le reste (DTO, schémas Zod des modules Niveau 2/3) sera couvert au fil des chapitres correspondants | Aucun repéré sur la partie couverte |
 | `packages/shared/src/index.test.ts` | 1 | 11 tests Vitest (`calculerCommande` ×5, `calculerDepenseFarine` ×2, `aAcces` ×4) | `volumes/11a-noyau-financier-permissions.md` | Vérifié | — | Aucun |
 
 ## F. `prisma/`
@@ -154,7 +154,7 @@
 | `apps/web/src/pages/Profil.tsx` | 2 | `ProfilPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/RapportsPersonnels.tsx` | 2 | `RapportsPersonnelsPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Stocks.tsx` | 2 | `StocksPage` | À déterminer | À analyser | — | — |
-| `apps/web/src/pages/Travailleurs.tsx` | 1 | `TravailleursPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Travailleurs.tsx` | 1 | `TravailleursPage` (fiches, pointages, absences) | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md` | Vérifié | — | Aucun |
 
 ## K. `apps/web/src/components/` (hors `ui/`)
 
@@ -170,7 +170,7 @@
 | `apps/web/src/components/IndicateurConnexion.tsx` | 3 | `IndicateurConnexion` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/Layout.tsx` | 2 | `Layout` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/NotificationBell.tsx` | 2 | `NotificationBell` | À déterminer | À analyser | — | — |
-| `apps/web/src/components/PaieCard.tsx` | 1 | `PaieCard` | À déterminer | À analyser | — | — |
+| `apps/web/src/components/PaieCard.tsx` | 1 | `PaieCard` (sanctions, calcul de paie, bulletins) | `volumes/11k-3-travailleurs-paie-bulletins.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/PanneauEmailPro.tsx` | 2 | `PanneauEmailPro` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/ZonesDepositaireCard.tsx` | 2 | `ZonesDepositaireCard` | À déterminer | À analyser | — | — |
 
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 129 |
+| À analyser | 126 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 25 |
+| Vérifié | 28 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

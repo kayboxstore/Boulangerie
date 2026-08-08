@@ -34,6 +34,8 @@
 
 ## D
 
+**Décision (Absence)** — Acte distinct de la déclaration d'une absence, tranché par un Admin (secondaire ou Principal) : justifiée, non justifiée, ou en attente. Voir Volume 11k-2.
+
 **Délégation** — Attribution temporaire (bornée par une date de début et de fin) d'un droit d'écriture sur un module à un utilisateur qui ne l'a pas dans son rôle de base.
 
 **Dépositaire** — Type de client qui reçoit des livraisons régulières de pain pour les revendre, sans commission (contrairement aux « Mamans »).
@@ -53,6 +55,10 @@
 **Fc** — Franc congolais, la devise dans laquelle tous les montants de l'application sont exprimés. Toujours stocké en nombre entier (jamais de centimes flottants) — voir Volume 11a sur les implications de ce choix.
 
 **Fonction pure** — Une fonction dont le résultat ne dépend que de ses paramètres (deux appels avec les mêmes valeurs donnent toujours le même résultat) et qui ne modifie rien en dehors d'elle-même (pas d'écriture en base, pas d'appel réseau). Les fonctions de calcul de `packages/shared/src/index.ts` (`calculerCommande`, `calculerDepenseFarine`, `aAcces`...) sont toutes pures — voir Volume 11a.
+
+## I
+
+**Instantané figé** — Copie complète et indépendante d'un calcul à un instant donné (ex. un `BulletinPaie`), qui ne change jamais rétroactivement même si les données sources qui l'ont nourri sont modifiées après coup. S'oppose à une « vue dérivée » (Commissions, Caisse), toujours recalculée à la lecture. Voir Volume 11k-3.
 
 ## J
 
@@ -91,6 +97,8 @@
 **Rôle** — Ensemble nommé de permissions (ex. « Caissier(ère) », « Responsable de production »), attribué à un ou plusieurs comptes `Utilisateur`. Modèle `Role` en base.
 
 ## S
+
+**Sanction** — Punition ou retenue disciplinaire déclarée sur une fiche Travailleur (type `PUNITION` ou `RETENUE`) — un montant n'a de sens que pour une retenue, jamais pour une punition non financière. Voir Volume 11k-2.
 
 **Schéma de commande** — Document numérique récapitulant, pour une date donnée, ce que chaque Dépositaire/Maman a commandé. Alimente automatiquement le Planning de production. Voir section 3.3 d de la spécification.
 
