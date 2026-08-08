@@ -196,6 +196,17 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Frontend : `EtatSystemePage`, `ParametresPage` (**observation** : modification de Qualité sans distinction visuelle exécuté/en attente, contrairement à `Equipe.tsx`), `PremierLancementPage`, `NotificationBell`
 - Écart repéré : aucun
 
+### 11z-5 — À propos, Email professionnel, Assistant, Rapports, Export ✅
+- `routes/apropos.ts` : page publique, champs partagés avec Paramètres, crédit développeur réservé à cet écran
+- `services/emailPro.ts` + `lib/cloudflareEmail.ts` : mécanisme complet (déjà entrevu aux 11k-1/11z-4), deux portées Cloudflare distinctes (Compte vs Zone)
+- `routes/assistant.ts` + `lib/ia.ts` : chat support avec premier niveau IA optionnel (`ASSISTANT_IA_ACTIF`), repli automatique vers l'escalade humaine, jamais d'exception qui romprait l'envoi du message
+- `routes/rapports.ts` : 7 widgets Tableau de bord — **observation** : commentaire de `/cloture-quotidienne` obsolète (n'a pas suivi l'extension de portée aux Admins documentée dans la spec 3.8)
+- `routes/rapports-personnels.ts` : portée dédiée (`resoudrePortee`), hors matrice de permissions standard, 8 sources agrégées
+- `routes/export.ts` + `services/email.ts` + `construirePdf` générique (`services/pdf.ts`, désormais couvert intégralement) : vérification de permission a posteriori, un seul générateur PDF partagé par 3 écrans
+- Écart repéré : aucun
+
+**Clôture du Volume 11z** (5 sous-chapitres, 12 routeurs API, 12 services, ~20 composants/pages frontend).
+
 ## Volume 12 — API et communications réseau ⬜
 - Convention REST du projet (verbes, codes de statut, forme des erreurs `{ erreur: string }`)
 - Socket.io : événements émis/écoutés, salles par utilisateur

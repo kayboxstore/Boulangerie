@@ -100,6 +100,21 @@
 | `apps/web/src/pages/Parametres.tsx` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
 | `apps/web/src/pages/PremierLancement.tsx` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
 | `apps/web/src/components/NotificationBell.tsx` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/api/src/routes/apropos.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/web/src/pages/APropos.tsx` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/api/src/services/emailPro.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/api/src/lib/cloudflareEmail.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/web/src/components/PanneauEmailPro.tsx` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/api/src/routes/assistant.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/api/src/lib/ia.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/web/src/pages/Assistant.tsx` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/api/src/routes/rapports.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/api/src/routes/rapports-personnels.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/web/src/pages/RapportsPersonnels.tsx` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/api/src/routes/export.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/api/src/services/email.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/api/src/services/pdf.ts` (`construirePdf` générique) | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/web/src/components/BarreExport.tsx` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -173,6 +188,14 @@
 | `construireDump` / `coordonneesBase` | `apps/api/src/services/sauvegarde.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
 | `reinitialiserBase` | `apps/api/src/services/reinitialisation.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
 | `premierLancementRouter` (`exigerBaseVide`, 4 étapes) | `apps/api/src/routes/premierLancement.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `declencherEmailPro` / `verifierEmailPro` / `genererAdresseProUnique` | `apps/api/src/services/emailPro.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `creerOuObtenirDestination` / `creerRegleRoutage` | `apps/api/src/lib/cloudflareEmail.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `appelerGemini` / `repondreAssistantIA` / `testerConnexionIA` | `apps/api/src/lib/ia.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `assistantRouter` (`/messages`, `/escalader`, `/conversations`) | `apps/api/src/routes/assistant.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `resoudrePortee` | `apps/api/src/routes/rapports-personnels.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `construirePdf` (générique) | `apps/api/src/services/pdf.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `envoyerRapport` | `apps/api/src/services/email.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `moduleInterdit` | `apps/api/src/routes/export.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
@@ -201,6 +224,11 @@
 | 3.15 (État système, sauvegardes, réinitialisation) | État système | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
 | 3.9 (paramètres boutique, langue par défaut) | Paramètres | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
 | 3.7 (Assistant de premier lancement) | Premier lancement | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| 3.12 (À propos) | À propos | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| 3.18 (email professionnel, Cloudflare) | Email pro | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| 3.19 (Assistant, chat, IA) | Assistant | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| 3.13 (Rapports personnels, export/partage) | Rapports personnels, Export | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| 3.8 (widgets Tableau de bord) | Rapports (widgets) | `volumes/11z-5-apropos-assistant-export-rapports.md` |
 
 ---
 

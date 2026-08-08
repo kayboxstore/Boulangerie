@@ -56,7 +56,9 @@ Ce volume est scindé en un chapitre par domaine fonctionnel, dans l'ordre de pr
 | `11z-2-production.md` | `routes/production.ts`, `pages/Production.tsx`, `pages/BonsLivraison.tsx`, `services/pdf.ts` (partiel) | 2 | ✅ |
 | `11z-3-departements-zones-clients.md` | `routes/departements.ts`, `routes/zones-depositaires.ts`, `routes/clients.ts`, `DepartementsCard.tsx`, `ZonesDepositaireCard.tsx`, `DialogNouvelleZone.tsx`, `pages/Clients.tsx` | 2 | ✅ |
 | `11z-4-notifications-etat-systeme-parametres.md` | `routes/notifications.ts`, `services/notifications.ts`, `routes/etat-systeme.ts`, `services/sauvegarde*.ts`, `services/reinitialisation.ts`, `routes/parametres.ts`, `routes/premierLancement.ts`, `pages/EtatSysteme.tsx`, `pages/Parametres.tsx`, `pages/PremierLancement.tsx`, `NotificationBell.tsx` | 2 | ✅ |
-| `11z-5` (à venir) | À propos, Assistant, Export, Rapports, Rapports personnels, `construirePdf` générique | 2 | ⬜ |
+| `11z-5-apropos-assistant-export-rapports.md` | `routes/apropos.ts`, `services/emailPro.ts`, `lib/cloudflareEmail.ts`, `routes/assistant.ts`, `lib/ia.ts`, `routes/rapports.ts`, `routes/rapports-personnels.ts`, `routes/export.ts`, `services/email.ts`, `services/pdf.ts` (complet), pages et composants associés | 2 | ✅ |
+
+**Le Volume 11z (reste du back-end Niveau 2) est désormais clos en 5 sous-chapitres (11z-1 à 11z-5).**
 
 ## Détail du Volume 22 (Guide complet d'utilisation)
 
