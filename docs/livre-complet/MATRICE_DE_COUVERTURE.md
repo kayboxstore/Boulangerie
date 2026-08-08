@@ -19,17 +19,17 @@
 |---|:---:|---|---|---|---|---|
 | `apps/api/src/app.ts` | 2 | `createApp` | À déterminer | À analyser | — | — |
 | `apps/api/src/index.ts` | 3 | point d'entrée | À déterminer | À analyser | — | — |
-| `apps/api/src/lib/audit.ts` | 1 | extension Prisma d'audit | À déterminer | À analyser | — | — |
+| `apps/api/src/lib/audit.ts` | 1 | `extensionAudit`, `normaliser`, `alignerCles` | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
 | `apps/api/src/services/actionsCritiques.ts` | 1 | `EXECUTEURS`, `executerAction`, `traiterActionCritique`, `ErreurAction` | `volumes/11f-approbations.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/cloudflareEmail.ts` | 2 | `creerAdresseProfessionnelle`, etc. | À déterminer | À analyser | — | — |
-| `apps/api/src/lib/contexteRequete.ts` | 2 | `contexteRequete` (AsyncLocalStorage) | À déterminer | À analyser | — | — |
+| `apps/api/src/lib/contexteRequete.ts` | 2 | `contexteRequete` (AsyncLocalStorage) | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/events.ts` | 2 | `busEvenements` | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/ia.ts` | 2 | `repondreAssistantIA`, `appelerGemini` | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/jwt.ts` | 1 | `signToken`, `verifyToken`, `JwtPayload` | `volumes/11b-authentification-permissions-bout-en-bout.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/logger.ts` | 3 | `logger` | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/origines.ts` | 2 | `verifierOrigine` | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/parametres.ts` | 2 | `lireParametre`, `ecrireParametre` | À déterminer | À analyser | — | — |
-| `apps/api/src/lib/prisma.ts` | 3 | client Prisma singleton | À déterminer | À analyser | — | — |
+| `apps/api/src/lib/prisma.ts` | 3 | client Prisma singleton | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/realtime.ts` | 2 | `initRealtime`, `getIo`, `roomUtilisateur` | À déterminer | À analyser | — | — |
 
 ## B. `apps/api/src/middleware/`
@@ -45,7 +45,7 @@
 | `apps/api/src/routes/approbations.ts` | 1 | `approbationsRouter` (`GET /`, `POST /:id/approuver`, `POST /:id/rejeter`) | `volumes/11f-approbations.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/apropos.ts` | 2 | `aProposRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/assistant.ts` | 2 | `assistantRouter` | À déterminer | À analyser | — | — |
-| `apps/api/src/routes/audit.ts` | 2 | `auditRouter` | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/audit.ts` | 2 | `auditRouter` (`GET /`) | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/auth.ts` | 1 | `authRouter` (`/login`, `/me`, `/mot-de-passe`, `/langue`, `/etat-initial`, `/langue-defaut`) | `volumes/11c-connexion.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/caisse.ts` | 1 | `caisseRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/clients.ts` | 2 | `clientsRouter`, `typeClientsRouter` | À déterminer | À analyser | — | — |
@@ -89,7 +89,7 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `packages/shared/src/index.ts` | 1 | `calculerCommande`, `calculerDepenseFarine`, `avanceAvantCommande`, `aAcces`, `delegationCreateSchema`, `DelegationDTO`, `TYPES_ACTION_CRITIQUE`, `STATUTS_DEMANDE`, `DemandeApprobationDTO`, `ResultatActionCritique` **(couverts)** ; `formatFc`, DTO/Zod des autres modules (restant) | `volumes/11a-noyau-financier-permissions.md`, `volumes/11e-delegations.md`, `volumes/11f-approbations.md` (partiel) | En cours | Le fichier sert plusieurs domaines ; seules quelques fonctions/schémas financiers, permissions, délégations et actions critiques sont couverts à ce stade — le reste (DTO, schémas Zod des autres modules) sera couvert au fil des chapitres correspondants | Aucun repéré sur la partie couverte |
+| `packages/shared/src/index.ts` | 1 | `calculerCommande`, `calculerDepenseFarine`, `avanceAvantCommande`, `aAcces`, `delegationCreateSchema`, `DelegationDTO`, `TYPES_ACTION_CRITIQUE`, `STATUTS_DEMANDE`, `DemandeApprobationDTO`, `ResultatActionCritique`, `ACTIONS_AUDIT`, `AuditLogDTO` **(couverts)** ; `formatFc`, DTO/Zod des autres modules (restant) | `volumes/11a-noyau-financier-permissions.md`, `volumes/11e-delegations.md`, `volumes/11f-approbations.md`, `volumes/11g-journal-audit.md` (partiel) | En cours | Le fichier sert plusieurs domaines ; seules quelques fonctions/schémas financiers, permissions, délégations, actions critiques et audit sont couverts à ce stade — le reste (DTO, schémas Zod des autres modules) sera couvert au fil des chapitres correspondants | Aucun repéré sur la partie couverte |
 | `packages/shared/src/index.test.ts` | 1 | 11 tests Vitest (`calculerCommande` ×5, `calculerDepenseFarine` ×2, `aAcces` ×4) | `volumes/11a-noyau-financier-permissions.md` | Vérifié | — | Aucun |
 
 ## F. `prisma/`
@@ -136,7 +136,7 @@
 | `apps/web/src/pages/Approbations.tsx` | 1 | `ApprobationsPage`, `BadgeStatut` | `volumes/11f-approbations.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/APropos.tsx` | 2 | `AProposPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Assistant.tsx` | 2 | `AssistantPage` | À déterminer | À analyser | — | — |
-| `apps/web/src/pages/Audit.tsx` | 2 | `AuditPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Audit.tsx` | 2 | `AuditPage`, `champsPertinents` | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/BonsLivraison.tsx` | 2 | `BonsLivraisonPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Caisse.tsx` | 1 | `CaissePage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Clients.tsx` | 2 | `ClientsPage` | À déterminer | À analyser | — | — |
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 140 |
+| À analyser | 135 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 14 |
+| Vérifié | 19 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

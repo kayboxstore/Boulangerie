@@ -12,6 +12,8 @@
 
 **Approbation (workflow d'—)** — Mécanisme par lequel une action sensible demandée par un Admin secondaire est enregistrée comme `DemandeApprobation` en attente, plutôt qu'exécutée immédiatement, jusqu'à décision de l'Admin Principal.
 
+**Audit (journal d'—)** — Historique immuable de toute modification ou suppression réussie sur une entité sensible (qui, quoi, quand, valeur avant/après), alimenté automatiquement par une extension Prisma plutôt que par un appel explicite dans chaque route. Voir Volume 11g.
+
 **AsyncLocalStorage** — API native de Node.js permettant de faire circuler une valeur (ici, l'identité de l'auteur d'une requête) à travers une chaîne d'appels asynchrones sans avoir à la passer explicitement en paramètre à chaque fonction. Utilisée par `contexteRequete.ts` pour que `lib/audit.ts` sache qui a déclenché une écriture.
 
 ## B
@@ -42,6 +44,8 @@
 
 **ESM (ECMAScript Modules)** — Système de modules JavaScript standard (`import`/`export`), utilisé dans tout ce projet (`"type": "module"` dans chaque `package.json`) par opposition à l'ancien système CommonJS (`require`).
 
+**Extension Prisma** — Mécanisme natif de Prisma (`$extends`) permettant d'enrober le comportement des requêtes (ex. `update`, `delete`) sur tous les modèles à la fois, à un seul endroit, sans modifier le code de chaque route qui écrit en base. Utilisée par ce projet pour le journal d'audit, voir Volume 11g.
+
 ## F
 
 **Fc** — Franc congolais, la devise dans laquelle tous les montants de l'application sont exprimés. Toujours stocké en nombre entier (jamais de centimes flottants) — voir Volume 11a sur les implications de ce choix.
@@ -57,6 +61,8 @@
 **Maman** — Type de cliente (vocabulaire du métier, pas un terme technique) dont les commandes génèrent une commission (contrairement aux Dépositaires et à la Vente cash).
 
 **Migration (Prisma)** — Fichier SQL généré automatiquement par `prisma migrate` décrivant un changement du schéma de base de données. Le dossier `prisma/migrations/` contient l'historique complet, dans l'ordre chronologique.
+
+**MVCC (Multiversion Concurrency Control)** — Mécanisme standard de PostgreSQL permettant à une lecture de voir un instantané cohérent des données sans bloquer les écritures concurrentes. Mentionné au Volume 11g pour expliquer pourquoi une lecture « avant » dans le journal d'audit n'interfère pas avec une transaction en cours.
 
 **Module** — Dans ce projet, un domaine fonctionnel de l'application sur lequel une permission peut être accordée (ex. `COMMANDES`, `CAISSE`, `TRAVAILLEURS`). Liste fixe définie par l'énumération `Module` dans `packages/shared/src/index.ts`.
 

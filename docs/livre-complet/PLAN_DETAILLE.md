@@ -103,7 +103,18 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Exemple chiffré complet : commission Maman 1650 → 1800 Fc, du déclenchement à l'approbation
 - Écart repéré : aucun — deux nuances de granularité expliquées (Qualité entière vs prix/commission ; regroupement de champs sur `MODIFIER_TAUX_TAXE`)
 
-### 11g à 11k ⬜ *(prochain chapitre : 11g — Journal d'audit)*
+### 11g — Journal d'audit ✅
+- `contexteRequete.ts` : `AsyncLocalStorage`, ouvert par `requireAuth` (11b), lu par l'extension d'audit
+- `lib/prisma.ts` : client `base` vs client `prisma` étendu, seul point d'instanciation de `PrismaClient`
+- `MODELE_MODULE` : quels modèles sont audités et pourquoi (Notification, AuditLog, SauvegardeBase exclus)
+- `normaliser`/`alignerCles` : expurgation des champs sensibles (`CLE_SENSIBLE`), alignement du diff
+- `extensionAudit` : interception `update`/`delete` sur `$allModels`, lecture « avant » via le client `base` (pas de récursion), échec de journalisation non bloquant
+- `auditRouter` : lecture seule, filtres utilisateur/module/période, immuabilité garantie par l'absence de route d'écriture
+- `AuditPage` : filtres, diff dépliable calculé côté client (`champsPertinents`)
+- Exemple chiffré (suite du 11f) : qui apparaît comme auteur d'une action critique différée puis approuvée — l'approbateur, pas le demandeur initial
+- Écart repéré : aucun
+
+### 11h à 11k ⬜ *(prochain chapitre : 11h — Commandes)*
 Voir `TABLE_DES_MATIERES.md`.
 
 ## Volume 12 — API et communications réseau ⬜
