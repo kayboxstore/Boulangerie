@@ -43,7 +43,7 @@ Ce volume est scindé en un chapitre par domaine fonctionnel, dans l'ordre de pr
 | `11b-authentification-permissions-bout-en-bout.md` | `apps/api/src/lib/jwt.ts`, `apps/api/src/middleware/auth.ts`, `apps/web/src/lib/auth.tsx`, `apps/web/src/lib/api.ts` | 1 | ✅ |
 | `11c-connexion.md` | `apps/api/src/routes/auth.ts`, `apps/web/src/pages/Login.tsx` | 1 | ✅ |
 | `11d-equipe-roles-permissions.md` | `apps/api/src/routes/equipe.ts`, `apps/api/src/routes/roles.ts`, `apps/web/src/pages/Equipe.tsx` | 1 | ✅ |
-| `11e-delegations.md` | `apps/api/src/routes/delegations.ts` | 1 | ⬜ |
+| `11e-delegations.md` | `apps/api/src/routes/delegations.ts` | 1 | ✅ |
 | `11f-approbations.md` | `apps/api/src/services/actionsCritiques.ts`, `apps/api/src/routes/approbations.ts`, `apps/web/src/pages/Approbations.tsx` | 1 | ⬜ |
 | `11g-journal-audit.md` | `apps/api/src/lib/audit.ts` | 1 | ⬜ |
 | `11h-commandes.md` | `apps/api/src/routes/commandes.ts`, `apps/web/src/pages/Commandes.tsx` | 1 | ⬜ |

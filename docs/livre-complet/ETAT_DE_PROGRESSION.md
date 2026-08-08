@@ -4,8 +4,8 @@
 
 ## Session en cours
 
-**Date** : 2026-08-07
-**Commit de référence** : `ffe2e749ee1b6b5fcb39b69303f6518df5a65370` (branche `main-a7fm5x`)
+**Date** : 2026-08-08
+**Commit de référence** : `faa203a` (branche `main-a7fm5x`)
 
 ## 1. Point de calibrage (produit immédiatement après l'audit, comme demandé)
 
@@ -46,6 +46,7 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
 - [x] Volume 11b — Chapitre « Authentification et permissions bout en bout » : `apps/api/src/lib/jwt.ts`, `apps/api/src/middleware/auth.ts` (`requireAuth`, `requirePermission`, `chargerUtilisateur`), `apps/web/src/lib/api.ts`, `apps/web/src/lib/auth.tsx` — déroulement complet des 3 passes de fusion des permissions, du garde-fou de transparence Admin Principal, de la session unique, et diagramme de séquence Mermaid du cycle complet d'une requête authentifiée (avec le cas de session remplacée).
 - [x] Volume 11c — Chapitre « Connexion » : `apps/api/src/routes/auth.ts` (`POST /login` détaillé étape par étape — prévention de l'énumération de comptes, ordre écriture-base/notification-temps-réel, `POST /mot-de-passe`, routes publiques) et `apps/web/src/pages/Login.tsx`, avec diagramme de séquence Mermaid dédié à la déconnexion d'un appareil concurrent.
 - [x] Volume 11d — Chapitre « Équipe, rôles et permissions » : `apps/api/src/routes/equipe.ts` (`verifierQuotaAdmins`, création liée à une fiche Travailleur, activation, réaffectation, **historique complet de la faille de sécurité corrigée sur `/principal`**), `apps/api/src/routes/roles.ts` (avec un écart spec/code repéré et documenté), `apps/web/src/pages/Equipe.tsx`. Diagramme d'état Mermaid du statut Admin Principal. Premier écart ajouté à `annexes/ecarts-spec-code.md`.
+- [x] Volume 11e — Chapitre « Délégations temporaires de rôle » : `apps/api/src/routes/delegations.ts` (les 3 routes, comparaison lexicographique de dates ISO partagée avec le 11b, absence de contrôle de chevauchement et de contrôle de propriété à la révocation), `delegationCreateSchema`/`DelegationDTO` (`packages/shared/src/index.ts`), intégration côté `Equipe.tsx`. Aucun écart spec/code ; clarification d'une question laissée ouverte par la spec elle-même (un seul module par délégation).
 
 ## 3. Ce qu'il reste à faire (dans l'ordre de priorité)
 
@@ -53,8 +54,8 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
    - ~~`apps/api/src/middleware/auth.ts` + `apps/web/src/lib/auth.tsx` + `apps/web/src/lib/api.ts`~~ **fait (11b)**
    - ~~`apps/api/src/routes/auth.ts` + `apps/web/src/pages/Login.tsx`~~ **fait (11c)**
    - ~~`apps/api/src/routes/equipe.ts` + `apps/api/src/routes/roles.ts` + `apps/web/src/pages/Equipe.tsx`~~ **fait (11d)**
-   - `apps/api/src/routes/delegations.ts` *(prochain)*
-   - `apps/api/src/services/actionsCritiques.ts` + `apps/api/src/routes/approbations.ts` + `apps/web/src/pages/Approbations.tsx`
+   - ~~`apps/api/src/routes/delegations.ts`~~ **fait (11e)**
+   - `apps/api/src/services/actionsCritiques.ts` + `apps/api/src/routes/approbations.ts` + `apps/web/src/pages/Approbations.tsx` *(prochain)*
    - `apps/api/src/lib/audit.ts`
    - `apps/api/src/routes/commandes.ts` + `apps/web/src/pages/Commandes.tsx`
    - `apps/api/src/routes/commissions.ts` + `apps/web/src/pages/Commissions.tsx`
@@ -75,11 +76,11 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
 
 ## 4. Dernier fichier analysé
 
-`apps/web/src/pages/Equipe.tsx` (dans le cadre du chapitre 11d, avec `apps/api/src/routes/equipe.ts` et `apps/api/src/routes/roles.ts` — les 3 marqués « Vérifié »).
+`apps/api/src/routes/delegations.ts` (chapitre 11e), avec `delegationCreateSchema`/`DelegationDTO` (`packages/shared/src/index.ts`) et l'encart délégations de `apps/web/src/pages/Equipe.tsx` — tous marqués « Vérifié » (le fichier partagé reste « En cours » dans son ensemble, voir §6).
 
 ## 5. Prochaine tâche exacte
 
-Rédiger le chapitre **11e — Délégations**, couvrant `apps/api/src/routes/delegations.ts` (93 lignes). Ce chapitre est plus court que les précédents — il peut réutiliser directement le mécanisme déjà expliqué au Volume 11b (passe 3 de `chargerUtilisateur`, fusion des délégations actives) plutôt que de le redériver, et se concentrer sur ce que `delegations.ts` fait spécifiquement : validation des dates (`dateDebut` ≤ `dateFin`), création, révocation, éventuelles règles de chevauchement. Vérifier aussi le lien avec l'UI déjà partiellement décrite au 11d (§5.9, `creerDelegation`/`revoquerDelegation` dans `Equipe.tsx`) sans la répéter.
+Rédiger le chapitre **11f — Approbations et actions critiques**, couvrant `apps/api/src/services/actionsCritiques.ts`, `apps/api/src/routes/approbations.ts` et `apps/web/src/pages/Approbations.tsx`. Ce chapitre est central : `traiterActionCritique` a déjà été mentionné sans être détaillé aux volumes 11d (création/suppression de compte Admin) et 11e (justification du choix de ne pas y recourir pour les délégations) — il faut maintenant l'expliquer complètement (déclenchement immédiat pour l'Admin Principal vs création d'une `DemandeApprobation` en attente pour un Admin secondaire, notification de l'Admin Principal, cycle de vie d'une demande : approuver/rejeter, exécution différée de l'action une fois approuvée). Vérifier aussi comment chacune des 5 tâches critiques de la spec (section 2) est effectivement acheminée à travers ce mécanisme, en s'appuyant sur les exemples déjà rencontrés (`CREER_COMPTE_ADMIN` au 11d).
 
 ## 6. Problèmes ou incertitudes en suspens
 
@@ -88,16 +89,17 @@ Rédiger le chapitre **11e — Délégations**, couvrant `apps/api/src/routes/de
 - **Premier écart spec/code confirmé** (chapitre 11d) : aucune interface trouvée dans `apps/web/src` pour « Modifier les permissions d'un rôle » (`PUT /api/roles/:id/permissions`), pourtant listée par la spec comme l'une des 5 tâches critiques réellement disponibles. Détail complet dans `annexes/ecarts-spec-code.md`.
 - `apps/api/src/lib/jwt.ts` : le champ `roleId` du jeton JWT n'est, à la lecture du code de `requireAuth`/`chargerUtilisateur`, jamais utilisé pour construire les permissions réelles (toujours recalculées depuis la base). **Non confirmé dans le code actuel** qu'il serve à un autre usage ailleurs dans le projet — à vérifier si un chapitre futur (Socket.io, Volume 12) en révèle un usage.
 - `apps/api/src/routes/auth.ts` : aucune route de type « mot de passe oublié » n'a été repérée — **non confirmé** qu'une telle procédure existe ailleurs dans le projet. Le chapitre 11d n'a pas non plus révélé de mécanisme de réinitialisation par un Admin distinct du changement de mot de passe ordinaire ; à confirmer au Volume 22 (Guide d'utilisation).
+- `apps/api/src/routes/delegations.ts` (chapitre 11e) : aucune règle n'empêche deux délégations actives simultanées sur le même couple utilisateur/module, et `DELETE /:id` ne vérifie pas que l'appelant est l'auteur (`creeParId`) de la délégation révoquée. Ni l'un ni l'autre ne contredit la spécification (qui ne mentionne aucune de ces règles) — noté comme observation de comportement, pas comme écart ni comme faille.
 
 ## 7. Pourcentage réel de couverture (fichiers à l'état « Vérifié »)
 
 | Niveau | Vérifiés / Total | % |
 |---|---|---:|
-| Niveau 1 | 10 / 26 (`packages/shared/src/index.ts` partiellement, `packages/shared/src/index.test.ts`, `apps/api/src/lib/jwt.ts`, `apps/api/src/middleware/auth.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/lib/auth.tsx`, `apps/api/src/routes/auth.ts`, `apps/web/src/pages/Login.tsx`, `apps/api/src/routes/equipe.ts`, `apps/api/src/routes/roles.ts`, `apps/web/src/pages/Equipe.tsx`) | ~38 % (partiel) |
+| Niveau 1 | 11 / 26 (`packages/shared/src/index.ts` partiellement, `packages/shared/src/index.test.ts`, `apps/api/src/lib/jwt.ts`, `apps/api/src/middleware/auth.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/lib/auth.tsx`, `apps/api/src/routes/auth.ts`, `apps/web/src/pages/Login.tsx`, `apps/api/src/routes/equipe.ts`, `apps/api/src/routes/roles.ts`, `apps/web/src/pages/Equipe.tsx`, `apps/api/src/routes/delegations.ts`) | ~42 % (partiel) |
 | Niveau 2 | 0 / 66 | 0 % |
 | Niveau 3 | 0 / 63 | 0 % |
-| **Global** | **~11 / 155** | **~7 %** |
+| **Global** | **~12 / 155** | **~8 %** |
 
-*(`packages/shared/src/index.ts` est compté comme « partiellement vérifié » : ses fonctions financières et de permission sont couvertes en détail, mais le fichier dans son ensemble reste « En cours » tant que ses autres sections n'ont pas été traitées au fil des chapitres correspondants — voir §6. Les 9 autres fichiers Niveau 1 des chapitres 11b, 11c et 11d sont, eux, intégralement couverts et comptés comme pleinement « Vérifié ».)*
+*(`packages/shared/src/index.ts` est compté comme « partiellement vérifié » : ses fonctions financières, de permission et de délégation sont couvertes en détail, mais le fichier dans son ensemble reste « En cours » tant que ses autres sections n'ont pas été traitées au fil des chapitres correspondants — voir §6. Les 10 autres fichiers Niveau 1 des chapitres 11b à 11e sont, eux, intégralement couverts et comptés comme pleinement « Vérifié ».)*
 
-Ce pourcentage progresse régulièrement : quatre chapitres Niveau 1 complets (11a, 11b, 11c, 11d) sont maintenant posés, formant le socle sur lequel les chapitres suivants (délégations, approbations, commandes...) vont directement s'appuyer sans avoir à répéter les mécanismes déjà expliqués. Le compte réel « 10 / 26 » ci-dessus arrondit `packages/shared/src/index.ts` à une unité complète malgré sa couverture partielle, par simplicité d'affichage — la nuance reste documentée dans cette note.
+Ce pourcentage progresse régulièrement : cinq chapitres Niveau 1 complets (11a, 11b, 11c, 11d, 11e) sont maintenant posés, formant le socle sur lequel les chapitres suivants (approbations, commandes...) vont directement s'appuyer sans avoir à répéter les mécanismes déjà expliqués. Le compte réel « 11 / 26 » ci-dessus arrondit `packages/shared/src/index.ts` à une unité complète malgré sa couverture partielle, par simplicité d'affichage — la nuance reste documentée dans cette note.

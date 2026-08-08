@@ -50,7 +50,7 @@
 | `apps/api/src/routes/clients.ts` | 2 | `clientsRouter`, `typeClientsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/commandes.ts` | 1 | `commandesRouter`, `calculerCommande` (via shared) | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/commissions.ts` | 1 | `commissionsRouter` | À déterminer | À analyser | — | — |
-| `apps/api/src/routes/delegations.ts` | 1 | `delegationsRouter` | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/delegations.ts` | 1 | `delegationsRouter` (`GET /`, `POST /`, `DELETE /:id`) | `volumes/11e-delegations.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/departements.ts` | 2 | `departementsRouter`, `groupesRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/equipe.ts` | 1 | `equipeRouter` (comptes, `verifierQuotaAdmins`, `/principal`) | `volumes/11d-equipe-roles-permissions.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/etat-systeme.ts` | 2 | `etatSystemeRouter` | À déterminer | À analyser | — | — |
@@ -88,7 +88,7 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `packages/shared/src/index.ts` | 1 | `calculerCommande`, `calculerDepenseFarine`, `avanceAvantCommande`, `aAcces` **(couverts)** ; `formatFc`, DTO/Zod des autres modules (restant) | `volumes/11a-noyau-financier-permissions.md` (partiel) | En cours | Le fichier sert plusieurs domaines ; seules les 4 fonctions financières/permissions sont couvertes à ce stade — le reste (DTO, schémas Zod des autres modules) sera couvert au fil des chapitres correspondants | Aucun repéré sur la partie couverte |
+| `packages/shared/src/index.ts` | 1 | `calculerCommande`, `calculerDepenseFarine`, `avanceAvantCommande`, `aAcces`, `delegationCreateSchema`, `DelegationDTO` **(couverts)** ; `formatFc`, DTO/Zod des autres modules (restant) | `volumes/11a-noyau-financier-permissions.md`, `volumes/11e-delegations.md` (partiel) | En cours | Le fichier sert plusieurs domaines ; seules quelques fonctions/schémas financiers, permissions et délégations sont couverts à ce stade — le reste (DTO, schémas Zod des autres modules) sera couvert au fil des chapitres correspondants | Aucun repéré sur la partie couverte |
 | `packages/shared/src/index.test.ts` | 1 | 11 tests Vitest (`calculerCommande` ×5, `calculerDepenseFarine` ×2, `aAcces` ×4) | `volumes/11a-noyau-financier-permissions.md` | Vérifié | — | Aucun |
 
 ## F. `prisma/`
@@ -220,9 +220,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 144 |
+| À analyser | 143 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 10 |
+| Vérifié | 11 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

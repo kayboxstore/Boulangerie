@@ -86,7 +86,15 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - `pages/Equipe.tsx` : mutations, `messageApprobation`, gating du bouton « Rendre Principal »
 - Diagramme d'état Mermaid du statut Admin Principal
 
-### 11e à 11k ⬜ *(prochain chapitre : 11e — Délégations)*
+### 11e — Délégations temporaires de rôle ✅
+- `delegationsRouter` (`GET /`, `POST /`, `DELETE /:id`) : garde d'accès, pourquoi ce n'est pas une tâche critique
+- `versDTO` : calcul de l'état `active` par comparaison lexicographique de chaînes ISO (même ruse qu'au 11b passe 3)
+- `delegationCreateSchema` : validation des dates, `.refine()` fin ≥ début
+- Cas limites : chevauchement non contrôlé, révocation sans vérification de propriété, plafond de 100 résultats
+- Encart dédié dans `Equipe.tsx` (pas d'écran séparé)
+- Écart repéré : aucun — mais clarification d'une question laissée ouverte par la spec elle-même (un seul module par délégation)
+
+### 11f à 11k ⬜ *(prochain chapitre : 11f — Approbations et actions critiques)*
 Voir `TABLE_DES_MATIERES.md`.
 
 ## Volume 12 — API et communications réseau ⬜
