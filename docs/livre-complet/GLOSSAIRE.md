@@ -24,6 +24,8 @@
 
 **Bon de livraison** — Document (numérique dans l'application) constatant ce qui a été réellement livré à un Dépositaire, indépendamment de ce qui avait été commandé (Schéma de commande). Voir section 3.3 e de la spécification.
 
+**BOM (Byte Order Mark)** — Caractère invisible placé en tête d'un fichier texte pour en signaler explicitement l'encodage UTF-8. Ajouté par `lib/csv.ts` (frontend) en tête de chaque export CSV, sans quoi Excel en configuration française affiche les caractères accentués incorrectement. Voir Volume 18b.
+
 ## C
 
 **Compare-and-set** — Technique de concurrence où une écriture n'est effectuée que si une condition sur l'état actuel est encore vraie au moment précis de l'écriture (ex. `updateMany` gardé sur une valeur `null`) — garantit qu'une seule tentative parmi plusieurs concurrentes réussit, sans verrou explicite. Utilisé pour l'alerte de dette non payée, voir Volume 11h.
@@ -52,6 +54,8 @@
 
 **Énumération de comptes** — Faille de sécurité où un attaquant peut déduire quels e-mails correspondent à des comptes réels en observant des messages d'erreur différents selon que l'e-mail existe ou non. Ce projet s'en protège en renvoyant systématiquement le même message (« E-mail ou mot de passe incorrect ») pour les deux cas — voir Volume 11c.
 
+**execFile** — Fonction Node.js qui lance un programme externe en lui passant des arguments sous forme de tableau, sans jamais passer par un interpréteur shell — contrairement à `exec` (chaîne de commande unique), aucune valeur ne peut donc être détournée pour injecter une commande shell supplémentaire. Utilisée pour appeler `pg_dump` (Volume 11z-4) et `pg_restore` (`scripts/restaurer-sauvegarde.ts`, Volume 18a).
+
 **ESM (ECMAScript Modules)** — Système de modules JavaScript standard (`import`/`export`), utilisé dans tout ce projet (`"type": "module"` dans chaque `package.json`) par opposition à l'ancien système CommonJS (`require`).
 
 **Extension Prisma** — Mécanisme natif de Prisma (`$extends`) permettant d'enrober le comportement des requêtes (ex. `update`, `delete`) sur tous les modèles à la fois, à un seul endroit, sans modifier le code de chaque route qui écrit en base. Utilisée par ce projet pour le journal d'audit, voir Volume 11g.
@@ -61,6 +65,10 @@
 **Fc** — Franc congolais, la devise dans laquelle tous les montants de l'application sont exprimés. Toujours stocké en nombre entier (jamais de centimes flottants) — voir Volume 11a sur les implications de ce choix.
 
 **Fonction pure** — Une fonction dont le résultat ne dépend que de ses paramètres (deux appels avec les mêmes valeurs donnent toujours le même résultat) et qui ne modifie rien en dehors d'elle-même (pas d'écriture en base, pas d'appel réseau). Les fonctions de calcul de `packages/shared/src/index.ts` (`calculerCommande`, `calculerDepenseFarine`, `aAcces`...) sont toutes pures — voir Volume 11a.
+
+## G
+
+**Garde-fou de transparence (intervention Admin Principal)** — Mécanisme (`services/interventionsAdmin.ts`, Volume 18a) qui notifie en temps réel le rôle propriétaire d'un module et le DG chaque fois que l'Admin Principal écrit dans un module métier hors de son périmètre d'origine (Paramètres/Équipe/Travailleurs). Le pouvoir total de l'Admin Principal (section 2 de la spécification) reste possible, mais jamais discret.
 
 ## I
 
@@ -103,6 +111,8 @@
 **NiveauAcces** — Le niveau d'une permission sur un module : `AUCUN`, `LECTURE` ou `ECRITURE`. `ECRITURE` implique toujours `LECTURE` (voir la fonction `aAcces`, Volume 11a).
 
 ## P
+
+**ParametreBoutique** — Table Prisma générique clé/valeur (une colonne `cle`, une colonne `valeur`) qui stocke les réglages de la boutique n'ayant pas besoin d'une colonne dédiée (nom, adresse, langue par défaut...) — accédée via `lireParametre`/`ecrireParametre` (`lib/parametres.ts`, Volume 18a). Écriture par `create`/`update` explicites plutôt qu'`upsert`, pour rester visible au Journal d'audit.
 
 **Permission** — Couple (`Module`, `NiveauAcces`) attribué à un rôle. L'ensemble des permissions d'un rôle forme sa « matrice de permissions ».
 

@@ -125,6 +125,13 @@
 | `apps/api/src/app.ts` — middleware d'erreur centralisé | `volumes/16-erreurs-journalisation.md` |
 | `apps/web/src/i18n/index.ts` | `volumes/17-i18n.md` |
 | `apps/web/src/i18n/fr.json`, `en.json`, `ln.json`, `sw.json` | `volumes/17-i18n.md` |
+| `apps/api/src/lib/parametres.ts` | `volumes/18a-parametres-intervention-admin-restauration.md` |
+| `apps/api/src/services/interventionsAdmin.ts` | `volumes/18a-parametres-intervention-admin-restauration.md` |
+| `scripts/restaurer-sauvegarde.ts` | `volumes/18a-parametres-intervention-admin-restauration.md` |
+| `apps/web/src/lib/theme.tsx` | `volumes/18b-theme-csv-utils-feedback.md` |
+| `apps/web/src/lib/csv.ts` | `volumes/18b-theme-csv-utils-feedback.md` |
+| `apps/web/src/lib/utils.ts` | `volumes/18b-theme-csv-utils-feedback.md` |
+| `apps/web/src/components/FeedbackProvider.tsx` | `volumes/18b-theme-csv-utils-feedback.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -212,6 +219,12 @@
 | `verifierOrigine` | `apps/api/src/lib/origines.ts` | `volumes/14-authentification-securite.md` |
 | `logger` (`info`/`warn`/`error`) / `remplacantErreur` | `apps/api/src/lib/logger.ts` | `volumes/16-erreurs-journalisation.md` |
 | `appliquerLangue` / `RESSOURCES` | `apps/web/src/i18n/index.ts` | `volumes/17-i18n.md` |
+| `lireParametre` / `ecrireParametre` | `apps/api/src/lib/parametres.ts` | `volumes/18a-parametres-intervention-admin-restauration.md` |
+| `estHorsPerimetreAdmin` / `notifierInterventionAdmin` | `apps/api/src/services/interventionsAdmin.ts` | `volumes/18a-parametres-intervention-admin-restauration.md` |
+| `initTheme` / `ThemeProvider` / `useTheme` | `apps/web/src/lib/theme.tsx` | `volumes/18b-theme-csv-utils-feedback.md` |
+| `genererCSV` / `telechargerCSV` | `apps/web/src/lib/csv.ts` | `volumes/18b-theme-csv-utils-feedback.md` |
+| `cn` | `apps/web/src/lib/utils.ts` | `volumes/18b-theme-csv-utils-feedback.md` |
+| `FeedbackProvider` / `useFeedback` | `apps/web/src/components/FeedbackProvider.tsx` | `volumes/18b-theme-csv-utils-feedback.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
@@ -245,6 +258,8 @@
 | 3.19 (Assistant, chat, IA) | Assistant | `volumes/11z-5-apropos-assistant-export-rapports.md` |
 | 3.13 (Rapports personnels, export/partage) | Rapports personnels, Export | `volumes/11z-5-apropos-assistant-export-rapports.md` |
 | 3.8 (widgets Tableau de bord) | Rapports (widgets) | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| 2 (garde-fou intervention Admin Principal hors périmètre) | Notification d'intervention Admin | `volumes/18a-parametres-intervention-admin-restauration.md` |
+| 3.15 (État système) — restauration, hors périmètre applicatif | Restauration de sauvegarde | `volumes/18a-parametres-intervention-admin-restauration.md` |
 
 ---
 
