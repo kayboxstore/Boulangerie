@@ -142,7 +142,7 @@
 
 ## Z
 
-**Zod** — Bibliothèque de validation de schémas TypeScript. Chaque formulaire/entrée d'API du projet est validé par un schéma Zod défini dans `packages/shared/src/index.ts`, partagé entre le serveur (validation réelle) et le client (retour immédiat).
+**Zod** — Bibliothèque de validation de schémas TypeScript. Chaque entrée d'API du projet est validée par un schéma Zod (53 au total) défini dans `packages/shared/src/index.ts`, invoqué via `safeParse` — 55 occurrences identiques à travers les routes (Volume 15). **Précision (Volume 15)** : les schémas eux-mêmes ne sont jamais invoqués côté client (vérifié par recherche exhaustive) — seuls les types dérivés (`z.infer`) et certaines fonctions de calcul pures qui les accompagnent (ex. `calculerCommande`) traversent vers le frontend, pour un confort de saisie, jamais pour la validation réelle, toujours assurée côté serveur.
 
 **Zone de dépôt** — Regroupement purement organisationnel de Dépositaires (ex. « Centre-ville »), sans effet sur les prix, utilisé pour trier l'affichage du Schéma de commande et du Bon de livraison.
 

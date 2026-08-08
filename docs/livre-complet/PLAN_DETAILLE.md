@@ -237,9 +237,12 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Constat de l'audit de sécurité réalisé dans ce dépôt (faille corrigée sur `equipe.ts`/11d, XSS corrigé sur `APropos.tsx`/11z-5) — présenté comme fait acquis, pas comme audit à refaire
 - Écart repéré : aucun
 
-## Volume 15 — Validation des données ⬜
-- Zod : schémas de `packages/shared/src/index.ts`, réutilisation front/back
-- Où la validation a lieu (toujours côté serveur, jamais fait confiance au client)
+## Volume 15 — Validation des données ✅
+- Synthèse transversale (aucun nouveau fichier) : 53 schémas Zod, motif `safeParse` identique à 55 emplacements
+- `setErrorMap` global (filet) + message dédié par champ (principal) — réalise le ton clair exigé par la spec 3.8
+- `.partial()`/`.omit()` pour dériver les schémas de mise à jour sans dupliquer les règles ; `.refine()` pour les règles inter-champs (11 usages)
+- **Précision** : les schémas Zod ne sont jamais invoqués côté client (vérifié) — seuls les types et fonctions pures traversent, jamais la validation elle-même
+- Écart repéré : aucun
 
 ## Volume 16 — Gestion des erreurs et journalisation ⬜
 - Middleware d'erreur central (`app.ts`)
