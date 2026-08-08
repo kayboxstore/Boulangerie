@@ -45,14 +45,15 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
 - [x] Volume 11a — Chapitre « Noyau financier et permissions » : premier chapitre Niveau 1 complet sur `packages/shared/src/index.ts` (fonctions `calculerCommande`, `avanceAvantCommande`, `calculerDepenseFarine`, `aAcces`), avec exemples chiffrés bout en bout, table de vérité de `aAcces`, et confrontation avec `packages/shared/src/index.test.ts`.
 - [x] Volume 11b — Chapitre « Authentification et permissions bout en bout » : `apps/api/src/lib/jwt.ts`, `apps/api/src/middleware/auth.ts` (`requireAuth`, `requirePermission`, `chargerUtilisateur`), `apps/web/src/lib/api.ts`, `apps/web/src/lib/auth.tsx` — déroulement complet des 3 passes de fusion des permissions, du garde-fou de transparence Admin Principal, de la session unique, et diagramme de séquence Mermaid du cycle complet d'une requête authentifiée (avec le cas de session remplacée).
 - [x] Volume 11c — Chapitre « Connexion » : `apps/api/src/routes/auth.ts` (`POST /login` détaillé étape par étape — prévention de l'énumération de comptes, ordre écriture-base/notification-temps-réel, `POST /mot-de-passe`, routes publiques) et `apps/web/src/pages/Login.tsx`, avec diagramme de séquence Mermaid dédié à la déconnexion d'un appareil concurrent.
+- [x] Volume 11d — Chapitre « Équipe, rôles et permissions » : `apps/api/src/routes/equipe.ts` (`verifierQuotaAdmins`, création liée à une fiche Travailleur, activation, réaffectation, **historique complet de la faille de sécurité corrigée sur `/principal`**), `apps/api/src/routes/roles.ts` (avec un écart spec/code repéré et documenté), `apps/web/src/pages/Equipe.tsx`. Diagramme d'état Mermaid du statut Admin Principal. Premier écart ajouté à `annexes/ecarts-spec-code.md`.
 
 ## 3. Ce qu'il reste à faire (dans l'ordre de priorité)
 
 1. **Volumes Niveau 1 restants** (priorité absolue, dans cet ordre suggéré car chaque fichier s'appuie sur les précédents) :
    - ~~`apps/api/src/middleware/auth.ts` + `apps/web/src/lib/auth.tsx` + `apps/web/src/lib/api.ts`~~ **fait (11b)**
    - ~~`apps/api/src/routes/auth.ts` + `apps/web/src/pages/Login.tsx`~~ **fait (11c)**
-   - `apps/api/src/routes/equipe.ts` + `apps/api/src/routes/roles.ts` + `apps/web/src/pages/Equipe.tsx` *(prochain)*
-   - `apps/api/src/routes/delegations.ts`
+   - ~~`apps/api/src/routes/equipe.ts` + `apps/api/src/routes/roles.ts` + `apps/web/src/pages/Equipe.tsx`~~ **fait (11d)**
+   - `apps/api/src/routes/delegations.ts` *(prochain)*
    - `apps/api/src/services/actionsCritiques.ts` + `apps/api/src/routes/approbations.ts` + `apps/web/src/pages/Approbations.tsx`
    - `apps/api/src/lib/audit.ts`
    - `apps/api/src/routes/commandes.ts` + `apps/web/src/pages/Commandes.tsx`
@@ -74,29 +75,29 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
 
 ## 4. Dernier fichier analysé
 
-`apps/web/src/pages/Login.tsx` (dans le cadre du chapitre 11c, avec `apps/api/src/routes/auth.ts` — les 2 marqués « Vérifié »).
+`apps/web/src/pages/Equipe.tsx` (dans le cadre du chapitre 11d, avec `apps/api/src/routes/equipe.ts` et `apps/api/src/routes/roles.ts` — les 3 marqués « Vérifié »).
 
 ## 5. Prochaine tâche exacte
 
-Rédiger le chapitre **11d — Équipe, rôles et permissions**, couvrant `apps/api/src/routes/equipe.ts`, `apps/api/src/routes/roles.ts` et `apps/web/src/pages/Equipe.tsx`. Ce chapitre doit impérativement couvrir en détail la route `POST /equipe/:id/principal` — c'est là qu'une faille de sécurité réelle (élévation de privilège : un Admin secondaire pouvait s'auto-promouvoir Principal) a été découverte et corrigée dans l'historique de ce dépôt ; le chapitre doit expliquer le mécanisme de garde (`estAdminPrincipal`) tel qu'il existe maintenant, avec le contexte de cette correction au passage (sans refaire l'audit, juste l'expliquer comme fait acquis). Vérifier aussi le mécanisme de quota (max 3 comptes Administrateur) et le lien avec `traiterActionCritique` (Volume 11f, pas encore rédigé) pour les autres actions sensibles du module.
+Rédiger le chapitre **11e — Délégations**, couvrant `apps/api/src/routes/delegations.ts` (93 lignes). Ce chapitre est plus court que les précédents — il peut réutiliser directement le mécanisme déjà expliqué au Volume 11b (passe 3 de `chargerUtilisateur`, fusion des délégations actives) plutôt que de le redériver, et se concentrer sur ce que `delegations.ts` fait spécifiquement : validation des dates (`dateDebut` ≤ `dateFin`), création, révocation, éventuelles règles de chevauchement. Vérifier aussi le lien avec l'UI déjà partiellement décrite au 11d (§5.9, `creerDelegation`/`revoquerDelegation` dans `Equipe.tsx`) sans la répéter.
 
 ## 6. Problèmes ou incertitudes en suspens
 
 - Aucun `CLAUDE.md`/`AGENTS.md` trouvé : confirmé absent, pas une lacune de l'audit.
 - Le fichier `packages/shared/src/index.ts` sert plusieurs domaines fonctionnels (Commandes, Production, Stocks, RH, Caisse, À propos, Assistant...) dans un seul fichier de 1942 lignes. Le livre le traite en **plusieurs passages**, un par domaine, plutôt qu'en un seul chapitre monolithique — chaque passage sera référencé dans la matrice avec le chapitre où il apparaît. Ce choix sera rappelé dans `INDEX_DU_CODE.md`.
-- Aucun écart entre code et spec n'a encore été confirmé à ce stade (les fichiers Niveau 1 des chapitres 11a, 11b et 11c ont été croisés avec la spec, et correspondent tous). Le registre `annexes/ecarts-spec-code.md` est créé mais vide pour l'instant — il se remplira au fil des chapitres.
+- **Premier écart spec/code confirmé** (chapitre 11d) : aucune interface trouvée dans `apps/web/src` pour « Modifier les permissions d'un rôle » (`PUT /api/roles/:id/permissions`), pourtant listée par la spec comme l'une des 5 tâches critiques réellement disponibles. Détail complet dans `annexes/ecarts-spec-code.md`.
 - `apps/api/src/lib/jwt.ts` : le champ `roleId` du jeton JWT n'est, à la lecture du code de `requireAuth`/`chargerUtilisateur`, jamais utilisé pour construire les permissions réelles (toujours recalculées depuis la base). **Non confirmé dans le code actuel** qu'il serve à un autre usage ailleurs dans le projet — à vérifier si un chapitre futur (Socket.io, Volume 12) en révèle un usage.
-- `apps/api/src/routes/auth.ts` : aucune route de type « mot de passe oublié » n'a été repérée — **non confirmé** qu'une telle procédure existe ailleurs dans le projet ; à confirmer au Volume 22 (Guide d'utilisation) ou si un chapitre futur (Équipe, 11d) révèle que la réinitialisation passe uniquement par un Admin.
+- `apps/api/src/routes/auth.ts` : aucune route de type « mot de passe oublié » n'a été repérée — **non confirmé** qu'une telle procédure existe ailleurs dans le projet. Le chapitre 11d n'a pas non plus révélé de mécanisme de réinitialisation par un Admin distinct du changement de mot de passe ordinaire ; à confirmer au Volume 22 (Guide d'utilisation).
 
 ## 7. Pourcentage réel de couverture (fichiers à l'état « Vérifié »)
 
 | Niveau | Vérifiés / Total | % |
 |---|---|---:|
-| Niveau 1 | 7 / 26 (`packages/shared/src/index.ts` partiellement, `packages/shared/src/index.test.ts`, `apps/api/src/lib/jwt.ts`, `apps/api/src/middleware/auth.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/lib/auth.tsx`, `apps/api/src/routes/auth.ts`, `apps/web/src/pages/Login.tsx`) | ~27 % (partiel) |
+| Niveau 1 | 10 / 26 (`packages/shared/src/index.ts` partiellement, `packages/shared/src/index.test.ts`, `apps/api/src/lib/jwt.ts`, `apps/api/src/middleware/auth.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/lib/auth.tsx`, `apps/api/src/routes/auth.ts`, `apps/web/src/pages/Login.tsx`, `apps/api/src/routes/equipe.ts`, `apps/api/src/routes/roles.ts`, `apps/web/src/pages/Equipe.tsx`) | ~38 % (partiel) |
 | Niveau 2 | 0 / 66 | 0 % |
 | Niveau 3 | 0 / 63 | 0 % |
-| **Global** | **~8 / 155** | **~5 %** |
+| **Global** | **~11 / 155** | **~7 %** |
 
-*(`packages/shared/src/index.ts` est compté comme « partiellement vérifié » : ses fonctions financières et de permission sont couvertes en détail, mais le fichier dans son ensemble reste « En cours » tant que ses autres sections n'ont pas été traitées au fil des chapitres correspondants — voir §6. Les 6 autres fichiers Niveau 1 des chapitres 11b et 11c sont, eux, intégralement couverts et comptés comme pleinement « Vérifié ».)*
+*(`packages/shared/src/index.ts` est compté comme « partiellement vérifié » : ses fonctions financières et de permission sont couvertes en détail, mais le fichier dans son ensemble reste « En cours » tant que ses autres sections n'ont pas été traitées au fil des chapitres correspondants — voir §6. Les 9 autres fichiers Niveau 1 des chapitres 11b, 11c et 11d sont, eux, intégralement couverts et comptés comme pleinement « Vérifié ».)*
 
-Ce pourcentage progresse régulièrement : trois chapitres Niveau 1 complets (11a, 11b, 11c) sont maintenant posés, formant le socle sur lequel les chapitres suivants (équipe/rôles, approbations, commandes...) vont directement s'appuyer sans avoir à répéter les mécanismes déjà expliqués. Le compte réel « 7 / 26 » ci-dessus arrondit `packages/shared/src/index.ts` à une unité complète malgré sa couverture partielle, par simplicité d'affichage — la nuance reste documentée dans cette note.
+Ce pourcentage progresse régulièrement : quatre chapitres Niveau 1 complets (11a, 11b, 11c, 11d) sont maintenant posés, formant le socle sur lequel les chapitres suivants (délégations, approbations, commandes...) vont directement s'appuyer sans avoir à répéter les mécanismes déjà expliqués. Le compte réel « 10 / 26 » ci-dessus arrondit `packages/shared/src/index.ts` à une unité complète malgré sa couverture partielle, par simplicité d'affichage — la nuance reste documentée dans cette note.

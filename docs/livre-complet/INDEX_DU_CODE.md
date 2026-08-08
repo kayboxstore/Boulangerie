@@ -16,6 +16,9 @@
 | `apps/web/src/lib/auth.tsx` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
 | `apps/api/src/routes/auth.ts` | `volumes/11c-connexion.md` |
 | `apps/web/src/pages/Login.tsx` | `volumes/11c-connexion.md` |
+| `apps/api/src/routes/equipe.ts` | `volumes/11d-equipe-roles-permissions.md` |
+| `apps/api/src/routes/roles.ts` | `volumes/11d-equipe-roles-permissions.md` |
+| `apps/web/src/pages/Equipe.tsx` | `volumes/11d-equipe-roles-permissions.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -38,6 +41,10 @@
 | `authRouter` (`/login`, `/me`, `/mot-de-passe`, `/langue`, `/etat-initial`, `/langue-defaut`) | `apps/api/src/routes/auth.ts` | `volumes/11c-connexion.md` |
 | `LoginPage` | `apps/web/src/pages/Login.tsx` | `volumes/11c-connexion.md` |
 | `invaliderSessionUtilisateur` | `apps/api/src/lib/realtime.ts` | `volumes/11c-connexion.md` (introduction ; détail complet au Volume 12) |
+| `verifierQuotaAdmins` | `apps/api/src/routes/equipe.ts` | `volumes/11d-equipe-roles-permissions.md` |
+| `equipeRouter` (comptes, `/principal`, `/activation`) | `apps/api/src/routes/equipe.ts` | `volumes/11d-equipe-roles-permissions.md` |
+| `rolesRouter` (`/`, `/:id/permissions`) | `apps/api/src/routes/roles.ts` | `volumes/11d-equipe-roles-permissions.md` |
+| `EquipePage` / `messageApprobation` | `apps/web/src/pages/Equipe.tsx` | `volumes/11d-equipe-roles-permissions.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
@@ -48,6 +55,8 @@
 | 2 (rôles, hiérarchie, permissions, garde-fou Admin Principal) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md` |
 | 3.7 (session unique, délégations) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md`, `volumes/11c-connexion.md` |
 | 3.14 (activation/désactivation d'un compte) | Connexion | `volumes/11c-connexion.md` |
+| 2 (5 tâches critiques : créer/supprimer un compte Admin, modifier permissions/taux/qualité) | Équipe, rôles et permissions | `volumes/11d-equipe-roles-permissions.md` |
+| 3.7 (quota de 3 Admins, réaffectation) | Équipe, rôles et permissions | `volumes/11d-equipe-roles-permissions.md` |
 
 ---
 

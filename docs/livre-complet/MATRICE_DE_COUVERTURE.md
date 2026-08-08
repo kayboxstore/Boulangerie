@@ -52,7 +52,7 @@
 | `apps/api/src/routes/commissions.ts` | 1 | `commissionsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/delegations.ts` | 1 | `delegationsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/departements.ts` | 2 | `departementsRouter`, `groupesRouter` | À déterminer | À analyser | — | — |
-| `apps/api/src/routes/equipe.ts` | 1 | `equipeRouter` (comptes, rôles, `/principal`) | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/equipe.ts` | 1 | `equipeRouter` (comptes, `verifierQuotaAdmins`, `/principal`) | `volumes/11d-equipe-roles-permissions.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/etat-systeme.ts` | 2 | `etatSystemeRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/export.ts` | 2 | `exportRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/fournisseurs.ts` | 2 | `fournisseursRouter` | À déterminer | À analyser | — | — |
@@ -63,7 +63,7 @@
 | `apps/api/src/routes/produits.ts` | 2 | `produitsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/rapports-personnels.ts` | 2 | `rapportsPersonnelsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/rapports.ts` | 2 | `rapportsRouter` | À déterminer | À analyser | — | — |
-| `apps/api/src/routes/roles.ts` | 1 | `rolesRouter` | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/roles.ts` | 1 | `rolesRouter` | `volumes/11d-equipe-roles-permissions.md` | Vérifié | — | Oui — voir `annexes/ecarts-spec-code.md` (aucune UI trouvée pour `PUT /:id/permissions`) |
 | `apps/api/src/routes/stocks.ts` | 2 | `stocksRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/travailleurs.ts` | 1 | `travailleursRouter` (fiches, pointages, absences, sanctions, salaire, bulletins) | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/zones-depositaires.ts` | 2 | `zonesDepositaireRouter` | À déterminer | À analyser | — | — |
@@ -142,7 +142,7 @@
 | `apps/web/src/pages/Commandes.tsx` | 1 | `CommandesPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Commissions.tsx` | 1 | `CommissionsPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Dashboard.tsx` | 2 | `DashboardPage` | À déterminer | À analyser | — | — |
-| `apps/web/src/pages/Equipe.tsx` | 1 | `EquipePage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Equipe.tsx` | 1 | `EquipePage`, `messageApprobation` | `volumes/11d-equipe-roles-permissions.md` | Vérifié | Section délégations couverte sommairement, détail complet au 11e | Aucun (côté ce fichier) |
 | `apps/web/src/pages/EtatSysteme.tsx` | 2 | `EtatSystemePage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Fournisseurs.tsx` | 2 | `FournisseursPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Login.tsx` | 1 | `LoginPage` | `volumes/11c-connexion.md` | Vérifié | — | Aucun |
@@ -220,9 +220,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 147 |
+| À analyser | 144 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 7 |
+| Vérifié | 10 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

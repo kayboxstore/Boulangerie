@@ -76,7 +76,17 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - `pages/Login.tsx` : délégation à `useAuth().login`, affichage du message de session remplacée
 - Diagramme de séquence Mermaid : connexion avec déconnexion d'un appareil concurrent
 
-### 11d à 11k ⬜ *(prochain chapitre : 11d — Équipe, rôles et permissions)*
+### 11d — Équipe, rôles et permissions ✅
+- `verifierQuotaAdmins` (max 3 comptes Administrateur)
+- `POST /equipe` : création liée à une fiche Travailleur (pas d'e-mail libre), aiguillage compte ordinaire vs Admin
+- `PUT /equipe/:id/activation`, `PUT /equipe/:id` (réaffectation, notification temps réel)
+- `POST /equipe/:id/principal` : mécanisme actuel **et** historique complet de la faille de sécurité corrigée (élévation de privilège)
+- `DELETE /equipe/:id`
+- `routes/roles.ts` : matrice de permissions, écart repéré (aucune UI pour `PUT /:id/permissions`)
+- `pages/Equipe.tsx` : mutations, `messageApprobation`, gating du bouton « Rendre Principal »
+- Diagramme d'état Mermaid du statut Admin Principal
+
+### 11e à 11k ⬜ *(prochain chapitre : 11e — Délégations)*
 Voir `TABLE_DES_MATIERES.md`.
 
 ## Volume 12 — API et communications réseau ⬜

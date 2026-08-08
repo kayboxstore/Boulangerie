@@ -4,6 +4,8 @@
 
 ## A
 
+**Action critique** (ou tâche critique) — L'une des 5 actions sensibles listées par la spécification (section 2) : supprimer un utilisateur, créer/supprimer un compte Admin, modifier les prix/commissions par Qualité, modifier le taux de taxe, modifier les permissions d'un rôle. Exécutée immédiatement si l'auteur est l'Admin Principal, mise en attente d'approbation sinon — voir `traiterActionCritique`, Volume 11f.
+
 **Admin Principal** — Le compte Administrateur unique (un seul à la fois) qui a l'écriture sur absolument tous les modules et exécute directement toutes les actions critiques (section 2 de la spécification). Se distingue d'un Admin secondaire par le seul champ booléen `Utilisateur.estAdminPrincipal` — les deux partagent le même rôle « Administrateur ».
 
 **Admin secondaire** — Compte de rôle « Administrateur » dont `estAdminPrincipal` vaut `false`. Ses actions les plus sensibles (supprimer un compte, modifier les permissions d'un rôle) sont mises en attente d'approbation par l'Admin Principal plutôt qu'exécutées directement — voir `traiterActionCritique`.
