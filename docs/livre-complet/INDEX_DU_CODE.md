@@ -123,6 +123,8 @@
 | `apps/api/src/lib/origines.ts` | `volumes/14-authentification-securite.md` |
 | `apps/api/src/lib/logger.ts` | `volumes/16-erreurs-journalisation.md` |
 | `apps/api/src/app.ts` — middleware d'erreur centralisé | `volumes/16-erreurs-journalisation.md` |
+| `apps/web/src/i18n/index.ts` | `volumes/17-i18n.md` |
+| `apps/web/src/i18n/fr.json`, `en.json`, `ln.json`, `sw.json` | `volumes/17-i18n.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -209,6 +211,7 @@
 | `SocketProvider` / `useSocket` | `apps/web/src/lib/socket.tsx` | `volumes/12-api-reseau.md` |
 | `verifierOrigine` | `apps/api/src/lib/origines.ts` | `volumes/14-authentification-securite.md` |
 | `logger` (`info`/`warn`/`error`) / `remplacantErreur` | `apps/api/src/lib/logger.ts` | `volumes/16-erreurs-journalisation.md` |
+| `appliquerLangue` / `RESSOURCES` | `apps/web/src/i18n/index.ts` | `volumes/17-i18n.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 

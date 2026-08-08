@@ -22,7 +22,7 @@
 | 14 | Authentification, autorisations et sécurité (synthèse transversale) | `14-authentification-securite.md` | ✅ |
 | 15 | Validation des données | `15-validation.md` | ✅ |
 | 16 | Gestion des erreurs et journalisation | `16-erreurs-journalisation.md` | ✅ |
-| 17 | Internationalisation | `17-i18n.md` | ⬜ |
+| 17 | Internationalisation | `17-i18n.md` | ✅ |
 | 18 | Explication exhaustive des fichiers sources restants | `18a` à `18z` (Niveau 2/3 non couverts ailleurs) | ⬜ |
 | 19 | Tests et stratégie de vérification | `19-tests.md` | ⬜ |
 | 20 | Performances | `20-performances.md` | ⬜ |

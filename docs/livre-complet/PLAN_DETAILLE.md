@@ -251,10 +251,13 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - `lib/audit.ts` (renvoi au 11g)
 - Écart repéré : aucun
 
-## Volume 17 — Internationalisation ⬜
-- Structure des clés de traduction (`i18n/*.json`)
-- Portée labels (statique, dans le code) vs données (langue préférée utilisateur, `languePreferee`)
-- Comment ajouter une langue, étape par étape
+## Volume 17 — Internationalisation ✅
+- `i18n/index.ts` : initialisation react-i18next, `fallbackLng: "FR"`, `appliquerLangue` idempotente
+- Parité vérifiée par script : 1013 clés fonctionnelles strictement identiques dans les 4 langues (seul écart : `_note`, présente uniquement dans `ln.json`/`sw.json`)
+- Lingala et Kiswahili explicitement documentés comme « premier jet, non définitif » dans le fichier lui-même — français et anglais sans réserve
+- 39 namespaces de premier niveau, correspondant terme à terme aux écrans déjà couverts chapitre par chapitre
+- `langueDefaut` (boutique, 11z-4) vs `Utilisateur.languePreferee` (individuelle, nullable, prime sur la boutique)
+- Écart repéré : aucun (section 3.8)
 
 ## Volume 18 — Explication exhaustive des fichiers sources restants ⬜
 - Tous les fichiers Niveau 2/3 non couverts par un volume thématique dédié, organisés par dossier

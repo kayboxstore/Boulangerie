@@ -123,11 +123,11 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `apps/web/src/i18n/index.ts` | 2 | init i18next, `appliquerLangue` | À déterminer | À analyser | — | — |
-| `apps/web/src/i18n/fr.json` | 2 | dictionnaire français (langue de référence) | À déterminer | À analyser | — | — |
-| `apps/web/src/i18n/en.json` | 2 | dictionnaire anglais | À déterminer | À analyser | — | — |
-| `apps/web/src/i18n/ln.json` | 2 | dictionnaire lingala | À déterminer | À analyser | — | — |
-| `apps/web/src/i18n/sw.json` | 2 | dictionnaire swahili | À déterminer | À analyser | — | — |
+| `apps/web/src/i18n/index.ts` | 2 | init i18next, `appliquerLangue`, `RESSOURCES` | `volumes/17-i18n.md` | Vérifié | — | Aucun |
+| `apps/web/src/i18n/fr.json` | 2 | dictionnaire français (langue de référence, 1013 clés) | `volumes/17-i18n.md` | Vérifié | — | Aucun |
+| `apps/web/src/i18n/en.json` | 2 | dictionnaire anglais (parité 1013/1013 vérifiée) | `volumes/17-i18n.md` | Vérifié | — | Aucun |
+| `apps/web/src/i18n/ln.json` | 2 | dictionnaire lingala (« premier jet », `_note`) | `volumes/17-i18n.md` | Vérifié | Traduction non relue par un locuteur natif (signalé dans le fichier lui-même) | Aucun |
+| `apps/web/src/i18n/sw.json` | 2 | dictionnaire swahili (« premier jet », `_note`) | `volumes/17-i18n.md` | Vérifié | Traduction non relue par un locuteur natif (signalé dans le fichier lui-même) | Aucun |
 
 ## J. `apps/web/src/pages/`
 
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 51 |
+| À analyser | 46 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 103 |
+| Vérifié | 108 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*
