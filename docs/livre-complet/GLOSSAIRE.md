@@ -74,6 +74,8 @@
 
 **Maman** — Type de cliente (vocabulaire du métier, pas un terme technique) dont les commandes génèrent une commission (contrairement aux Dépositaires et à la Vente cash).
 
+**Mot de passe d'application** — Mot de passe secondaire généré par Google, révocable indépendamment du mot de passe principal du compte, utilisé pour l'envoi d'e-mail via Gmail/Google Workspace (`GMAIL_APP_PASSWORD`) sans jamais exposer les identifiants réels du compte. Voir Volume 5.
+
 **Migration (Prisma)** — Fichier SQL généré automatiquement par `prisma migrate` décrivant un changement du schéma de base de données. Le dossier `prisma/migrations/` contient l'historique complet, dans l'ordre chronologique.
 
 **MVCC (Multiversion Concurrency Control)** — Mécanisme standard de PostgreSQL permettant à une lecture de voir un instantané cohérent des données sans bloquer les écritures concurrentes. Mentionné au Volume 11g pour expliquer pourquoi une lecture « avant » dans le journal d'audit n'interfère pas avec une transaction en cours.

@@ -9,8 +9,8 @@
 | 1 | Présentation du produit et du problème résolu | `01-presentation.md` | ✅ |
 | 2 | Guide de lecture et notions fondamentales | `02-guide-de-lecture.md` | ✅ |
 | 3 | Technologies, langages et dépendances | `03-technologies.md` | ✅ |
-| 4 | Installation de l'environnement | `04-installation.md` | ⬜ |
-| 5 | Configuration et variables d'environnement | `05-configuration.md` | ⬜ |
+| 4 | Installation de l'environnement | `04-installation.md` | ✅ |
+| 5 | Configuration et variables d'environnement | `05-configuration.md` | ✅ |
 | 6 | Architecture générale | `06-architecture.md` | ⬜ |
 | 7 | Arborescence détaillée du projet | `07-arborescence.md` | ⬜ |
 | 8 | Cycle de démarrage de l'application | `08-cycle-demarrage.md` | ⬜ |

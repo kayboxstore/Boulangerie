@@ -47,6 +47,9 @@
 | `prisma/schema.prisma` (42 modèles, 16 enums) | `volumes/13-base-de-donnees.md` |
 | `prisma/migrations/*.sql` (29 fichiers, synthèse chronologique) | `volumes/13-base-de-donnees.md` |
 | `prisma/seed.ts` | `volumes/13-base-de-donnees.md` |
+| `README.md` | `volumes/04-installation.md` |
+| `render.yaml` | `volumes/05-configuration.md` |
+| `.env.example` | `volumes/05-configuration.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 

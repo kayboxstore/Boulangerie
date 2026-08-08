@@ -22,15 +22,17 @@
 - Outils : npm workspaces, Vitest, tsx
 - Pourquoi ces choix (déductions du code, jamais des suppositions non fondées)
 
-## Volume 4 — Installation de l'environnement ⬜
-- Prérequis (Node, PostgreSQL, versions)
-- Étapes depuis `README.md`, vérifiées contre le code
-- Résolution des erreurs d'installation courantes
+## Volume 4 — Installation de l'environnement ✅
+- Prérequis vérifiés dans l'environnement de rédaction (Node 22, npm) ; Docker/PostgreSQL non disponibles ici — signalé explicitement, pas supposé
+- Les 5 étapes du `README.md` : ce qui a pu être vérifié (`npm install` déjà fait, `prisma validate` OK, les 11 tests Vitest passent) vs ce qui ne l'a pas pu (migration/seed/démarrage complet, faute de base accessible)
+- **Découverte** : la section « Phase actuelle » et une partie des Conventions du `README.md` décrivent l'ancienne Caisse (vente au comptoir, clôture, alerte transaction inhabituelle) — retirée depuis la refonte 3.1 (Volume 11j) ; incohérence documentaire, pas un écart spec/code
+- Comptes de démonstration croisés avec `seed.ts` (Volume 13) — aucune divergence
 
-## Volume 5 — Configuration et variables d'environnement ⬜
-- Rôle de chaque variable de `.env.example` (jamais sa valeur)
-- Variables obligatoires vs optionnelles, avec repli documenté (ex. `JWT_SECRET`)
-- Spécificités Render (`render.yaml`)
+## Volume 5 — Configuration et variables d'environnement ✅
+- Trois variables obligatoires (`DATABASE_URL`, `JWT_SECRET`, `PORT`) vs toutes les autres, optionnelles avec repli documenté
+- Groupes de variables optionnelles croisés avec leur section de spec : e-mail des rapports (3.13), e-mail professionnel Cloudflare (3.18, portée Compte vs Zone), Assistant IA (3.19), sauvegarde (3.15)
+- `render.yaml` : un seul service Node sert API + frontend compilé, chaîne de build (`--include=dev`, génération Prisma, migrations, seed, build web), `healthCheckPath`
+- Écart repéré : aucun
 
 ## Volume 6 — Architecture générale ⬜
 - Schéma Mermaid de l'architecture globale (client/serveur/base/Socket.io/services externes)

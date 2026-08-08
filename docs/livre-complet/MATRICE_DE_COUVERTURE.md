@@ -203,15 +203,15 @@
 | `apps/web/components.json` | À déterminer | À analyser | — |
 | `packages/shared/package.json` | À déterminer | À analyser | — |
 | `vitest.config.ts` | À déterminer | À analyser | — |
-| `render.yaml` | À déterminer | À analyser | — |
-| `.env.example` | À déterminer | À analyser | — |
+| `render.yaml` | `volumes/05-configuration.md` | Vérifié | — | Aucun |
+| `.env.example` | `volumes/05-configuration.md` | Vérifié | — | Aucun |
 
 ## N. Sources documentaires (hors grille de risque — références croisées, pas "expliquées")
 
 | Chemin | Utilisation dans le livre | État |
 |---|---|---|
 | `docs/spec-boulangerie.md` | Source de vérité du comportement voulu, croisée à chaque chapitre fonctionnel | Consulté en continu |
-| `README.md` | Base du chapitre Installation | À utiliser |
+| `README.md` | Base du chapitre Installation | Utilisé (`volumes/04-installation.md`) — section « Phase actuelle »/Conventions Caisse signalée obsolète |
 | `DEPLOIEMENT.md` | Base du chapitre Construction et déploiement | À utiliser |
 | `docs/MISE-EN-PRODUCTION.md` | Référence pour le chapitre Administration/maintenance | À utiliser |
 
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 123 |
+| À analyser | 121 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 31 |
+| Vérifié | 33 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*
