@@ -125,7 +125,13 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Écart repéré : aucun
 - Hors périmètre (renvoyé au Volume 18, Niveau 2) : fiche Client, Schéma de commande, Bon de livraison, Zones de dépôt
 
-### 11i à 11k ⬜ *(prochain chapitre : 11i — Commissions)*
+### 11i — Commissions ✅
+- Aucune table dédiée : « vue dérivée » recalculée à chaque lecture depuis `CommandeClient` (filtre `commissionParBac > 0`, plus générale que le seul nom « Maman »)
+- `montantTotalPaye` : nuance financière (commande soldée via avance = affichée payée à 100 %) avec exemple chiffré repris du 11a
+- `CommissionsPage` : lecture seule, aucune mutation ; export via `BarreExport` (détaillé au Volume 18)
+- Écart repéré : aucun
+
+### 11j à 11k ⬜ *(prochain chapitre : 11j — Caisse)*
 Voir `TABLE_DES_MATIERES.md`.
 
 ## Volume 12 — API et communications réseau ⬜

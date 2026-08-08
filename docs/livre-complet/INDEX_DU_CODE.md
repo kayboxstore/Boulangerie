@@ -34,6 +34,9 @@
 | `apps/api/src/routes/commandes.ts` | `volumes/11h-commandes.md` |
 | `apps/web/src/pages/Commandes.tsx` | `volumes/11h-commandes.md` |
 | `packages/shared/src/index.ts` — `commandeCreateSchema`, `reglementCreateSchema`, `STRATEGIES_DOUBLON`, `CommandeDTO`, `ConflitCommandeDTO` | `volumes/11h-commandes.md` |
+| `apps/api/src/routes/commissions.ts` | `volumes/11i-commissions.md` |
+| `apps/web/src/pages/Commissions.tsx` | `volumes/11i-commissions.md` |
+| `packages/shared/src/index.ts` — `montantTotalPaye`, `CommissionLigneDTO` | `volumes/11i-commissions.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -74,6 +77,9 @@
 | `commandesRouter` (`GET /resume-jour`, `/livraisons-du-jour`, `/alertes-dette`, `/`, `POST /`, `POST /:id/reglements`) | `apps/api/src/routes/commandes.ts` | `volumes/11h-commandes.md` |
 | `bornesDuJour` / `verifierAlertesDette` | `apps/api/src/routes/commandes.ts` | `volumes/11h-commandes.md` |
 | `CommandesPage` | `apps/web/src/pages/Commandes.tsx` | `volumes/11h-commandes.md` |
+| `commissionsRouter` (`GET /`) | `apps/api/src/routes/commissions.ts` | `volumes/11i-commissions.md` |
+| `montantTotalPaye` | `packages/shared/src/index.ts` | `volumes/11i-commissions.md` |
+| `CommissionsPage` | `apps/web/src/pages/Commissions.tsx` | `volumes/11i-commissions.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
@@ -81,6 +87,7 @@
 |---|---|---|
 | 3.1 (dépense farine) | Registre de Caisse | `volumes/11a-noyau-financier-permissions.md` (formule), `volumes/11j-caisse.md` (à venir, écran complet) |
 | 3.4 (commandes, avance/dette, doublon) | Commandes clients | `volumes/11a-noyau-financier-permissions.md` (formule), `volumes/11h-commandes.md` (écran complet) |
+| 3.11 (Commissions) | Commissions | `volumes/11i-commissions.md` |
 | 2 (rôles, hiérarchie, permissions, garde-fou Admin Principal) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md` |
 | 3.7 (session unique, délégations) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md`, `volumes/11c-connexion.md` |
 | 3.7 (délégation temporaire de rôle) | Délégations | `volumes/11e-delegations.md` |

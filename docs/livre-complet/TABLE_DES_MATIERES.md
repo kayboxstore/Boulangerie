@@ -47,7 +47,7 @@ Ce volume est scindé en un chapitre par domaine fonctionnel, dans l'ordre de pr
 | `11f-approbations.md` | `apps/api/src/services/actionsCritiques.ts`, `apps/api/src/routes/approbations.ts`, `apps/web/src/pages/Approbations.tsx` | 1 | ✅ |
 | `11g-journal-audit.md` | `apps/api/src/lib/audit.ts` | 1 | ✅ |
 | `11h-commandes.md` | `apps/api/src/routes/commandes.ts`, `apps/web/src/pages/Commandes.tsx` | 1 | ✅ |
-| `11i-commissions.md` | `apps/api/src/routes/commissions.ts`, `apps/web/src/pages/Commissions.tsx` | 1 | ⬜ |
+| `11i-commissions.md` | `apps/api/src/routes/commissions.ts`, `apps/web/src/pages/Commissions.tsx` | 1 | ✅ |
 | `11j-caisse.md` | `apps/api/src/routes/caisse.ts`, `apps/web/src/pages/Caisse.tsx` | 1 | ⬜ |
 | `11k-travailleurs-paie.md` (probablement scindé en plusieurs fichiers vu la taille de `travailleurs.ts`, 985 lignes) | `apps/api/src/routes/travailleurs.ts`, `apps/web/src/pages/Travailleurs.tsx`, `apps/web/src/components/PaieCard.tsx` | 1 | ⬜ |
 | `11z-modules-niveau2.md` (ou plusieurs fichiers) | Stocks, Fournisseurs, Production, Départements, Notifications, À propos, Assistant, Paramètres, Export, Rapports, Zones de dépôt, Clients, Premier lancement, État système | 2 | ⬜ |

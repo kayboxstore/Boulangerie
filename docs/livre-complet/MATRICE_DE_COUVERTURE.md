@@ -50,7 +50,7 @@
 | `apps/api/src/routes/caisse.ts` | 1 | `caisseRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/clients.ts` | 2 | `clientsRouter`, `typeClientsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/commandes.ts` | 1 | `commandesRouter` (résumé, alertes dette, liste, création/doublon, règlements), `bornesDuJour`, `verifierAlertesDette` | `volumes/11h-commandes.md` | Vérifié | — | Aucun |
-| `apps/api/src/routes/commissions.ts` | 1 | `commissionsRouter` | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/commissions.ts` | 1 | `commissionsRouter` (`GET /`) | `volumes/11i-commissions.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/delegations.ts` | 1 | `delegationsRouter` (`GET /`, `POST /`, `DELETE /:id`) | `volumes/11e-delegations.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/departements.ts` | 2 | `departementsRouter`, `groupesRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/equipe.ts` | 1 | `equipeRouter` (comptes, `verifierQuotaAdmins`, `/principal`) | `volumes/11d-equipe-roles-permissions.md` | Vérifié | — | Aucun |
@@ -89,7 +89,7 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `packages/shared/src/index.ts` | 1 | `calculerCommande`, `calculerDepenseFarine`, `avanceAvantCommande`, `aAcces`, `delegationCreateSchema`, `DelegationDTO`, `TYPES_ACTION_CRITIQUE`, `STATUTS_DEMANDE`, `DemandeApprobationDTO`, `ResultatActionCritique`, `ACTIONS_AUDIT`, `AuditLogDTO`, `commandeCreateSchema`, `reglementCreateSchema`, `STRATEGIES_DOUBLON`, `CommandeDTO`, `ConflitCommandeDTO` **(couverts)** ; `formatFc`, DTO/Zod des autres modules (restant) | `volumes/11a-noyau-financier-permissions.md`, `volumes/11e-delegations.md`, `volumes/11f-approbations.md`, `volumes/11g-journal-audit.md`, `volumes/11h-commandes.md` (partiel) | En cours | Le fichier sert plusieurs domaines ; seules quelques fonctions/schémas financiers, permissions, délégations, actions critiques, audit et commandes sont couverts à ce stade — le reste (DTO, schémas Zod des autres modules) sera couvert au fil des chapitres correspondants | Aucun repéré sur la partie couverte |
+| `packages/shared/src/index.ts` | 1 | `calculerCommande`, `calculerDepenseFarine`, `avanceAvantCommande`, `aAcces`, `delegationCreateSchema`, `DelegationDTO`, `TYPES_ACTION_CRITIQUE`, `STATUTS_DEMANDE`, `DemandeApprobationDTO`, `ResultatActionCritique`, `ACTIONS_AUDIT`, `AuditLogDTO`, `commandeCreateSchema`, `reglementCreateSchema`, `STRATEGIES_DOUBLON`, `CommandeDTO`, `ConflitCommandeDTO`, `montantTotalPaye`, `CommissionLigneDTO` **(couverts)** ; `formatFc`, DTO/Zod des autres modules (restant) | `volumes/11a-noyau-financier-permissions.md`, `volumes/11e-delegations.md`, `volumes/11f-approbations.md`, `volumes/11g-journal-audit.md`, `volumes/11h-commandes.md`, `volumes/11i-commissions.md` (partiel) | En cours | Le fichier sert plusieurs domaines ; seules quelques fonctions/schémas financiers, permissions, délégations, actions critiques, audit, commandes et commissions sont couverts à ce stade — le reste (DTO, schémas Zod des autres modules) sera couvert au fil des chapitres correspondants | Aucun repéré sur la partie couverte |
 | `packages/shared/src/index.test.ts` | 1 | 11 tests Vitest (`calculerCommande` ×5, `calculerDepenseFarine` ×2, `aAcces` ×4) | `volumes/11a-noyau-financier-permissions.md` | Vérifié | — | Aucun |
 
 ## F. `prisma/`
@@ -141,7 +141,7 @@
 | `apps/web/src/pages/Caisse.tsx` | 1 | `CaissePage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Clients.tsx` | 2 | `ClientsPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Commandes.tsx` | 1 | `CommandesPage` (apercu client via `calculerCommande`, dialogue de conflit) | `volumes/11h-commandes.md` | Vérifié | — | Aucun |
-| `apps/web/src/pages/Commissions.tsx` | 1 | `CommissionsPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Commissions.tsx` | 1 | `CommissionsPage` | `volumes/11i-commissions.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Dashboard.tsx` | 2 | `DashboardPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Equipe.tsx` | 1 | `EquipePage`, `messageApprobation` | `volumes/11d-equipe-roles-permissions.md` | Vérifié | Section délégations couverte sommairement, détail complet au 11e | Aucun (côté ce fichier) |
 | `apps/web/src/pages/EtatSysteme.tsx` | 2 | `EtatSystemePage` | À déterminer | À analyser | — | — |
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 133 |
+| À analyser | 131 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 21 |
+| Vérifié | 23 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*
