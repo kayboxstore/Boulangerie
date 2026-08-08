@@ -76,6 +76,8 @@
 
 **Permission** — Couple (`Module`, `NiveauAcces`) attribué à un rôle. L'ensemble des permissions d'un rôle forme sa « matrice de permissions ».
 
+**Polling** — Technique consistant à réinterroger périodiquement le serveur à intervalle fixe (ex. toutes les 20 secondes) plutôt que d'attendre passivement une notification. Utilisé en complément — pas en remplacement — du temps réel Socket.io sur l'écran Approbations, voir Volume 11f.
+
 ## R
 
 **Rôle** — Ensemble nommé de permissions (ex. « Caissier(ère) », « Responsable de production »), attribué à un ou plusieurs comptes `Utilisateur`. Modèle `Role` en base.

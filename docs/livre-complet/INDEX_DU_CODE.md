@@ -21,6 +21,10 @@
 | `apps/web/src/pages/Equipe.tsx` | `volumes/11d-equipe-roles-permissions.md` |
 | `apps/api/src/routes/delegations.ts` | `volumes/11e-delegations.md` |
 | `packages/shared/src/index.ts` — `delegationCreateSchema`, `DelegationDTO` | `volumes/11e-delegations.md` |
+| `apps/api/src/services/actionsCritiques.ts` | `volumes/11f-approbations.md` |
+| `apps/api/src/routes/approbations.ts` | `volumes/11f-approbations.md` |
+| `apps/web/src/pages/Approbations.tsx` | `volumes/11f-approbations.md` |
+| `packages/shared/src/index.ts` — `TYPES_ACTION_CRITIQUE`, `STATUTS_DEMANDE`, `DemandeApprobationDTO`, `ResultatActionCritique` | `volumes/11f-approbations.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -50,6 +54,9 @@
 | `delegationsRouter` (`GET /`, `POST /`, `DELETE /:id`) | `apps/api/src/routes/delegations.ts` | `volumes/11e-delegations.md` |
 | `delegationCreateSchema` | `packages/shared/src/index.ts` | `volumes/11e-delegations.md` |
 | `versDTO` (délégations) | `apps/api/src/routes/delegations.ts` | `volumes/11e-delegations.md` |
+| `EXECUTEURS` / `executerAction` / `traiterActionCritique` / `ErreurAction` | `apps/api/src/services/actionsCritiques.ts` | `volumes/11f-approbations.md` |
+| `approbationsRouter` (`GET /`, `POST /:id/approuver`, `POST /:id/rejeter`) | `apps/api/src/routes/approbations.ts` | `volumes/11f-approbations.md` |
+| `ApprobationsPage` / `BadgeStatut` | `apps/web/src/pages/Approbations.tsx` | `volumes/11f-approbations.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
@@ -60,6 +67,7 @@
 | 2 (rôles, hiérarchie, permissions, garde-fou Admin Principal) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md` |
 | 3.7 (session unique, délégations) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md`, `volumes/11c-connexion.md` |
 | 3.7 (délégation temporaire de rôle) | Délégations | `volumes/11e-delegations.md` |
+| 2 (5 tâches critiques), 3.16 (Approbations) | Approbations et actions critiques | `volumes/11f-approbations.md` |
 | 3.14 (activation/désactivation d'un compte) | Connexion | `volumes/11c-connexion.md` |
 | 2 (5 tâches critiques : créer/supprimer un compte Admin, modifier permissions/taux/qualité) | Équipe, rôles et permissions | `volumes/11d-equipe-roles-permissions.md` |
 | 3.7 (quota de 3 Admins, réaffectation) | Équipe, rôles et permissions | `volumes/11d-equipe-roles-permissions.md` |

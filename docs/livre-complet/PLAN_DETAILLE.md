@@ -94,7 +94,16 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Encart dédié dans `Equipe.tsx` (pas d'écran séparé)
 - Écart repéré : aucun — mais clarification d'une question laissée ouverte par la spec elle-même (un seul module par délégation)
 
-### 11f à 11k ⬜ *(prochain chapitre : 11f — Approbations et actions critiques)*
+### 11f — Approbations et actions critiques ✅
+- `EXECUTEURS` : une seule implémentation par tâche critique, rejouée à l'identique qu'elle soit immédiate ou différée (revérification systématique de l'état à l'exécution)
+- Les 5 tâches en détail : `SUPPRIMER_UTILISATEUR`, `CREER_COMPTE_ADMIN`, `MODIFIER_TYPE_CLIENT`, `MODIFIER_TAUX_TAXE` (gating conditionnel côté route), `MODIFIER_PERMISSIONS_ROLE` (remplacement complet de la matrice, repli technique `["CAISSE"]` pour `notIn`)
+- `traiterActionCritique` : aiguillage direct (Admin Principal) vs `DemandeApprobation` + notification temps réel (Admin secondaire)
+- `approbationsRouter` : file scoping par rôle, approbation avec revérification et gestion d'échec sans rejet automatique, rejet
+- `ApprobationsPage` : polling 20s en complément du temps réel, invalidation croisée des caches
+- Exemple chiffré complet : commission Maman 1650 → 1800 Fc, du déclenchement à l'approbation
+- Écart repéré : aucun — deux nuances de granularité expliquées (Qualité entière vs prix/commission ; regroupement de champs sur `MODIFIER_TAUX_TAXE`)
+
+### 11g à 11k ⬜ *(prochain chapitre : 11g — Journal d'audit)*
 Voir `TABLE_DES_MATIERES.md`.
 
 ## Volume 12 — API et communications réseau ⬜

@@ -20,6 +20,7 @@
 | `apps/api/src/app.ts` | 2 | `createApp` | À déterminer | À analyser | — | — |
 | `apps/api/src/index.ts` | 3 | point d'entrée | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/audit.ts` | 1 | extension Prisma d'audit | À déterminer | À analyser | — | — |
+| `apps/api/src/services/actionsCritiques.ts` | 1 | `EXECUTEURS`, `executerAction`, `traiterActionCritique`, `ErreurAction` | `volumes/11f-approbations.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/cloudflareEmail.ts` | 2 | `creerAdresseProfessionnelle`, etc. | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/contexteRequete.ts` | 2 | `contexteRequete` (AsyncLocalStorage) | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/events.ts` | 2 | `busEvenements` | À déterminer | À analyser | — | — |
@@ -41,7 +42,7 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `apps/api/src/routes/approbations.ts` | 1 | file d'approbation | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/approbations.ts` | 1 | `approbationsRouter` (`GET /`, `POST /:id/approuver`, `POST /:id/rejeter`) | `volumes/11f-approbations.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/apropos.ts` | 2 | `aProposRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/assistant.ts` | 2 | `assistantRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/audit.ts` | 2 | `auditRouter` | À déterminer | À analyser | — | — |
@@ -88,7 +89,7 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `packages/shared/src/index.ts` | 1 | `calculerCommande`, `calculerDepenseFarine`, `avanceAvantCommande`, `aAcces`, `delegationCreateSchema`, `DelegationDTO` **(couverts)** ; `formatFc`, DTO/Zod des autres modules (restant) | `volumes/11a-noyau-financier-permissions.md`, `volumes/11e-delegations.md` (partiel) | En cours | Le fichier sert plusieurs domaines ; seules quelques fonctions/schémas financiers, permissions et délégations sont couverts à ce stade — le reste (DTO, schémas Zod des autres modules) sera couvert au fil des chapitres correspondants | Aucun repéré sur la partie couverte |
+| `packages/shared/src/index.ts` | 1 | `calculerCommande`, `calculerDepenseFarine`, `avanceAvantCommande`, `aAcces`, `delegationCreateSchema`, `DelegationDTO`, `TYPES_ACTION_CRITIQUE`, `STATUTS_DEMANDE`, `DemandeApprobationDTO`, `ResultatActionCritique` **(couverts)** ; `formatFc`, DTO/Zod des autres modules (restant) | `volumes/11a-noyau-financier-permissions.md`, `volumes/11e-delegations.md`, `volumes/11f-approbations.md` (partiel) | En cours | Le fichier sert plusieurs domaines ; seules quelques fonctions/schémas financiers, permissions, délégations et actions critiques sont couverts à ce stade — le reste (DTO, schémas Zod des autres modules) sera couvert au fil des chapitres correspondants | Aucun repéré sur la partie couverte |
 | `packages/shared/src/index.test.ts` | 1 | 11 tests Vitest (`calculerCommande` ×5, `calculerDepenseFarine` ×2, `aAcces` ×4) | `volumes/11a-noyau-financier-permissions.md` | Vérifié | — | Aucun |
 
 ## F. `prisma/`
@@ -132,7 +133,7 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `apps/web/src/pages/Approbations.tsx` | 1 | `ApprobationsPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Approbations.tsx` | 1 | `ApprobationsPage`, `BadgeStatut` | `volumes/11f-approbations.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/APropos.tsx` | 2 | `AProposPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Assistant.tsx` | 2 | `AssistantPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Audit.tsx` | 2 | `AuditPage` | À déterminer | À analyser | — | — |
@@ -220,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 143 |
+| À analyser | 140 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 11 |
+| Vérifié | 14 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

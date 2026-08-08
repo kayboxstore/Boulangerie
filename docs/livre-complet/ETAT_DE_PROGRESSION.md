@@ -47,6 +47,7 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
 - [x] Volume 11c — Chapitre « Connexion » : `apps/api/src/routes/auth.ts` (`POST /login` détaillé étape par étape — prévention de l'énumération de comptes, ordre écriture-base/notification-temps-réel, `POST /mot-de-passe`, routes publiques) et `apps/web/src/pages/Login.tsx`, avec diagramme de séquence Mermaid dédié à la déconnexion d'un appareil concurrent.
 - [x] Volume 11d — Chapitre « Équipe, rôles et permissions » : `apps/api/src/routes/equipe.ts` (`verifierQuotaAdmins`, création liée à une fiche Travailleur, activation, réaffectation, **historique complet de la faille de sécurité corrigée sur `/principal`**), `apps/api/src/routes/roles.ts` (avec un écart spec/code repéré et documenté), `apps/web/src/pages/Equipe.tsx`. Diagramme d'état Mermaid du statut Admin Principal. Premier écart ajouté à `annexes/ecarts-spec-code.md`.
 - [x] Volume 11e — Chapitre « Délégations temporaires de rôle » : `apps/api/src/routes/delegations.ts` (les 3 routes, comparaison lexicographique de dates ISO partagée avec le 11b, absence de contrôle de chevauchement et de contrôle de propriété à la révocation), `delegationCreateSchema`/`DelegationDTO` (`packages/shared/src/index.ts`), intégration côté `Equipe.tsx`. Aucun écart spec/code ; clarification d'une question laissée ouverte par la spec elle-même (un seul module par délégation).
+- [x] Volume 11f — Chapitre « Approbations et actions critiques » : `apps/api/src/services/actionsCritiques.ts` (`EXECUTEURS` pour les 5 tâches critiques, `traiterActionCritique`, `ErreurAction`), `apps/api/src/routes/approbations.ts` (file scoping par rôle, approbation avec revérification et gestion d'échec sans rejet automatique, rejet), `apps/web/src/pages/Approbations.tsx` (polling 20s, invalidation croisée). Exemple chiffré complet (commission Maman 1650 → 1800 Fc). Aucun écart spec/code ; deux nuances de granularité expliquées.
 
 ## 3. Ce qu'il reste à faire (dans l'ordre de priorité)
 
@@ -55,8 +56,8 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
    - ~~`apps/api/src/routes/auth.ts` + `apps/web/src/pages/Login.tsx`~~ **fait (11c)**
    - ~~`apps/api/src/routes/equipe.ts` + `apps/api/src/routes/roles.ts` + `apps/web/src/pages/Equipe.tsx`~~ **fait (11d)**
    - ~~`apps/api/src/routes/delegations.ts`~~ **fait (11e)**
-   - `apps/api/src/services/actionsCritiques.ts` + `apps/api/src/routes/approbations.ts` + `apps/web/src/pages/Approbations.tsx` *(prochain)*
-   - `apps/api/src/lib/audit.ts`
+   - ~~`apps/api/src/services/actionsCritiques.ts` + `apps/api/src/routes/approbations.ts` + `apps/web/src/pages/Approbations.tsx`~~ **fait (11f)**
+   - `apps/api/src/lib/audit.ts` *(prochain)*
    - `apps/api/src/routes/commandes.ts` + `apps/web/src/pages/Commandes.tsx`
    - `apps/api/src/routes/commissions.ts` + `apps/web/src/pages/Commissions.tsx`
    - `apps/api/src/routes/caisse.ts` + `apps/web/src/pages/Caisse.tsx`
@@ -76,11 +77,11 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
 
 ## 4. Dernier fichier analysé
 
-`apps/api/src/routes/delegations.ts` (chapitre 11e), avec `delegationCreateSchema`/`DelegationDTO` (`packages/shared/src/index.ts`) et l'encart délégations de `apps/web/src/pages/Equipe.tsx` — tous marqués « Vérifié » (le fichier partagé reste « En cours » dans son ensemble, voir §6).
+`apps/api/src/services/actionsCritiques.ts`, `apps/api/src/routes/approbations.ts` et `apps/web/src/pages/Approbations.tsx` (chapitre 11f) — tous marqués « Vérifié » (le fichier partagé `packages/shared/src/index.ts` reste « En cours » dans son ensemble, voir §6).
 
 ## 5. Prochaine tâche exacte
 
-Rédiger le chapitre **11f — Approbations et actions critiques**, couvrant `apps/api/src/services/actionsCritiques.ts`, `apps/api/src/routes/approbations.ts` et `apps/web/src/pages/Approbations.tsx`. Ce chapitre est central : `traiterActionCritique` a déjà été mentionné sans être détaillé aux volumes 11d (création/suppression de compte Admin) et 11e (justification du choix de ne pas y recourir pour les délégations) — il faut maintenant l'expliquer complètement (déclenchement immédiat pour l'Admin Principal vs création d'une `DemandeApprobation` en attente pour un Admin secondaire, notification de l'Admin Principal, cycle de vie d'une demande : approuver/rejeter, exécution différée de l'action une fois approuvée). Vérifier aussi comment chacune des 5 tâches critiques de la spec (section 2) est effectivement acheminée à travers ce mécanisme, en s'appuyant sur les exemples déjà rencontrés (`CREER_COMPTE_ADMIN` au 11d).
+Rédiger le chapitre **11g — Journal d'audit**, couvrant `apps/api/src/lib/audit.ts`. Ce fichier n'a pas encore été lu en détail dans le cadre du livre — il faudra d'abord l'ouvrir en entier, identifier son mécanisme (probablement une extension de client Prisma, vu son rôle noté dans `INVENTAIRE_DU_PROJET.md` : « extension Prisma d'audit »), comprendre comment il capture l'auteur d'une écriture (probablement via `apps/api/src/lib/contexteRequete.ts`, l'`AsyncLocalStorage` déjà mentionné dans le glossaire mais jamais encore expliqué en détail), quelles opérations il trace (créations/modifications/suppressions réussies uniquement, d'après le Glossaire actuel), et où le résultat est consultable (probablement un écran « Journal d'audit » côté frontend, à retrouver). Vérifier aussi si les actions critiques du 11f (une fois exécutées, immédiatement ou après approbation) sont elles-mêmes tracées par ce mécanisme.
 
 ## 6. Problèmes ou incertitudes en suspens
 
@@ -95,11 +96,11 @@ Rédiger le chapitre **11f — Approbations et actions critiques**, couvrant `ap
 
 | Niveau | Vérifiés / Total | % |
 |---|---|---:|
-| Niveau 1 | 11 / 26 (`packages/shared/src/index.ts` partiellement, `packages/shared/src/index.test.ts`, `apps/api/src/lib/jwt.ts`, `apps/api/src/middleware/auth.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/lib/auth.tsx`, `apps/api/src/routes/auth.ts`, `apps/web/src/pages/Login.tsx`, `apps/api/src/routes/equipe.ts`, `apps/api/src/routes/roles.ts`, `apps/web/src/pages/Equipe.tsx`, `apps/api/src/routes/delegations.ts`) | ~42 % (partiel) |
+| Niveau 1 | 14 / 26 (`packages/shared/src/index.ts` partiellement, `packages/shared/src/index.test.ts`, `apps/api/src/lib/jwt.ts`, `apps/api/src/middleware/auth.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/lib/auth.tsx`, `apps/api/src/routes/auth.ts`, `apps/web/src/pages/Login.tsx`, `apps/api/src/routes/equipe.ts`, `apps/api/src/routes/roles.ts`, `apps/web/src/pages/Equipe.tsx`, `apps/api/src/routes/delegations.ts`, `apps/api/src/services/actionsCritiques.ts`, `apps/api/src/routes/approbations.ts`, `apps/web/src/pages/Approbations.tsx`) | ~54 % (partiel) |
 | Niveau 2 | 0 / 66 | 0 % |
 | Niveau 3 | 0 / 63 | 0 % |
-| **Global** | **~12 / 155** | **~8 %** |
+| **Global** | **~15 / 155** | **~10 %** |
 
-*(`packages/shared/src/index.ts` est compté comme « partiellement vérifié » : ses fonctions financières, de permission et de délégation sont couvertes en détail, mais le fichier dans son ensemble reste « En cours » tant que ses autres sections n'ont pas été traitées au fil des chapitres correspondants — voir §6. Les 10 autres fichiers Niveau 1 des chapitres 11b à 11e sont, eux, intégralement couverts et comptés comme pleinement « Vérifié ».)*
+*(`packages/shared/src/index.ts` est compté comme « partiellement vérifié » : ses fonctions financières, de permission, de délégation et d'actions critiques sont couvertes en détail, mais le fichier dans son ensemble reste « En cours » tant que ses autres sections n'ont pas été traitées au fil des chapitres correspondants — voir §6. Les 13 autres fichiers Niveau 1 des chapitres 11b à 11f sont, eux, intégralement couverts et comptés comme pleinement « Vérifié ».)*
 
-Ce pourcentage progresse régulièrement : cinq chapitres Niveau 1 complets (11a, 11b, 11c, 11d, 11e) sont maintenant posés, formant le socle sur lequel les chapitres suivants (approbations, commandes...) vont directement s'appuyer sans avoir à répéter les mécanismes déjà expliqués. Le compte réel « 11 / 26 » ci-dessus arrondit `packages/shared/src/index.ts` à une unité complète malgré sa couverture partielle, par simplicité d'affichage — la nuance reste documentée dans cette note.
+Ce pourcentage progresse régulièrement : six chapitres Niveau 1 complets (11a à 11f) sont maintenant posés, formant le socle sur lequel les chapitres suivants (journal d'audit, commandes...) vont directement s'appuyer sans avoir à répéter les mécanismes déjà expliqués. Le compte réel « 14 / 26 » ci-dessus arrondit `packages/shared/src/index.ts` à une unité complète malgré sa couverture partielle, par simplicité d'affichage — la nuance reste documentée dans cette note. Le seuil des 50 % de couverture Niveau 1 vient d'être franchi.
