@@ -30,6 +30,8 @@
 
 **CORS (Cross-Origin Resource Sharing)** — Mécanisme du navigateur qui bloque par défaut les requêtes entre deux origines différentes (domaines/ports). `lib/origines.ts` définit la liste des origines autorisées à appeler l'API.
 
+**cuid()** — Identifiant textuel unique, résistant aux collisions, généré côté application et triable chronologiquement — utilisé comme clé primaire (`id`) sur tous les modèles du schéma, à la place d'un entier auto-incrémenté classique. Voir Volume 13.
+
 **Commission** — Somme reversée à une cliente de qualité « Maman » pour chaque bac reçu (1 650 Fc/bac au moment de l'audit). Calculée automatiquement à l'enregistrement d'une commande.
 
 ## D
@@ -44,6 +46,8 @@
 
 ## E
 
+**ERD (Entity-Relationship Diagram)** — Diagramme montrant les modèles de données et leurs relations (cardinalités). Présenté en six vues par domaine au Volume 13, le schéma complet (42 modèles) étant trop dense pour un diagramme unique lisible.
+
 **Énumération de comptes** — Faille de sécurité où un attaquant peut déduire quels e-mails correspondent à des comptes réels en observant des messages d'erreur différents selon que l'e-mail existe ou non. Ce projet s'en protège en renvoyant systématiquement le même message (« E-mail ou mot de passe incorrect ») pour les deux cas — voir Volume 11c.
 
 **ESM (ECMAScript Modules)** — Système de modules JavaScript standard (`import`/`export`), utilisé dans tout ce projet (`"type": "module"` dans chaque `package.json`) par opposition à l'ancien système CommonJS (`require`).
@@ -57,6 +61,8 @@
 **Fonction pure** — Une fonction dont le résultat ne dépend que de ses paramètres (deux appels avec les mêmes valeurs donnent toujours le même résultat) et qui ne modifie rien en dehors d'elle-même (pas d'écriture en base, pas d'appel réseau). Les fonctions de calcul de `packages/shared/src/index.ts` (`calculerCommande`, `calculerDepenseFarine`, `aAcces`...) sont toutes pures — voir Volume 11a.
 
 ## I
+
+**Index unique partiel** — Contrainte d'unicité PostgreSQL conditionnelle (`CREATE UNIQUE INDEX ... WHERE ...`), sans équivalent direct dans la syntaxe de `schema.prisma`, ajoutée manuellement au SQL d'une migration. Utilisé pour garantir qu'un seul compte a `estAdminPrincipal = true` à la fois. Voir Volume 13.
 
 **Instantané figé** — Copie complète et indépendante d'un calcul à un instant donné (ex. un `BulletinPaie`), qui ne change jamais rétroactivement même si les données sources qui l'ont nourri sont modifiées après coup. S'oppose à une « vue dérivée » (Commissions, Caisse), toujours recalculée à la lecture. Voir Volume 11k-3.
 

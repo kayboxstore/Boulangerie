@@ -223,7 +223,9 @@ Un repli à deux niveaux : si le serveur a déjà fourni `montantEstime` (cas no
 
 ## 5.8 Croisement avec la spécification
 
-Aucun écart trouvé. Les quatre postes du registre (Entrées, Dettes payées, Dépenses, Solde), leur formule exacte, la règle de non-double-comptage (reproduite mot pour mot dans le commentaire du code source), la formule de la dépense farine (`[(33,5 × taux) + 500] × sacs`, Volume 11a), les deux conditions de blocage de la case farine, l'affichage du solde négatif en rouge vif, l'absence d'action de clôture, et le fait que `Vente`/`LigneVente`/`ClotureCaisse` restent orphelines en base (confirmé : aucune de ces tables n'est référencée dans `caisse.ts`) correspondent tous exactement à la section 3.1 de `docs/spec-boulangerie.md`.
+Aucun écart trouvé. Les quatre postes du registre (Entrées, Dettes payées, Dépenses, Solde), leur formule exacte, la règle de non-double-comptage (reproduite mot pour mot dans le commentaire du code source), la formule de la dépense farine (`[(33,5 × taux) + 500] × sacs`, Volume 11a), les deux conditions de blocage de la case farine, l'affichage du solde négatif en rouge vif, l'absence d'action de clôture, et l'absence de toute référence à `Vente`/`LigneVente`/`ClotureCaisse` dans `caisse.ts` correspondent tous exactement à la section 3.1 de `docs/spec-boulangerie.md`.
+
+**Correction (établie au Volume 13, lors de l'étude de l'historique des migrations)** : ce chapitre affirmait initialement que `Vente`/`LigneVente`/`ClotureCaisse` « restent orphelines en base » — une reprise fidèle du commentaire présent dans `schema.prisma` à l'époque de la rédaction de ce chapitre, mais qui s'est révélée **obsolète** : la migration `20260806134719_absence_alerte_et_nettoyage_orphelines` a en réalité **supprimé ces trois tables** (avec `Presence`), après avoir vérifié qu'elles étaient bien vides. Le commentaire correspondant dans `schema.prisma`, lui, n'a jamais été mis à jour pour refléter cette suppression — voir Volume 13 pour le détail de cette incohérence documentaire (un commentaire du code, pas un écart avec la spécification).
 
 ## 5.9 Résumé
 

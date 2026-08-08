@@ -257,8 +257,8 @@ Aucun écart trouvé. La formule (salaire de base − retenue absences − reten
 
 Le calcul de paie applique, pour la première fois dans ce livre, une règle de précision inverse de celle vue partout ailleurs (Volume 11a : toujours des Fc entiers) — précision décimale complète jusqu'au tout dernier arrondi, pour que le détail affiché corresponde exactement au total. Le bulletin de paie est le seul document de ce module à rompre avec le principe « calcul recalculé à la lecture » déjà vu pour les Commissions et la Caisse : une fois généré, il devient une archive figée, copiée en JSON, immunisée contre tout changement ultérieur des absences ou sanctions qui l'ont nourri. L'accès à ces bulletins illustre un cas où la permission de module ne suffit pas : un mécanisme de vérification manuelle s'y ajoute pour qu'un employé sans aucun accès au module Travailleurs garde malgré tout la lecture de ses propres documents. Aucun écart avec la spécification.
 
-Avec ce sous-chapitre, le **Volume 11k est clos** et les **26 fichiers Niveau 1** de ce livre sont désormais tous couverts.
+Avec ce sous-chapitre, le **Volume 11k est clos** : 25 des 26 fichiers Niveau 1 sont désormais couverts. **Correction** (une erreur de comptage avait initialement annoncé ici la clôture complète du Niveau 1) : `prisma/schema.prisma`, lui aussi classé Niveau 1 dans `INVENTAIRE_DU_PROJET.md`, restait à ce stade encore à traiter — il l'est depuis, au Volume 13, qui referme réellement le Niveau 1 à 26/26.
 
 ---
 
-**Suite →** Volume 13 — Base de données et migrations (ERD complet), puis les 66 fichiers Niveau 2 restants, en commençant par les fichiers déjà entrevus sans être détaillés dans ce volume (`services/emailPro.ts`, `lib/cloudflareEmail.ts`, `services/pdf.ts`, `Departement`/`Groupe`).
+**Suite →** Volume 13 — Base de données et migrations (ERD complet), qui referme le Niveau 1, puis les 66 fichiers Niveau 2 restants, en commençant par les fichiers déjà entrevus sans être détaillés dans ce volume (`services/emailPro.ts`, `lib/cloudflareEmail.ts`, `services/pdf.ts`, `Departement`/`Groupe`).

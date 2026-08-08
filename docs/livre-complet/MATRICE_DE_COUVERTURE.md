@@ -96,9 +96,9 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `prisma/schema.prisma` | 1 | 40 modèles, 14 enums | À déterminer | À analyser | — | — |
-| `prisma/seed.ts` | 3 | `upsertUtilisateur`, jeu de démonstration | À déterminer | À analyser | — | — |
-| `prisma/migrations/*.sql` (29 fichiers) | 3 | historique généré | À déterminer | À analyser | — | — |
+| `prisma/schema.prisma` | 1 | 42 modèles, 16 enums (recompté au Volume 13 — l'inventaire initial datait d'avant plusieurs migrations) | `volumes/13-base-de-donnees.md` | Vérifié | — | Aucun (voir note interne §5.5, commentaire obsolète non lié à la spec) |
+| `prisma/seed.ts` | 3 | `upsertRole` (autoritatif sur la matrice), fonctions de retrofit idempotentes, jeu de démonstration | `volumes/13-base-de-donnees.md` | Vérifié | — | Aucun |
+| `prisma/migrations/*.sql` (29 fichiers) | 3 | historique généré — couvert par synthèse chronologique, pas ligne à ligne (conforme au mandat) | `volumes/13-base-de-donnees.md` | Vérifié | — | Aucun |
 
 ## G. `scripts/`
 
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 126 |
+| À analyser | 123 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 28 |
+| Vérifié | 31 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

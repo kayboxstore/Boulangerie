@@ -44,6 +44,9 @@
 | `apps/web/src/pages/Travailleurs.tsx` | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md` |
 | `apps/web/src/components/PaieCard.tsx` | `volumes/11k-3-travailleurs-paie-bulletins.md` |
 | `packages/shared/src/index.ts` — `travailleurCreateSchema`/`UpdateSchema`, `pointageCreerSchema`/`ModifierSchema`, `absenceDeclarerSchema`/`DecisionSchema`, `sanctionCreateSchema`, `moisISO`, `CalculPaieDTO`, `BulletinPaieDTO` | `volumes/11k-1/2/3-travailleurs-*.md` |
+| `prisma/schema.prisma` (42 modèles, 16 enums) | `volumes/13-base-de-donnees.md` |
+| `prisma/migrations/*.sql` (29 fichiers, synthèse chronologique) | `volumes/13-base-de-donnees.md` |
+| `prisma/seed.ts` | `volumes/13-base-de-donnees.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 

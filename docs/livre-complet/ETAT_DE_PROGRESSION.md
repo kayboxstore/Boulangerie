@@ -56,7 +56,8 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
   - **11k-1** (fiches, e-mail pro, pointage) : garde-fous de cohérence (compte déjà lié, groupe hors département), suppression asymétrique (bloquée par les bulletins — correctif documenté dans la spec elle-même — cascade silencieuse sur le reste), pointage en horodatage complet gérant nativement les équipes de nuit.
   - **11k-2** (absences, sanctions) : déclaration/décision comme deux actes distincts, alerte paresseuse réutilisant le compare-and-set du 11h avec restriction de destinataires plus fine, validation croisée type/montant portée par le schéma Zod partagé.
   - **11k-3** (calcul de paie, bulletins) : `calculerPaieBrute` sans arrondi intermédiaire (un seul arrondi final), vue dynamique vs bulletin figé (JSON copié, jamais recalculé), accès personnel aux bulletins hors permission de module, export PDF reconstruit uniquement depuis les chiffres figés. Exemple chiffré complet (350 000 Fc, 26 jours, 2 absences NJ, 1 retenue → 313 077 Fc net).
-  - Aucun écart spec/code sur l'ensemble du Volume 11k. **Les 26 fichiers Niveau 1 sont désormais tous couverts.**
+  - Aucun écart spec/code sur l'ensemble du Volume 11k. **Correction** : ce chapitre annonçait initialement, à tort, la clôture complète du Niveau 1 (26/26) — `prisma/schema.prisma`, également classé Niveau 1, restait alors non traité ; le Niveau 1 n'était donc qu'à 25/26 à ce stade. Voir la ligne Volume 13 ci-dessous, qui referme réellement le Niveau 1.
+- [x] Volume 13 — Chapitre « Base de données et migrations » : `prisma/schema.prisma` (42 modèles/16 enums recomptés, conventions transversales — `cuid()`, les 3 stratégies `onDelete`, `Int`/`Decimal`, `DateTime`/`@db.Date`, instantanés JSON, index unique partiel), ERD Mermaid en 6 vues par domaine, table de référence des 42 modèles, `prisma/migrations/*.sql` (résumé chronologique des 29 migrations), `prisma/seed.ts` (`upsertRole` autoritatif, retrofits idempotents). **Découverte et correction** : commentaire obsolète dans `schema.prisma` sur `Vente`/`LigneVente`/`ClotureCaisse` (présentées comme conservées alors qu'elles ont été réellement supprimées par une migration) — correction rétroactive appliquée au Volume 11j. Incohérence interne au code, pas un écart spec/code.
 
 ## 3. Ce qu'il reste à faire (dans l'ordre de priorité)
 
@@ -71,8 +72,8 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
    - ~~`apps/api/src/routes/commissions.ts` + `apps/web/src/pages/Commissions.tsx`~~ **fait (11i)**
    - ~~`apps/api/src/routes/caisse.ts` + `apps/web/src/pages/Caisse.tsx`~~ **fait (11j)**
    - ~~`apps/api/src/routes/travailleurs.ts` + `apps/web/src/pages/Travailleurs.tsx` + `apps/web/src/components/PaieCard.tsx`~~ **fait (11k, scindé en 11k-1/2/3) — Niveau 1 clos (26/26)**
-   - `prisma/schema.prisma` (chapitre Base de données complet, ERD Mermaid) *(prochain)*
-2. **Volumes 4-5** : Installation, Configuration et variables d'environnement (peut réutiliser largement `README.md`/`DEPLOIEMENT.md`, à confirmer avec le code).
+   - ~~`prisma/schema.prisma` (chapitre Base de données complet, ERD Mermaid)~~ **fait (Volume 13)**
+2. **Volumes 4-5** : Installation, Configuration et variables d'environnement (peut réutiliser largement `README.md`/`DEPLOIEMENT.md`, à confirmer avec le code). *(prochain)*
 3. **Volumes 7-10** : Arborescence détaillée, cycle de démarrage, UI et composants (Niveau 2/3), navigation et gestion d'état.
 4. **Volume 11-12** : Reste du back-end Niveau 2 (Stocks, Fournisseurs, Production, Départements, Notifications, etc.) et API/communications réseau.
 5. **Volume 13** : Base de données et migrations (au-delà du chapitre schéma déjà commencé dans le noyau Niveau 1).
@@ -86,11 +87,11 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
 
 ## 4. Dernier fichier analysé
 
-`apps/api/src/routes/travailleurs.ts`, `apps/web/src/pages/Travailleurs.tsx` et `apps/web/src/components/PaieCard.tsx` (Volume 11k, scindé en 11k-1/11k-2/11k-3) — tous marqués « Vérifié ». **Les 26 fichiers Niveau 1 sont désormais tous couverts.**
+`prisma/schema.prisma`, `prisma/migrations/*.sql` (29 fichiers, résumé chronologique) et `prisma/seed.ts` (Volume 13) — tous marqués « Vérifié ». **Le Niveau 1 est désormais clos à 100 % (26/26) et le premier chapitre transversal (base de données) est posé.**
 
 ## 5. Prochaine tâche exacte
 
-Le Niveau 1 étant clos, la priorité bascule sur le **Volume 13 — Base de données et migrations**, couvrant `prisma/schema.prisma` (980 lignes, 40 modèles/14 enums déjà recensés dans `INVENTAIRE_DU_PROJET.md`) avec un ERD Mermaid complet, une explication modèle par modèle (rôle, champs clés, relations, règles `onDelete`), un résumé de l'historique des migrations (29 migrations d'après l'inventaire — résumé, pas ligne à ligne), et `prisma/seed.ts`. Ce chapitre peut réutiliser directement toute la connaissance déjà accumulée sur les modèles individuels au fil des volumes 11a-11k (chaque modèle déjà croisé dans un chapitre applicatif n'a pas besoin d'être redécouvert, seulement resitué dans la vue d'ensemble relationnelle). Une fois ce chapitre posé, la priorité suivante est l'ensemble des 66 fichiers Niveau 2 restants (volumes 4-10, 12, 14-18), dans l'ordre indiqué au §3 ci-dessus.
+Rédiger les **Volumes 4 (Installation) et 5 (Configuration)**, en s'appuyant sur `README.md`, `.env.example` et `render.yaml` (déjà repérés dans `INVENTAIRE_DU_PROJET.md`, pas encore lus en détail dans le cadre du livre). Le Volume 4 doit vérifier les commandes d'installation autant que possible sans risque (installation des dépendances, génération du client Prisma, lancement des migrations) et signaler explicitement toute étape non vérifiable dans cet environnement. Le Volume 5 doit documenter le rôle de chaque variable d'environnement de `.env.example` — jamais sa valeur — en distinguant les variables obligatoires des optionnelles avec repli documenté (ex. `JWT_SECRET`, déjà croisé au Volume 11b pour son échec rapide en production si absent), et couvrir les spécificités du déploiement Render (`render.yaml`). Avant de rédiger : lire les trois fichiers sources en entier.
 
 ## 6. Problèmes ou incertitudes en suspens
 
@@ -107,11 +108,11 @@ Le Niveau 1 étant clos, la priorité bascule sur le **Volume 13 — Base de don
 
 | Niveau | Vérifiés / Total | % |
 |---|---|---:|
-| Niveau 1 | **26 / 26 — 100 %** (tous les fichiers Niveau 1 couverts, `packages/shared/src/index.ts` compté comme unité complète malgré sa nature transversale — voir note ci-dessous) | **100 %** |
+| Niveau 1 | **26 / 26 — 100 %** (tous les fichiers Niveau 1 couverts depuis le Volume 13, `prisma/schema.prisma` inclus — `packages/shared/src/index.ts` compté comme unité complète malgré sa nature transversale, voir note ci-dessous) | **100 %** |
 | Niveau 2 | 3 / 66 (`apps/api/src/lib/contexteRequete.ts`, `apps/api/src/routes/audit.ts`, `apps/web/src/pages/Audit.tsx`) | ~5 % |
-| Niveau 3 | 1 / 63 (`apps/api/src/lib/prisma.ts`) | ~2 % |
-| **Global** | **~30 / 155** | **~19 %** |
+| Niveau 3 | 3 / 63 (`apps/api/src/lib/prisma.ts`, `prisma/seed.ts`, `prisma/migrations/*.sql`) | ~5 % |
+| **Global** | **~31 / 155** | **~20 %** |
 
 *(`packages/shared/src/index.ts` est un cas particulier : ses portions Niveau 1 — fonctions financières, permissions, délégations, actions critiques, audit, commandes, commissions, caisse, travailleurs/paie — sont toutes couvertes en détail sur ce qui relève du Niveau 1, mais le fichier dans son ensemble reste « En cours » dans `MATRICE_DE_COUVERTURE.md` tant que ses sections Niveau 2/3 n'ont pas été traitées — voir §6. Il est compté ici comme une unité Niveau 1 complète, sa part Niveau 1 étant intégralement expliquée.)*
 
-**Étape franchie : le Niveau 1 (fichiers critiques, argent réel et calculs sensibles) est désormais couvert à 100 %** — douze chapitres complets (11a à 11k, ce dernier en 3 sous-chapitres), tous vérifiés contre la spécification, sans aucun écart trouvé au-delà des deux nuances de granularité déjà documentées (Volume 11f). La priorité bascule maintenant sur le Volume 13 (base de données, ERD complet) puis sur les 66 fichiers Niveau 2 restants — voir §5.
+**Étape franchie : le Niveau 1 (fichiers critiques, argent réel et calculs sensibles) est désormais couvert à 100 %** — treize chapitres complets (11a à 11k, ce dernier en 3 sous-chapitres, plus le Volume 13 qui referme réellement ce niveau via `prisma/schema.prisma`), tous vérifiés contre la spécification, sans aucun écart trouvé au-delà des deux nuances de granularité déjà documentées (Volume 11f) et d'un commentaire obsolète sans lien avec la spec (Volume 13, §5.5). La priorité bascule maintenant sur les Volumes 4-5 (Installation, Configuration) puis sur les 66 fichiers Niveau 2 restants — voir §5.

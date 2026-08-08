@@ -157,18 +157,21 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - `peutConsulterBulletinsDe` : accès personnel aux bulletins hors permission de module
 - Export PDF reconstruit uniquement depuis les chiffres figés, jamais recalculé
 - Exemple chiffré complet (350 000 Fc, 26 jours, 2 absences NJ, 1 retenue 10 000 Fc → 313 077 Fc net)
-- **Clôture du Niveau 1 : les 26 fichiers Niveau 1 sont désormais tous couverts.**
+- 25/26 fichiers Niveau 1 couverts à l'issue de ce volume (`schema.prisma`, également Niveau 1, restait à traiter — voir Volume 13, qui referme réellement le Niveau 1 à 26/26 ; correction d'une annonce prématurée faite ici initialement)
 
 ## Volume 12 — API et communications réseau ⬜
 - Convention REST du projet (verbes, codes de statut, forme des erreurs `{ erreur: string }`)
 - Socket.io : événements émis/écoutés, salles par utilisateur
 - `lib/api.ts` détaillé (déjà en partie couvert au 11b, référencé ici)
 
-## Volume 13 — Base de données et migrations ⬜
-- ERD Mermaid complet (40 modèles)
-- Modèle par modèle : rôle, champs clés, relations, règles `onDelete`
-- Historique des 29 migrations (résumé, pas ligne à ligne)
-- `prisma/seed.ts`
+## Volume 13 — Base de données et migrations ✅
+- Recomptage exact : 42 modèles, 16 enums (l'inventaire initial datait d'avant plusieurs migrations)
+- Conventions transversales centralisées : `cuid()`, `createdAt`/`updatedAt`, les 3 stratégies `onDelete`, `Int` vs `Decimal`, `DateTime` vs `@db.Date`, instantanés JSON, index unique partiel sur `estAdminPrincipal`
+- ERD Mermaid en 6 vues par domaine (identité/gouvernance, commandes/clients, catalogue/stocks/fournisseurs, production, travailleurs/paie, caisse/système)
+- Table de référence des 42 modèles avec renvoi vers leur chapitre applicatif (déjà couverts) ou le Volume 18 (Niveau 2, à venir)
+- **Découverte et correction** : commentaire obsolète dans `schema.prisma` (`Vente`/`LigneVente`/`ClotureCaisse` présentées comme « conservées en base » alors que la migration `absence_alerte_et_nettoyage_orphelines` les a réellement supprimées) — correction appliquée rétroactivement au Volume 11j
+- Historique résumé des 29 migrations (chronologie par étapes, pas ligne à ligne)
+- `prisma/seed.ts` : `upsertRole` autoritatif sur la matrice de permissions, fonctions de retrofit idempotentes
 
 ## Volume 14 — Authentification, autorisations et sécurité (synthèse) ⬜
 - Récapitulatif transversal (renvoie au Volume 11b pour le détail)
