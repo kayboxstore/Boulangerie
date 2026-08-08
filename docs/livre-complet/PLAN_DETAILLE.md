@@ -131,7 +131,15 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - `CommissionsPage` : lecture seule, aucune mutation ; export via `BarreExport` (détaillé au Volume 18)
 - Écart repéré : aucun
 
-### 11j à 11k ⬜ *(prochain chapitre : 11j — Caisse)*
+### 11j — Caisse ✅
+- Deux techniques de bornage de date (`dateSQL` pour les colonnes `@db.Date`, `bornesLocales` pour les `DateTime`) et pourquoi elles coexistent
+- `construireRegistre` : disjonction Entrées/Dettes payées par soustraction (`montantRecu − règlements`), exemple chiffré ; solde ; blocage farine à deux niveaux (taux puis production)
+- `sacsUtilisesLe` : seul pont en lecture vers le module Production
+- `PUT /taux` (upsert manuel sur date unique), dépenses manuelles, `PUT /depenses/farine` (cocher/décocher comme une seule opération, figeage du taux/sacs sur la ligne créée)
+- Côté client : tuile `Poste` avec alerte rouge sur solde négatif, réutilisation de `calculerDepenseFarine` pour l'estimation
+- Écart repéré : aucun
+
+### 11k ⬜ *(prochain chapitre : 11k — Travailleurs et Paie)*
 Voir `TABLE_DES_MATIERES.md`.
 
 ## Volume 12 — API et communications réseau ⬜

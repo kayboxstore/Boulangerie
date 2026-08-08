@@ -37,6 +37,9 @@
 | `apps/api/src/routes/commissions.ts` | `volumes/11i-commissions.md` |
 | `apps/web/src/pages/Commissions.tsx` | `volumes/11i-commissions.md` |
 | `packages/shared/src/index.ts` — `montantTotalPaye`, `CommissionLigneDTO` | `volumes/11i-commissions.md` |
+| `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
+| `apps/web/src/pages/Caisse.tsx` | `volumes/11j-caisse.md` |
+| `packages/shared/src/index.ts` — `tauxDuJourSchema`, `depenseCreateSchema`, `depenseFarineSchema`, `RegistreCaisseDTO`, `DepenseCaisseDTO` | `volumes/11j-caisse.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -80,12 +83,15 @@
 | `commissionsRouter` (`GET /`) | `apps/api/src/routes/commissions.ts` | `volumes/11i-commissions.md` |
 | `montantTotalPaye` | `packages/shared/src/index.ts` | `volumes/11i-commissions.md` |
 | `CommissionsPage` | `apps/web/src/pages/Commissions.tsx` | `volumes/11i-commissions.md` |
+| `caisseRouter` (`GET /registre`, `PUT /taux`, `POST /depenses`, `DELETE /depenses/:id`, `PUT /depenses/farine`) | `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
+| `construireRegistre` / `sacsUtilisesLe` | `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
+| `CaissePage` / `Poste` | `apps/web/src/pages/Caisse.tsx` | `volumes/11j-caisse.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
 | Section de `docs/spec-boulangerie.md` | Sujet | Chapitre du livre |
 |---|---|---|
-| 3.1 (dépense farine) | Registre de Caisse | `volumes/11a-noyau-financier-permissions.md` (formule), `volumes/11j-caisse.md` (à venir, écran complet) |
+| 3.1 (registre journalier, dépense farine) | Caisse | `volumes/11a-noyau-financier-permissions.md` (formule farine), `volumes/11j-caisse.md` (écran complet) |
 | 3.4 (commandes, avance/dette, doublon) | Commandes clients | `volumes/11a-noyau-financier-permissions.md` (formule), `volumes/11h-commandes.md` (écran complet) |
 | 3.11 (Commissions) | Commissions | `volumes/11i-commissions.md` |
 | 2 (rôles, hiérarchie, permissions, garde-fou Admin Principal) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md` |
