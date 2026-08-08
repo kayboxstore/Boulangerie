@@ -115,6 +115,11 @@
 | `apps/api/src/services/email.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
 | `apps/api/src/services/pdf.ts` (`construirePdf` générique) | `volumes/11z-5-apropos-assistant-export-rapports.md` |
 | `apps/web/src/components/BarreExport.tsx` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `apps/api/src/lib/realtime.ts` | `volumes/12-api-reseau.md` |
+| `apps/api/src/lib/events.ts` | `volumes/12-api-reseau.md` |
+| `apps/web/src/lib/socket.tsx` | `volumes/12-api-reseau.md` |
+| `apps/web/src/components/ActivityFeed.tsx` | `volumes/12-api-reseau.md` |
+| `apps/web/src/components/IndicateurConnexion.tsx` | `volumes/12-api-reseau.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -196,6 +201,9 @@
 | `construirePdf` (générique) | `apps/api/src/services/pdf.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
 | `envoyerRapport` | `apps/api/src/services/email.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
 | `moduleInterdit` | `apps/api/src/routes/export.ts` | `volumes/11z-5-apropos-assistant-export-rapports.md` |
+| `initRealtime` / `getIo` / `roomUtilisateur` / `roomRole` / `invaliderSessionUtilisateur` | `apps/api/src/lib/realtime.ts` | `volumes/12-api-reseau.md` |
+| `busEvenements` (`EvenementMetier`) | `apps/api/src/lib/events.ts` | `volumes/12-api-reseau.md` |
+| `SocketProvider` / `useSocket` | `apps/web/src/lib/socket.tsx` | `volumes/12-api-reseau.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 

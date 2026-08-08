@@ -23,14 +23,14 @@
 | `apps/api/src/services/actionsCritiques.ts` | 1 | `EXECUTEURS`, `executerAction`, `traiterActionCritique`, `ErreurAction` | `volumes/11f-approbations.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/cloudflareEmail.ts` | 2 | `creerOuObtenirDestination`, `obtenirDestination`, `creerRegleRoutage` | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/contexteRequete.ts` | 2 | `contexteRequete` (AsyncLocalStorage) | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
-| `apps/api/src/lib/events.ts` | 2 | `busEvenements` | À déterminer | À analyser | — | — |
+| `apps/api/src/lib/events.ts` | 2 | `busEvenements`, `EvenementMetier` | `volumes/12-api-reseau.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/ia.ts` | 2 | `repondreAssistantIA`, `appelerGemini`, `testerConnexionIA` | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/jwt.ts` | 1 | `signToken`, `verifyToken`, `JwtPayload` | `volumes/11b-authentification-permissions-bout-en-bout.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/logger.ts` | 3 | `logger` | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/origines.ts` | 2 | `verifierOrigine` | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/parametres.ts` | 2 | `lireParametre`, `ecrireParametre` | À déterminer | À analyser | — | — |
 | `apps/api/src/lib/prisma.ts` | 3 | client Prisma singleton | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
-| `apps/api/src/lib/realtime.ts` | 2 | `initRealtime`, `getIo`, `roomUtilisateur` | À déterminer | À analyser | — | — |
+| `apps/api/src/lib/realtime.ts` | 2 | `initRealtime`, `getIo`, `roomUtilisateur`, `roomRole`, `invaliderSessionUtilisateur` | `volumes/12-api-reseau.md` | Vérifié | — | Aucun |
 
 ## B. `apps/api/src/middleware/`
 
@@ -114,7 +114,7 @@
 | `apps/web/src/main.tsx` | 3 | montage React (providers empilés) | `volumes/08-cycle-demarrage.md` | Vérifié | — | Aucun |
 | `apps/web/src/lib/api.ts` | 1 | `api`, `getToken`, `setToken`, `surSessionRemplacee`, `ApiError` | `volumes/11b-authentification-permissions-bout-en-bout.md` | Vérifié | — | Aucun |
 | `apps/web/src/lib/auth.tsx` | 1 | `AuthProvider`, `useAuth`, `peutLire`, `peutEcrire`, `login`, `logout`, `deconnexionForcee` | `volumes/11b-authentification-permissions-bout-en-bout.md` | Vérifié | — | Aucun |
-| `apps/web/src/lib/socket.tsx` | 2 | connexion Socket.io client | À déterminer | À analyser | — | — |
+| `apps/web/src/lib/socket.tsx` | 2 | `SocketProvider`, `useSocket` | `volumes/12-api-reseau.md` | Vérifié | Clés d'invalidation `["ventes"]`/`["clotures"]` mortes (module CAISSE) | Aucun |
 | `apps/web/src/lib/theme.tsx` | 3 | thème clair/sombre | À déterminer | À analyser | — | — |
 | `apps/web/src/lib/csv.ts` | 3 | export CSV | À déterminer | À analyser | — | — |
 | `apps/web/src/lib/utils.ts` | 3 | `cn` | À déterminer | À analyser | — | — |
@@ -160,14 +160,14 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `apps/web/src/components/ActivityFeed.tsx` | 2 | `ActivityFeed` | À déterminer | À analyser | — | — |
+| `apps/web/src/components/ActivityFeed.tsx` | 2 | `ActivityFeed`, `tempsRelatif` | `volumes/12-api-reseau.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/BarreExport.tsx` | 2 | `BarreExport` | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/ChargementModule.tsx` | 3 | `ChargementModule` | `volumes/08-cycle-demarrage.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/DepartementsCard.tsx` | 2 | `DepartementsCard` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/DialogNouvelleZone.tsx` | 2 | `DialogNouvelleZone` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/EcranDemarrage.tsx` | 3 | `EcranDemarrage`, `splashDejaVu` | `volumes/08-cycle-demarrage.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/FeedbackProvider.tsx` | 3 | `FeedbackProvider`, `useFeedback` | À déterminer | À analyser | — | — |
-| `apps/web/src/components/IndicateurConnexion.tsx` | 3 | `IndicateurConnexion` | À déterminer | À analyser | — | — |
+| `apps/web/src/components/IndicateurConnexion.tsx` | 3 | `IndicateurConnexion` | `volumes/12-api-reseau.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/Layout.tsx` | 2 | `Layout`, `ListeNavigation`, `calculerLiens` (dupliquée, jamais appelée — voir lacunes) | `volumes/09-ui-composants.md` | Vérifié | Duplication de logique repérée (`calculerLiens` non appelée, réimplémentée en ligne) — signalée, pas corrigée (hors périmètre) | Aucun |
 | `apps/web/src/components/NotificationBell.tsx` | 2 | `NotificationBell` (lazy, framer-motion) | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/PaieCard.tsx` | 1 | `PaieCard` (sanctions, calcul de paie, bulletins) | `volumes/11k-3-travailleurs-paie-bulletins.md` | Vérifié | — | Aucun |
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 58 |
+| À analyser | 53 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 96 |
+| Vérifié | 101 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

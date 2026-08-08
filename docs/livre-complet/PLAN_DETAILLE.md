@@ -207,10 +207,15 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 
 **Clôture du Volume 11z** (5 sous-chapitres, 12 routeurs API, 12 services, ~20 composants/pages frontend).
 
-## Volume 12 — API et communications réseau ⬜
-- Convention REST du projet (verbes, codes de statut, forme des erreurs `{ erreur: string }`)
-- Socket.io : événements émis/écoutés, salles par utilisateur
-- `lib/api.ts` détaillé (déjà en partie couvert au 11b, référencé ici)
+## Volume 12 — API et communications réseau ✅
+- `lib/events.ts` : bus d'événements interne (`EventEmitter` natif Node), découplé de Socket.io — les modules métier publient sans connaître le transport
+- `lib/realtime.ts` : `initRealtime` (CORS Socket.io séparé d'Express, authentification au handshake avec la même vérification de session unique que `requireAuth`), deux rooms par connexion (`user:{id}`, `role:{id}`), `getIo`/`invaliderSessionUtilisateur`
+- `lib/socket.tsx` : `SocketProvider`/`useSocket`, chargement paresseux de `socket.io-client`, rattrapage d'historique à chaque (re)connexion, trois filets pour la session unique
+- **Observation** : clés d'invalidation `["ventes"]`/`["clotures"]` (module CAISSE) — code mort, aucun écran actuel ne les utilise (tables supprimées à la refonte 3.1, Volume 13)
+- `ActivityFeed`/`IndicateurConnexion` : rendu du flux, séparation délibérée pour le découpage de bundle (Framer Motion)
+- Écart repéré : aucun
+
+**Ce volume referme le transport du système de notification temps réel expliqué à travers les Volumes 11 et 11z.**
 
 ## Volume 13 — Base de données et migrations ✅
 - Recomptage exact : 42 modèles, 16 enums (l'inventaire initial datait d'avant plusieurs migrations)
