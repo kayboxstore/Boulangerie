@@ -55,7 +55,8 @@ Ce volume est scindé en un chapitre par domaine fonctionnel, dans l'ordre de pr
 | `11z-1-stocks-fournisseurs-produits.md` | `routes/stocks.ts`, `services/stocks.ts`, `routes/fournisseurs.ts`, `routes/produits.ts`, `pages/Stocks.tsx`, `pages/Fournisseurs.tsx`, `pages/Produits.tsx` | 2 | ✅ |
 | `11z-2-production.md` | `routes/production.ts`, `pages/Production.tsx`, `pages/BonsLivraison.tsx`, `services/pdf.ts` (partiel) | 2 | ✅ |
 | `11z-3-departements-zones-clients.md` | `routes/departements.ts`, `routes/zones-depositaires.ts`, `routes/clients.ts`, `DepartementsCard.tsx`, `ZonesDepositaireCard.tsx`, `DialogNouvelleZone.tsx`, `pages/Clients.tsx` | 2 | ✅ |
-| `11z-4` à `11z-n` (à venir) | Notifications, État système, Paramètres (boutique), Premier lancement, À propos, Assistant, Export, Rapports, Rapports personnels | 2 | ⬜ |
+| `11z-4-notifications-etat-systeme-parametres.md` | `routes/notifications.ts`, `services/notifications.ts`, `routes/etat-systeme.ts`, `services/sauvegarde*.ts`, `services/reinitialisation.ts`, `routes/parametres.ts`, `routes/premierLancement.ts`, `pages/EtatSysteme.tsx`, `pages/Parametres.tsx`, `pages/PremierLancement.tsx`, `NotificationBell.tsx` | 2 | ✅ |
+| `11z-5` (à venir) | À propos, Assistant, Export, Rapports, Rapports personnels, `construirePdf` générique | 2 | ⬜ |
 
 ## Détail du Volume 22 (Guide complet d'utilisation)
 

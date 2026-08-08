@@ -188,6 +188,14 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Frontend : `DepartementsCard`/`ZonesDepositaireCard` reçoivent leurs données/permissions en props depuis la page parente (pas de requête redondante), `DialogNouvelleZone` (création rapide depuis la fiche client)
 - Écart repéré : aucun
 
+### 11z-4 — Notifications, État système, Paramètres, Premier lancement ✅
+- `services/notifications.ts` : `rolesDestinataires` (matrice de permissions réutilisée pour le ciblage + supérieur hiérarchique en filet de sécurité), `rolesAvecLecture` (événements système), `publierEvenement` (persistance + temps réel dans le même passage)
+- `routes/etat-systeme.ts` + 4 services (`sauvegarde.ts` : pg_dump en sous-processus, mot de passe jamais en argument ; `sauvegardeLocale.ts` : rétention glissante ; `planificateurSauvegarde.ts` : node-cron, `noOverlap` ; `reinitialisation.ts` : séquencement strict sauvegarde-puis-effacement, catalogue matières premières conservé)
+- `routes/parametres.ts` : boutique + langue par défaut, partagé avec À propos
+- `routes/premierLancement.ts` : 4 étapes, `exigerBaseVide` en garde manuelle (pas de `requireAuth` possible)
+- Frontend : `EtatSystemePage`, `ParametresPage` (**observation** : modification de Qualité sans distinction visuelle exécuté/en attente, contrairement à `Equipe.tsx`), `PremierLancementPage`, `NotificationBell`
+- Écart repéré : aucun
+
 ## Volume 12 — API et communications réseau ⬜
 - Convention REST du projet (verbes, codes de statut, forme des erreurs `{ erreur: string }`)
 - Socket.io : événements émis/écoutés, salles par utilisateur

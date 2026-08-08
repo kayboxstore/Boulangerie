@@ -54,12 +54,12 @@
 | `apps/api/src/routes/delegations.ts` | 1 | `delegationsRouter` (`GET /`, `POST /`, `DELETE /:id`) | `volumes/11e-delegations.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/departements.ts` | 2 | `departementsRouter`, `groupesRouter` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/equipe.ts` | 1 | `equipeRouter` (comptes, `verifierQuotaAdmins`, `/principal`) | `volumes/11d-equipe-roles-permissions.md` | Vérifié | — | Aucun |
-| `apps/api/src/routes/etat-systeme.ts` | 2 | `etatSystemeRouter` | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/etat-systeme.ts` | 2 | `etatSystemeRouter` (état, sauvegarde manuelle, téléchargement local, réinitialisation) | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/export.ts` | 2 | `exportRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/fournisseurs.ts` | 2 | `fournisseursRouter` (fournisseurs, commandes, réception) | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | — | Aucun |
-| `apps/api/src/routes/notifications.ts` | 2 | `notificationsRouter` | À déterminer | À analyser | — | — |
-| `apps/api/src/routes/parametres.ts` | 2 | `parametresRouter` | À déterminer | À analyser | — | — |
-| `apps/api/src/routes/premierLancement.ts` | 2 | `premierLancementRouter` | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/notifications.ts` | 2 | `notificationsRouter` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
+| `apps/api/src/routes/parametres.ts` | 2 | `parametresRouter` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
+| `apps/api/src/routes/premierLancement.ts` | 2 | `premierLancementRouter` (`exigerBaseVide`, 4 étapes) | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/production.ts` | 2 | `productionRouter` (planning, productions, Schéma, Bon de livraison, écarts) | `volumes/11z-2-production.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/produits.ts` | 2 | `produitsRouter` (catalogue, `MODIFIER_TAUX_TAXE` via action critique) | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | UI `ProduitsPage` n'envoie jamais de changement de `tauxTaxe` — chemin serveur non atteint par l'UI actuelle | Aucun |
 | `apps/api/src/routes/rapports-personnels.ts` | 2 | `rapportsPersonnelsRouter` | À déterminer | À analyser | — | — |
@@ -77,12 +77,12 @@
 | `apps/api/src/services/email.ts` | 2 | envoi SMTP | À déterminer | À analyser | — | — |
 | `apps/api/src/services/emailPro.ts` | 2 | orchestration e-mail pro | À déterminer | À analyser | — | — |
 | `apps/api/src/services/interventionsAdmin.ts` | 2 | `notifierInterventionAdmin`, `estHorsPerimetreAdmin` | À déterminer | À analyser | — | — |
-| `apps/api/src/services/notifications.ts` | 2 | `publierEvenement`, `initNotificationService` | À déterminer | À analyser | — | — |
+| `apps/api/src/services/notifications.ts` | 2 | `publierEvenement`, `rolesDestinataires`, `rolesAvecLecture`, `initNotificationService` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
 | `apps/api/src/services/pdf.ts` | 2 | `construirePdfBonsLivraison`, `nomFichierPdf` **(couverts)** ; `construirePdf` générique (restant) | `volumes/11z-2-production.md` (partiel) | En cours | Fonction générique `construirePdf` (exports de rapports) sera couverte au chapitre Export/Rapports | Aucun repéré sur la partie couverte |
-| `apps/api/src/services/planificateurSauvegarde.ts` | 2 | `initPlanificateurSauvegarde`, `executerSauvegardeAutomatique` | À déterminer | À analyser | — | — |
-| `apps/api/src/services/reinitialisation.ts` | 2 | `reinitialiserBase` | À déterminer | À analyser | — | — |
-| `apps/api/src/services/sauvegarde.ts` | 2 | `construireDump`, `outilSauvegardeDisponible` | À déterminer | À analyser | — | — |
-| `apps/api/src/services/sauvegardeLocale.ts` | 2 | `ecrireSauvegardeLocale`, `lireSauvegardeLocale` | À déterminer | À analyser | — | — |
+| `apps/api/src/services/planificateurSauvegarde.ts` | 2 | `initPlanificateurSauvegarde`, `executerSauvegardeAutomatique` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
+| `apps/api/src/services/reinitialisation.ts` | 2 | `reinitialiserBase` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
+| `apps/api/src/services/sauvegarde.ts` | 2 | `construireDump`, `outilSauvegardeDisponible`, `coordonneesBase` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
+| `apps/api/src/services/sauvegardeLocale.ts` | 2 | `ecrireSauvegardeLocale`, `lireSauvegardeLocale` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
 | `apps/api/src/services/stocks.ts` | 2 | `appliquerMouvement`, `emettreAlerteSeuil`, `ErreurStock` | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | — | Aucun |
 
 ## E. `packages/shared/src/`
@@ -144,11 +144,11 @@
 | `apps/web/src/pages/Commissions.tsx` | 1 | `CommissionsPage` | `volumes/11i-commissions.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Dashboard.tsx` | 2 | `DashboardPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Equipe.tsx` | 1 | `EquipePage`, `messageApprobation` | `volumes/11d-equipe-roles-permissions.md` | Vérifié | Section délégations couverte sommairement, détail complet au 11e | Aucun (côté ce fichier) |
-| `apps/web/src/pages/EtatSysteme.tsx` | 2 | `EtatSystemePage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/EtatSysteme.tsx` | 2 | `EtatSystemePage` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Fournisseurs.tsx` | 2 | `FournisseursPage` | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Login.tsx` | 1 | `LoginPage` | `volumes/11c-connexion.md` | Vérifié | — | Aucun |
-| `apps/web/src/pages/Parametres.tsx` | 2 | `ParametresPage` | À déterminer | À analyser | — | — |
-| `apps/web/src/pages/PremierLancement.tsx` | 2 | `PremierLancementPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Parametres.tsx` | 2 | `ParametresPage` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | Modification de Qualité sans distinction visuelle exécuté/en attente d'approbation (contrairement à `Equipe.tsx`) | Aucun |
+| `apps/web/src/pages/PremierLancement.tsx` | 2 | `PremierLancementPage` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Production.tsx` | 2 | `ProductionPage` | `volumes/11z-2-production.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Produits.tsx` | 2 | `ProduitsPage` | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | N'envoie jamais de changement de `tauxTaxe` (chemin serveur non atteint) | Aucun |
 | `apps/web/src/pages/Profil.tsx` | 2 | `ProfilPage` | À déterminer | À analyser | — | — |
@@ -169,7 +169,7 @@
 | `apps/web/src/components/FeedbackProvider.tsx` | 3 | `FeedbackProvider`, `useFeedback` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/IndicateurConnexion.tsx` | 3 | `IndicateurConnexion` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/Layout.tsx` | 2 | `Layout`, `ListeNavigation`, `calculerLiens` (dupliquée, jamais appelée — voir lacunes) | `volumes/09-ui-composants.md` | Vérifié | Duplication de logique repérée (`calculerLiens` non appelée, réimplémentée en ligne) — signalée, pas corrigée (hors périmètre) | Aucun |
-| `apps/web/src/components/NotificationBell.tsx` | 2 | `NotificationBell` | À déterminer | À analyser | — | — |
+| `apps/web/src/components/NotificationBell.tsx` | 2 | `NotificationBell` (lazy, framer-motion) | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/PaieCard.tsx` | 1 | `PaieCard` (sanctions, calcul de paie, bulletins) | `volumes/11k-3-travailleurs-paie-bulletins.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/PanneauEmailPro.tsx` | 2 | `PanneauEmailPro` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/ZonesDepositaireCard.tsx` | 2 | `ZonesDepositaireCard` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 85 |
+| À analyser | 72 |
 | En cours | 2 |
 | Expliqué | 0 |
-| Vérifié | 68 |
+| Vérifié | 81 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

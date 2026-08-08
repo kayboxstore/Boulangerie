@@ -87,6 +87,19 @@
 | `apps/web/src/components/ZonesDepositaireCard.tsx` | `volumes/11z-3-departements-zones-clients.md` |
 | `apps/web/src/components/DialogNouvelleZone.tsx` | `volumes/11z-3-departements-zones-clients.md` |
 | `apps/web/src/pages/Clients.tsx` | `volumes/11z-3-departements-zones-clients.md` |
+| `apps/api/src/routes/notifications.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/api/src/services/notifications.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/api/src/routes/etat-systeme.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/api/src/services/sauvegarde.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/api/src/services/sauvegardeLocale.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/api/src/services/planificateurSauvegarde.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/api/src/services/reinitialisation.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/api/src/routes/parametres.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/api/src/routes/premierLancement.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/web/src/pages/EtatSysteme.tsx` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/web/src/pages/Parametres.tsx` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/web/src/pages/PremierLancement.tsx` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `apps/web/src/components/NotificationBell.tsx` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -156,6 +169,10 @@
 | `departementsRouter` / `groupesRouter` | `apps/api/src/routes/departements.ts` | `volumes/11z-3-departements-zones-clients.md` |
 | `ecritureZones` (middleware combinant `COMMANDES` OU `PRODUCTION`) | `apps/api/src/routes/zones-depositaires.ts` | `volumes/11z-3-departements-zones-clients.md` |
 | `clientsRouter` / `typeClientsRouter` | `apps/api/src/routes/clients.ts` | `volumes/11z-3-departements-zones-clients.md` |
+| `rolesDestinataires` / `rolesAvecLecture` / `publierEvenement` | `apps/api/src/services/notifications.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `construireDump` / `coordonneesBase` | `apps/api/src/services/sauvegarde.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `reinitialiserBase` | `apps/api/src/services/reinitialisation.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| `premierLancementRouter` (`exigerBaseVide`, 4 étapes) | `apps/api/src/routes/premierLancement.ts` | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
@@ -180,6 +197,10 @@
 | 3.18 (départements, groupes) | Départements/Groupes | `volumes/11z-3-departements-zones-clients.md` |
 | 3.3 d (zones de dépôt) | Zones de dépôt | `volumes/11z-3-departements-zones-clients.md` |
 | 3.4 (clients, qualités) | Clients | `volumes/11z-3-departements-zones-clients.md` |
+| 3.10 (notifications temps réel, ciblage hiérarchique) | Notifications | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| 3.15 (État système, sauvegardes, réinitialisation) | État système | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| 3.9 (paramètres boutique, langue par défaut) | Paramètres | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
+| 3.7 (Assistant de premier lancement) | Premier lancement | `volumes/11z-4-notifications-etat-systeme-parametres.md` |
 
 ---
 
