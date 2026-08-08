@@ -76,6 +76,10 @@
 | `apps/web/src/pages/Stocks.tsx` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
 | `apps/web/src/pages/Fournisseurs.tsx` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
 | `apps/web/src/pages/Produits.tsx` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| `apps/api/src/routes/production.ts` | `volumes/11z-2-production.md` |
+| `apps/api/src/services/pdf.ts` — `construirePdfBonsLivraison`, `nomFichierPdf` | `volumes/11z-2-production.md` |
+| `apps/web/src/pages/Production.tsx` | `volumes/11z-2-production.md` |
+| `apps/web/src/pages/BonsLivraison.tsx` | `volumes/11z-2-production.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -138,6 +142,10 @@
 | `stocksRouter` (`/matieres`, `/mouvements`) | `apps/api/src/routes/stocks.ts` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
 | `fournisseursRouter` (`/`, `/commandes`, `/commandes/:id/reception`) | `apps/api/src/routes/fournisseurs.ts` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
 | `produitsRouter` | `apps/api/src/routes/produits.ts` | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| `productionRouter` (`/planning`, `/schema-commande`, `/bons-livraison`, `/productions`, `/ecarts`) | `apps/api/src/routes/production.ts` | `volumes/11z-2-production.md` |
+| `chargerSchemaCommandeJour` / `chargerBonLivraisonJour` | `apps/api/src/routes/production.ts` | `volumes/11z-2-production.md` |
+| `totalDestinationsBacs` | `packages/shared/src/index.ts` | `volumes/11z-2-production.md` |
+| `construirePdfBonsLivraison` | `apps/api/src/services/pdf.ts` | `volumes/11z-2-production.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
@@ -158,6 +166,7 @@
 | 3.2 (matières premières, mouvements, seuils) | Stocks | `volumes/11z-1-stocks-fournisseurs-produits.md` |
 | 3.6 (fournisseurs, bons de commande, réception) | Fournisseurs | `volumes/11z-1-stocks-fournisseurs-produits.md` |
 | 3.9 (catalogue produits, prix, taxes) | Produits/Paramètres | `volumes/11z-1-stocks-fournisseurs-produits.md` |
+| 3.3 a-e (planning, productions, ingrédients, schéma de commande, bon de livraison) | Production | `volumes/11z-2-production.md` |
 
 ---
 

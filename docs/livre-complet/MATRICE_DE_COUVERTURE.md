@@ -60,7 +60,7 @@
 | `apps/api/src/routes/notifications.ts` | 2 | `notificationsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/parametres.ts` | 2 | `parametresRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/premierLancement.ts` | 2 | `premierLancementRouter` | À déterminer | À analyser | — | — |
-| `apps/api/src/routes/production.ts` | 2 | `productionRouter` (planning, Schéma, Bon de livraison) | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/production.ts` | 2 | `productionRouter` (planning, productions, Schéma, Bon de livraison, écarts) | `volumes/11z-2-production.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/produits.ts` | 2 | `produitsRouter` (catalogue, `MODIFIER_TAUX_TAXE` via action critique) | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | UI `ProduitsPage` n'envoie jamais de changement de `tauxTaxe` — chemin serveur non atteint par l'UI actuelle | Aucun |
 | `apps/api/src/routes/rapports-personnels.ts` | 2 | `rapportsPersonnelsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/rapports.ts` | 2 | `rapportsRouter` | À déterminer | À analyser | — | — |
@@ -78,7 +78,7 @@
 | `apps/api/src/services/emailPro.ts` | 2 | orchestration e-mail pro | À déterminer | À analyser | — | — |
 | `apps/api/src/services/interventionsAdmin.ts` | 2 | `notifierInterventionAdmin`, `estHorsPerimetreAdmin` | À déterminer | À analyser | — | — |
 | `apps/api/src/services/notifications.ts` | 2 | `publierEvenement`, `initNotificationService` | À déterminer | À analyser | — | — |
-| `apps/api/src/services/pdf.ts` | 2 | générateurs PDF | À déterminer | À analyser | — | — |
+| `apps/api/src/services/pdf.ts` | 2 | `construirePdfBonsLivraison`, `nomFichierPdf` **(couverts)** ; `construirePdf` générique (restant) | `volumes/11z-2-production.md` (partiel) | En cours | Fonction générique `construirePdf` (exports de rapports) sera couverte au chapitre Export/Rapports | Aucun repéré sur la partie couverte |
 | `apps/api/src/services/planificateurSauvegarde.ts` | 2 | `initPlanificateurSauvegarde`, `executerSauvegardeAutomatique` | À déterminer | À analyser | — | — |
 | `apps/api/src/services/reinitialisation.ts` | 2 | `reinitialiserBase` | À déterminer | À analyser | — | — |
 | `apps/api/src/services/sauvegarde.ts` | 2 | `construireDump`, `outilSauvegardeDisponible` | À déterminer | À analyser | — | — |
@@ -137,7 +137,7 @@
 | `apps/web/src/pages/APropos.tsx` | 2 | `AProposPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Assistant.tsx` | 2 | `AssistantPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Audit.tsx` | 2 | `AuditPage`, `champsPertinents` | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
-| `apps/web/src/pages/BonsLivraison.tsx` | 2 | `BonsLivraisonPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/BonsLivraison.tsx` | 2 | `BonsLivraisonPage` | `volumes/11z-2-production.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Caisse.tsx` | 1 | `CaissePage`, `Poste` (tuile avec alerte solde négatif) | `volumes/11j-caisse.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Clients.tsx` | 2 | `ClientsPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Commandes.tsx` | 1 | `CommandesPage` (apercu client via `calculerCommande`, dialogue de conflit) | `volumes/11h-commandes.md` | Vérifié | — | Aucun |
@@ -149,7 +149,7 @@
 | `apps/web/src/pages/Login.tsx` | 1 | `LoginPage` | `volumes/11c-connexion.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Parametres.tsx` | 2 | `ParametresPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/PremierLancement.tsx` | 2 | `PremierLancementPage` | À déterminer | À analyser | — | — |
-| `apps/web/src/pages/Production.tsx` | 2 | `ProductionPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Production.tsx` | 2 | `ProductionPage` | `volumes/11z-2-production.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Produits.tsx` | 2 | `ProduitsPage` | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | N'envoie jamais de changement de `tauxTaxe` (chemin serveur non atteint) | Aucun |
 | `apps/web/src/pages/Profil.tsx` | 2 | `ProfilPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/RapportsPersonnels.tsx` | 2 | `RapportsPersonnelsPage` | À déterminer | À analyser | — | — |
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 96 |
-| En cours | 1 |
+| À analyser | 92 |
+| En cours | 2 |
 | Expliqué | 0 |
-| Vérifié | 58 |
+| Vérifié | 61 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

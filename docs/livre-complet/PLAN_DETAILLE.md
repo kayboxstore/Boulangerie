@@ -175,6 +175,12 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Observation : `ProduitsPage` n'envoie jamais de changement de `tauxTaxe` — le chemin serveur existe mais n'est atteint par aucune UI actuelle
 - Écart repéré : aucun
 
+### 11z-2 — Production ✅
+- `routes/production.ts` : Planning (unicité par date, mise à jour plutôt qu'échec), Schéma de commande (`chargerSchemaCommandeJour` source unique GET/PUT, alimentation automatique du Planning), Bon de livraison (`chargerBonLivraisonJour`, indépendance volontaire du Schéma, Dépositaires uniquement), Productions enregistrées (décrémentation via code d'ingrédient + `appliquerMouvement` réutilisé du 11z-1, réconciliation non bloquante via `totalDestinationsBacs`), vue Écarts prévu/réalisé
+- `services/pdf.ts` (partiel) : `construirePdfBonsLivraison`, `nomFichierPdf` — la fonction générique `construirePdf` (rapports) reste à couvrir
+- `pages/Production.tsx`, `pages/BonsLivraison.tsx` : édition en grille par cellule, réutilisation client de `totalDestinationsBacs`, téléchargement PDF via `fetch` direct (pas le wrapper `api()`, incompatible avec un flux binaire)
+- Écart repéré : aucun
+
 ## Volume 12 — API et communications réseau ⬜
 - Convention REST du projet (verbes, codes de statut, forme des erreurs `{ erreur: string }`)
 - Socket.io : événements émis/écoutés, salles par utilisateur
