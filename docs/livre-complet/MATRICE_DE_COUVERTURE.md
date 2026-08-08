@@ -17,8 +17,8 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `apps/api/src/app.ts` | 2 | `createApp` | À déterminer | À analyser | — | — |
-| `apps/api/src/index.ts` | 3 | point d'entrée | À déterminer | À analyser | — | — |
+| `apps/api/src/app.ts` | 2 | `createApp` (middlewares, montage des 26 routeurs, repli SPA, gestion d'erreurs) | `volumes/08-cycle-demarrage.md` | Vérifié | — | Aucun |
+| `apps/api/src/index.ts` | 3 | point d'entrée (serveur HTTP, Socket.io, notifications, planificateur) | `volumes/08-cycle-demarrage.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/audit.ts` | 1 | `extensionAudit`, `normaliser`, `alignerCles` | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
 | `apps/api/src/services/actionsCritiques.ts` | 1 | `EXECUTEURS`, `executerAction`, `traiterActionCritique`, `ErreurAction` | `volumes/11f-approbations.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/cloudflareEmail.ts` | 2 | `creerAdresseProfessionnelle`, etc. | À déterminer | À analyser | — | — |
@@ -110,8 +110,8 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `apps/web/src/App.tsx` | 2 | `App`, `AppAuthentifiee`, `RequiertLecture`, `RequiertEcriture` | À déterminer | À analyser | — | — |
-| `apps/web/src/main.tsx` | 3 | montage React | À déterminer | À analyser | — | — |
+| `apps/web/src/App.tsx` | 2 | `App`, `AppAuthentifiee`, `RequiertLecture`, `RequiertEcriture` | `volumes/08-cycle-demarrage.md`, `volumes/10-navigation-etat.md` | Vérifié | — | Aucun |
+| `apps/web/src/main.tsx` | 3 | montage React (providers empilés) | `volumes/08-cycle-demarrage.md` | Vérifié | — | Aucun |
 | `apps/web/src/lib/api.ts` | 1 | `api`, `getToken`, `setToken`, `surSessionRemplacee`, `ApiError` | `volumes/11b-authentification-permissions-bout-en-bout.md` | Vérifié | — | Aucun |
 | `apps/web/src/lib/auth.tsx` | 1 | `AuthProvider`, `useAuth`, `peutLire`, `peutEcrire`, `login`, `logout`, `deconnexionForcee` | `volumes/11b-authentification-permissions-bout-en-bout.md` | Vérifié | — | Aucun |
 | `apps/web/src/lib/socket.tsx` | 2 | connexion Socket.io client | À déterminer | À analyser | — | — |
@@ -162,13 +162,13 @@
 |---|:---:|---|---|---|---|---|
 | `apps/web/src/components/ActivityFeed.tsx` | 2 | `ActivityFeed` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/BarreExport.tsx` | 2 | `BarreExport` | À déterminer | À analyser | — | — |
-| `apps/web/src/components/ChargementModule.tsx` | 3 | `ChargementModule` | À déterminer | À analyser | — | — |
+| `apps/web/src/components/ChargementModule.tsx` | 3 | `ChargementModule` | `volumes/08-cycle-demarrage.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/DepartementsCard.tsx` | 2 | `DepartementsCard` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/DialogNouvelleZone.tsx` | 2 | `DialogNouvelleZone` | À déterminer | À analyser | — | — |
-| `apps/web/src/components/EcranDemarrage.tsx` | 3 | `EcranDemarrage`, `splashDejaVu` | À déterminer | À analyser | — | — |
+| `apps/web/src/components/EcranDemarrage.tsx` | 3 | `EcranDemarrage`, `splashDejaVu` | `volumes/08-cycle-demarrage.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/FeedbackProvider.tsx` | 3 | `FeedbackProvider`, `useFeedback` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/IndicateurConnexion.tsx` | 3 | `IndicateurConnexion` | À déterminer | À analyser | — | — |
-| `apps/web/src/components/Layout.tsx` | 2 | `Layout` | À déterminer | À analyser | — | — |
+| `apps/web/src/components/Layout.tsx` | 2 | `Layout`, `ListeNavigation`, `calculerLiens` (dupliquée, jamais appelée — voir lacunes) | `volumes/09-ui-composants.md` | Vérifié | Duplication de logique repérée (`calculerLiens` non appelée, réimplémentée en ligne) — signalée, pas corrigée (hors périmètre) | Aucun |
 | `apps/web/src/components/NotificationBell.tsx` | 2 | `NotificationBell` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/PaieCard.tsx` | 1 | `PaieCard` (sanctions, calcul de paie, bulletins) | `volumes/11k-3-travailleurs-paie-bulletins.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/PanneauEmailPro.tsx` | 2 | `PanneauEmailPro` | À déterminer | À analyser | — | — |
@@ -178,17 +178,17 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `apps/web/src/components/ui/badge.tsx` | 3 | `Badge` | À déterminer | À analyser | — | — |
-| `apps/web/src/components/ui/button.tsx` | 3 | `Button` | À déterminer | À analyser | — | — |
-| `apps/web/src/components/ui/card.tsx` | 3 | `Card` et sous-composants | À déterminer | À analyser | — | — |
-| `apps/web/src/components/ui/carte-ligne.tsx` | 3 | `CarteLigne` (vue mobile) | À déterminer | À analyser | — | — |
-| `apps/web/src/components/ui/dialog.tsx` | 3 | `Dialog` et sous-composants | À déterminer | À analyser | — | — |
-| `apps/web/src/components/ui/input.tsx` | 3 | `Input` | À déterminer | À analyser | — | — |
-| `apps/web/src/components/ui/label.tsx` | 3 | `Label` | À déterminer | À analyser | — | — |
-| `apps/web/src/components/ui/select.tsx` | 3 | `NativeSelect` | À déterminer | À analyser | — | — |
-| `apps/web/src/components/ui/sheet.tsx` | 3 | `Sheet` (panneau mobile) | À déterminer | À analyser | — | — |
-| `apps/web/src/components/ui/table.tsx` | 3 | `Table` et sous-composants | À déterminer | À analyser | — | — |
-| `apps/web/src/components/ui/textarea.tsx` | 3 | `Textarea` | À déterminer | À analyser | — | — |
+| `apps/web/src/components/ui/badge.tsx` | 3 | `Badge` (variantes `cva` : default/gold/secondary/destructive/outline) | `volumes/09-ui-composants.md` | Vérifié | — | Aucun |
+| `apps/web/src/components/ui/button.tsx` | 3 | `Button` (variantes/tailles `cva`, `asChild` via `@radix-ui/react-slot`) | `volumes/09-ui-composants.md` | Vérifié | — | Aucun |
+| `apps/web/src/components/ui/card.tsx` | 3 | `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter` | `volumes/09-ui-composants.md` | Vérifié | — | Aucun |
+| `apps/web/src/components/ui/carte-ligne.tsx` | 3 | `CarteLigne`, `CarteLigneTitre`, `CarteLigneChamp`, `CarteLigneActions` (vue mobile) | `volumes/09-ui-composants.md` | Vérifié | — | Aucun |
+| `apps/web/src/components/ui/dialog.tsx` | 3 | wrapper `@radix-ui/react-dialog`, bouton de fermeture intégré à `DialogContent` | `volumes/09-ui-composants.md` | Vérifié | — | Aucun |
+| `apps/web/src/components/ui/input.tsx` | 3 | `Input` | `volumes/09-ui-composants.md` | Vérifié | — | Aucun |
+| `apps/web/src/components/ui/label.tsx` | 3 | `Label` (wrapper `@radix-ui/react-label`) | `volumes/09-ui-composants.md` | Vérifié | — | Aucun |
+| `apps/web/src/components/ui/select.tsx` | 3 | `NativeSelect` (`<select>` HTML natif stylé, pas un composant Radix) | `volumes/09-ui-composants.md` | Vérifié | — | Aucun |
+| `apps/web/src/components/ui/sheet.tsx` | 3 | `Sheet` (tiroir mobile — réutilise le même primitif Radix que `Dialog`, stylé différemment) | `volumes/09-ui-composants.md` | Vérifié | — | Aucun |
+| `apps/web/src/components/ui/table.tsx` | 3 | `Table` (enveloppé `overflow-auto`), `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell` | `volumes/09-ui-composants.md` | Vérifié | — | Aucun |
+| `apps/web/src/components/ui/textarea.tsx` | 3 | `Textarea` | `volumes/09-ui-composants.md` | Vérifié | — | Aucun |
 
 ## M. Configuration et outillage (Niveau 3)
 
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 121 |
+| À analyser | 103 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 33 |
+| Vérifié | 51 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

@@ -50,6 +50,25 @@
 | `README.md` | `volumes/04-installation.md` |
 | `render.yaml` | `volumes/05-configuration.md` |
 | `.env.example` | `volumes/05-configuration.md` |
+| Arborescence complète (`apps/`, `packages/`, `prisma/`, `docs/`, `scripts/`) | `volumes/07-arborescence.md` |
+| `apps/api/src/index.ts` | `volumes/08-cycle-demarrage.md` |
+| `apps/api/src/app.ts` | `volumes/08-cycle-demarrage.md` |
+| `apps/web/src/main.tsx` | `volumes/08-cycle-demarrage.md` |
+| `apps/web/src/App.tsx` | `volumes/08-cycle-demarrage.md`, `volumes/10-navigation-etat.md` |
+| `apps/web/src/components/EcranDemarrage.tsx` | `volumes/08-cycle-demarrage.md` |
+| `apps/web/src/components/ChargementModule.tsx` | `volumes/08-cycle-demarrage.md` |
+| `apps/web/src/components/Layout.tsx` | `volumes/09-ui-composants.md` |
+| `apps/web/src/components/ui/badge.tsx` | `volumes/09-ui-composants.md` |
+| `apps/web/src/components/ui/button.tsx` | `volumes/09-ui-composants.md` |
+| `apps/web/src/components/ui/card.tsx` | `volumes/09-ui-composants.md` |
+| `apps/web/src/components/ui/carte-ligne.tsx` | `volumes/09-ui-composants.md` |
+| `apps/web/src/components/ui/dialog.tsx` | `volumes/09-ui-composants.md` |
+| `apps/web/src/components/ui/input.tsx` | `volumes/09-ui-composants.md` |
+| `apps/web/src/components/ui/label.tsx` | `volumes/09-ui-composants.md` |
+| `apps/web/src/components/ui/select.tsx` | `volumes/09-ui-composants.md` |
+| `apps/web/src/components/ui/sheet.tsx` | `volumes/09-ui-composants.md` |
+| `apps/web/src/components/ui/table.tsx` | `volumes/09-ui-composants.md` |
+| `apps/web/src/components/ui/textarea.tsx` | `volumes/09-ui-composants.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -101,6 +120,13 @@
 | `calculerPaieBrute` / `peutConsulterBulletinsDe` | `apps/api/src/routes/travailleurs.ts` | `volumes/11k-3-travailleurs-paie-bulletins.md` |
 | `TravailleursPage` | `apps/web/src/pages/Travailleurs.tsx` | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md` |
 | `PaieCard` | `apps/web/src/components/PaieCard.tsx` | `volumes/11k-3-travailleurs-paie-bulletins.md` |
+| `createApp` | `apps/api/src/app.ts` | `volumes/08-cycle-demarrage.md` |
+| `App` / `AppAuthentifiee` / `RequiertLecture` / `RequiertEcriture` | `apps/web/src/App.tsx` | `volumes/08-cycle-demarrage.md`, `volumes/10-navigation-etat.md` |
+| `EcranDemarrage` / `splashDejaVu` | `apps/web/src/components/EcranDemarrage.tsx` | `volumes/08-cycle-demarrage.md` |
+| `Layout` / `ListeNavigation` / `calculerLiens` (dupliquée, jamais appelée) | `apps/web/src/components/Layout.tsx` | `volumes/09-ui-composants.md` |
+| `CarteLigne` / `CarteLigneTitre` / `CarteLigneChamp` / `CarteLigneActions` | `apps/web/src/components/ui/carte-ligne.tsx` | `volumes/09-ui-composants.md` |
+| `NativeSelect` | `apps/web/src/components/ui/select.tsx` | `volumes/09-ui-composants.md` |
+| `Sheet` (réutilise `@radix-ui/react-dialog`) | `apps/web/src/components/ui/sheet.tsx` | `volumes/09-ui-composants.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 

@@ -12,10 +12,10 @@
 | 4 | Installation de l'environnement | `04-installation.md` | ✅ |
 | 5 | Configuration et variables d'environnement | `05-configuration.md` | ✅ |
 | 6 | Architecture générale | `06-architecture.md` | ⬜ |
-| 7 | Arborescence détaillée du projet | `07-arborescence.md` | ⬜ |
-| 8 | Cycle de démarrage de l'application | `08-cycle-demarrage.md` | ⬜ |
-| 9 | Interface utilisateur et composants | `09-ui-composants.md` | ⬜ |
-| 10 | Navigation et gestion de l'état | `10-navigation-etat.md` | ⬜ |
+| 7 | Arborescence détaillée du projet | `07-arborescence.md` | ✅ |
+| 8 | Cycle de démarrage de l'application | `08-cycle-demarrage.md` | ✅ |
+| 9 | Interface utilisateur et composants | `09-ui-composants.md` | ✅ |
+| 10 | Navigation et gestion de l'état | `10-navigation-etat.md` | ✅ |
 | 11 | Back-end, services et règles métier | `11a` à `11z` (voir détail ci-dessous) | 🟡 |
 | 12 | API et communications réseau | `12-api-reseau.md` | ⬜ |
 | 13 | Base de données et migrations | `13-base-de-donnees.md` | ✅ |

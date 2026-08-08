@@ -39,22 +39,28 @@
 - Le monorepo et la circulation d'un type depuis `packages/shared` jusqu'au rendu React
 - Séparation des responsabilités (routes → services → Prisma)
 
-## Volume 7 — Arborescence détaillée du projet ⬜
+## Volume 7 — Arborescence détaillée du projet ✅
 - Explication dossier par dossier, avec renvoi vers `INVENTAIRE_DU_PROJET.md` pour le détail fichier par fichier
+- Trois paquets npm (`apps/api`, `apps/web`, `packages/shared`), `apps/web/components.json` (shadcn/ui, générateur et non dépendance)
 
-## Volume 8 — Cycle de démarrage de l'application ⬜
-- Démarrage du serveur API (`index.ts` → `app.ts` → routers → écoute HTTP)
-- Démarrage du frontend (`main.tsx` → `App.tsx` → écran de démarrage → connexion)
-- Diagramme de séquence Mermaid
+## Volume 8 — Cycle de démarrage de l'application ✅
+- Démarrage du serveur API (`index.ts` → `createApp()` → 26 routeurs → repli SPA → écoute HTTP)
+- Démarrage du frontend (`main.tsx` → empilement des providers → `App.tsx` → `EcranDemarrage` → connexion)
+- Diagramme de séquence Mermaid complet
+- Écart repéré : aucun
 
-## Volume 9 — Interface utilisateur et composants ⬜
-- Système de design (Tailwind + Radix + composants `ui/`)
-- Vue mobile (`CarteLigne`) vs vue desktop (`Table`)
-- Inventaire commenté des composants réutilisables (Niveau 2/3)
+## Volume 9 — Interface utilisateur et composants ✅
+- Système de design (Tailwind + Radix + shadcn/ui, générateur copiant les composants dans `components/ui/`)
+- Les 11 primitives `ui/` : `badge`, `button`, `card`, `carte-ligne`, `dialog`, `input`, `label`, `select`/`NativeSelect`, `sheet`, `table`, `textarea`
+- Vue mobile (`CarteLigne`) vs vue desktop (`Table`) : deux arbres JSX partageant les mêmes données
+- `Sheet` : réutilise le même primitif Radix que `Dialog`, stylé en tiroir plutôt que centré
+- `Layout.tsx` : règle « tous les modules visibles, grisés si hors permission », `ListeNavigation` (rendu unique partagé)
+- **Observation signalée (pas un écart spec/code)** : `calculerLiens` dans `Layout.tsx` définie mais jamais appelée, dupliquée en ligne dans `Layout()`
 
-## Volume 10 — Navigation et gestion de l'état ⬜
-- `App.tsx` : arbre de routes, gardes `RequiertLecture`/`RequiertEcriture`
-- TanStack Query : clés de requête, invalidation, cache
+## Volume 10 — Navigation et gestion de l'état ✅
+- `App.tsx` : arbre de routes complet, `React.lazy` (20/22 pages), gardes `RequiertLecture`/`RequiertEcriture` (confort d'affichage — sécurité réelle côté serveur)
+- TanStack Query : clés de requête structurées, invalidation large après mutation, `enabled`
+- Écart repéré : aucun
 - État local vs état serveur
 
 ## Volume 11 — Back-end, services et règles métier 🟡

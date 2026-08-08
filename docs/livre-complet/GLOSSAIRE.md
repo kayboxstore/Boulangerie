@@ -34,6 +34,8 @@
 
 **Commission** — Somme reversée à une cliente de qualité « Maman » pour chaque bac reçu (1 650 Fc/bac au moment de l'audit). Calculée automatiquement à l'enregistrement d'une commande.
 
+**cva (class-variance-authority)** — Bibliothèque utilitaire générant des classes Tailwind CSS conditionnelles à partir d'un ensemble de « variantes » nommées (ex. `default`/`gold`/`destructive` pour `Badge` ou `Button`). Voir Volume 9.
+
 ## D
 
 **Décision (Absence)** — Acte distinct de la déclaration d'une absence, tranché par un Admin (secondaire ou Principal) : justifiée, non justifiée, ou en attente. Voir Volume 11k-2.
@@ -70,6 +72,10 @@
 
 **JWT (JSON Web Token)** — Jeton signé cryptographiquement contenant l'identité d'un utilisateur connecté (`sub`, `roleId`, `sid`), envoyé par le client à chaque requête dans l'en-tête `Authorization: Bearer <jeton>`. Signé par `lib/jwt.ts`.
 
+## L
+
+**Lazy loading (chargement paresseux)** — Technique consistant à ne charger le code d'un composant (ici, une page) qu'au moment où il est effectivement affiché, via `React.lazy`/`import()` dynamique, plutôt que dans le paquet JavaScript initial. Appliqué à 20 des 22 pages de l'application (`Login.tsx` et `PremierLancement.tsx` restent dans le paquet principal, nécessaires avant toute authentification). Voir Volume 10.
+
 ## M
 
 **Maman** — Type de cliente (vocabulaire du métier, pas un terme technique) dont les commandes génèrent une commission (contrairement aux Dépositaires et à la Vente cash).
@@ -102,6 +108,8 @@
 
 ## R
 
+**Radix UI** — Bibliothèque de primitives d'interface accessibles et sans style imposé (`@radix-ui/react-*`), sur laquelle sont bâtis `Dialog` et `Sheet` de ce projet (les deux réutilisent le même primitif `@radix-ui/react-dialog`, seul le style diffère). Voir Volume 9.
+
 **Rôle** — Ensemble nommé de permissions (ex. « Caissier(ère) », « Responsable de production »), attribué à un ou plusieurs comptes `Utilisateur`. Modèle `Role` en base.
 
 ## S
@@ -112,7 +120,19 @@
 
 **Session unique** — Règle selon laquelle un compte ne peut avoir qu'une seule session active à la fois : une nouvelle connexion invalide la précédente (`Utilisateur.sessionActuelleId`).
 
+**shadcn/ui** — Non pas une bibliothèque installée comme dépendance classique, mais un générateur qui copie des composants Radix UI pré-stylés directement dans le code du projet (`apps/web/src/components/ui/`), piloté par `apps/web/components.json`. Explique pourquoi ce dossier fait partie du code source versionné plutôt que de `node_modules`. Voir Volumes 7 et 9.
+
 **Socket.io** — Bibliothèque de communication temps réel bidirectionnelle (au-dessus des WebSockets, avec repli automatique) utilisée pour les notifications et le fil d'activité en direct.
+
+**SPA (Single Page Application) — repli (fallback)** — Configuration serveur qui renvoie systématiquement `index.html` pour toute route non reconnue comme un fichier statique ou une route `/api/*`, afin que le routage côté client (`react-router-dom`) puisse prendre le relais après rechargement d'une URL profonde. Posé en dernier, après le montage des 26 routeurs, dans `apps/api/src/app.ts`. Voir Volume 8.
+
+**Splash (écran de démarrage)** — Écran de chargement superposé non bloquant, affiché au tout premier lancement de l'application dans un onglet donné (mémorisé via `sessionStorage`) pendant une durée fixe (7000 ms), géré par `EcranDemarrage.tsx`. Voir Volume 8.
+
+## T
+
+**TanStack Query** — Bibliothèque de gestion de l'état serveur côté client (cache, invalidation, re-fetch) utilisée pour toutes les données venant de l'API. Convention du projet : clés de requête structurées (`["ressource", filtres]`), invalidation large de toutes les clés affectées après une mutation plutôt que du seul écran courant, option `enabled` pour suspendre une requête tant qu'une condition n'est pas remplie (permission manquante, paramètre non renseigné). Voir Volume 10.
+
+**Trust proxy** — Réglage Express indiquant au serveur qu'il est placé derrière un proxy inverse (celui de Render) et qu'il doit donc faire confiance aux en-têtes `X-Forwarded-*` pour déterminer l'adresse IP réelle du client et le protocole d'origine (HTTP/HTTPS). Posé en tout premier dans `createApp()`. Voir Volume 8.
 
 ## V
 
