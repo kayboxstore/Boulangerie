@@ -45,7 +45,7 @@
 | `apps/api/src/routes/apropos.ts` | 2 | `aProposRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/assistant.ts` | 2 | `assistantRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/audit.ts` | 2 | `auditRouter` | À déterminer | À analyser | — | — |
-| `apps/api/src/routes/auth.ts` | 1 | `authRouter` (`/login`, `/me`, `/mot-de-passe`) | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/auth.ts` | 1 | `authRouter` (`/login`, `/me`, `/mot-de-passe`, `/langue`, `/etat-initial`, `/langue-defaut`) | `volumes/11c-connexion.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/caisse.ts` | 1 | `caisseRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/clients.ts` | 2 | `clientsRouter`, `typeClientsRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/commandes.ts` | 1 | `commandesRouter`, `calculerCommande` (via shared) | À déterminer | À analyser | — | — |
@@ -145,7 +145,7 @@
 | `apps/web/src/pages/Equipe.tsx` | 1 | `EquipePage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/EtatSysteme.tsx` | 2 | `EtatSystemePage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Fournisseurs.tsx` | 2 | `FournisseursPage` | À déterminer | À analyser | — | — |
-| `apps/web/src/pages/Login.tsx` | 1 | `LoginPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Login.tsx` | 1 | `LoginPage` | `volumes/11c-connexion.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Parametres.tsx` | 2 | `ParametresPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/PremierLancement.tsx` | 2 | `PremierLancementPage` | À déterminer | À analyser | — | — |
 | `apps/web/src/pages/Production.tsx` | 2 | `ProductionPage` | À déterminer | À analyser | — | — |
@@ -220,9 +220,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 149 |
+| À analyser | 147 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 5 |
+| Vérifié | 7 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

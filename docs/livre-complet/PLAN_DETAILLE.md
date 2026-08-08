@@ -71,7 +71,12 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - `lib/api.ts` (frontend) : intercepteur de requêtes, gestion du 401 `SESSION_REMPLACEE`
 - Diagramme de séquence Mermaid : de la saisie du mot de passe à une requête protégée, y compris le cas de session remplacée
 
-### 11c à 11k ⬜ *(prochain chapitre : 11c — Connexion)*
+### 11c — Connexion ✅
+- `routes/auth.ts` : `POST /login` (bcrypt, prévention de l'énumération de comptes, session unique, notification temps réel de l'appareil déconnecté), `POST /mot-de-passe`, routes publiques `/etat-initial` et `/langue-defaut`
+- `pages/Login.tsx` : délégation à `useAuth().login`, affichage du message de session remplacée
+- Diagramme de séquence Mermaid : connexion avec déconnexion d'un appareil concurrent
+
+### 11d à 11k ⬜ *(prochain chapitre : 11d — Équipe, rôles et permissions)*
 Voir `TABLE_DES_MATIERES.md`.
 
 ## Volume 12 — API et communications réseau ⬜

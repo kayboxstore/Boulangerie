@@ -14,6 +14,8 @@
 | `apps/api/src/middleware/auth.ts` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
 | `apps/web/src/lib/api.ts` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
 | `apps/web/src/lib/auth.tsx` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| `apps/api/src/routes/auth.ts` | `volumes/11c-connexion.md` |
+| `apps/web/src/pages/Login.tsx` | `volumes/11c-connexion.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -33,6 +35,9 @@
 | `api` / `ApiError` | `apps/web/src/lib/api.ts` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
 | `AuthProvider` / `useAuth` | `apps/web/src/lib/auth.tsx` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
 | `peutLire` / `peutEcrire` | `apps/web/src/lib/auth.tsx` | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| `authRouter` (`/login`, `/me`, `/mot-de-passe`, `/langue`, `/etat-initial`, `/langue-defaut`) | `apps/api/src/routes/auth.ts` | `volumes/11c-connexion.md` |
+| `LoginPage` | `apps/web/src/pages/Login.tsx` | `volumes/11c-connexion.md` |
+| `invaliderSessionUtilisateur` | `apps/api/src/lib/realtime.ts` | `volumes/11c-connexion.md` (introduction ; détail complet au Volume 12) |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
@@ -41,7 +46,8 @@
 | 3.1 (dépense farine) | Registre de Caisse | `volumes/11a-noyau-financier-permissions.md` (formule), `volumes/11j-caisse.md` (à venir, écran complet) |
 | 3.4 (commandes, avance/dette) | Commandes clients | `volumes/11a-noyau-financier-permissions.md` (formule), `volumes/11h-commandes.md` (à venir, écran complet) |
 | 2 (rôles, hiérarchie, permissions, garde-fou Admin Principal) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md` |
-| 3.7 (session unique, délégations) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md` |
+| 3.7 (session unique, délégations) | Authentification et permissions | `volumes/11b-authentification-permissions-bout-en-bout.md`, `volumes/11c-connexion.md` |
+| 3.14 (activation/désactivation d'un compte) | Connexion | `volumes/11c-connexion.md` |
 
 ---
 

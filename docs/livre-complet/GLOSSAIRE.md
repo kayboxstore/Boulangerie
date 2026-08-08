@@ -14,6 +14,8 @@
 
 ## B
 
+**bcrypt** — Algorithme de hachage de mot de passe volontairement lent (résistant à la force brute), utilisé via la bibliothèque `bcryptjs`. Un mot de passe n'est jamais stocké en clair : seul son hachage (`Utilisateur.motDePasseHash`) l'est. Voir Volume 11c.
+
 **Bacs** — Unité de comptage des livraisons de pain (un « bac » de pains). Les prix, avances et dettes sont calculés par bac.
 
 **Bon de livraison** — Document (numérique dans l'application) constatant ce qui a été réellement livré à un Dépositaire, indépendamment de ce qui avait été commandé (Schéma de commande). Voir section 3.3 e de la spécification.
@@ -33,6 +35,8 @@
 **DTO (Data Transfer Object)** — Forme des données telle qu'elle transite entre le serveur et le client (réponse d'API). Dans ce projet, chaque DTO est un `interface` TypeScript défini dans `packages/shared/src/index.ts`, distinct du modèle Prisma correspondant (qui peut contenir des champs internes non exposés).
 
 ## E
+
+**Énumération de comptes** — Faille de sécurité où un attaquant peut déduire quels e-mails correspondent à des comptes réels en observant des messages d'erreur différents selon que l'e-mail existe ou non. Ce projet s'en protège en renvoyant systématiquement le même message (« E-mail ou mot de passe incorrect ») pour les deux cas — voir Volume 11c.
 
 **ESM (ECMAScript Modules)** — Système de modules JavaScript standard (`import`/`export`), utilisé dans tout ce projet (`"type": "module"` dans chaque `package.json`) par opposition à l'ancien système CommonJS (`require`).
 
