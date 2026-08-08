@@ -181,6 +181,13 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - `pages/Production.tsx`, `pages/BonsLivraison.tsx` : édition en grille par cellule, réutilisation client de `totalDestinationsBacs`, téléchargement PDF via `fetch` direct (pas le wrapper `api()`, incompatible avec un flux binaire)
 - Écart repéré : aucun
 
+### 11z-3 — Départements/Groupes, Zones de dépôt, Clients ✅
+- `routes/departements.ts` : règle de désignation du chef différente création (auto-rattachement) vs modification (membre existant obligatoire), cascade/SetNull à la suppression
+- `routes/zones-depositaires.ts` : `ecritureZones`, deuxième middleware Express personnalisé du projet (combine `COMMANDES` OU `PRODUCTION` via `aAcces`), correction de conception documentée dans la spec elle-même
+- `routes/clients.ts` : `clientsRouter`/`typeClientsRouter`, `MODIFIER_TYPE_CLIENT` via action critique (3ᵉ occurrence du mécanisme du 11f)
+- Frontend : `DepartementsCard`/`ZonesDepositaireCard` reçoivent leurs données/permissions en props depuis la page parente (pas de requête redondante), `DialogNouvelleZone` (création rapide depuis la fiche client)
+- Écart repéré : aucun
+
 ## Volume 12 — API et communications réseau ⬜
 - Convention REST du projet (verbes, codes de statut, forme des erreurs `{ erreur: string }`)
 - Socket.io : événements émis/écoutés, salles par utilisateur

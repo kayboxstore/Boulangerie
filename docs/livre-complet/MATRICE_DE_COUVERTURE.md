@@ -48,11 +48,11 @@
 | `apps/api/src/routes/audit.ts` | 2 | `auditRouter` (`GET /`) | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/auth.ts` | 1 | `authRouter` (`/login`, `/me`, `/mot-de-passe`, `/langue`, `/etat-initial`, `/langue-defaut`) | `volumes/11c-connexion.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/caisse.ts` | 1 | `caisseRouter` (registre, taux, dépenses, case farine), `construireRegistre`, `sacsUtilisesLe` | `volumes/11j-caisse.md` | Vérifié | — | Aucun |
-| `apps/api/src/routes/clients.ts` | 2 | `clientsRouter`, `typeClientsRouter` | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/clients.ts` | 2 | `clientsRouter`, `typeClientsRouter` (`MODIFIER_TYPE_CLIENT` via action critique) | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/commandes.ts` | 1 | `commandesRouter` (résumé, alertes dette, liste, création/doublon, règlements), `bornesDuJour`, `verifierAlertesDette` | `volumes/11h-commandes.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/commissions.ts` | 1 | `commissionsRouter` (`GET /`) | `volumes/11i-commissions.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/delegations.ts` | 1 | `delegationsRouter` (`GET /`, `POST /`, `DELETE /:id`) | `volumes/11e-delegations.md` | Vérifié | — | Aucun |
-| `apps/api/src/routes/departements.ts` | 2 | `departementsRouter`, `groupesRouter` | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/departements.ts` | 2 | `departementsRouter`, `groupesRouter` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/equipe.ts` | 1 | `equipeRouter` (comptes, `verifierQuotaAdmins`, `/principal`) | `volumes/11d-equipe-roles-permissions.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/etat-systeme.ts` | 2 | `etatSystemeRouter` | À déterminer | À analyser | — | — |
 | `apps/api/src/routes/export.ts` | 2 | `exportRouter` | À déterminer | À analyser | — | — |
@@ -67,7 +67,7 @@
 | `apps/api/src/routes/roles.ts` | 1 | `rolesRouter` | `volumes/11d-equipe-roles-permissions.md` | Vérifié | — | Oui — voir `annexes/ecarts-spec-code.md` (aucune UI trouvée pour `PUT /:id/permissions`) |
 | `apps/api/src/routes/stocks.ts` | 2 | `stocksRouter` (matières premières, journal des mouvements) | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/travailleurs.ts` | 1 | `travailleursRouter` (fiches, e-mail pro, pointages, absences, sanctions, `calculerPaieBrute`, bulletins) | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md`, `volumes/11k-3-travailleurs-paie-bulletins.md` | Vérifié | — | Aucun |
-| `apps/api/src/routes/zones-depositaires.ts` | 2 | `zonesDepositaireRouter` | À déterminer | À analyser | — | — |
+| `apps/api/src/routes/zones-depositaires.ts` | 2 | `zonesDepositaireRouter`, `ecritureZones` (middleware personnalisé) | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 
 ## D. `apps/api/src/services/`
 
@@ -139,7 +139,7 @@
 | `apps/web/src/pages/Audit.tsx` | 2 | `AuditPage`, `champsPertinents` | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/BonsLivraison.tsx` | 2 | `BonsLivraisonPage` | `volumes/11z-2-production.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Caisse.tsx` | 1 | `CaissePage`, `Poste` (tuile avec alerte solde négatif) | `volumes/11j-caisse.md` | Vérifié | — | Aucun |
-| `apps/web/src/pages/Clients.tsx` | 2 | `ClientsPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Clients.tsx` | 2 | `ClientsPage` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Commandes.tsx` | 1 | `CommandesPage` (apercu client via `calculerCommande`, dialogue de conflit) | `volumes/11h-commandes.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Commissions.tsx` | 1 | `CommissionsPage` | `volumes/11i-commissions.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Dashboard.tsx` | 2 | `DashboardPage` | À déterminer | À analyser | — | — |
@@ -163,8 +163,8 @@
 | `apps/web/src/components/ActivityFeed.tsx` | 2 | `ActivityFeed` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/BarreExport.tsx` | 2 | `BarreExport` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/ChargementModule.tsx` | 3 | `ChargementModule` | `volumes/08-cycle-demarrage.md` | Vérifié | — | Aucun |
-| `apps/web/src/components/DepartementsCard.tsx` | 2 | `DepartementsCard` | À déterminer | À analyser | — | — |
-| `apps/web/src/components/DialogNouvelleZone.tsx` | 2 | `DialogNouvelleZone` | À déterminer | À analyser | — | — |
+| `apps/web/src/components/DepartementsCard.tsx` | 2 | `DepartementsCard` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
+| `apps/web/src/components/DialogNouvelleZone.tsx` | 2 | `DialogNouvelleZone` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/EcranDemarrage.tsx` | 3 | `EcranDemarrage`, `splashDejaVu` | `volumes/08-cycle-demarrage.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/FeedbackProvider.tsx` | 3 | `FeedbackProvider`, `useFeedback` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/IndicateurConnexion.tsx` | 3 | `IndicateurConnexion` | À déterminer | À analyser | — | — |
@@ -172,7 +172,7 @@
 | `apps/web/src/components/NotificationBell.tsx` | 2 | `NotificationBell` | À déterminer | À analyser | — | — |
 | `apps/web/src/components/PaieCard.tsx` | 1 | `PaieCard` (sanctions, calcul de paie, bulletins) | `volumes/11k-3-travailleurs-paie-bulletins.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/PanneauEmailPro.tsx` | 2 | `PanneauEmailPro` | À déterminer | À analyser | — | — |
-| `apps/web/src/components/ZonesDepositaireCard.tsx` | 2 | `ZonesDepositaireCard` | À déterminer | À analyser | — | — |
+| `apps/web/src/components/ZonesDepositaireCard.tsx` | 2 | `ZonesDepositaireCard` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 
 ## L. `apps/web/src/components/ui/` (primitives, Niveau 3)
 
@@ -221,9 +221,9 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 92 |
+| À analyser | 85 |
 | En cours | 2 |
 | Expliqué | 0 |
-| Vérifié | 61 |
+| Vérifié | 68 |
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

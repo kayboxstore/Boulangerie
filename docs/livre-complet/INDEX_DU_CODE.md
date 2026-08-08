@@ -80,6 +80,13 @@
 | `apps/api/src/services/pdf.ts` — `construirePdfBonsLivraison`, `nomFichierPdf` | `volumes/11z-2-production.md` |
 | `apps/web/src/pages/Production.tsx` | `volumes/11z-2-production.md` |
 | `apps/web/src/pages/BonsLivraison.tsx` | `volumes/11z-2-production.md` |
+| `apps/api/src/routes/departements.ts` | `volumes/11z-3-departements-zones-clients.md` |
+| `apps/api/src/routes/zones-depositaires.ts` | `volumes/11z-3-departements-zones-clients.md` |
+| `apps/api/src/routes/clients.ts` | `volumes/11z-3-departements-zones-clients.md` |
+| `apps/web/src/components/DepartementsCard.tsx` | `volumes/11z-3-departements-zones-clients.md` |
+| `apps/web/src/components/ZonesDepositaireCard.tsx` | `volumes/11z-3-departements-zones-clients.md` |
+| `apps/web/src/components/DialogNouvelleZone.tsx` | `volumes/11z-3-departements-zones-clients.md` |
+| `apps/web/src/pages/Clients.tsx` | `volumes/11z-3-departements-zones-clients.md` |
 
 *(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
 
@@ -146,6 +153,9 @@
 | `chargerSchemaCommandeJour` / `chargerBonLivraisonJour` | `apps/api/src/routes/production.ts` | `volumes/11z-2-production.md` |
 | `totalDestinationsBacs` | `packages/shared/src/index.ts` | `volumes/11z-2-production.md` |
 | `construirePdfBonsLivraison` | `apps/api/src/services/pdf.ts` | `volumes/11z-2-production.md` |
+| `departementsRouter` / `groupesRouter` | `apps/api/src/routes/departements.ts` | `volumes/11z-3-departements-zones-clients.md` |
+| `ecritureZones` (middleware combinant `COMMANDES` OU `PRODUCTION`) | `apps/api/src/routes/zones-depositaires.ts` | `volumes/11z-3-departements-zones-clients.md` |
+| `clientsRouter` / `typeClientsRouter` | `apps/api/src/routes/clients.ts` | `volumes/11z-3-departements-zones-clients.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
@@ -167,6 +177,9 @@
 | 3.6 (fournisseurs, bons de commande, réception) | Fournisseurs | `volumes/11z-1-stocks-fournisseurs-produits.md` |
 | 3.9 (catalogue produits, prix, taxes) | Produits/Paramètres | `volumes/11z-1-stocks-fournisseurs-produits.md` |
 | 3.3 a-e (planning, productions, ingrédients, schéma de commande, bon de livraison) | Production | `volumes/11z-2-production.md` |
+| 3.18 (départements, groupes) | Départements/Groupes | `volumes/11z-3-departements-zones-clients.md` |
+| 3.3 d (zones de dépôt) | Zones de dépôt | `volumes/11z-3-departements-zones-clients.md` |
+| 3.4 (clients, qualités) | Clients | `volumes/11z-3-departements-zones-clients.md` |
 
 ---
 

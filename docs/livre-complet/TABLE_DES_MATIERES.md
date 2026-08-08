@@ -54,7 +54,8 @@ Ce volume est scindé en un chapitre par domaine fonctionnel, dans l'ordre de pr
 | `11k-3-travailleurs-paie-bulletins.md` | `apps/api/src/routes/travailleurs.ts` (paie, bulletins), `apps/web/src/components/PaieCard.tsx` | 1 | ✅ |
 | `11z-1-stocks-fournisseurs-produits.md` | `routes/stocks.ts`, `services/stocks.ts`, `routes/fournisseurs.ts`, `routes/produits.ts`, `pages/Stocks.tsx`, `pages/Fournisseurs.tsx`, `pages/Produits.tsx` | 2 | ✅ |
 | `11z-2-production.md` | `routes/production.ts`, `pages/Production.tsx`, `pages/BonsLivraison.tsx`, `services/pdf.ts` (partiel) | 2 | ✅ |
-| `11z-3` à `11z-n` (à venir) | Départements, Notifications, À propos, Assistant, Paramètres, Export, Rapports, Zones de dépôt (gestion), Clients, Premier lancement, État système | 2 | ⬜ |
+| `11z-3-departements-zones-clients.md` | `routes/departements.ts`, `routes/zones-depositaires.ts`, `routes/clients.ts`, `DepartementsCard.tsx`, `ZonesDepositaireCard.tsx`, `DialogNouvelleZone.tsx`, `pages/Clients.tsx` | 2 | ✅ |
+| `11z-4` à `11z-n` (à venir) | Notifications, État système, Paramètres (boutique), Premier lancement, À propos, Assistant, Export, Rapports, Rapports personnels | 2 | ⬜ |
 
 ## Détail du Volume 22 (Guide complet d'utilisation)
 
