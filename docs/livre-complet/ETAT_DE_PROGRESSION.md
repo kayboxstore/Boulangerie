@@ -89,6 +89,7 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
 
 - [x] Volume 22c — Chapitre « Commandes et Clients » : reprise pédagogique de l'exemple chiffré exact de la spec (Volume 11h) pour expliquer avance/dette/trop-perçu, doublon de commande (fenêtre Modifier/Remplacer, avec le garde-fou Remplacer bloqué si des règlements existent déjà), règlement d'une dette (prix figé au moment de la commande d'origine), création rapide de client depuis le formulaire, zones de dépôt créées à la volée depuis la fiche client (Volume 11z-3), effet des Qualités limité aux commandes futures. Aucun nouvel écart trouvé — chapitre de pure synthèse pédagogique à partir des Volumes 11h et 11z-3 déjà écrits.
 - [x] Volume 22d — Chapitre « Production » : les cinq volets (Planning, Schéma de commande, Productions, Bon de livraison, Écarts) expliqués côté utilisateur à partir du Volume 11z-2 — alimentation automatique du Planning par le Schéma (et ce qui n'est jamais écrasé), indépendance volontaire du Bon de livraison, décrémentation automatique de stock à l'enregistrement d'une production (avec blocage total si stock insuffisant, jamais de production à moitié enregistrée), réconciliation des bacs signalée mais jamais bloquante (repris avec l'exemple chiffré −1 du Volume 11z-2), vue Écarts prévu/réalisé, zones de dépôt modifiables depuis Commandes ou Production indifféremment. Aucun nouvel écart trouvé — pure synthèse pédagogique.
+- [x] Volume 22e — Chapitre « Matières premières, Fournisseurs et Catalogue produits » : mouvement manuel de stock (jamais de stock négatif), alerte de seuil au franchissement seulement vs bandeau permanent en continu (avec l'exemple chiffré du Volume 11z-1), suppression bloquée par l'historique (matière première, fournisseur), cycle commande En attente → Reçue (le stock n'augmente qu'à la réception, compare-and-set anti-double-réception), catalogue produits réservé aux Admins, rappel pratique de l'observation déjà signalée au Volume 11z-1 (aucune UI n'envoie de changement de taux de taxe, pas un écart spec/code). Pure synthèse pédagogique, sans nouveau fichier de code.
 
 ## 3. Ce qu'il reste à faire (dans l'ordre de priorité)
 
@@ -128,13 +129,13 @@ Les 26 fichiers Niveau 1 concentrent l'essentiel de l'effort de rédaction malgr
 
 ## 4. Dernier fichier analysé
 
-Aucun nouveau fichier de code au Volume 22d (guide utilisateur, pure synthèse du Volume 11z-2 déjà écrit). **Les Volumes 1-21 et les sous-chapitres 22a-22d sont désormais clos.**
+Aucun nouveau fichier de code au Volume 22e (guide utilisateur, pure synthèse du Volume 11z-1 déjà écrit). **Les Volumes 1-21 et les sous-chapitres 22a-22e sont désormais clos.**
 
 **Correction du 2026-08-08 (avant rédaction du Volume 18)** : `MATRICE_DE_COUVERTURE.md` ne comptait que 128 lignes de tableau pour 155 fichiers réels. Audit complet effectué : l'écart s'explique entièrement par (a) les 29 migrations Prisma volontairement regroupées sur une seule ligne (méthodologie correcte) et (b) une ligne fantôme dupliquant `apps/api/src/services/actionsCritiques.ts` (une copie correcte « Vérifié » mal placée en section A, une copie fantôme « À analyser » en section D) — corrigée en fusionnant les deux en une seule ligne, à sa place correcte, à l'état Vérifié. Le tableau de statistiques de la matrice et le §7 ci-dessous sont mis à jour avec les vrais chiffres : **18 fichiers réellement « À analyser »** (pas 46), **136 Vérifié** (pas 108). Le Volume 18 (18a-18d) a depuis clos ces 18 fichiers — la matrice atteint désormais 155/155.
 
 ## 5. Prochaine tâche exacte
 
-Rédiger **22e — Matières premières et Fournisseurs** (`22e-stocks-fournisseurs.md`) : guide pratique des mouvements de stock (Volume 11z-1), des seuils d'alerte, des bons de commande fournisseurs et de la réception (avec le même mécanisme de décrémentation/incrémentation déjà rencontré au 22d pour la production). Poursuivre ensuite la série 22f à 22l selon le découpage de `TABLE_DES_MATIERES.md` (Caisse, Commissions, Travailleurs/Paie, Équipe/Approbations, État système/Sauvegardes, Paramètres/À propos/Assistant, Rapports/Exports).
+Rédiger **22f — Caisse** (`22f-caisse.md`) : guide pratique du registre journalier (Volume 11j) — taux du jour, entrées/dettes payées/dépenses/solde, alerte visuelle du solde négatif, dépense farine automatique via la case à cocher. Poursuivre ensuite la série 22g à 22l selon le découpage de `TABLE_DES_MATIERES.md` (Commissions, Travailleurs/Paie, Équipe/Approbations, État système/Sauvegardes, Paramètres/À propos/Assistant, Rapports/Exports).
 
 ## 6. Problèmes ou incertitudes en suspens
 

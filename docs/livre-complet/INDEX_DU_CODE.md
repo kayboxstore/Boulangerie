@@ -287,6 +287,7 @@
 | 2 (rôles, hiérarchie, permissions, garde-fou Admin Principal, 5 tâches critiques) | Rôles et permissions (guide utilisateur) | `volumes/22b-roles-et-permissions.md` |
 | 3.4 (commandes, avance/dette/trop-perçu, doublon, clients, Qualités), 3.3 d (zones de dépôt) | Commandes et Clients (guide utilisateur) | `volumes/22c-commandes-et-clients.md` |
 | 3.3 a-e (Planning, Schéma de commande, Bon de livraison, Productions, Écarts) | Production (guide utilisateur) | `volumes/22d-production.md` |
+| 3.2 (stocks, seuils), 3.6 (fournisseurs, réception), 3.9 (catalogue produits) | Matières premières, Fournisseurs et Catalogue (guide utilisateur) | `volumes/22e-stocks-fournisseurs.md` |
 
 ---
 
