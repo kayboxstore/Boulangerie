@@ -80,7 +80,7 @@ Un chapitre par grande zone fonctionnelle, écrit en croisant `docs/spec-boulang
 | `22a-premiers-pas.md` | Installation, premier démarrage, création du premier compte, connexion/déconnexion | ✅ |
 | `22b-roles-et-permissions.md` | Les rôles de l'application et ce que chacun peut faire | ✅ |
 | `22c-commandes-et-clients.md` | Écran Commandes + sous-module Clients | ✅ |
-| `22d-production.md` | Planning, Schéma de commande, Bon de livraison | ⬜ |
+| `22d-production.md` | Planning, Schéma de commande, Bon de livraison | ✅ |
 | `22e-stocks-fournisseurs.md` | Matières premières, mouvements, fournisseurs, achats | ⬜ |
 | `22f-caisse.md` | Registre journalier | ⬜ |
 | `22g-commissions.md` | Consultation des commissions | ⬜ |
