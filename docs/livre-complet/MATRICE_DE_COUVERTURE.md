@@ -211,8 +211,8 @@
 |---|---|---|
 | `docs/spec-boulangerie.md` | Source de vérité du comportement voulu, croisée à chaque chapitre fonctionnel | Consulté en continu |
 | `README.md` | Base du chapitre Installation | Utilisé (`volumes/04-installation.md`) — section « Phase actuelle »/Conventions Caisse signalée obsolète |
-| `DEPLOIEMENT.md` | Base du chapitre Construction et déploiement | À utiliser |
-| `docs/MISE-EN-PRODUCTION.md` | Référence pour le chapitre Administration/maintenance | À utiliser |
+| `DEPLOIEMENT.md` | Base du chapitre Construction et déploiement | Utilisé (`volumes/21-build-deploiement.md`) |
+| `docs/MISE-EN-PRODUCTION.md` | Rapport d'audit daté (2026-08-06), utilisé au Volume 21 ; à recroiser au Volume 23 (Administration et maintenance) | Utilisé (`volumes/21-build-deploiement.md`) — à recroiser au Volume 23 |
 
 ---
 

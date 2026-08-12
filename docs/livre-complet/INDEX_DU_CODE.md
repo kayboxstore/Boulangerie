@@ -146,6 +146,9 @@
 | `packages/shared/src/index.test.ts` (angle stratégie) | `volumes/19-tests.md` |
 | `apps/api/src/services/stocks.ts` (angle performance) | `volumes/20-performances.md` |
 | `prisma/schema.prisma` (indexation, angle performance) | `volumes/20-performances.md` |
+| `DEPLOIEMENT.md` | `volumes/21-build-deploiement.md` |
+| `docs/MISE-EN-PRODUCTION.md` | `volumes/21-build-deploiement.md` |
+| `render.yaml` (rappel architecture, angle déploiement) | `volumes/21-build-deploiement.md` |
 
 *(Tous les fichiers de code du projet sont désormais couverts par au moins un chapitre — voir `MATRICE_DE_COUVERTURE.md` pour l'état détaillé de chacun.)*
 
@@ -279,6 +282,7 @@
 | 3.8 (widgets Tableau de bord, composition par rôle, résumé de clôture) | Tableau de bord (écran) | `volumes/18c-dashboard-profil.md` |
 | 2/3.7 (mot de passe), 3.9 (langue individuelle), 3.18 (bulletins personnels) | Profil individuel | `volumes/18c-dashboard-profil.md` |
 | 1 (vue d'ensemble technique, monorepo npm workspaces) | Configuration et outillage | `volumes/18d-configuration-outillage.md` |
+| 7 (stack technique), 3.15 (sauvegarde/restauration) | Construction et déploiement | `volumes/21-build-deploiement.md` |
 
 ---
 

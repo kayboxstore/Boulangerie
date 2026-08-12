@@ -18,6 +18,8 @@
 
 ## B
 
+**Blueprint (Render)** — Fichier déclaratif (`render.yaml`, Volume 5) lu automatiquement par l'hébergeur Render pour provisionner et configurer l'ensemble des ressources d'un déploiement (service web + base de données) sans script de déploiement personnalisé. Voir Volume 21.
+
 **bcrypt** — Algorithme de hachage de mot de passe volontairement lent (résistant à la force brute), utilisé via la bibliothèque `bcryptjs`. Un mot de passe n'est jamais stocké en clair : seul son hachage (`Utilisateur.motDePasseHash`) l'est. Voir Volume 11c.
 
 **Bacs** — Unité de comptage des livraisons de pain (un « bac » de pains). Les prix, avances et dettes sont calculés par bac.

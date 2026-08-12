@@ -26,7 +26,7 @@
 | 18 | Explication exhaustive des fichiers sources restants | `18a` à `18d` (Niveau 2/3 non couverts ailleurs) | ✅ |
 | 19 | Tests et stratégie de vérification | `19-tests.md` | ✅ |
 | 20 | Performances | `20-performances.md` | ✅ |
-| 21 | Construction et déploiement | `21-build-deploiement.md` | ⬜ |
+| 21 | Construction et déploiement | `21-build-deploiement.md` | ✅ |
 | 22 | Guide complet d'utilisation | `22a` à `22z` (un chapitre par rôle/écran) | ⬜ |
 | 23 | Administration et maintenance | `23-administration-maintenance.md` | ⬜ |
 | 24 | Débogage et résolution des problèmes | `24-debogage.md` | ⬜ |
