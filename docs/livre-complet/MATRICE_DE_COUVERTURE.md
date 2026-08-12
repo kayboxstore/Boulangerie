@@ -89,7 +89,7 @@
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
 | `packages/shared/src/index.ts` | 1 | Portions Niveau 1 (financier, permissions, délégations, actions critiques, audit, commandes, commissions, caisse, travailleurs/paie) **entièrement couvertes** ; portions Niveau 2/3 (stocks, fournisseurs, produits, production, départements, zones, clients, notifications, état système, paramètres, premier lancement, à propos, assistant, rapports, export) **couvertes au fil des chapitres 11z-1 à 11z-5** ; motif transversal de validation Zod synthétisé au Volume 15 (53 schémas, `.partial()`, `.refine()`, `setErrorMap`) | `volumes/11a` à `11k-*`, `volumes/11z-1` à `11z-5`, `volumes/12-api-reseau.md`, `volumes/15-validation.md` | En cours | Fichier de 1942 lignes servant tous les domaines ; tous les domaines fonctionnels ont été traversés au moins une fois par un chapitre thématique, mais aucun audit symbole-par-symbole exhaustif n'a formellement clos ce fichier — laissé « En cours » par rigueur plutôt que déclaré « Vérifié » sans cette vérification finale | Aucun repéré sur les parties couvertes |
-| `packages/shared/src/index.test.ts` | 1 | 11 tests Vitest (`calculerCommande` ×5, `calculerDepenseFarine` ×2, `aAcces` ×4) | `volumes/11a-noyau-financier-permissions.md` | Vérifié | — | Aucun |
+| `packages/shared/src/index.test.ts` | 1 | 11 tests Vitest (`calculerCommande` ×5, `calculerDepenseFarine` ×2, `aAcces` ×4) | `volumes/11a-noyau-financier-permissions.md`, `volumes/19-tests.md` (stratégie) | Vérifié | — | Aucun |
 
 ## F. `prisma/`
 
@@ -201,7 +201,7 @@
 | `apps/web/vite.config.ts` | `volumes/18d-configuration-outillage.md` | Vérifié | — |
 | `apps/web/components.json` | `volumes/18d-configuration-outillage.md` | Vérifié | — |
 | `packages/shared/package.json` | `volumes/18d-configuration-outillage.md` | Vérifié | — |
-| `vitest.config.ts` | `volumes/18d-configuration-outillage.md` | Vérifié | — |
+| `vitest.config.ts` | `volumes/18d-configuration-outillage.md`, `volumes/19-tests.md` (stratégie) | Vérifié | — |
 | `render.yaml` | `volumes/05-configuration.md` | Vérifié | — | Aucun |
 | `.env.example` | `volumes/05-configuration.md` | Vérifié | — | Aucun |
 

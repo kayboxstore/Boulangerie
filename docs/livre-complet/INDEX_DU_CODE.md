@@ -142,7 +142,8 @@
 | `apps/web/vite.config.ts` | `volumes/18d-configuration-outillage.md` |
 | `apps/web/components.json` | `volumes/18d-configuration-outillage.md` |
 | `packages/shared/package.json` | `volumes/18d-configuration-outillage.md` |
-| `vitest.config.ts` | `volumes/18d-configuration-outillage.md` |
+| `vitest.config.ts` | `volumes/18d-configuration-outillage.md`, `volumes/19-tests.md` (stratégie) |
+| `packages/shared/src/index.test.ts` (angle stratégie) | `volumes/19-tests.md` |
 
 *(Tous les fichiers de code du projet sont désormais couverts par au moins un chapitre — voir `MATRICE_DE_COUVERTURE.md` pour l'état détaillé de chacun.)*
 

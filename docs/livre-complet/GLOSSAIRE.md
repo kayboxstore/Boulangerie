@@ -152,6 +152,8 @@
 
 **Vente cash (VC)** — Type de client sans commission, ni compte régulier — équivalent d'une vente ponctuelle au comptant.
 
+**Vitest** — Framework de tests unitaires du projet, exécuté via `npm test`. Un seul fichier de test existe dans tout le dépôt à ce jour (`packages/shared/src/index.test.ts`, 11 tests sur les fonctions financières et de permissions les plus critiques). Voir Volume 19.
+
 ## Z
 
 **Zod** — Bibliothèque de validation de schémas TypeScript. Chaque entrée d'API du projet est validée par un schéma Zod (53 au total) défini dans `packages/shared/src/index.ts`, invoqué via `safeParse` — 55 occurrences identiques à travers les routes (Volume 15). **Précision (Volume 15)** : les schémas eux-mêmes ne sont jamais invoqués côté client (vérifié par recherche exhaustive) — seuls les types dérivés (`z.infer`) et certaines fonctions de calcul pures qui les accompagnent (ex. `calculerCommande`) traversent vers le frontend, pour un confort de saisie, jamais pour la validation réelle, toujours assurée côté serveur.

@@ -30,6 +30,15 @@
 - **Chapitre du livre où cet écart est détaillé** : `volumes/11d-equipe-roles-permissions.md`, §5.8
 - **Statut** : Écart entre spec et code — à confirmer avec l'équipe (soit une interface existe et n'a pas été repérée, soit cette action n'est aujourd'hui déclenchable que par un appel direct à l'API, hors interface graphique)
 
+### [Tests] Playwright recommandé par la spec, absent du dépôt
+
+- **Section de la spec concernée** : 7 (« Stack technique recommandée » — ligne « Tests : Vitest (unitaires) + Playwright (E2E) »)
+- **Fichier(s) de code concerné(s)** : les trois `package.json` du monorepo (racine, `apps/api`, `apps/web`) — aucune dépendance `@playwright/test` ni `playwright` ; aucun fichier `playwright.config.ts` ni `*.spec.ts` trouvé sur l'ensemble du dépôt
+- **Ce que dit la spec** : la stack technique recommandée liste Playwright comme outil de test E2E, au même titre que Vitest pour les tests unitaires, sans distinction de priorité entre les deux lignes du tableau.
+- **Ce que fait le code** : seul Vitest est installé et exécutable (`npm test`, 11 tests sur `packages/shared/src/index.test.ts`, vérifiés passants). `README.md` mentionne des « vérifications E2E Playwright réalisées à chaque fonctionnalité » et renvoie à l'« historique des commits » — une pratique de développement ponctuelle semble avoir existé, mais aucune trace n'en subsiste dans le dépôt sous forme de fichiers de test rejouables, de configuration, ou de dépendance installée.
+- **Chapitre du livre où cet écart est détaillé** : `volumes/19-tests.md`, §5
+- **Statut** : Écart entre spec et code — à confirmer avec l'équipe (soit Playwright a été retiré intentionnellement après usage ponctuel, soit son installation reste à faire pour se conformer pleinement à la stack recommandée)
+
 ---
 
-*Dernière mise à jour : session du 2026-08-07 (chapitre 11d).*
+*Dernière mise à jour : session du 2026-08-12 (chapitre 19).*
