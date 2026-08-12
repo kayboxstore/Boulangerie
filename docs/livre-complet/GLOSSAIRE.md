@@ -78,7 +78,7 @@
 
 ## J
 
-**Journal append-only** — Table où les lignes ne sont jamais modifiées ni supprimées après coup, seulement ajoutées : le Journal d'audit (Volume 11g) et le journal des mouvements de stock (`MouvementStock`, Volume 11z-1) en sont les deux exemples du projet. L'état courant (quantité en stock, diff affiché) est alors dérivé de ce journal plutôt que stocké séparément et modifié directement.
+**Journal append-only** — Table où les lignes ne sont jamais modifiées ni supprimées après coup, seulement ajoutées : le Journal d'audit (Volume 11g) et le journal des mouvements de stock (`MouvementStock`, Volume 11z-1) en sont les deux exemples du projet. **Précision (Volume 20)** : pour les mouvements de stock, l'état courant (`MatierePremiere.quantiteStock`) n'est PAS recalculé en sommant le journal à chaque lecture — il est stocké séparément et mis à jour de façon incrémentale (`increment`/`decrement`) dans la même transaction que l'écriture du journal (`appliquerMouvement`, `services/stocks.ts`), pour que sa lecture reste en O(1) plutôt que de nécessiter une agrégation. Seul l'historique (le détail des mouvements passés, le diff affiché par entrée du Journal d'audit) est porté par le journal lui-même — l'état agrégé courant ne l'est pas.
 
 **JWT (JSON Web Token)** — Jeton signé cryptographiquement contenant l'identité d'un utilisateur connecté (`sub`, `roleId`, `sid`), envoyé par le client à chaque requête dans l'en-tête `Authorization: Bearer <jeton>`. Signé par `lib/jwt.ts`.
 

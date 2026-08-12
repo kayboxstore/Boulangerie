@@ -82,7 +82,7 @@
 | `apps/api/src/services/reinitialisation.ts` | 2 | `reinitialiserBase` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
 | `apps/api/src/services/sauvegarde.ts` | 2 | `construireDump`, `outilSauvegardeDisponible`, `coordonneesBase` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
 | `apps/api/src/services/sauvegardeLocale.ts` | 2 | `ecrireSauvegardeLocale`, `lireSauvegardeLocale` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
-| `apps/api/src/services/stocks.ts` | 2 | `appliquerMouvement`, `emettreAlerteSeuil`, `ErreurStock` | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | — | Aucun |
+| `apps/api/src/services/stocks.ts` | 2 | `appliquerMouvement`, `emettreAlerteSeuil`, `ErreurStock` | `volumes/11z-1-stocks-fournisseurs-produits.md`, `volumes/20-performances.md` (angle performance) | Vérifié | — | Aucun |
 
 ## E. `packages/shared/src/`
 
@@ -95,7 +95,7 @@
 
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
-| `prisma/schema.prisma` | 1 | 42 modèles, 16 enums (recompté au Volume 13 — l'inventaire initial datait d'avant plusieurs migrations) | `volumes/13-base-de-donnees.md` | Vérifié | — | Aucun (voir note interne §5.5, commentaire obsolète non lié à la spec) |
+| `prisma/schema.prisma` | 1 | 42 modèles, 16 enums (recompté au Volume 13 — l'inventaire initial datait d'avant plusieurs migrations) | `volumes/13-base-de-donnees.md`, `volumes/20-performances.md` (indexation, angle performance) | Vérifié | — | Aucun (voir note interne §5.5, commentaire obsolète non lié à la spec) |
 | `prisma/seed.ts` | 3 | `upsertRole` (autoritatif sur la matrice), fonctions de retrofit idempotentes, jeu de démonstration | `volumes/13-base-de-donnees.md` | Vérifié | — | Aucun |
 | `prisma/migrations/*.sql` (29 fichiers) | 3 | historique généré — couvert par synthèse chronologique, pas ligne à ligne (conforme au mandat) | `volumes/13-base-de-donnees.md` | Vérifié | — | Aucun |
 
