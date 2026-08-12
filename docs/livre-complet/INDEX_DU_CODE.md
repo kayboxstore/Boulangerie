@@ -283,6 +283,7 @@
 | 2/3.7 (mot de passe), 3.9 (langue individuelle), 3.18 (bulletins personnels) | Profil individuel | `volumes/18c-dashboard-profil.md` |
 | 1 (vue d'ensemble technique, monorepo npm workspaces) | Configuration et outillage | `volumes/18d-configuration-outillage.md` |
 | 7 (stack technique), 3.15 (sauvegarde/restauration) | Construction et déploiement | `volumes/21-build-deploiement.md` |
+| 3.7 (premier lancement, session unique), 3.14 (activation/désactivation) | Premiers pas (guide utilisateur) | `volumes/22a-premiers-pas.md` |
 
 ---
 

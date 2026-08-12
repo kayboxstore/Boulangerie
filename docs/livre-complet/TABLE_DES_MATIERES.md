@@ -27,7 +27,7 @@
 | 19 | Tests et stratégie de vérification | `19-tests.md` | ✅ |
 | 20 | Performances | `20-performances.md` | ✅ |
 | 21 | Construction et déploiement | `21-build-deploiement.md` | ✅ |
-| 22 | Guide complet d'utilisation | `22a` à `22z` (un chapitre par rôle/écran) | ⬜ |
+| 22 | Guide complet d'utilisation | `22a` à `22l` (un chapitre par grande zone fonctionnelle) | 🟡 |
 | 23 | Administration et maintenance | `23-administration-maintenance.md` | ⬜ |
 | 24 | Débogage et résolution des problèmes | `24-debogage.md` | ⬜ |
 | 25 | Possibilités d'évolution | `25-evolutions.md` | ⬜ |
@@ -77,7 +77,7 @@ Un chapitre par grande zone fonctionnelle, écrit en croisant `docs/spec-boulang
 
 | Chapitre | Contenu | État |
 |---|---|:---:|
-| `22a-premiers-pas.md` | Installation, premier démarrage, création du premier compte, connexion/déconnexion | ⬜ |
+| `22a-premiers-pas.md` | Installation, premier démarrage, création du premier compte, connexion/déconnexion | ✅ |
 | `22b-roles-et-permissions.md` | Les rôles de l'application et ce que chacun peut faire | ⬜ |
 | `22c-commandes-et-clients.md` | Écran Commandes + sous-module Clients | ⬜ |
 | `22d-production.md` | Planning, Schéma de commande, Bon de livraison | ⬜ |
