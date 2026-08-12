@@ -284,9 +284,12 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md`. **Clos en 12 sous-chapi
 - Sauvegarde et restauration (`scripts/restaurer-sauvegarde.ts`, procédure complète avec piège réellement rencontré)
 - Gestion des comptes Admin dans la durée (transfert Principal avant départ, roulement d'équipe, langues non finalisées)
 
-## Volume 24 — Débogage et résolution des problèmes ⬜
-- Erreurs fréquentes par domaine (connexion, permissions, sauvegarde, e-mail)
-- Comment lire les logs structurés (Volume 16)
+## Volume 24 — Débogage et résolution des problèmes ✅
+- Distinction Journal d'audit (données métier) vs logs techniques structurés (Volume 16, console de l'hébergeur uniquement)
+- Table de lecture des codes HTTP (400/401/403/404/409/500) dans le contexte de l'application
+- Tableau de ~18 symptômes fréquents → cause probable → chapitre source (connexion, commandes, stocks, farine, paie, transfert Principal, approbations, veille Render, hors-ligne, expiration base gratuite, comptes de démo)
+- Marche à suivre quand rien ne correspond (rappel du constat honnête du Volume 19 sur l'absence de tests automatisés, Assistant comme canal d'escalade officiel)
+- Pure synthèse, aucun nouveau fichier de code
 
 ## Volume 25 — Possibilités d'évolution ⬜
 - Pistes identifiées dans le code (commentaires, TODO) et dans l'historique du projet
