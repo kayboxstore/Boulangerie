@@ -291,9 +291,13 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md`. **Clos en 12 sous-chapi
 - Marche à suivre quand rien ne correspond (rappel du constat honnête du Volume 19 sur l'absence de tests automatisés, Assistant comme canal d'escalade officiel)
 - Pure synthèse, aucun nouveau fichier de code
 
-## Volume 25 — Possibilités d'évolution ⬜
-- Pistes identifiées dans le code (commentaires, TODO) et dans l'historique du projet
-- Clairement distinguées : constat vs recommandation de l'auteur du livre
+## Volume 25 — Possibilités d'évolution ✅
+- Fonctionnalités construites côté serveur mais non exposées côté écran (permissions d'un rôle, taux de taxe produit)
+- Limites connues déjà documentées pour l'utilisateur (mot de passe oublié, mode hors-ligne, Playwright, pagination, traductions ln/sw)
+- Observations de qualité de code (code mort, commentaires obsolètes) et pistes d'ergonomie
+- Pistes hors code (infrastructure Render)
+- Chaque piste distingue clairement constat (fait vérifié) vs recommandation (avis de l'auteur, jamais une décision)
+- Pure synthèse, aucun nouveau fichier de code, aucun nouvel écart spec/code
 
 ## Volume 26 — Glossaire, index et annexes 🟡
 - `GLOSSAIRE.md`, `INDEX_DU_CODE.md` : mis à jour en continu

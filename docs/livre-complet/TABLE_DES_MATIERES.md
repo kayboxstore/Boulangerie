@@ -30,7 +30,7 @@
 | 22 | Guide complet d'utilisation | `22a` à `22l` (un chapitre par grande zone fonctionnelle) | ✅ |
 | 23 | Administration et maintenance | `23-administration-maintenance.md` | ✅ |
 | 24 | Débogage et résolution des problèmes | `24-debogage.md` | ✅ |
-| 25 | Possibilités d'évolution | `25-evolutions.md` | ⬜ |
+| 25 | Possibilités d'évolution | `25-evolutions.md` | ✅ |
 | 26 | Glossaire, index et annexes | voir `GLOSSAIRE.md`, `INDEX_DU_CODE.md`, `annexes/` | 🟡 |
 
 ## Détail du Volume 11 (Back-end, services et règles métier)
