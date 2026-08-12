@@ -279,10 +279,10 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 ## Volume 22 — Guide complet d'utilisation ✅
 Voir découpage détaillé dans `TABLE_DES_MATIERES.md`. **Clos en 12 sous-chapitres** (22a Premiers pas, 22b Rôles et permissions, 22c Commandes et Clients, 22d Production, 22e Stocks et Fournisseurs, 22f Caisse, 22g Commissions, 22h Travailleurs et Paie, 22i Équipe et Approbations, 22j État système et Sauvegardes, 22k Paramètres/À propos/Assistant, 22l Rapports et Exports).
 
-## Volume 23 — Administration et maintenance ⬜
-- Sauvegarde et restauration (`scripts/restaurer-sauvegarde.ts`, déjà écrit et testé dans ce dépôt)
-- Réinitialisation de la base
-- Gestion des comptes Admin
+## Volume 23 — Administration et maintenance ✅
+- Checklist périodique (expiration base gratuite Render, historique sauvegardes, comptes obsolètes)
+- Sauvegarde et restauration (`scripts/restaurer-sauvegarde.ts`, procédure complète avec piège réellement rencontré)
+- Gestion des comptes Admin dans la durée (transfert Principal avant départ, roulement d'équipe, langues non finalisées)
 
 ## Volume 24 — Débogage et résolution des problèmes ⬜
 - Erreurs fréquentes par domaine (connexion, permissions, sauvegarde, e-mail)
