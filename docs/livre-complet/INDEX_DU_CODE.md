@@ -293,6 +293,7 @@
 | 3.18 (fiche, pointage, absence, sanction, salaire/paie, bulletins) | Travailleurs et Paie (guide utilisateur) | `volumes/22h-travailleurs-paie.md` |
 | 2 (comptes, quota Admin, transfert Principal, workflow d'approbation), 3.7 (délégations) | Équipe et Approbations (guide utilisateur) | `volumes/22i-equipe-et-approbations.md` |
 | 3.15 (État système, sauvegardes, réinitialisation) | État système et Sauvegardes (guide utilisateur) | `volumes/22j-etat-systeme-sauvegardes.md` |
+| 3.9 (paramètres boutique), 3.12 (À propos), 3.19 (Assistant, IA optionnelle) | Paramètres, À propos et Assistant (guide utilisateur) | `volumes/22k-parametres-a-propos-assistant.md` |
 
 ---
 

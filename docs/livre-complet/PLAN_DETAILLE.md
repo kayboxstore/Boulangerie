@@ -277,7 +277,7 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Spécificités de l'offre gratuite Render (`docs/MISE-EN-PRODUCTION.md` croisé) — risque majeur d'expiration de la base gratuite documenté
 
 ## Volume 22 — Guide complet d'utilisation 🟡
-Voir découpage détaillé dans `TABLE_DES_MATIERES.md`. 10 sous-chapitres rédigés à ce jour (22a Premiers pas, 22b Rôles et permissions, 22c Commandes et Clients, 22d Production, 22e Stocks et Fournisseurs, 22f Caisse, 22g Commissions, 22h Travailleurs et Paie, 22i Équipe et Approbations, 22j État système et Sauvegardes) sur 12 prévus (22a-22l).
+Voir découpage détaillé dans `TABLE_DES_MATIERES.md`. 11 sous-chapitres rédigés à ce jour (22a Premiers pas, 22b Rôles et permissions, 22c Commandes et Clients, 22d Production, 22e Stocks et Fournisseurs, 22f Caisse, 22g Commissions, 22h Travailleurs et Paie, 22i Équipe et Approbations, 22j État système et Sauvegardes, 22k Paramètres/À propos/Assistant) sur 12 prévus (22a-22l).
 
 ## Volume 23 — Administration et maintenance ⬜
 - Sauvegarde et restauration (`scripts/restaurer-sauvegarde.ts`, déjà écrit et testé dans ce dépôt)
