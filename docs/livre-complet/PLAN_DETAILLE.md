@@ -259,25 +259,25 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - `langueDefaut` (boutique, 11z-4) vs `Utilisateur.languePreferee` (individuelle, nullable, prime sur la boutique)
 - Écart repéré : aucun (section 3.8)
 
-## Volume 18 — Explication exhaustive des fichiers sources restants ⬜
-- Tous les fichiers Niveau 2/3 non couverts par un volume thématique dédié, organisés par dossier
+## Volume 18 — Explication exhaustive des fichiers sources restants ✅
+- Tous les fichiers Niveau 2/3 non couverts par un volume thématique dédié, organisés par dossier — clos en 4 sous-chapitres (18a-18d), matrice à 155/155
 
-## Volume 19 — Tests et stratégie de vérification ⬜
-- `packages/shared/src/index.test.ts` (déjà référencé au 11a)
-- Ce qui n'est PAS testé automatiquement (constat honnête, cohérent avec l'audit réalisé dans ce projet)
-- Comment lancer les tests, comment en écrire un nouveau
+## Volume 19 — Tests et stratégie de vérification ✅
+- `packages/shared/src/index.test.ts` (déjà référencé au 11a) — 11 tests, exécutés réellement et vérifiés passants
+- Ce qui n'est PAS testé automatiquement (constat honnête) — aucune route API, composant frontend, ni parcours E2E
+- Deuxième écart spec/code trouvé : Playwright recommandé par la spec, jamais installé
 
-## Volume 20 — Performances ⬜
-- Lazy loading des pages (`App.tsx`)
-- Requêtes Prisma (inclusions, `_count`)
-- Constat honnête des limites connues (pas de pagination sur certaines listes, etc. — à vérifier dans le code, pas supposé)
+## Volume 20 — Performances ✅
+- Lazy loading des pages (`App.tsx`), `manualChunks` sélectif de Vite
+- Indexation Prisma (29 `@@index` recomptés), état du stock stocké et incrémenté (pas dérivé par agrégation)
+- Constat honnête : aucune vraie pagination (`skip`), seulement des plafonds fixes (`take: N`)
 
-## Volume 21 — Construction et déploiement ⬜
-- `npm run build`, `render.yaml`, `DEPLOIEMENT.md`
-- Spécificités de l'offre gratuite Render (déjà documentées dans `MISE-EN-PRODUCTION.md`, à croiser)
+## Volume 21 — Construction et déploiement ✅
+- `npm run build`, `render.yaml`, `DEPLOIEMENT.md` — lus intégralement
+- Spécificités de l'offre gratuite Render (`docs/MISE-EN-PRODUCTION.md` croisé) — risque majeur d'expiration de la base gratuite documenté
 
-## Volume 22 — Guide complet d'utilisation ⬜
-Voir découpage détaillé dans `TABLE_DES_MATIERES.md`.
+## Volume 22 — Guide complet d'utilisation 🟡
+Voir découpage détaillé dans `TABLE_DES_MATIERES.md`. 3 sous-chapitres rédigés à ce jour (22a Premiers pas, 22b Rôles et permissions, 22c Commandes et Clients) sur 12 prévus (22a-22l).
 
 ## Volume 23 — Administration et maintenance ⬜
 - Sauvegarde et restauration (`scripts/restaurer-sauvegarde.ts`, déjà écrit et testé dans ce dépôt)
