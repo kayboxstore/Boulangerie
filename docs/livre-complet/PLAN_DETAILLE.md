@@ -299,7 +299,9 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md`. **Clos en 12 sous-chapi
 - Chaque piste distingue clairement constat (fait vérifié) vs recommandation (avis de l'auteur, jamais une décision)
 - Pure synthèse, aucun nouveau fichier de code, aucun nouvel écart spec/code
 
-## Volume 26 — Glossaire, index et annexes 🟡
-- `GLOSSAIRE.md`, `INDEX_DU_CODE.md` : mis à jour en continu
-- `annexes/ecarts-spec-code.md` : registre unique des écarts spec/code
-- Rapport final de couverture (rédigé à la toute fin)
+## Volume 26 — Glossaire, index et annexes ✅
+- `GLOSSAIRE.md` consolidé : fusion de la section « M » dupliquée, ajout des termes « Écart entre spec et code », « Niveau de risque métier », « Constat / Interprétation / Recommandation »
+- `INDEX_DU_CODE.md` consolidé : deux lignes ajoutées à la vue « par terme métier » pour les Volumes 24-25
+- `annexes/ecarts-spec-code.md` relu intégralement : 2 écarts au total, tous deux encore ouverts
+- Rapport final de couverture : 155/155 fichiers (154 Vérifié + 1 En cours documenté), 26 volumes/57 chapitres, 2 écarts spec/code, 17 pistes d'évolution
+- **Dernier volume du plan — le livre est désormais complet**

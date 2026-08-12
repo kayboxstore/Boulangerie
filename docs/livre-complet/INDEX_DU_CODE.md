@@ -296,6 +296,8 @@
 | 3.9 (paramètres boutique), 3.12 (À propos), 3.19 (Assistant, IA optionnelle) | Paramètres, À propos et Assistant (guide utilisateur) | `volumes/22k-parametres-a-propos-assistant.md` |
 | 3.8 (widgets Tableau de bord), 3.13 (Rapports personnels, portée par rôle), export | Rapports et Exports (guide utilisateur) | `volumes/22l-rapports-et-exports.md` |
 | 3.15 (checklist opérationnelle, restauration), aucune section spec dédiée | Administration et maintenance | `volumes/23-administration-maintenance.md` |
+| Aucune section spec dédiée (synthèse transversale codes HTTP/journalisation, Volume 16) | Débogage et résolution des problèmes | `volumes/24-debogage.md` |
+| Aucune section spec dédiée (synthèse des observations de qualité de code et limites déjà relevées) | Possibilités d'évolution | `volumes/25-evolutions.md` |
 
 ---
 

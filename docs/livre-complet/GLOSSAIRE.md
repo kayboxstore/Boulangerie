@@ -30,6 +30,8 @@
 
 ## C
 
+**Constat / Interprétation / Recommandation** — Trois niveaux de discours que ce livre distingue systématiquement, en particulier dans les chapitres de synthèse (Volumes 19-25) : un **constat** est un fait vérifié directement dans le code ou la spécification, toujours accompagné de son renvoi exact ; une **interprétation** relie plusieurs constats entre eux sans en ajouter de nouveau ; une **recommandation** est l'avis de l'auteur de ce livre sur ce qu'il serait raisonnable d'envisager, jamais présentée comme une décision prise — la seule instance à trancher reste l'équipe du projet. Utilisé le plus intensément au Volume 25 (Possibilités d'évolution).
+
 **Compare-and-set** — Technique de concurrence où une écriture n'est effectuée que si une condition sur l'état actuel est encore vraie au moment précis de l'écriture (ex. `updateMany` gardé sur une valeur `null`) — garantit qu'une seule tentative parmi plusieurs concurrentes réussit, sans verrou explicite. Utilisé pour l'alerte de dette non payée, voir Volume 11h.
 
 **CORS (Cross-Origin Resource Sharing)** — Mécanisme du navigateur qui bloque par défaut les requêtes entre deux origines différentes (domaines/ports). `lib/origines.ts` définit la liste des origines autorisées à appeler l'API.
@@ -51,6 +53,8 @@
 **DTO (Data Transfer Object)** — Forme des données telle qu'elle transite entre le serveur et le client (réponse d'API). Dans ce projet, chaque DTO est un `interface` TypeScript défini dans `packages/shared/src/index.ts`, distinct du modèle Prisma correspondant (qui peut contenir des champs internes non exposés).
 
 ## E
+
+**Écart entre spec et code** — Mention normalisée utilisée dans tout ce livre (jamais résolue par l'auteur lui-même) dès qu'une divergence est constatée entre `docs/spec-boulangerie.md` (comportement voulu) et le code réel (comportement effectif). Toujours consignée dans `annexes/ecarts-spec-code.md` avec le statut « à confirmer avec l'équipe ». Deux écarts trouvés sur l'ensemble du livre : l'absence d'interface pour modifier les permissions d'un rôle (Volume 11d) et l'absence de Playwright malgré sa recommandation par la spec (Volume 19).
 
 **ERD (Entity-Relationship Diagram)** — Diagramme montrant les modèles de données et leurs relations (cardinalités). Présenté en six vues par domaine au Volume 13, le schéma complet (42 modèles) étant trop dense pour un diagramme unique lisible.
 
@@ -102,15 +106,15 @@
 
 **Module** — Dans ce projet, un domaine fonctionnel de l'application sur lequel une permission peut être accordée (ex. `COMMANDES`, `CAISSE`, `TRAVAILLEURS`). Liste fixe définie par l'énumération `Module` dans `packages/shared/src/index.ts`.
 
-**Monorepo** — Dépôt Git unique contenant plusieurs paquets npm distincts (`apps/api`, `apps/web`, `packages/shared`) gérés ensemble via les *workspaces* npm. `packages/shared` n'est jamais compilé séparément : ses champs `main`/`types`/`exports` (`package.json`, Volume 18d) pointent directement vers le fichier `.ts` source, retypé à la volée par le `tsconfig.json` de chaque consommateur (`apps/api`, `apps/web`) — voir Volume 18d.
-
-## M
-
 **Middleware** (Express) — Une fonction `(req, res, next)` insérée dans la chaîne de traitement d'une requête HTTP, exécutée avant le gestionnaire final de la route. Peut soit continuer la chaîne (`next()`), soit renvoyer directement une réponse (ex. un refus 401/403), interrompant la suite. `requireAuth` et `requirePermission` (`middleware/auth.ts`) en sont les exemples centraux de ce projet — voir Volume 11b.
 
 **Middleware factory** (fabrique de middleware) — Une fonction qui ne prend pas `(req, res, next)` directement, mais des paramètres de configuration, et **renvoie** une fonction middleware construite à partir de ces paramètres. `requirePermission(module, niveau)` en est l'exemple : elle prend un module et un niveau, et renvoie le middleware qui vérifiera précisément ce couple. Voir Volume 11b.
 
+**Monorepo** — Dépôt Git unique contenant plusieurs paquets npm distincts (`apps/api`, `apps/web`, `packages/shared`) gérés ensemble via les *workspaces* npm. `packages/shared` n'est jamais compilé séparément : ses champs `main`/`types`/`exports` (`package.json`, Volume 18d) pointent directement vers le fichier `.ts` source, retypé à la volée par le `tsconfig.json` de chaque consommateur (`apps/api`, `apps/web`) — voir Volume 18d.
+
 ## N
+
+**Niveau de risque métier** — Classification en trois paliers de chaque fichier propriétaire du projet, déterminant la profondeur de traitement attendue dans ce livre (Volume 2, méthodologie du mandat) : **Niveau 1 — Critique** (ligne à ligne, argent réel et calculs sensibles, 26 fichiers), **Niveau 2 — Fonctionnel standard** (explication complète, regroupement possible des lignes non critiques, 66 fichiers), **Niveau 3 — Support/infrastructure** (couverture correcte mais concise, 63 fichiers). Voir `MATRICE_DE_COUVERTURE.md` pour le détail fichier par fichier.
 
 **NiveauAcces** — Le niveau d'une permission sur un module : `AUCUN`, `LECTURE` ou `ECRITURE`. `ECRITURE` implique toujours `LECTURE` (voir la fonction `aAcces`, Volume 11a).
 

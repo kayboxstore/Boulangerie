@@ -31,7 +31,7 @@
 | 23 | Administration et maintenance | `23-administration-maintenance.md` | ✅ |
 | 24 | Débogage et résolution des problèmes | `24-debogage.md` | ✅ |
 | 25 | Possibilités d'évolution | `25-evolutions.md` | ✅ |
-| 26 | Glossaire, index et annexes | voir `GLOSSAIRE.md`, `INDEX_DU_CODE.md`, `annexes/` | 🟡 |
+| 26 | Glossaire, index et annexes | `26-glossaire-index-annexes.md` — voir aussi `GLOSSAIRE.md`, `INDEX_DU_CODE.md`, `annexes/` | ✅ |
 
 ## Détail du Volume 11 (Back-end, services et règles métier)
 
@@ -91,5 +91,7 @@ Un chapitre par grande zone fonctionnelle, écrit en croisant `docs/spec-boulang
 | `22l-rapports-et-exports.md` | Rapports personnels, exports CSV/PDF/e-mail | ✅ |
 
 ---
+
+**Les 26 volumes (57 chapitres) du Livre Boulangerie Lomoto sont désormais tous rédigés.** Voir le rapport final de couverture dans `volumes/26-glossaire-index-annexes.md` §4 et `ETAT_DE_PROGRESSION.md` §7.
 
 *Ce sommaire évoluera au fur et à mesure de la rédaction — notamment le découpage exact du Volume 11k (Travailleurs/Paie) et du Volume 18 (fichiers restants), qui seront précisés une fois ces chapitres entamés.*
