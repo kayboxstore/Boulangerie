@@ -84,7 +84,7 @@ Un chapitre par grande zone fonctionnelle, écrit en croisant `docs/spec-boulang
 | `22e-stocks-fournisseurs.md` | Matières premières, mouvements, fournisseurs, achats | ✅ |
 | `22f-caisse.md` | Registre journalier | ✅ |
 | `22g-commissions.md` | Consultation des commissions | ✅ |
-| `22h-travailleurs-paie.md` | Fiches, pointages, absences, sanctions, bulletins de paie | ⬜ |
+| `22h-travailleurs-paie.md` | Fiches, pointages, absences, sanctions, bulletins de paie | ✅ |
 | `22i-equipe-et-approbations.md` | Comptes, rôles, délégations, approbations | ⬜ |
 | `22j-etat-systeme-sauvegardes.md` | Sauvegarde, restauration, réinitialisation | ⬜ |
 | `22k-parametres-a-propos-assistant.md` | Paramètres, page À propos, Assistant | ⬜ |

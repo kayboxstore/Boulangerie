@@ -290,6 +290,7 @@
 | 3.2 (stocks, seuils), 3.6 (fournisseurs, réception), 3.9 (catalogue produits) | Matières premières, Fournisseurs et Catalogue (guide utilisateur) | `volumes/22e-stocks-fournisseurs.md` |
 | 3.1 (registre journalier, dépense farine, solde négatif) | Caisse (guide utilisateur) | `volumes/22f-caisse.md` |
 | 3.11 (Commissions, vue dérivée, montant total payé) | Commissions (guide utilisateur) | `volumes/22g-commissions.md` |
+| 3.18 (fiche, pointage, absence, sanction, salaire/paie, bulletins) | Travailleurs et Paie (guide utilisateur) | `volumes/22h-travailleurs-paie.md` |
 
 ---
 
