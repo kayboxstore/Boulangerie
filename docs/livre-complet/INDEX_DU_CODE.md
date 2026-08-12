@@ -289,6 +289,7 @@
 | 3.3 a-e (Planning, Schéma de commande, Bon de livraison, Productions, Écarts) | Production (guide utilisateur) | `volumes/22d-production.md` |
 | 3.2 (stocks, seuils), 3.6 (fournisseurs, réception), 3.9 (catalogue produits) | Matières premières, Fournisseurs et Catalogue (guide utilisateur) | `volumes/22e-stocks-fournisseurs.md` |
 | 3.1 (registre journalier, dépense farine, solde négatif) | Caisse (guide utilisateur) | `volumes/22f-caisse.md` |
+| 3.11 (Commissions, vue dérivée, montant total payé) | Commissions (guide utilisateur) | `volumes/22g-commissions.md` |
 
 ---
 
