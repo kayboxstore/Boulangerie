@@ -276,8 +276,8 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - `npm run build`, `render.yaml`, `DEPLOIEMENT.md` — lus intégralement
 - Spécificités de l'offre gratuite Render (`docs/MISE-EN-PRODUCTION.md` croisé) — risque majeur d'expiration de la base gratuite documenté
 
-## Volume 22 — Guide complet d'utilisation 🟡
-Voir découpage détaillé dans `TABLE_DES_MATIERES.md`. 11 sous-chapitres rédigés à ce jour (22a Premiers pas, 22b Rôles et permissions, 22c Commandes et Clients, 22d Production, 22e Stocks et Fournisseurs, 22f Caisse, 22g Commissions, 22h Travailleurs et Paie, 22i Équipe et Approbations, 22j État système et Sauvegardes, 22k Paramètres/À propos/Assistant) sur 12 prévus (22a-22l).
+## Volume 22 — Guide complet d'utilisation ✅
+Voir découpage détaillé dans `TABLE_DES_MATIERES.md`. **Clos en 12 sous-chapitres** (22a Premiers pas, 22b Rôles et permissions, 22c Commandes et Clients, 22d Production, 22e Stocks et Fournisseurs, 22f Caisse, 22g Commissions, 22h Travailleurs et Paie, 22i Équipe et Approbations, 22j État système et Sauvegardes, 22k Paramètres/À propos/Assistant, 22l Rapports et Exports).
 
 ## Volume 23 — Administration et maintenance ⬜
 - Sauvegarde et restauration (`scripts/restaurer-sauvegarde.ts`, déjà écrit et testé dans ce dépôt)

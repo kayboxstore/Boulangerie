@@ -27,7 +27,7 @@
 | 19 | Tests et stratégie de vérification | `19-tests.md` | ✅ |
 | 20 | Performances | `20-performances.md` | ✅ |
 | 21 | Construction et déploiement | `21-build-deploiement.md` | ✅ |
-| 22 | Guide complet d'utilisation | `22a` à `22l` (un chapitre par grande zone fonctionnelle) | 🟡 |
+| 22 | Guide complet d'utilisation | `22a` à `22l` (un chapitre par grande zone fonctionnelle) | ✅ |
 | 23 | Administration et maintenance | `23-administration-maintenance.md` | ⬜ |
 | 24 | Débogage et résolution des problèmes | `24-debogage.md` | ⬜ |
 | 25 | Possibilités d'évolution | `25-evolutions.md` | ⬜ |
@@ -88,7 +88,7 @@ Un chapitre par grande zone fonctionnelle, écrit en croisant `docs/spec-boulang
 | `22i-equipe-et-approbations.md` | Comptes, rôles, délégations, approbations | ✅ |
 | `22j-etat-systeme-sauvegardes.md` | Sauvegarde, restauration, réinitialisation | ✅ |
 | `22k-parametres-a-propos-assistant.md` | Paramètres, page À propos, Assistant | ✅ |
-| `22l-rapports-et-exports.md` | Rapports personnels, exports CSV/PDF/e-mail | ⬜ |
+| `22l-rapports-et-exports.md` | Rapports personnels, exports CSV/PDF/e-mail | ✅ |
 
 ---
 
