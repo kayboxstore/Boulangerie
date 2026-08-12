@@ -132,8 +132,19 @@
 | `apps/web/src/lib/csv.ts` | `volumes/18b-theme-csv-utils-feedback.md` |
 | `apps/web/src/lib/utils.ts` | `volumes/18b-theme-csv-utils-feedback.md` |
 | `apps/web/src/components/FeedbackProvider.tsx` | `volumes/18b-theme-csv-utils-feedback.md` |
+| `apps/web/src/pages/Dashboard.tsx` | `volumes/18c-dashboard-profil.md` |
+| `apps/web/src/pages/Profil.tsx` | `volumes/18c-dashboard-profil.md` |
+| `package.json` (racine) | `volumes/18d-configuration-outillage.md` |
+| `apps/api/package.json` | `volumes/18d-configuration-outillage.md` |
+| `apps/api/tsconfig.json` | `volumes/18d-configuration-outillage.md` |
+| `apps/web/package.json` | `volumes/18d-configuration-outillage.md` |
+| `apps/web/tsconfig.json` | `volumes/18d-configuration-outillage.md` |
+| `apps/web/vite.config.ts` | `volumes/18d-configuration-outillage.md` |
+| `apps/web/components.json` | `volumes/18d-configuration-outillage.md` |
+| `packages/shared/package.json` | `volumes/18d-configuration-outillage.md` |
+| `vitest.config.ts` | `volumes/18d-configuration-outillage.md` |
 
-*(Le reste des 155 fichiers du projet apparaîtra ici au fur et à mesure — voir `MATRICE_DE_COUVERTURE.md` pour la liste complète et leur état actuel.)*
+*(Tous les fichiers de code du projet sont désormais couverts par au moins un chapitre — voir `MATRICE_DE_COUVERTURE.md` pour l'état détaillé de chacun.)*
 
 ## Par symbole (fonctions, composants, routes déjà expliqués)
 
@@ -225,6 +236,8 @@
 | `genererCSV` / `telechargerCSV` | `apps/web/src/lib/csv.ts` | `volumes/18b-theme-csv-utils-feedback.md` |
 | `cn` | `apps/web/src/lib/utils.ts` | `volumes/18b-theme-csv-utils-feedback.md` |
 | `FeedbackProvider` / `useFeedback` | `apps/web/src/components/FeedbackProvider.tsx` | `volumes/18b-theme-csv-utils-feedback.md` |
+| `Compteur` / `CarteKPI` / `construireSections` | `apps/web/src/pages/Dashboard.tsx` | `volumes/18c-dashboard-profil.md` |
+| `ProfilPage` | `apps/web/src/pages/Profil.tsx` | `volumes/18c-dashboard-profil.md` |
 
 ## Par terme métier (section de la spécification ↔ chapitre du livre)
 
@@ -260,6 +273,9 @@
 | 3.8 (widgets Tableau de bord) | Rapports (widgets) | `volumes/11z-5-apropos-assistant-export-rapports.md` |
 | 2 (garde-fou intervention Admin Principal hors périmètre) | Notification d'intervention Admin | `volumes/18a-parametres-intervention-admin-restauration.md` |
 | 3.15 (État système) — restauration, hors périmètre applicatif | Restauration de sauvegarde | `volumes/18a-parametres-intervention-admin-restauration.md` |
+| 3.8 (widgets Tableau de bord, composition par rôle, résumé de clôture) | Tableau de bord (écran) | `volumes/18c-dashboard-profil.md` |
+| 2/3.7 (mot de passe), 3.9 (langue individuelle), 3.18 (bulletins personnels) | Profil individuel | `volumes/18c-dashboard-profil.md` |
+| 1 (vue d'ensemble technique, monorepo npm workspaces) | Configuration et outillage | `volumes/18d-configuration-outillage.md` |
 
 ---
 

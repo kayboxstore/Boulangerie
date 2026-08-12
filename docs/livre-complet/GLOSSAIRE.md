@@ -88,6 +88,8 @@
 
 ## M
 
+**manualChunks** — Réglage du bundler Rollup (via Vite) qui isole certaines dépendances dans des fichiers JavaScript séparés, mis en cache long terme par le navigateur indépendamment du reste du code applicatif. Ce projet l'utilise pour React/TanStack Query/i18next, mais exclut volontairement `recharts` et `framer-motion` pour qu'ils restent liés au chargement paresseux de leurs consommateurs. Voir Volume 18d.
+
 **Maman** — Type de cliente (vocabulaire du métier, pas un terme technique) dont les commandes génèrent une commission (contrairement aux Dépositaires et à la Vente cash).
 
 **Mot de passe d'application** — Mot de passe secondaire généré par Google, révocable indépendamment du mot de passe principal du compte, utilisé pour l'envoi d'e-mail via Gmail/Google Workspace (`GMAIL_APP_PASSWORD`) sans jamais exposer les identifiants réels du compte. Voir Volume 5.
@@ -98,7 +100,7 @@
 
 **Module** — Dans ce projet, un domaine fonctionnel de l'application sur lequel une permission peut être accordée (ex. `COMMANDES`, `CAISSE`, `TRAVAILLEURS`). Liste fixe définie par l'énumération `Module` dans `packages/shared/src/index.ts`.
 
-**Monorepo** — Dépôt Git unique contenant plusieurs paquets npm distincts (`apps/api`, `apps/web`, `packages/shared`) gérés ensemble via les *workspaces* npm.
+**Monorepo** — Dépôt Git unique contenant plusieurs paquets npm distincts (`apps/api`, `apps/web`, `packages/shared`) gérés ensemble via les *workspaces* npm. `packages/shared` n'est jamais compilé séparément : ses champs `main`/`types`/`exports` (`package.json`, Volume 18d) pointent directement vers le fichier `.ts` source, retypé à la volée par le `tsconfig.json` de chaque consommateur (`apps/api`, `apps/web`) — voir Volume 18d.
 
 ## M
 

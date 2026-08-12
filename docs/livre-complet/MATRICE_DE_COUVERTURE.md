@@ -141,7 +141,7 @@
 | `apps/web/src/pages/Clients.tsx` | 2 | `ClientsPage` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Commandes.tsx` | 1 | `CommandesPage` (apercu client via `calculerCommande`, dialogue de conflit) | `volumes/11h-commandes.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Commissions.tsx` | 1 | `CommissionsPage` | `volumes/11i-commissions.md` | Vérifié | — | Aucun |
-| `apps/web/src/pages/Dashboard.tsx` | 2 | `DashboardPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Dashboard.tsx` | 2 | `DashboardPage`, `Compteur`, `CarteKPI`, `construireSections` | `volumes/18c-dashboard-profil.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Equipe.tsx` | 1 | `EquipePage`, `messageApprobation` | `volumes/11d-equipe-roles-permissions.md` | Vérifié | Section délégations couverte sommairement, détail complet au 11e | Aucun (côté ce fichier) |
 | `apps/web/src/pages/EtatSysteme.tsx` | 2 | `EtatSystemePage` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Fournisseurs.tsx` | 2 | `FournisseursPage` | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | — | Aucun |
@@ -150,7 +150,7 @@
 | `apps/web/src/pages/PremierLancement.tsx` | 2 | `PremierLancementPage` | `volumes/11z-4-notifications-etat-systeme-parametres.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Production.tsx` | 2 | `ProductionPage` | `volumes/11z-2-production.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Produits.tsx` | 2 | `ProduitsPage` | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | N'envoie jamais de changement de `tauxTaxe` (chemin serveur non atteint) | Aucun |
-| `apps/web/src/pages/Profil.tsx` | 2 | `ProfilPage` | À déterminer | À analyser | — | — |
+| `apps/web/src/pages/Profil.tsx` | 2 | `ProfilPage` | `volumes/18c-dashboard-profil.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/RapportsPersonnels.tsx` | 2 | `RapportsPersonnelsPage` | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Stocks.tsx` | 2 | `StocksPage` | `volumes/11z-1-stocks-fournisseurs-produits.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Travailleurs.tsx` | 1 | `TravailleursPage` (fiches, pointages, absences) | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md` | Vérifié | — | Aucun |
@@ -193,15 +193,15 @@
 
 | Chemin | Chapitre | État | Lacunes |
 |---|---|---|---|
-| `package.json` (racine) | À déterminer | À analyser | — |
-| `apps/api/package.json` | À déterminer | À analyser | — |
-| `apps/api/tsconfig.json` | À déterminer | À analyser | — |
-| `apps/web/package.json` | À déterminer | À analyser | — |
-| `apps/web/tsconfig.json` | À déterminer | À analyser | — |
-| `apps/web/vite.config.ts` | À déterminer | À analyser | — |
-| `apps/web/components.json` | À déterminer | À analyser | — |
-| `packages/shared/package.json` | À déterminer | À analyser | — |
-| `vitest.config.ts` | À déterminer | À analyser | — |
+| `package.json` (racine) | `volumes/18d-configuration-outillage.md` | Vérifié | — |
+| `apps/api/package.json` | `volumes/18d-configuration-outillage.md` | Vérifié | — |
+| `apps/api/tsconfig.json` | `volumes/18d-configuration-outillage.md` | Vérifié | — |
+| `apps/web/package.json` | `volumes/18d-configuration-outillage.md` | Vérifié | — |
+| `apps/web/tsconfig.json` | `volumes/18d-configuration-outillage.md` | Vérifié | — |
+| `apps/web/vite.config.ts` | `volumes/18d-configuration-outillage.md` | Vérifié | — |
+| `apps/web/components.json` | `volumes/18d-configuration-outillage.md` | Vérifié | — |
+| `packages/shared/package.json` | `volumes/18d-configuration-outillage.md` | Vérifié | — |
+| `vitest.config.ts` | `volumes/18d-configuration-outillage.md` | Vérifié | — |
 | `render.yaml` | `volumes/05-configuration.md` | Vérifié | — | Aucun |
 | `.env.example` | `volumes/05-configuration.md` | Vérifié | — | Aucun |
 
@@ -222,15 +222,16 @@
 
 | État | Nombre de fichiers (sur 155 fichiers de code) |
 |---|---:|
-| À analyser | 11 |
+| À analyser | 0 |
 | En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 143 |
+| Vérifié | 154 |
+
+**155 / 155 fichiers couverts** (154 Vérifié + 1 En cours — `packages/shared/src/index.ts`, cas particulier documenté ci-dessous). Le Volume 18 (18a-18d) a clos les 18 derniers fichiers réellement « À analyser ».
 
 Méthodologie de comptage (pour que ce tableau reste vérifiable) :
-- La section F regroupe volontairement les 29 fichiers `prisma/migrations/*.sql` sur **une seule ligne de tableau** (conforme au mandat : « couvertes de façon groupée, pas ligne à ligne »). Cette ligne, à l'état Vérifié, compte donc pour **29 fichiers Vérifié**, pas pour 1 — d'où l'écart entre 128 lignes de tableau et 155 fichiers.
+- La section F regroupe volontairement les 29 fichiers `prisma/migrations/*.sql` sur **une seule ligne de tableau** (conforme au mandat : « couvertes de façon groupée, pas ligne à ligne »). Cette ligne, à l'état Vérifié, compte donc pour **29 fichiers Vérifié**, pas pour 1 — d'où l'écart originel (corrigé le 2026-08-08) entre 128 lignes de tableau et 155 fichiers.
 - Une ligne fantôme dupliquait `apps/api/src/services/actionsCritiques.ts` (une copie correcte « Vérifié » en section A, mal placée, et une copie fantôme « À analyser » en section D). Corrigé le 2026-08-08 : une seule ligne subsiste, à sa place correcte (section D), à l'état Vérifié.
-- Volume 18a (`parametres.ts`, `interventionsAdmin.ts`, `restaurer-sauvegarde.ts`) et Volume 18b (`theme.tsx`, `csv.ts`, `utils.ts`, `FeedbackProvider.tsx`) ont fait passer 7 fichiers de « À analyser » à « Vérifié ».
-- Les 11 fichiers réellement « À analyser » restants : `apps/web/src/pages/Dashboard.tsx`, `apps/web/src/pages/Profil.tsx`, et les 9 fichiers de configuration de la section M (`package.json` racine, `apps/api/package.json`, `apps/api/tsconfig.json`, `apps/web/package.json`, `apps/web/tsconfig.json`, `apps/web/vite.config.ts`, `apps/web/components.json`, `packages/shared/package.json`, `vitest.config.ts`) — couverts par les Volumes 18c et 18d.
+- `packages/shared/src/index.ts` est le seul fichier à l'état « En cours » : ses portions Niveau 1 et Niveau 2/3 sont toutes couvertes en détail au fil des chapitres thématiques (voir section E ci-dessus et §7 de `ETAT_DE_PROGRESSION.md`), mais aucun audit symbole-par-symbole exhaustif n'a formellement clos ce fichier de 1942 lignes en un seul passage — laissé « En cours » par rigueur plutôt que déclaré « Vérifié » sans cette vérification finale.
 
 *(Mis à jour à la fin de chaque lot — voir `ETAT_DE_PROGRESSION.md` pour le détail par niveau de risque.)*

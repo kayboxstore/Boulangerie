@@ -23,7 +23,7 @@
 | 15 | Validation des données | `15-validation.md` | ✅ |
 | 16 | Gestion des erreurs et journalisation | `16-erreurs-journalisation.md` | ✅ |
 | 17 | Internationalisation | `17-i18n.md` | ✅ |
-| 18 | Explication exhaustive des fichiers sources restants | `18a` à `18d` (Niveau 2/3 non couverts ailleurs) | 🟡 |
+| 18 | Explication exhaustive des fichiers sources restants | `18a` à `18d` (Niveau 2/3 non couverts ailleurs) | ✅ |
 | 19 | Tests et stratégie de vérification | `19-tests.md` | ⬜ |
 | 20 | Performances | `20-performances.md` | ⬜ |
 | 21 | Construction et déploiement | `21-build-deploiement.md` | ⬜ |
@@ -66,8 +66,10 @@ Ce volume est scindé en un chapitre par domaine fonctionnel, dans l'ordre de pr
 |---|---|:---:|
 | `18a-parametres-intervention-admin-restauration.md` | `apps/api/src/lib/parametres.ts`, `apps/api/src/services/interventionsAdmin.ts`, `scripts/restaurer-sauvegarde.ts` | ✅ |
 | `18b-theme-csv-utils-feedback.md` | `apps/web/src/lib/theme.tsx`, `apps/web/src/lib/csv.ts`, `apps/web/src/lib/utils.ts`, `apps/web/src/components/FeedbackProvider.tsx` | ✅ |
-| `18c-dashboard-profil.md` | `apps/web/src/pages/Dashboard.tsx`, `apps/web/src/pages/Profil.tsx` | ⬜ |
-| `18d-configuration-outillage.md` | Les 9 fichiers de configuration de la section M (`package.json` ×4, `tsconfig.json` ×2, `vite.config.ts`, `components.json`, `vitest.config.ts`) | ⬜ |
+| `18c-dashboard-profil.md` | `apps/web/src/pages/Dashboard.tsx`, `apps/web/src/pages/Profil.tsx` | ✅ |
+| `18d-configuration-outillage.md` | Les 9 fichiers de configuration de la section M (`package.json` ×4, `tsconfig.json` ×2, `vite.config.ts`, `components.json`, `vitest.config.ts`) | ✅ |
+
+**Le Volume 18 (fichiers sources restants) est désormais clos en 4 sous-chapitres (18a à 18d) — la matrice de couverture atteint 155/155 fichiers.**
 
 ## Détail du Volume 22 (Guide complet d'utilisation)
 
