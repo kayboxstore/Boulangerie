@@ -19,7 +19,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
+      DATABASE_URL: postgresql://lomoto:lomoto@localhost:5432/lomoto_ci?schema=public
       JWT_SECRET: ci-secret-uniquement-pour-les-tests
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: lomoto
+          POSTGRES_PASSWORD: lomoto
+          POSTGRES_DB: lomoto_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
@@ -32,6 +47,9 @@ jobs:
 
       - name: Installer les dépendances
         run: npm ci
+
+      - name: Appliquer les migrations PostgreSQL
+        run: npx prisma migrate deploy
 
       - name: Générer le client Prisma
         run: npx prisma generate
