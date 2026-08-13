@@ -42,6 +42,33 @@ type CommandeAvecRelations = Prisma.CommandeClientGetPayload<{
   };
 }>;
 
+type ResultatCommandeEcriture =
+  | { type: "creee"; commande: CommandeAvecRelations }
+  | { type: "miseAJour"; commande: CommandeAvecRelations; strategie: StrategieDoublon }
+  | { type: "conflit"; existante: CommandeAvecRelations }
+  | { type: "reglementsPresents"; existante: CommandeAvecRelations };
+
+interface CorpsCommandeEcriture {
+  commande?: CommandeDTO;
+  erreur?: string;
+  conflit?: boolean;
+  commandeExistante?: CommandeDTO;
+  apercu?: {
+    MODIFIER: { quantiteBacs: number; montantRecu: number };
+    REMPLACER: { quantiteBacs: number; montantRecu: number };
+  };
+}
+
+type ResultatReglementEcriture =
+  | { type: "introuvable" }
+  | { type: "sansDette" }
+  | { type: "reglee"; commande: CommandeAvecRelations };
+
+interface CorpsReglementEcriture {
+  commande?: CommandeDTO;
+  erreur?: string;
+}
+
 const versCommandeDTO = (c: CommandeAvecRelations): CommandeDTO => ({
   id: c.id,
   numero: c.numero,
@@ -269,7 +296,10 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
     }
     const { clientId, quantiteBacs, montantRecu, strategie } = parsed.data;
 
-    const execution = await executerEcritureIdempotente(
+    const execution = await executerEcritureIdempotente<
+      ResultatCommandeEcriture,
+      CorpsCommandeEcriture
+    >(
       req,
       "POST:/api/commandes",
       parsed.data,
@@ -396,7 +426,12 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
     );
 
     ajouterEnteteRejeu(res, execution.rejoue);
-    if (!execution.rejoue && execution.valeur && "commande" in execution.corps) {
+    if (
+      !execution.rejoue &&
+      execution.valeur &&
+      (execution.valeur.type === "creee" || execution.valeur.type === "miseAJour") &&
+      execution.corps.commande
+    ) {
       const dto = execution.corps.commande;
       const valeur = execution.valeur;
       const prefixe =
@@ -451,7 +486,10 @@ commandesRouter.post("/:id/reglements", requirePermission("COMMANDES", "ECRITURE
     }
     const { montant } = parsed.data;
 
-    const execution = await executerEcritureIdempotente(
+    const execution = await executerEcritureIdempotente<
+      ResultatReglementEcriture,
+      CorpsReglementEcriture
+    >(
       req,
       `POST:/api/commandes/${req.params.id}/reglements`,
       parsed.data,
@@ -506,7 +544,7 @@ commandesRouter.post("/:id/reglements", requirePermission("COMMANDES", "ECRITURE
     );
 
     ajouterEnteteRejeu(res, execution.rejoue);
-    if (!execution.rejoue && execution.valeur?.type === "reglee" && "commande" in execution.corps) {
+    if (!execution.rejoue && execution.valeur?.type === "reglee" && execution.corps.commande) {
       const dto = execution.corps.commande;
       busEvenements.emettreEvenement({
         type: "REGLEMENT_COMMANDE",
