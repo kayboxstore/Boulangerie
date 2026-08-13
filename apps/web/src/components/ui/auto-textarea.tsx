@@ -12,10 +12,19 @@ export interface AutoTextareaProps extends React.ComponentProps<typeof Textarea>
 }
 
 const AutoTextarea = React.forwardRef<HTMLTextAreaElement, AutoTextareaProps>(
-  ({ className, hauteurMaxPx = 320, limiteCaracteres, value, defaultValue, onChange, ...props }, ref) => {
+  ({ className, hauteurMaxPx = 320, limiteCaracteres, value, defaultValue, onChange, style, ...props }, ref) => {
     const { t } = useTranslation();
     const elementRef = React.useRef<HTMLTextAreaElement | null>(null);
     const [longueur, setLongueur] = React.useState(() => String(value ?? defaultValue ?? "").length);
+
+    // Correction revue Codex : en usage contrôlé, la longueur doit suivre
+    // `value` même quand elle change depuis le parent SANS passer par
+    // `gererChangement` ci-dessous (ex. réinitialisation programmatique,
+    // valeur reçue après un chargement asynchrone) — sans cet effet, le
+    // compteur restait figé sur la longueur du tout premier rendu.
+    React.useEffect(() => {
+      if (value !== undefined) setLongueur(String(value).length);
+    }, [value]);
 
     const combinerRef = React.useCallback(
       (node: HTMLTextAreaElement | null) => {
@@ -55,7 +64,14 @@ const AutoTextarea = React.forwardRef<HTMLTextAreaElement, AutoTextareaProps>(
           defaultValue={defaultValue}
           onChange={gererChangement}
           className={cn("resize-none overflow-y-auto", className)}
-          style={{ maxHeight: hauteurMaxPx }}
+          // Correction revue Codex : fusionne le style éventuellement fourni
+          // par l'appelant au lieu de l'écraser — `maxHeight` reste toujours
+          // appliqué en dernier pour que la limite de redimensionnement reste
+          // garantie même si l'appelant fournit son propre `style`. `style`
+          // est retiré de `...props` ci-dessus pour ne pas ré-écraser ce
+          // fusionnement (l'ordre des props JSX donnerait sinon la main au
+          // spread, qui suit dans le JSX).
+          style={{ ...style, maxHeight: hauteurMaxPx }}
           {...props}
         />
         {etatCompteur.limite !== undefined && (

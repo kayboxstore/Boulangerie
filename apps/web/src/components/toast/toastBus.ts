@@ -38,12 +38,19 @@ let prochainId = 0;
 const ecouteurs = new Set<Ecouteur>();
 
 /**
- * Ne conserve que les `max` derniers éléments d'une liste (les plus récents).
- * Pure et testable indépendamment du rendu — règle UX-17 : trois toasts au maximum.
+ * Sélectionne les toasts VISIBLES parmi la file complète (règle UX-17 :
+ * trois au maximum). Contrairement à un plafonnement qui supprimerait les
+ * plus anciens à l'arrivée d'un nouveau, cette fonction ne modifie ni ne
+ * perd jamais rien : elle prend simplement les `max` premiers de la file,
+ * dans leur ordre d'arrivée. Les suivants restent dans la file (non
+ * affichés) et prennent le relais dès qu'une place se libère — y compris un
+ * toast `persistant`, qui ne disparaît donc jamais à cause d'un 4ᵉ toast
+ * (correction demandée en revue : l'ancienne version gardait les *derniers*
+ * arrivés et perdait silencieusement les plus anciens, persistants ou non).
  */
-export function limiterToasts<T>(liste: readonly T[], max: number): T[] {
+export function selectionnerToastsVisibles<T>(file: readonly T[], max: number): T[] {
   if (max <= 0) return [];
-  return liste.length <= max ? [...liste] : liste.slice(liste.length - max);
+  return file.slice(0, max);
 }
 
 /**

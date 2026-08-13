@@ -47,8 +47,15 @@ function DateHeurePicker({
   className,
 }: DateHeurePickerProps) {
   const { t } = useTranslation();
-  const idDate = id ? `${id}-date` : undefined;
-  const idHeure = id ? `${id}-heure` : undefined;
+  // Correction revue Codex : sans `id` fourni par l'appelant, `idDate`/
+  // `idHeure` restaient `undefined` — `Label htmlFor` n'associait alors plus
+  // le libellé à son champ (association label/champ perdue). `React.useId()`
+  // garantit un identifiant stable et unique même quand l'appelant n'en
+  // fournit pas.
+  const idGenere = React.useId();
+  const idBase = id ?? idGenere;
+  const idDate = `${idBase}-date`;
+  const idHeure = `${idBase}-heure`;
 
   const apercuDate = formaterDateFr(dateValue);
   const apercuHeure = formaterHeureFr(heureValue);

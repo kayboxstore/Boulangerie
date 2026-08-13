@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
 import { Pagination } from "@/components/ui/pagination";
+import { bornerPage } from "@/components/ui/pagination-logique";
 import { EtatChargement, EtatVide } from "@/components/ui/etats";
 import { cn } from "@/lib/utils";
 import { filtrerParRecherche, trierPar, type SensTri } from "./rechercheEtTri";
@@ -102,7 +103,15 @@ function PremiumTable<T>({
   }, [recherche, triCle, triSens]);
 
   const total = donneesTriees.length;
-  const debut = (page - 1) * taillePage;
+  // Correction revue Codex : `pageEffective` est une valeur DÉRIVÉE (jamais
+  // stockée telle quelle), recalculée à chaque rendu à partir de `total`/
+  // `taillePage` courants — sans effet supplémentaire, sans clignotement sur
+  // une page vide. Si les données diminuent (suppression, filtrage plus
+  // strict côté appelant) ou si `taillePage` change, la page affichée est
+  // immédiatement rabattue dans les bornes valides ; si les données
+  // reviennent, `page` (jamais modifié dans ce cas) redonne la même position.
+  const pageEffective = bornerPage(page, taillePage, total);
+  const debut = (pageEffective - 1) * taillePage;
   const donneesPage = donneesTriees.slice(debut, debut + taillePage);
 
   const basculerTri = (colonne: ColonnePremiumTable<T>) => {
@@ -186,7 +195,14 @@ function PremiumTable<T>({
                   <TableRow key={cleId(item)} data-state={estSelectionne(item) ? "selected" : undefined}>
                     {selection && (
                       <TableCell>
-                        <span className="-m-2 inline-flex p-2">
+                        {/* Correction revue Codex : un <span> avec du padding
+                            n'agrandit que visuellement la zone — cliquer sur
+                            le padding ne coche pas la case (le clic ne cible
+                            que l'élément réellement sous le curseur). Un vrai
+                            <label> enveloppant la case, lui, transmet le clic
+                            à la case qu'il contient sur toute sa surface,
+                            nativement, sans JavaScript ni id à gérer. */}
+                        <label className="flex h-11 w-11 cursor-pointer items-center justify-center">
                           <input
                             type="checkbox"
                             checked={estSelectionne(item)}
@@ -194,7 +210,7 @@ function PremiumTable<T>({
                             aria-label={t("premium.table.selectionnerLigne")}
                             className="h-4 w-4"
                           />
-                        </span>
+                        </label>
                       </TableCell>
                     )}
                     {colonnes.map((colonne) => (
@@ -216,7 +232,7 @@ function PremiumTable<T>({
                 <CarteLigneTitre>
                   <span className="flex items-center gap-2">
                     {selection && (
-                      <span className="-m-2 inline-flex p-2">
+                      <label className="flex h-11 w-11 cursor-pointer items-center justify-center">
                         <input
                           type="checkbox"
                           checked={estSelectionne(item)}
@@ -224,7 +240,7 @@ function PremiumTable<T>({
                           aria-label={t("premium.table.selectionnerLigne")}
                           className="h-4 w-4"
                         />
-                      </span>
+                      </label>
                     )}
                     {titreMobile(item)}
                   </span>
@@ -239,7 +255,7 @@ function PremiumTable<T>({
             ))}
           </div>
 
-          <Pagination page={page} pageSize={taillePage} total={total} onPageChange={setPage} />
+          <Pagination page={pageEffective} pageSize={taillePage} total={total} onPageChange={setPage} />
         </>
       )}
     </div>

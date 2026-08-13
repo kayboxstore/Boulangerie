@@ -107,7 +107,8 @@ function Pagination({
         <label className="flex items-center gap-2 text-xs text-muted-foreground sm:text-sm">
           {t("premium.pagination.parPage")}
           <select
-            className="h-9 rounded-md border border-input bg-card px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            // Cible tactile ≥ 44 px (correction revue Codex : h-9 = 36 px).
+            className="h-11 rounded-md border border-input bg-card px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             value={etat.pageSize}
             onChange={(e) => onPageSizeChange?.(Number(e.target.value))}
           >

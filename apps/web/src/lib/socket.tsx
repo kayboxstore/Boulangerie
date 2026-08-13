@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -15,6 +16,12 @@ import { MESSAGE_SESSION_REMPLACEE } from "@lomoto/shared";
 import { api, getToken } from "./api";
 import { useAuth } from "./auth";
 import { emettreToast } from "@/components/toast/toastBus";
+import {
+  annulerLectureCiblee,
+  creerRegistreDePropriete,
+  marquerIdCommeLu,
+  marquerTousCommeLus,
+} from "./notificationsRollback";
 
 export type StatutConnexion = "connecte" | "reconnexion" | "deconnecte";
 
@@ -136,33 +143,44 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, [utilisateur?.id]);
 
-  // Mise à jour optimiste avec rollback (audit P0-03/UX-07) : l'état
-  // précédent est capturé AVANT la mise à jour optimiste ; si l'appel API
-  // échoue, on y revient exactement plutôt que de laisser l'écran mentir
-  // silencieusement sur ce qui a réellement été marqué lu côté serveur.
+  // Registre de propriété par identifiant (voir lib/notificationsRollback.ts) :
+  // survit aux re-rendus (useRef) pour que marquerLue et toutMarquerLu, même
+  // concurrents, sachent lequel des deux a le droit d'annuler quoi en cas
+  // d'échec réseau. Un jeton par appel évite qu'un rollback tardif n'écrase
+  // une mutation plus récente ou déjà réussie sur le même identifiant.
+  const registrePropriete = useRef(creerRegistreDePropriete<symbol>());
+
+  // Rollback CIBLÉ (correction suite revue Codex) : on ne capture plus l'état
+  // précédent dans un setter React pour le rejouer tel quel après l'appel
+  // réseau (cela écrasait toute notification arrivée entre-temps). En cas
+  // d'échec, seul l'identifiant concerné est restauré, via un nouvel appel à
+  // `setNotifications` qui repart de l'état le plus frais — jamais d'un
+  // instantané figé avant l'attente réseau.
   const marquerLue = useCallback(
     async (id: string) => {
-      let etatPrecedent: NotificationDTO[] | null = null;
-      let nonLuesPrecedent = 0;
-
+      let aChange = false;
       setNotifications((prev) => {
-        const cible = prev.find((n) => n.id === id);
-        if (!cible || cible.lu) return prev;
-        etatPrecedent = prev;
-        return prev.map((n) => (n.id === id ? { ...n, lu: true } : n));
+        const resultat = marquerIdCommeLu(prev, id);
+        aChange = resultat.aChange;
+        return resultat.notifications;
       });
-      if (etatPrecedent === null) return; // déjà lue ou introuvable : rien à faire, rien à annuler
+      if (!aChange) return; // déjà lue ou introuvable : rien à faire, rien à annuler
 
-      setNonLues((c) => {
-        nonLuesPrecedent = c;
-        return Math.max(0, c - 1);
-      });
+      setNonLues((c) => Math.max(0, c - 1));
+
+      const jeton = Symbol("marquerLue");
+      registrePropriete.current.reclamer([id], jeton);
 
       try {
         await api(`/api/notifications/${id}/lu`, { method: "POST" });
+        registrePropriete.current.liberer([id], jeton);
       } catch {
-        setNotifications(etatPrecedent);
-        setNonLues(nonLuesPrecedent);
+        const idsARestaurer = registrePropriete.current.idsEncorePossedesPar([id], jeton);
+        registrePropriete.current.liberer(idsARestaurer, jeton);
+        if (idsARestaurer.length === 0) return; // une action plus récente (ex. toutMarquerLu) a repris la main entre-temps
+
+        setNotifications((prev) => annulerLectureCiblee(prev, idsARestaurer));
+        setNonLues((c) => c + idsARestaurer.length);
         emettreToast({ variante: "erreur", message: t("premium.socket.echecMarquerLue") });
       }
     },
@@ -170,23 +188,33 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   );
 
   const toutMarquerLu = useCallback(async () => {
-    let etatPrecedent: NotificationDTO[] = [];
-    let nonLuesPrecedent = 0;
-
+    let idsTouches: string[] = [];
     setNotifications((prev) => {
-      etatPrecedent = prev;
-      return prev.map((n) => ({ ...n, lu: true }));
+      const resultat = marquerTousCommeLus(prev);
+      idsTouches = resultat.idsTouches;
+      return resultat.notifications;
     });
-    setNonLues((c) => {
-      nonLuesPrecedent = c;
-      return 0;
-    });
+    if (idsTouches.length === 0) return;
+
+    setNonLues(0);
+
+    // Cette action globale l'emporte sur toute action individuelle en cours
+    // pour les mêmes identifiants : un marquerLue(id) déjà en vol perd la
+    // propriété de son id et ne pourra plus l'annuler si son propre appel
+    // échoue après coup (voir notificationsRollback.test.ts).
+    const jeton = Symbol("toutMarquerLu");
+    registrePropriete.current.reclamer(idsTouches, jeton);
 
     try {
       await api("/api/notifications/lu", { method: "POST" });
+      registrePropriete.current.liberer(idsTouches, jeton);
     } catch {
-      setNotifications(etatPrecedent);
-      setNonLues(nonLuesPrecedent);
+      const idsARestaurer = registrePropriete.current.idsEncorePossedesPar(idsTouches, jeton);
+      registrePropriete.current.liberer(idsARestaurer, jeton);
+      if (idsARestaurer.length === 0) return;
+
+      setNotifications((prev) => annulerLectureCiblee(prev, idsARestaurer));
+      setNonLues((c) => c + idsARestaurer.length);
       emettreToast({ variante: "erreur", message: t("premium.socket.echecToutMarquerLu") });
     }
   }, [t]);

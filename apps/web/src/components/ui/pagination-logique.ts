@@ -45,6 +45,20 @@ export function calculerPagination(page: number, pageSize: number, total: number
   };
 }
 
+/**
+ * Borne une page demandée à l'intervalle [1, totalPages] calculé à partir de
+ * `taillePage`/`total` — dérivé, sans état. Utilisé par PremiumTable pour ne
+ * jamais afficher une page vide après une réduction des données ou de
+ * `taillePage` (correction revue Codex : l'ancienne version ne recalculait
+ * la page affichée que sur changement de recherche/tri, jamais sur une
+ * simple baisse du nombre d'éléments).
+ */
+export function bornerPage(page: number, taillePage: number, total: number): number {
+  const tailleBornee = Math.max(1, Math.floor(taillePage) || 1);
+  const totalPages = Math.max(1, Math.ceil(Math.max(0, total) / tailleBornee));
+  return Math.min(Math.max(1, Math.floor(page) || 1), totalPages);
+}
+
 export type ElementNumeroPage = number | "…";
 
 /**

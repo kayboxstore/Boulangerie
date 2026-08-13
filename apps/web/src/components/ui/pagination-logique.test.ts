@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculerPagination, genererNumerosPages } from "./pagination-logique";
+import { bornerPage, calculerPagination, genererNumerosPages } from "./pagination-logique";
 
 describe("calculerPagination", () => {
   it("calcule une page intermédiaire normale", () => {
@@ -48,6 +48,40 @@ describe("calculerPagination", () => {
   it("protège contre une taille de page nulle ou négative", () => {
     expect(calculerPagination(1, 0, 45).pageSize).toBe(1);
     expect(calculerPagination(1, -5, 45).pageSize).toBe(1);
+  });
+});
+
+describe("bornerPage — ne jamais renvoyer une page vide alors que des résultats existent", () => {
+  it("laisse une page valide inchangée", () => {
+    expect(bornerPage(2, 10, 45)).toBe(2);
+  });
+
+  it("borne une page devenue hors bornes après une baisse des données (ex. suppression de lignes)", () => {
+    // L'utilisateur était en page 5/5 (50 items, 10/page) ; les données
+    // tombent à 12 (2 pages) : la page affichée doit redescendre à 2, jamais rester à 5.
+    expect(bornerPage(5, 10, 12)).toBe(2);
+  });
+
+  it("borne une page devenue hors bornes après une augmentation de taillePage", () => {
+    // Page 5 avec 10/page sur 45 items (5 pages) ; taillePage passe à 20 → 3 pages.
+    expect(bornerPage(5, 20, 45)).toBe(3);
+  });
+
+  it("renvoie 1 quand il n'y a aucun résultat", () => {
+    expect(bornerPage(5, 10, 0)).toBe(1);
+  });
+
+  it("ne borne pas artificiellement une page déjà valide vers le bas", () => {
+    expect(bornerPage(1, 10, 45)).toBe(1);
+  });
+
+  it("protège contre une page invalide", () => {
+    expect(bornerPage(-1, 10, 45)).toBe(1);
+  });
+
+  it("protège contre une taille de page invalide (repli sur 1 élément par page)", () => {
+    // taillePage=0 replie sur 1 élément/page → 45 pages : la page 2 reste valide.
+    expect(bornerPage(2, 0, 45)).toBe(2);
   });
 });
 

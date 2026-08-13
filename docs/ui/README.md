@@ -31,11 +31,69 @@ dépendance n'a été touchée.
 | Liste mobile + Tableau ordinateur Premium (générique) | `components/premium/premium-table.tsx` + `components/premium/rechercheEtTri.ts` | 6, 7 |
 | Pagination Premium générique | `components/ui/pagination.tsx` + `components/ui/pagination-logique.ts` | 8 |
 | États vide / chargement / hors-ligne / réessayer | `components/ui/etats.tsx` | 9 |
-| Rollback de lecture des notifications + toast d'échec | `lib/socket.tsx` (seule modification autorisée à ce fichier) | 10 |
+| Rollback de lecture des notifications + toast d'échec | `lib/socket.tsx` (seule modification autorisée à ce fichier) + `lib/notificationsRollback.ts` | 10 |
 
 Toutes les nouvelles chaînes visibles sont traduites en français, anglais,
-lingala et kiswahili (`i18n/{fr,en,ln,sw}.json`, namespace `premium`) —
-parité vérifiée par script (1039/1039 clés dans les 4 langues).
+lingala et kiswahili (`i18n/{fr,en,ln,sw}.json`, namespace `premium`) — les
+**26 nouvelles clés `premium.*`** sont en parité parfaite dans les 4 langues
+(vérifié par script). Précision (correction revue Codex sur la formulation
+initiale) : le compte *total* de clés par fichier diffère d'une unité selon
+la langue — 1039 en FR/EN, 1040 en LN/SW — uniquement à cause de la clé
+`_note` (préexistante, propre à ln.json/sw.json, documentant que ces deux
+traductions sont un premier jet non définitif — voir Volume 17 du livre
+technique). Cette clé de métadonnées n'est pas une chaîne visible et n'entre
+pas dans les 26 clés `premium.*` elles-mêmes, dont la parité est totale.
+
+## Corrections apportées suite à la revue Codex (13 août, 2ᵉ commit)
+
+F1 n'était pas validée en l'état : sept points de correction ont été
+transmis, tous traités dans cette même branche, avant nouvelle revue.
+
+1. **Rollback ciblé (`lib/socket.tsx` + `lib/notificationsRollback.ts`,
+   nouveau)** — l'ancienne version capturait l'état des notifications dans
+   un setter React pour le rejouer tel quel après l'appel réseau : un
+   rollback qui remplaçait le tableau entier, effaçant au passage toute
+   notification arrivée entre-temps via Socket.io. Remplacé par un rollback
+   qui ne touche que l'identifiant concerné (jamais un remplacement complet)
+   et par un registre de propriété par identifiant (jeton `Symbol` par
+   appel) : une requête échouée ne peut plus annuler une mutation plus
+   récente ou déjà réussie sur le même identifiant, y compris entre
+   `marquerLue` et `toutMarquerLu` concurrents.
+2. **`AutoTextarea`** — le compteur de caractères ne suivait `value` qu'au
+   premier rendu (pas de resynchronisation si le parent la changeait sans
+   passer par `onChange`) ; corrigé par un effet dédié. Le `style`
+   personnalisé de l'appelant était entièrement écrasé par `{ maxHeight }`
+   (l'ordre des props JSX donnait la main au spread qui suivait) ; corrigé
+   par une fusion explicite avec `maxHeight` appliqué en dernier.
+3. **`PremiumTable`** — la page affichée ne se recalculait que sur
+   changement de recherche/tri, jamais sur une simple baisse du nombre de
+   données ou de `taillePage`, pouvant afficher une page vide avec des
+   résultats disponibles. Remplacé par une page effective **dérivée**
+   (`bornerPage()`, testée), recalculée à chaque rendu sans effet
+   supplémentaire ni clignotement.
+4. **Système de toasts** — l'ancien plafonnement gardait les 3 *derniers*
+   toasts arrivés et perdait silencieusement les précédents, y compris
+   persistants. Remplacé par une vraie file d'attente : `toasts` est
+   désormais la liste complète, jamais tronquée à l'émission ; seuls les 3
+   premiers de la file sont rendus, les suivants prennent le relais dès
+   qu'une place se libère. Refonte visuelle : position haut-droite
+   (ordinateur) / haut-centré (mobile) au lieu de bas-droite partout, halo
+   dégradé derrière un badge d'icône circulaire plus affirmé, cible de
+   fermeture 44×44 px.
+5. **Accessibilité/cibles tactiles** — `DateHeurePicker` utilise désormais
+   `React.useId()` en repli quand `id` n'est pas fourni (l'association
+   `Label`/champ était rompue sans lui). Bouton afficher/masquer du mot de
+   passe et sélecteur de taille de page portés à 44×44/44 px réels (pas
+   seulement visuels). Cases à cocher de `PremiumTable` : un `<span>` avec
+   du padding agrandit visuellement la zone mais ne transmet pas le clic à
+   la case — remplacé par un vrai `<label>` englobant, qui délègue
+   nativement le clic sur toute sa surface.
+6. **Tests** — 23 tests supplémentaires (`notificationsRollback.test.ts`,
+   nouveau ; `pagination-logique.test.ts` et `toastBus.test.ts` étendus)
+   couvrant le rollback ciblé et les scénarios de concurrence simulés, la
+   file d'attente de toasts (persistant jamais évincé), et le bornage de
+   pagination. Toujours aucune dépendance installée.
+7. **Documentation** — précision sur le compte de clés i18n (voir plus bas).
 
 ## Pourquoi un « bus de toasts » séparé du contexte React
 
@@ -88,20 +146,28 @@ $ find . -iname jsdom -o -iname "*testing-library*"   → aucun résultat
 Conformément à la règle du plan de coordination (§4 : « Si une bibliothèque
 frontend paraît nécessaire, Claude doit d'abord démontrer que les
 dépendances présentes ne suffisent pas et transmettre la demande »), F1
-n'installe **aucune** dépendance. Les 69 tests livrés (7 fichiers) couvrent
-donc uniquement la **logique pure** de chaque composant — calculs,
-formatage, validation — jamais le rendu DOM (clic, focus, rendu
+n'installe **aucune** dépendance — ni `package.json`, ni `package-lock.json`,
+ni aucune configuration de dépendances n'est modifiée. Les 92 tests livrés
+(8 fichiers) couvrent donc uniquement la **logique pure** de chaque
+composant — calculs, formatage, validation, rollback ciblé, file d'attente
+de toasts, bornage de pagination — jamais le rendu DOM (clic, focus, rendu
 conditionnel réel).
 
-**Demande transmise** : `jsdom` + `@testing-library/react` (+
-`@testing-library/user-event` en option) comme `devDependencies` de
-`apps/web`, pour permettre de vrais tests de rendu en F2/F3 — en particulier
-pour les parcours clavier/focus de `AuthShell` et la scène de connexion.
+**Demande approuvée côté Codex** (revue du 13 août) : `jsdom`,
+`@testing-library/react`, `@testing-library/user-event` et
+`@testing-library/jest-dom` seront ajoutés en `devDependencies` de
+`apps/web` par Codex, dans un harnais publié séparément (zone de
+dépendances hors périmètre F1). Une fois ce harnais disponible, les tests
+DOM suivants restent à ajouter : rollback et concurrence (montage réel de
+`SocketProvider`), toasts persistants/timers/pause/fermeture, navigation
+clavier/focus, `AutoTextarea` en usage contrôlé, association label/champ,
+tailles et états réels des contrôles, pagination après réduction des
+données.
 
 ## Vérifications exécutées
 
 ```
-npm test                         → 69/69 tests passants (7 fichiers, dont 61 nouveaux)
+npm test                         → 92/92 tests passants (8 fichiers, 81 nouveaux)
 cd apps/web && npm run build     → tsc --noEmit + vite build : succès, aucune erreur
 ```
 
@@ -110,9 +176,14 @@ aucune régression de compilation introduite par cette évolution.
 
 ## Accessibilité
 
-- Cibles tactiles ≥ 44 px sur tous les nouveaux contrôles interactifs
-  (`size="touch"`/`"icon-touch"` du bouton, boutons de pagination, bouton
-  afficher/masquer du mot de passe via une zone de clic élargie).
+- Cibles tactiles réellement ≥ 44×44 px sur tous les contrôles interactifs
+  neufs (`size="touch"`/`"icon-touch"` du bouton, boutons de pagination et
+  son sélecteur de taille, bouton afficher/masquer du mot de passe centré
+  sur le champ, cases à cocher de `PremiumTable` via un vrai `<label>`
+  englobant — pas une zone agrandie seulement visuellement).
+- Association label/champ : `DateHeurePicker` génère un identifiant stable
+  via `React.useId()` quand l'appelant n'en fournit pas, pour ne jamais
+  perdre l'association `Label`/champ.
 - Navigation clavier : tri des colonnes de `PremiumTable` via un vrai
   `<button>` (pas un simple `onClick` sur `<th>`), focus visible partout
   (`focus-visible:ring-2`).

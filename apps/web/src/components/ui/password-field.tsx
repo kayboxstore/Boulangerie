@@ -50,7 +50,7 @@ const PasswordField = React.forwardRef<HTMLInputElement, PasswordFieldProps>(
           <Input
             ref={ref}
             type={visible ? "text" : "password"}
-            className={cn("pr-10", className)}
+            className={cn("pr-12", className)}
             value={value}
             onChange={gererChangement}
             autoComplete={props.autoComplete ?? "current-password"}
@@ -61,9 +61,11 @@ const PasswordField = React.forwardRef<HTMLInputElement, PasswordFieldProps>(
             onClick={() => setVisible((v) => !v)}
             aria-label={visible ? t("premium.passwordField.masquer") : t("premium.passwordField.afficher")}
             aria-pressed={visible}
-            // Cible tactile 44px malgré une icône visuellement plus petite :
-            // le bouton occupe toute la hauteur du champ, pas seulement l'icône.
-            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+            // Cible tactile réellement 44×44 px (correction revue Codex :
+            // l'ancienne zone valait 40×36 px, alignée sur la hauteur du
+            // champ plutôt que sur la règle d'accessibilité). Centrée
+            // verticalement sur le champ quelle que soit sa hauteur.
+            className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-muted-foreground transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
             disabled={props.disabled}
             tabIndex={0}
           >
