@@ -10,6 +10,7 @@ import {
   creerSuiviFraicheurHistorique,
   demarrerMarquerLue,
   demarrerToutMarquerLu,
+  enregistrerEcritureVisuelleSiChangee,
   marquerIdCommeLu,
   marquerTousCommeLus,
   type EtatNotifications,
@@ -926,22 +927,48 @@ describe("creerSuiviFraicheurHistorique — round 6 : barrière de fraîcheur po
     expect(suivi.estEncoreValide(jetonB, 1)).toBe(true);
   });
 
-  it("enregistrerMutationLocale() invalide tout jeton déjà démarré", () => {
+  it("enregistrerEcritureVisuelle() invalide tout jeton déjà démarré", () => {
     const suivi = creerSuiviFraicheurHistorique();
     const jeton = suivi.demarrerChargement(1);
-    suivi.enregistrerMutationLocale();
+    suivi.enregistrerEcritureVisuelle();
+    expect(suivi.estEncoreValide(jeton, 1)).toBe(false);
+  });
+
+  it("enregistrerConfirmationServeur() invalide tout jeton déjà démarré (round 7)", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const jeton = suivi.demarrerChargement(1);
+    suivi.enregistrerConfirmationServeur();
     expect(suivi.estEncoreValide(jeton, 1)).toBe(false);
   });
 
   it("reinitialiser() remet séquence et révision à zéro pour une nouvelle génération", () => {
     const suivi = creerSuiviFraicheurHistorique();
     suivi.demarrerChargement(1);
-    suivi.enregistrerMutationLocale();
+    suivi.enregistrerEcritureVisuelle();
     suivi.reinitialiser();
     const jeton = suivi.demarrerChargement(2);
     expect(jeton.sequence).toBe(1);
     expect(jeton.revision).toBe(0);
     expect(suivi.estEncoreValide(jeton, 2)).toBe(true);
+  });
+
+  describe("enregistrerEcritureVisuelleSiChangee — round 7 : petite fonction pure partagée avec appliquerEtat()", () => {
+    it("n'enregistre rien quand la référence est inchangée", () => {
+      const suivi = creerSuiviFraicheurHistorique();
+      const jeton = suivi.demarrerChargement(1);
+      const etat: EtatNotifications<Notif> = { notifications: [], resteNonLues: 0 };
+      enregistrerEcritureVisuelleSiChangee(suivi, etat, etat); // même référence
+      expect(suivi.estEncoreValide(jeton, 1)).toBe(true);
+    });
+
+    it("enregistre une écriture quand la référence change", () => {
+      const suivi = creerSuiviFraicheurHistorique();
+      const jeton = suivi.demarrerChargement(1);
+      const etatAvant: EtatNotifications<Notif> = { notifications: [], resteNonLues: 0 };
+      const etatApres: EtatNotifications<Notif> = { notifications: [], resteNonLues: 1 };
+      enregistrerEcritureVisuelleSiChangee(suivi, etatAvant, etatApres);
+      expect(suivi.estEncoreValide(jeton, 1)).toBe(false);
+    });
   });
 });
 
@@ -949,9 +976,10 @@ describe("creerSuiviFraicheurHistorique — round 6 : barrière de fraîcheur po
  * Scénarios exigés en revue (round 6) : `chargerHistorique()` (GET
  * `/api/notifications`) peut répondre APRÈS une action plus récente. Ces
  * tests composent `creerSuiviFraicheurHistorique` avec les MÊMES
- * orchestrateurs que `socket.tsx` — `suivi.enregistrerMutationLocale()` est
- * appelé exactement là où `appliquerEtat()` l'appelle en production (à
- * chaque écriture d'état par référence réellement nouvelle).
+ * orchestrateurs que `socket.tsx` — chaque écriture d'état passe par
+ * `enregistrerEcritureVisuelleSiChangee()` (round 7), la MÊME petite
+ * fonction que `appliquerEtat()` appelle en production, jamais une
+ * comparaison réécrite en parallèle dans le test.
  */
 describe("Barrière de fraîcheur de chargerHistorique() (round 6)", () => {
   it("1) deux historiques concurrents : le plus ancien répond en dernier et est ignoré", () => {
@@ -980,10 +1008,14 @@ describe("Barrière de fraîcheur de chargerHistorique() (round 6)", () => {
     const registre = creerRegistreDePropriete<symbol>();
     const registreReste = creerProprieteUnique<symbol>();
     const demarrage = demarrerMarquerLue(etat, "1", registre);
+    const etatAvantOptimiste = etat;
     etat = demarrage.etat;
-    suivi.enregistrerMutationLocale(); // même geste que appliquerEtat() côté optimiste
+    enregistrerEcritureVisuelleSiChangee(suivi, etatAvantOptimiste, etat); // même geste que appliquerEtat() côté optimiste
+
+    // Succès confirmé : appelé INCONDITIONNELLEMENT, comme dans socket.tsx,
+    // qu'il produise ou non un changement de référence.
+    suivi.enregistrerConfirmationServeur();
     etat = confirmerSucces(etat, demarrage, registre, registreReste);
-    suivi.enregistrerMutationLocale(); // même geste que appliquerEtat() côté confirmation
 
     expect(suivi.estEncoreValide(jeton, generation)).toBe(false);
     // L'historique périmé n'est donc jamais appliqué : "1" reste lue.
@@ -1006,10 +1038,12 @@ describe("Barrière de fraîcheur de chargerHistorique() (round 6)", () => {
     const registre = creerRegistreDePropriete<symbol>();
     const registreReste = creerProprieteUnique<symbol>();
     const demarrage = demarrerToutMarquerLu(etat, registre, registreReste);
+    const etatAvantOptimiste = etat;
     etat = demarrage.etat;
-    suivi.enregistrerMutationLocale();
+    enregistrerEcritureVisuelleSiChangee(suivi, etatAvantOptimiste, etat);
+
+    suivi.enregistrerConfirmationServeur();
     etat = confirmerSucces(etat, demarrage, registre, registreReste);
-    suivi.enregistrerMutationLocale();
 
     expect(suivi.estEncoreValide(jeton, generation)).toBe(false);
     expect(etat.notifications.every((n) => n.lu)).toBe(true);
@@ -1023,8 +1057,9 @@ describe("Barrière de fraîcheur de chargerHistorique() (round 6)", () => {
     const jeton = suivi.demarrerChargement(generation);
 
     // Une notification Socket.io arrive avant que l'historique ne réponde.
+    const etatAvant = etat;
     etat = ajouterNotificationAvecPlafond(etat, { id: "2", lu: false, titre: "Nouvelle" }, 100);
-    suivi.enregistrerMutationLocale();
+    enregistrerEcritureVisuelleSiChangee(suivi, etatAvant, etat);
 
     expect(suivi.estEncoreValide(jeton, generation)).toBe(false);
     // L'historique périmé n'est donc jamais appliqué : "2" et le compteur qu'elle a fait progresser sont conservés.
@@ -1058,5 +1093,108 @@ describe("Barrière de fraîcheur de chargerHistorique() (round 6)", () => {
 
     const etat: EtatNotifications<Notif> = { notifications: [{ id: "1", lu: false, titre: "A" }], resteNonLues: 3 };
     expect(compterNonLues(etat)).toBe(4);
+  });
+});
+
+/**
+ * Course P1 (round 7) : un historique peut démarrer APRÈS l'écriture
+ * optimiste mais AVANT la réponse du POST. Si le succès confirmé ne change
+ * rien à l'écran, `confirmerSucces()` renvoie EXACTEMENT la même référence —
+ * sans `enregistrerConfirmationServeur()`, `appliquerEtat()` ne détecterait
+ * alors aucune écriture visuelle et l'historique périmé resterait valide.
+ * Ces tests reproduisent EXACTEMENT la séquence d'appels de socket.tsx
+ * (mêmes orchestrateurs, même petite fonction `enregistrerEcritureVisuelleSiChangee`
+ * que `appliquerEtat()`, même appel inconditionnel de
+ * `enregistrerConfirmationServeur()` juste après la vérification de
+ * génération) — aucun appel artificiel qu'un des deux chemins réels
+ * n'effectue.
+ */
+describe("Course historique/confirmation sans changement visuel (round 7)", () => {
+  it("marquerLue : succès serveur périme l'historique même si confirmerSucces() ne change rien à l'écran", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const generation = 1;
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+
+    // 1) Lecture individuelle optimiste.
+    let etat: EtatNotifications<Notif> = { notifications: [{ id: "1", lu: false, titre: "A" }], resteNonLues: 0 };
+    const demarrage = demarrerMarquerLue(etat, "1", registre);
+    expect(demarrage.aDemarre).toBe(true);
+    const etatAvantOptimiste = etat;
+    etat = demarrage.etat;
+    enregistrerEcritureVisuelleSiChangee(suivi, etatAvantOptimiste, etat); // appliquerEtat() optimiste
+
+    // 2) Historique démarré APRÈS l'optimisme, PENDANT que le POST est en vol.
+    const jetonHistorique = suivi.demarrerChargement(generation);
+
+    // 3) Succès individuel : `confirmerSucces()` renvoie la MÊME référence,
+    // l'état optimiste étant déjà exactement celui confirmé par le serveur.
+    // `enregistrerConfirmationServeur()` est appelé INCONDITIONNELLEMENT,
+    // exactement comme dans le bloc `try` de `marquerLue()` (socket.tsx),
+    // AVANT même de savoir si `confirmerSucces()` changera quelque chose.
+    suivi.enregistrerConfirmationServeur();
+    const etatAvantConfirmation = etat;
+    etat = confirmerSucces(etat, demarrage, registre, registreReste);
+    enregistrerEcritureVisuelleSiChangee(suivi, etatAvantConfirmation, etat); // appliquerEtat() de confirmation
+    expect(etat).toBe(etatAvantConfirmation); // confirme l'hypothèse du scénario : aucun changement de référence
+
+    // 4) L'historique lancé pendant le POST doit être considéré périmé.
+    expect(suivi.estEncoreValide(jetonHistorique, generation)).toBe(false);
+  });
+
+  it("toutMarquerLu : succès serveur périme l'historique même si confirmerSucces() ne change rien à l'écran", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const generation = 1;
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+
+    // 1) Lecture globale optimiste.
+    let etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "2", lu: false, titre: "B" },
+      ],
+      resteNonLues: 0,
+    };
+    const demarrage = demarrerToutMarquerLu(etat, registre, registreReste);
+    expect(demarrage.aDemarre).toBe(true);
+    const etatAvantOptimiste = etat;
+    etat = demarrage.etat;
+    enregistrerEcritureVisuelleSiChangee(suivi, etatAvantOptimiste, etat);
+
+    // 2) Historique démarré APRÈS l'optimisme, PENDANT que le POST est en vol.
+    const jetonHistorique = suivi.demarrerChargement(generation);
+
+    // 3) Succès global : `confirmerSucces()` renvoie la MÊME référence.
+    suivi.enregistrerConfirmationServeur();
+    const etatAvantConfirmation = etat;
+    etat = confirmerSucces(etat, demarrage, registre, registreReste);
+    enregistrerEcritureVisuelleSiChangee(suivi, etatAvantConfirmation, etat);
+    expect(etat).toBe(etatAvantConfirmation);
+
+    // 4) L'historique lancé pendant le POST doit être considéré périmé.
+    expect(suivi.estEncoreValide(jetonHistorique, generation)).toBe(false);
+  });
+
+  it("témoin positif : un historique lancé APRÈS la confirmation serveur reste valide sans mutation ultérieure", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const generation = 1;
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+
+    let etat: EtatNotifications<Notif> = { notifications: [{ id: "1", lu: false, titre: "A" }], resteNonLues: 0 };
+    const demarrage = demarrerMarquerLue(etat, "1", registre);
+    const etatAvantOptimiste = etat;
+    etat = demarrage.etat;
+    enregistrerEcritureVisuelleSiChangee(suivi, etatAvantOptimiste, etat);
+
+    suivi.enregistrerConfirmationServeur();
+    const etatAvantConfirmation = etat;
+    etat = confirmerSucces(etat, demarrage, registre, registreReste);
+    enregistrerEcritureVisuelleSiChangee(suivi, etatAvantConfirmation, etat);
+
+    // Historique lancé APRÈS la confirmation, sans mutation ultérieure.
+    const jeton = suivi.demarrerChargement(generation);
+    expect(suivi.estEncoreValide(jeton, generation)).toBe(true);
   });
 });

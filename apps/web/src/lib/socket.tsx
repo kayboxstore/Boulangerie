@@ -26,6 +26,7 @@ import {
   creerSuiviFraicheurHistorique,
   demarrerMarquerLue,
   demarrerToutMarquerLu,
+  enregistrerEcritureVisuelleSiChangee,
   type EtatNotifications,
 } from "./notificationsRollback";
 
@@ -64,15 +65,18 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
   // Suivi de fraîcheur pour `chargerHistorique()` (correction round 6) — voir
   // notificationsRollback.ts. `appliquerEtat` est l'UNIQUE point d'écriture
-  // de l'état, donc l'endroit exact où enregistrer qu'une mutation locale
+  // de l'état, donc l'endroit exact où enregistrer qu'une écriture VISUELLE
   // "utile" vient de se produire (l'égalité de référence distingue une
   // écriture réelle d'un no-op, ex. `confirmerSucces` qui renvoie le même
   // objet quand rien n'a changé) : toute requête d'historique encore en vol
-  // à ce moment doit être considérée périmée.
+  // à ce moment doit être considérée périmée. Round 7 : un succès réseau de
+  // `marquerLue`/`toutMarquerLu` doit AUSSI périmer l'historique même sans
+  // écriture visuelle (voir `enregistrerConfirmationServeur`, appelée
+  // séparément à l'endroit exact de la confirmation, plus bas).
   const fraicheurHistorique = useRef(creerSuiviFraicheurHistorique());
 
   const appliquerEtat = useCallback((etat: EtatNotifications<NotificationDTO>) => {
-    if (etat !== etatRef.current) fraicheurHistorique.current.enregistrerMutationLocale();
+    enregistrerEcritureVisuelleSiChangee(fraicheurHistorique.current, etatRef.current, etat);
     etatRef.current = etat;
     setNotifications(etat.notifications);
     setNonLues(compterNonLues(etat));
@@ -237,6 +241,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         // toast, ni écriture dans un registre qui a déjà été recréé pour la
         // nouvelle session.
         if (generationRef.current !== generation) return;
+        // Round 7 : un succès réseau confirmé périme tout historique en vol
+        // MÊME si `confirmerSucces()` ne change rien à l'écran (l'optimiste
+        // était déjà exactement l'état confirmé) — appel INCONDITIONNEL,
+        // distinct de l'écriture visuelle gardée par référence ci-dessus.
+        fraicheurHistorique.current.enregistrerConfirmationServeur();
         appliquerEtat(confirmerSucces(etatRef.current, demarrage, registrePropriete.current, registreReste.current));
       } catch {
         if (generationRef.current !== generation) return;
@@ -259,6 +268,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     try {
       await api("/api/notifications/lu", { method: "POST" });
       if (generationRef.current !== generation) return;
+      fraicheurHistorique.current.enregistrerConfirmationServeur(); // round 7 : idem, inconditionnel
       appliquerEtat(confirmerSucces(etatRef.current, demarrage, registrePropriete.current, registreReste.current));
     } catch {
       if (generationRef.current !== generation) return;

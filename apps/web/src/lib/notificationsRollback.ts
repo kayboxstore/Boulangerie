@@ -58,6 +58,18 @@
  *   locale, incrémentée par `socket.tsx` à chaque écriture RÉELLE de l'état
  *   (voir `appliquerEtat`) — capturée au départ de la requête, revérifiée à
  *   son retour.
+ * - round 7 : la révision round 6 n'avançait que sur une écriture visuelle
+ *   RÉELLE (comparaison de référence dans `appliquerEtat`). Or un succès
+ *   serveur de `marquerLue()`/`toutMarquerLu()` peut ne produire AUCUN
+ *   changement de référence — `confirmerSucces()` renvoie exactement le même
+ *   objet quand l'état optimiste était déjà celui confirmé par le serveur.
+ *   Un historique démarré pendant que ce POST était en vol restait alors
+ *   considéré valide après sa résolution, et pouvait réinjecter un état
+ *   serveur antérieur au succès. `enregistrerConfirmationServeur()` avance
+ *   désormais la révision INCONDITIONNELLEMENT à chaque succès réseau
+ *   confirmé, indépendamment de `enregistrerEcritureVisuelle()` (renommée
+ *   depuis `enregistrerMutationLocale`) qui reste gardée par comparaison de
+ *   référence pour les autres mutations locales.
  */
 
 export interface NotificationAvecLecture {
@@ -423,11 +435,28 @@ export interface JetonFraicheurHistorique {
  * socket.tsx), plutôt que de créer un second mécanisme concurrent.
  *
  * En revanche la SÉQUENCE (quelle requête d'historique est la plus récente)
- * et la RÉVISION (une mutation locale a-t-elle eu lieu depuis le départ de
- * la requête) sont spécifiques au chargement d'historique et gérées ici.
+ * et la RÉVISION (un événement plus récent a-t-il eu lieu depuis le départ
+ * de la requête) sont spécifiques au chargement d'historique et gérées ici.
  *
  * Une réponse n'est appliquée que si les TROIS conditions tiennent encore :
  * même génération, dernière séquence lancée, aucune révision depuis.
+ *
+ * Round 7 : la RÉVISION est avancée par deux évènements DISTINCTS, tous deux
+ * exposés explicitement pour que production et tests appellent EXACTEMENT
+ * la même méthode dans le même contexte :
+ * - `enregistrerEcritureVisuelle()` — une écriture RÉELLE de l'état affiché
+ *   (voir `appliquerEtat` dans socket.tsx, gardée par une comparaison de
+ *   référence) : action optimiste, rollback utile, arrivée d'une
+ *   notification Socket.io, ou toute autre mutation qui change effectivement
+ *   ce qui est affiché.
+ * - `enregistrerConfirmationServeur()` — un succès réseau CONFIRMÉ de
+ *   `marquerLue()`/`toutMarquerLu()`, à appeler INCONDITIONNELLEMENT, même
+ *   quand `confirmerSucces()` ne produit AUCUN changement de référence
+ *   (l'état optimiste était déjà exactement celui confirmé par le serveur).
+ *   Sans ce second point d'entrée, un historique démarré pendant que le POST
+ *   était en vol restait considéré valide après la résolution de ce POST,
+ *   puisque `appliquerEtat()` ne détecte alors aucune écriture visuelle et
+ *   n'avance jamais la révision — la course corrigée en round 7.
  */
 export function creerSuiviFraicheurHistorique() {
   let derniereSequence = 0;
@@ -439,14 +468,12 @@ export function creerSuiviFraicheurHistorique() {
       derniereSequence = 0;
       revision = 0;
     },
-    /**
-     * À appeler à chaque écriture RÉELLE de l'état affiché (voir
-     * `appliquerEtat` dans socket.tsx) : action optimiste, confirmation ou
-     * rollback utile (qui a effectivement changé quelque chose), arrivée
-     * d'une notification Socket.io, ou toute autre mutation locale. Périme
-     * immédiatement toute requête d'historique encore en vol.
-     */
-    enregistrerMutationLocale(): void {
+    /** Une écriture RÉELLE de l'état affiché a eu lieu — voir la note d'en-tête. Périme immédiatement toute requête d'historique encore en vol. */
+    enregistrerEcritureVisuelle(): void {
+      revision += 1;
+    },
+    /** Un succès réseau de `marquerLue()`/`toutMarquerLu()` vient d'être confirmé — voir la note d'en-tête. Périme immédiatement toute requête d'historique encore en vol, MÊME sans changement visuel. */
+    enregistrerConfirmationServeur(): void {
       revision += 1;
     },
     /** Démarre une nouvelle requête d'historique ; le jeton renvoyé doit être revérifié via `estEncoreValide` à la résolution (succès ou échec). */
@@ -462,3 +489,17 @@ export function creerSuiviFraicheurHistorique() {
 }
 
 export type SuiviFraicheurHistorique = ReturnType<typeof creerSuiviFraicheurHistorique>;
+
+/**
+ * Extrait de `appliquerEtat` (socket.tsx) la comparaison de référence qui
+ * décide si une écriture d'état constitue une écriture VISUELLE réelle —
+ * pour que production ET tests appellent exactement la MÊME fonction plutôt
+ * que deux implémentations parallèles de cette comparaison (round 7).
+ */
+export function enregistrerEcritureVisuelleSiChangee<T extends NotificationAvecLecture>(
+  suivi: Pick<SuiviFraicheurHistorique, "enregistrerEcritureVisuelle">,
+  etatAvant: EtatNotifications<T>,
+  etatApres: EtatNotifications<T>,
+): void {
+  if (etatApres !== etatAvant) suivi.enregistrerEcritureVisuelle();
+}
