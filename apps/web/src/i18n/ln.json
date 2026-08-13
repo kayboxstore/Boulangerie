@@ -1100,5 +1100,49 @@
     "escaladeError": "Bosɛngi ekoki te.",
     "statusIA": "IA",
     "iaHandlingBanner": "IA ezali koyanola na mosaleli oyo sikoyo — kotinda nsango ekozwa esika na yango."
+  },
+  "premium": {
+    "passwordField": {
+      "afficher": "Komonisa mot de passe",
+      "masquer": "Kobomba mot de passe",
+      "robustesse": {
+        "tresFaible": "Ya pete mingi",
+        "faible": "Ya pete",
+        "moyen": "Ya katikati",
+        "bon": "Malamu",
+        "fort": "Makasi"
+      }
+    },
+    "autoTextarea": {
+      "compteur": "{{longueur}} / {{limite}} caractères"
+    },
+    "dateHeurePicker": {
+      "date": "Mokolo",
+      "heure": "Ngonga"
+    },
+    "pagination": {
+      "navigation": "Bapaje",
+      "resume": "{{debut}}–{{fin}} na kati ya {{total}}",
+      "precedente": "Lokasa ya liboso",
+      "suivante": "Lokasa oyo elandi",
+      "aller": "Kokende na lokasa {{page}}",
+      "pageSur": "Lokasa {{page}} na kati ya {{totalPages}}",
+      "parPage": "Na lokasa moko"
+    },
+    "etats": {
+      "videTitre": "Eloko ya komonisa ezali te",
+      "horsLigneTitre": "Na libanda",
+      "horsLigneDescription": "Tala connexion na yo ya internet mpe meka lisusu.",
+      "reessayer": "Meka lisusu",
+      "erreurTitre": "Likambo moko esalemi mabe"
+    },
+    "table": {
+      "rechercherPlaceholder": "Koluka…",
+      "selectionnerLigne": "Pona molongo oyo"
+    },
+    "socket": {
+      "echecMarquerLue": "Ekoki te kotanga notifikasio oyo lokola etangami. Meka lisusu.",
+      "echecToutMarquerLu": "Ekoki te kotanga ba-notifikasio nyonso lokola etangami. Meka lisusu."
+    }
   }
 }

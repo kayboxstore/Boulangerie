@@ -1099,5 +1099,49 @@
     "escaladeError": "La demande a échoué.",
     "statusIA": "IA",
     "iaHandlingBanner": "L'IA répond actuellement à cet utilisateur — envoyer un message prend le relai."
+  },
+  "premium": {
+    "passwordField": {
+      "afficher": "Afficher le mot de passe",
+      "masquer": "Masquer le mot de passe",
+      "robustesse": {
+        "tresFaible": "Très faible",
+        "faible": "Faible",
+        "moyen": "Moyen",
+        "bon": "Bon",
+        "fort": "Fort"
+      }
+    },
+    "autoTextarea": {
+      "compteur": "{{longueur}} / {{limite}} caractères"
+    },
+    "dateHeurePicker": {
+      "date": "Date",
+      "heure": "Heure"
+    },
+    "pagination": {
+      "navigation": "Pagination",
+      "resume": "{{debut}}–{{fin}} sur {{total}}",
+      "precedente": "Page précédente",
+      "suivante": "Page suivante",
+      "aller": "Aller à la page {{page}}",
+      "pageSur": "Page {{page}} sur {{totalPages}}",
+      "parPage": "Par page"
+    },
+    "etats": {
+      "videTitre": "Aucun élément à afficher",
+      "horsLigneTitre": "Aucune connexion",
+      "horsLigneDescription": "Vérifiez votre connexion internet et réessayez.",
+      "reessayer": "Réessayer",
+      "erreurTitre": "Une erreur est survenue"
+    },
+    "table": {
+      "rechercherPlaceholder": "Rechercher…",
+      "selectionnerLigne": "Sélectionner cette ligne"
+    },
+    "socket": {
+      "echecMarquerLue": "Impossible de marquer cette notification comme lue. Réessayez.",
+      "echecToutMarquerLu": "Impossible de marquer toutes les notifications comme lues. Réessayez."
+    }
   }
 }

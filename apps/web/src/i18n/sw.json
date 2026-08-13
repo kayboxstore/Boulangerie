@@ -1100,5 +1100,49 @@
     "escaladeError": "Ombi limeshindikana.",
     "statusIA": "AI",
     "iaHandlingBanner": "AI inamjibu mtumiaji huyu kwa sasa — kutuma ujumbe kutachukua nafasi yake."
+  },
+  "premium": {
+    "passwordField": {
+      "afficher": "Onyesha nenosiri",
+      "masquer": "Ficha nenosiri",
+      "robustesse": {
+        "tresFaible": "Dhaifu sana",
+        "faible": "Dhaifu",
+        "moyen": "Wastani",
+        "bon": "Nzuri",
+        "fort": "Imara"
+      }
+    },
+    "autoTextarea": {
+      "compteur": "Herufi {{longueur}} / {{limite}}"
+    },
+    "dateHeurePicker": {
+      "date": "Tarehe",
+      "heure": "Saa"
+    },
+    "pagination": {
+      "navigation": "Kurasa",
+      "resume": "{{debut}}–{{fin}} kati ya {{total}}",
+      "precedente": "Ukurasa uliopita",
+      "suivante": "Ukurasa unaofuata",
+      "aller": "Nenda kwenye ukurasa wa {{page}}",
+      "pageSur": "Ukurasa wa {{page}} kati ya {{totalPages}}",
+      "parPage": "Kwa kila ukurasa"
+    },
+    "etats": {
+      "videTitre": "Hakuna kitu cha kuonyesha",
+      "horsLigneTitre": "Nje ya mtandao",
+      "horsLigneDescription": "Kagua muunganisho wako wa intaneti kisha jaribu tena.",
+      "reessayer": "Jaribu tena",
+      "erreurTitre": "Hitilafu imetokea"
+    },
+    "table": {
+      "rechercherPlaceholder": "Tafuta…",
+      "selectionnerLigne": "Chagua safu hii"
+    },
+    "socket": {
+      "echecMarquerLue": "Imeshindikana kuweka arifa hii kama imesomwa. Jaribu tena.",
+      "echecToutMarquerLu": "Imeshindikana kuweka arifa zote kama zimesomwa. Jaribu tena."
+    }
   }
 }

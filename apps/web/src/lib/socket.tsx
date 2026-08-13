@@ -9,10 +9,12 @@ import {
 } from "react";
 import type { Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { NotificationDTO, ServerToClientEvents, ClientToServerEvents } from "@lomoto/shared";
 import { MESSAGE_SESSION_REMPLACEE } from "@lomoto/shared";
 import { api, getToken } from "./api";
 import { useAuth } from "./auth";
+import { emettreToast } from "@/components/toast/toastBus";
 
 export type StatutConnexion = "connecte" | "reconnexion" | "deconnecte";
 
@@ -31,6 +33,7 @@ const MAX_FEED = 100;
 export function SocketProvider({ children }: { children: ReactNode }) {
   const { utilisateur, deconnexionForcee } = useAuth();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [statut, setStatut] = useState<StatutConnexion>("deconnecte");
   const [notifications, setNotifications] = useState<NotificationDTO[]>([]);
   const [nonLues, setNonLues] = useState(0);
@@ -133,21 +136,60 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, [utilisateur?.id]);
 
-  const marquerLue = useCallback(async (id: string) => {
-    setNotifications((prev) => {
-      const cible = prev.find((n) => n.id === id);
-      if (!cible || cible.lu) return prev;
-      setNonLues((c) => Math.max(0, c - 1));
-      return prev.map((n) => (n.id === id ? { ...n, lu: true } : n));
-    });
-    await api(`/api/notifications/${id}/lu`, { method: "POST" }).catch(() => {});
-  }, []);
+  // Mise à jour optimiste avec rollback (audit P0-03/UX-07) : l'état
+  // précédent est capturé AVANT la mise à jour optimiste ; si l'appel API
+  // échoue, on y revient exactement plutôt que de laisser l'écran mentir
+  // silencieusement sur ce qui a réellement été marqué lu côté serveur.
+  const marquerLue = useCallback(
+    async (id: string) => {
+      let etatPrecedent: NotificationDTO[] | null = null;
+      let nonLuesPrecedent = 0;
+
+      setNotifications((prev) => {
+        const cible = prev.find((n) => n.id === id);
+        if (!cible || cible.lu) return prev;
+        etatPrecedent = prev;
+        return prev.map((n) => (n.id === id ? { ...n, lu: true } : n));
+      });
+      if (etatPrecedent === null) return; // déjà lue ou introuvable : rien à faire, rien à annuler
+
+      setNonLues((c) => {
+        nonLuesPrecedent = c;
+        return Math.max(0, c - 1);
+      });
+
+      try {
+        await api(`/api/notifications/${id}/lu`, { method: "POST" });
+      } catch {
+        setNotifications(etatPrecedent);
+        setNonLues(nonLuesPrecedent);
+        emettreToast({ variante: "erreur", message: t("premium.socket.echecMarquerLue") });
+      }
+    },
+    [t],
+  );
 
   const toutMarquerLu = useCallback(async () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, lu: true })));
-    setNonLues(0);
-    await api("/api/notifications/lu", { method: "POST" }).catch(() => {});
-  }, []);
+    let etatPrecedent: NotificationDTO[] = [];
+    let nonLuesPrecedent = 0;
+
+    setNotifications((prev) => {
+      etatPrecedent = prev;
+      return prev.map((n) => ({ ...n, lu: true }));
+    });
+    setNonLues((c) => {
+      nonLuesPrecedent = c;
+      return 0;
+    });
+
+    try {
+      await api("/api/notifications/lu", { method: "POST" });
+    } catch {
+      setNotifications(etatPrecedent);
+      setNonLues(nonLuesPrecedent);
+      emettreToast({ variante: "erreur", message: t("premium.socket.echecToutMarquerLu") });
+    }
+  }, [t]);
 
   const value = useMemo(
     () => ({ statut, notifications, nonLues, marquerLue, toutMarquerLu }),
