@@ -18,6 +18,14 @@ import { LoginPage } from "@/pages/Login";
 const PremierLancementPage = lazy(() =>
   import("@/pages/PremierLancement").then((m) => ({ default: m.PremierLancementPage })),
 );
+// Récupération de mot de passe (F2, tâche 7-8) : pages pré-authentification,
+// rarement visitées — lazy comme PremierLancementPage, contrairement à LoginPage.
+const MotDePasseOubliePage = lazy(() =>
+  import("@/pages/MotDePasseOublie").then((m) => ({ default: m.MotDePasseOubliePage })),
+);
+const NouveauMotDePassePage = lazy(() =>
+  import("@/pages/NouveauMotDePasse").then((m) => ({ default: m.NouveauMotDePassePage })),
+);
 
 // `.then(...)` : les pages exportent des composants nommés, pas un export default.
 const DashboardPage = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.DashboardPage })));
@@ -94,10 +102,14 @@ export default function App() {
     return (
       <>
         {splash}
-        <Routes>
-          <Route path="/connexion" element={<LoginPage />} />
-          <Route path="*" element={<Navigate to="/connexion" replace />} />
-        </Routes>
+        <Suspense fallback={<ChargementModule plein />}>
+          <Routes>
+            <Route path="/connexion" element={<LoginPage />} />
+            <Route path="/mot-de-passe-oublie" element={<MotDePasseOubliePage />} />
+            <Route path="/nouveau-mot-de-passe" element={<NouveauMotDePassePage />} />
+            <Route path="*" element={<Navigate to="/connexion" replace />} />
+          </Routes>
+        </Suspense>
       </>
     );
   }

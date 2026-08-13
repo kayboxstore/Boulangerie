@@ -196,6 +196,44 @@
 }
 
 /* ---------------------------------------------------------------------------
+   Enveloppe Premium des écrans d'authentification (F2, AuthShell.tsx) —
+   réutilise les keyframes `lomoto-monte`/`lomoto-halo` définies ci-dessus
+   pour la scène de connexion, plutôt que d'en dupliquer une variante. La
+   classe n'est déjà appliquée par le composant que si `prefers-reduced-
+   motion` ne demande pas de réduction (voir `usePrefersReducedMotion`) ;
+   ce bloc média est une seconde barrière, cohérente avec `.lomoto-splash-*`
+   ci-dessus, pour le cas où le composant n'aurait pas encore pu lire la
+   préférence système. Ces animations ne sont qu'une entrée décorative au
+   montage : le formulaire lui-même reste toujours pleinement opaque et
+   utilisable, avec ou sans cette classe (voir la note d'en-tête d'AuthShell).
+   --------------------------------------------------------------------------- */
+
+.lomoto-authshell-formulaire { animation: lomoto-monte 0.6s ease-out both; }
+.lomoto-authshell-scene { animation: lomoto-monte 0.7s ease-out 0.15s both; }
+.lomoto-authshell-halo { animation: lomoto-halo 3.2s ease-in-out infinite; }
+
+/* Léger balancement du cordon de la lampe (LampeFicelle.tsx), au repos —
+   purement décoratif, jamais appliqué quand `reduireMouvement` est vrai
+   (le composant retire déjà la classe dans ce cas ; ce bloc média reste une
+   seconde barrière, comme pour les classes `.lomoto-authshell-*` ci-dessus). */
+@keyframes lomoto-cordon-balance {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50% { transform: rotate(1.5deg); }
+}
+.lomoto-cordon { transform-origin: top; animation: lomoto-cordon-balance 2.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lomoto-authshell-formulaire,
+  .lomoto-authshell-scene,
+  .lomoto-authshell-halo,
+  .lomoto-cordon {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
    Toast Premium (FeedbackProvider.tsx, audit UX-17) — barre de durée. Animée
    en CSS pur comme le reste des animations de cette feuille de style ;
    `prefers-reduced-motion` est géré directement au niveau du composant via

@@ -202,3 +202,158 @@ Conformément au plan de coordination §6 : pas de scène de connexion à
 lampe, pas de parcours mot de passe oublié, pas d'horloge « flip », pas de
 « Constellation Lomoto » — ces éléments appartiennent à F2/F3, une fois les
 API d'authentification de Codex (C3) disponibles.
+
+---
+
+# F2 — Connexion et enveloppe Premium
+
+> Base : `agent/integration-wave-1` au commit `04b87de1fb3ada819d0a0806117d523d5d327b17`
+> (intègre F1 + ses tests DOM, PR #5 fusionnée).
+> Branche : `claude/premium-shell-f2`.
+
+## Architecture
+
+- **`components/auth/AuthShell.tsx`** — enveloppe commune aux trois écrans
+  d'authentification (connexion, mot de passe oublié, nouveau mot de passe).
+  Principe non négociable, documenté en tête du fichier : le formulaire
+  (`children`) reste **toujours** pleinement opaque, lisible et utilisable —
+  jamais assombri, jamais `pointer-events: none`, jamais retiré de l'ordre
+  de tabulation. La lampe à ficelle ne pilote qu'un halo décoratif autour de
+  la scène de marque ; la « révélation progressive » du formulaire (tâche 4)
+  est une simple animation d'entrée au montage (fondu + léger mouvement),
+  indépendante de l'état de la lampe.
+- **`components/auth/LampeFicelle.tsx`** + **`lampeLogique.ts`** — lampe
+  décorative et interactive. Un vrai `<button>` porte toute la zone
+  cliquable (clavier natif, Entrée/Espace), cible tactile réelle ≥ 44×44 px
+  (`min-h-11 min-w-11`, revue Codex round 2 : l'icône seule ne faisait que
+  36 px). Le clic bascule l'état ; un glissement (souris ou tactile, unifié
+  via les Pointer Events) vers le bas au-delà d'un seuil de 32 px bascule
+  l'état de la même façon, sans déclencher un second basculement au `click`
+  de fin de geste (`aBasculeParGlissement`). La logique de seuil est pure et
+  testée sans dépendre du DOM. Propriété du geste par pointeur (revue Codex
+  round 2) : seul un pointeur primaire au bouton principal peut démarrer un
+  geste (jamais un clic droit, filet de sécurité aussi au niveau du `click`),
+  `pointerIdActif` mémorise le pointeur propriétaire — tout événement d'un
+  pointeur étranger ou secondaire est ignoré tant que ce geste est en cours.
+  `pointercancel` nettoie l'état ET remet à zéro le drapeau anti-double-clic
+  (`aBasculeParGlissement`), puisqu'aucun `click` de synthèse ne suit jamais
+  un `pointercancel` — sans ce nettoyage, la prochaine activation clavier ou
+  le prochain clic normal serait silencieusement avalé.
+- **`components/auth/prefersReducedMotion.ts`** — hook `matchMedia` en
+  direct (même modèle que `lib/theme.tsx`), utilisé pour : suspendre les
+  classes d'animation CSS (`.lomoto-authshell-*`, `index.css`, même
+  convention que `.lomoto-splash-*` d'`EcranDemarrage.tsx`) et démarrer la
+  lampe déjà « allumée » quand la préférence système la demande — la
+  variante réduite est donc observable, pas seulement l'absence de mouvement.
+- **`components/HorlogeFlip.tsx`** + **`horlogeLogique.ts`** — horloge
+  compacte de l'en-tête (`Layout.tsx`, barre desktop et en-tête mobile).
+  Composant isolé : son propre `setInterval`, nettoyé au démontage — seul ce
+  composant se re-rend chaque seconde, jamais le reste de l'arbre. Toujours
+  affichée en Africa/Kinshasa (`Intl.DateTimeFormat` avec `timeZone` fixe),
+  indépendamment du fuseau du navigateur. Sémantique `<time role="timer"
+  aria-live="off" dateTime="hh:mm:ss">` (revue Codex round 2, remplace un
+  ancien `role="status"`) : une région `status`/`aria-live` par défaut
+  annoncerait le changement de libellé à chaque seconde et interromprait en
+  continu les lecteurs d'écran ; `timer` + `aria-live="off"` rend l'heure
+  consultable à la demande sans jamais l'annoncer automatiquement. Le libellé
+  accessible (`auth.clock.ariaLabel`) est réellement localisé dans les 4
+  langues : heures/minutes/secondes sont passées séparément à i18next,
+  chaque langue compose sa propre phrase (plus de fragment français
+  « h/min/s » codé en dur pour EN/LN/SW).
+- **`pages/MotDePasseOublie.tsx`** / **`pages/NouveauMotDePasse.tsx`** —
+  voir « Comportement provisoire » ci-dessous.
+- **`components/Layout.tsx`** — la logique de navigation basée sur les rôles
+  (`calculerLiens`), auparavant dupliquée entre la barre latérale desktop et
+  le tiroir mobile, est désormais une seule fonction exportée et testée. La
+  politique de visibilité existante (spec section 2 : tous les modules
+  visibles, grisés hors périmètre du rôle) est **inchangée** — seule la
+  duplication de code a été supprimée.
+
+## Comportement provisoire des pages de récupération (tâches 9-10)
+
+Aucun appel réseau n'est jamais effectué par `MotDePasseOublie.tsx` ni
+`NouveauMotDePasse.tsx` : pas de faux jeton, pas de fausse demande envoyée,
+pas de message laissant croire à un succès. Une soumission valide (après
+validation locale uniquement) affiche un message persistant explicite
+(`role="status"`) indiquant que l'intégration serveur est en attente — et
+UNE SEULE annonce accessible (revue Codex round 2 : le toast de même teneur
+a été retiré, il faisait doublon avec le message persistant et aurait
+annoncé deux fois la même information aux lecteurs d'écran ; le message
+persistant est conservé seul car cette information ne doit jamais
+s'effacer automatiquement, contrairement à un toast). Ce choix est requis
+par le plan de coordination (§7) : *« La PR F2 peut rester en brouillon tant
+que les API d'authentification nécessaires ne sont pas fusionnées »* — ces
+écrans attendent les endpoints Codex C3 (réinitialisation par jeton, anti-
+énumération, limitation de fréquence).
+
+## i18n
+
+Nouveau namespace `auth.*` (lampe, lien « mot de passe oublié », pages de
+récupération, libellé accessible de l'horloge) ajouté aux 4 langues
+(FR/EN/LN/SW), parité vérifiée par script (0 clé manquante ou en trop).
+
+## Tests ajoutés
+
+| Fichier | Couvre |
+|---|---|
+| `auth/lampeLogique.test.ts` | Seuil de glissement (logique pure) |
+| `horlogeLogique.test.ts` | Décomposition Kinshasa, passage de minuit, valeur `dateTime` (hh:mm:ss) |
+| `auth/LampeFicelle.dom.test.tsx` | Clavier (bouton natif), cible tactile ≥ 44×44 px, clic, glissement Pointer Events au-dessus/en-dessous du seuil, non-double-basculement, pointeur étranger, pointeur secondaire, clic droit, `pointercancel` puis activation clavier/clic normal |
+| `auth/AuthShell.dom.test.tsx` | Formulaire toujours utilisable quel que soit l'état de la lampe, variante `prefers-reduced-motion`, filigrane décoratif, lampe desktop + mobile |
+| `HorlogeFlip.dom.test.tsx` | `role="timer"`/`aria-live="off"` (jamais `role="status"`), affichage initial, progression par seconde (libellé + `dateTime`), nettoyage exact de l'intervalle au démontage, libellé localisé FR/EN/LN/SW |
+| `pages/Login.dom.test.tsx` | Lien « mot de passe oublié », focus clavier, soumission, erreur accessible |
+| `pages/MotDePasseOublie.dom.test.tsx` | Association label/champ, validation, **absence d'appel réseau**, absence de message de succès, **une seule** annonce accessible (pas de double toast/message persistant) |
+| `pages/NouveauMotDePasse.dom.test.tsx` | Idem + validation longueur/correspondance des mots de passe |
+| `Layout.navigation.test.ts` | `calculerLiens` sur plusieurs combinaisons de permissions (lecture, écriture, sans module) |
+
+Résultat : `npm test` → 249/249 tests passants (29 fichiers, +7 tests round 2
+Codex). `npm run build` (tsc + vite) et `npm audit` (0 vulnérabilité)
+passent également. `npm ci` exécuté avec succès avant la vérification
+finale.
+
+## Corrections revue Codex round 2
+
+Six points obligatoires corrigés sur un seul commit, sans régression :
+
+1. **Horloge non bavarde** — `HorlogeFlip.tsx` : `role="status"` → `<time
+   role="timer" aria-live="off" dateTime="hh:mm:ss">`, pour ne plus
+   interrompre les lecteurs d'écran à chaque seconde.
+2. **Libellé de l'horloge réellement localisé** — `horlogeLogique.ts` ne
+   compose plus le fragment « h/min/s » en français ; `heures`/`minutes`/
+   `secondes` sont passés séparément à i18next, chaque langue (FR/EN/LN/SW)
+   compose sa propre phrase dans `auth.clock.ariaLabel`.
+3. **Cibles tactiles 44×44 px** — `LampeFicelle.tsx` (`min-h-11 min-w-11`,
+   l'icône seule ne faisait que 36 px), champ e-mail de connexion
+   (`Login.tsx`, `h-11`), lien « mot de passe oublié » et liens « retour à
+   la connexion » (`min-h-11`).
+4. **Propriété du geste Pointer Events** — `LampeFicelle.tsx` : un seul
+   pointeur primaire au bouton principal peut démarrer/poursuivre le
+   glissement (`pointerIdActif`), clic droit exclu, `pointercancel` nettoie
+   l'état sans neutraliser l'activation suivante.
+5. **Double annonce supprimée** — `MotDePasseOublie.tsx` /
+   `NouveauMotDePasse.tsx` : le toast redondant est retiré, seul le message
+   persistant subsiste (import `useFeedback` devenu inutile, retiré aussi).
+6. **Isolation des tests** — `vi.restoreAllMocks()` ajouté partout où un
+   `vi.spyOn` était pris (fetch, setInterval/clearInterval) sans être
+   restauré ; `window.matchMedia` restauré à sa valeur d'origine après
+   chaque test dans `AuthShell.dom.test.tsx`.
+
+## Correctif découvert pendant la prise des captures d'écran
+
+L'état « éteint » de l'icône de l'ampoule (`LampeFicelle.tsx`) utilisait une
+couleur fixe (`text-creme/40`) pensée pour le panneau de marque sombre du
+bureau — invisible sur le fond clair de l'en-tête compact mobile. Corrigé en
+`text-current/40` (et `bg-current/40` pour le cordon) : la couleur suit
+désormais celle posée par l'appelant sur chaque instance (crème sur le
+panneau marine, marine/crème selon le thème dans l'en-tête mobile).
+
+## Captures d'écran
+
+| | |
+|---|---|
+| Connexion — bureau | Connexion — mobile |
+| ![Connexion, bureau](screenshots/f2/01-desktop-login.png) | ![Connexion, mobile](screenshots/f2/02-mobile-login.png) |
+| Connexion — `prefers-reduced-motion` | Enveloppe authentifiée — bureau |
+| ![Connexion, variante prefers-reduced-motion](screenshots/f2/03-desktop-login-reduced-motion.png) | ![Enveloppe authentifiée, bureau](screenshots/f2/04-desktop-shell.png) |
+| Enveloppe authentifiée — mobile | Enveloppe authentifiée — mobile, tiroir ouvert |
+| ![Enveloppe authentifiée, mobile](screenshots/f2/05-mobile-shell.png) | ![Enveloppe authentifiée, mobile, tiroir de navigation ouvert](screenshots/f2/06-mobile-shell-menu-ouvert.png) |

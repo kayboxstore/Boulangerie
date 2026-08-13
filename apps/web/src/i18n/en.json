@@ -1143,5 +1143,33 @@
       "echecMarquerLue": "Could not mark this notification as read. Please try again.",
       "echecToutMarquerLu": "Could not mark all notifications as read. Please try again."
     }
+  },
+  "auth": {
+    "lamp": {
+      "turnOn": "Turn on the lamp",
+      "turnOff": "Turn off the lamp"
+    },
+    "forgotPasswordLink": "Forgot your password?",
+    "backToLogin": "Back to sign in",
+    "pendingServerIntegration": "This feature is still awaiting server-side integration. No request was sent.",
+    "resetRequest": {
+      "title": "Forgot password",
+      "subtitle": "Enter your work email address to start account recovery.",
+      "emailLabel": "Email address",
+      "emailInvalid": "Enter a valid email address.",
+      "submit": "Send request"
+    },
+    "resetPassword": {
+      "title": "New password",
+      "subtitle": "Choose a new password for your account.",
+      "newPasswordLabel": "New password",
+      "confirmPasswordLabel": "Confirm password",
+      "submit": "Save new password",
+      "passwordTooShort": "Password must be at least 8 characters long.",
+      "passwordMismatch": "The two passwords do not match."
+    },
+    "clock": {
+      "ariaLabel": "Current time in Kinshasa: {{heures}} hours {{minutes}} minutes {{secondes}} seconds"
+    }
   }
 }
