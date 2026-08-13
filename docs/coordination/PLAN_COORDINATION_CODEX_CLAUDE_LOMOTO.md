@@ -2,9 +2,12 @@
 
 **Projet :** Application Boulangerie Lomoto  
 **Date :** 13 août 2026  
-**Document de référence :** `PLAN_ATTAQUE_APPLICATION_LOMOTO.md` version 1.1  
+**Version :** 2.0 — après rapport F0  
+**Documents de référence :** `PLAN_ATTAQUE_APPLICATION_LOMOTO.md` version 1.1 et `ETAT_REEL_MAIN_A7FM5X.md`  
 **Dépôt :** `kayboxstore/Boulangerie`  
-**Base commune vérifiée :** branche `main`, commit `27724820e540ff53f1ee63369a6eb2984af19b6f`
+**Base commune de développement :** branche `main-a7fm5x`, commit `f7880b90ed1e2b735189b5c06ad9c2d88ed7fe35`
+
+> Règle de préséance : l’audit version 1.1 reste la photographie de l’ancien `main` au commit `27724820…`. Pour toute décision de développement actuelle, `ETAT_REEL_MAIN_A7FM5X.md` et le présent plan version 2.0 font autorité.
 
 ## 1. Décision de partage
 
@@ -17,29 +20,22 @@ Le travail est séparé par couches techniques, et non simplement par fonctionna
 
 Cette séparation permet aux deux intervenants de travailler en parallèle sans modifier les mêmes fichiers.
 
-## 2. Vérification obligatoire avant de commencer
+## 2. Résultat F0 et nouvelle base
 
-La branche distante `main` est toujours au commit `27724820…`. La copie de travail examinée contient toutefois des fichiers Premium qui ne sont pas présents sur cette branche distante, notamment :
+Le rapport F0 de Claude a été vérifié sur GitHub :
 
-- `LoginLamp.tsx` ;
-- `AuthShell.tsx` ;
-- `BirthdayCelebration.tsx` ;
-- `DigitalClock.tsx` ;
-- `ForgotPassword.tsx` ;
-- `ResetPassword.tsx` ;
-- `anniversaires.ts` ;
-- une migration `20260813000100_premium_auth_anniversaires`.
+- racine de sa session : `/home/user/Boulangerie` ;
+- branche : `main-a7fm5x` ;
+- HEAD : `f7880b90ed1e2b735189b5c06ad9c2d88ed7fe35` ;
+- arbre de travail propre ;
+- aucun fichier Premium annoncé n’existe ;
+- aucun commit de sauvegarde n’était nécessaire ;
+- `main-a7fm5x` est 152 commits en avance sur `main` et 0 commit en retard ;
+- la branche contient 239 fichiers suivis, 53 fichiers API, 67 fichiers web et 29 migrations applicatives plus le verrou Prisma.
 
-Ces fichiers peuvent être des travaux locaux non publiés. Avant tout nouveau développement, Claude doit donc :
+La branche `main-a7fm5x` contient les développements applicatifs légitimes les plus récents. Elle devient donc la base commune provisoire de Codex et Claude. Aucun nouveau travail ne doit partir de l’ancien `main`.
 
-1. afficher la racine réelle du dépôt ;
-2. afficher la branche et le commit courant ;
-3. exécuter `git status --short` ;
-4. indiquer si les fichiers ci-dessus existent dans son véritable dépôt ;
-5. sécuriser tout travail local existant sur une branche dédiée ;
-6. ne rien fusionner dans `main` avant revue.
-
-Aucun intervenant ne doit supposer que ces fichiers sont déjà sauvegardés sur GitHub.
+Les documents publiés sur `agent/publish-coordination-docs` seront proposés vers `main-a7fm5x`, et non vers `main`.
 
 ## 3. Zones de fichiers verrouillées
 
@@ -96,64 +92,65 @@ Leur mise à jour finale sera réalisée dans une PR de documentation séparée.
 - Claude consomme ces contrats ; il ne crée pas une deuxième définition concurrente dans le frontend.
 - Toute API nouvelle doit être documentée avant son intégration visuelle.
 
-## 5. Vague 0 — sécuriser l’état actuel
+## 5. Vague 0 — terminée
 
-### Claude — tâche F0
+### Claude — tâche F0 — terminée
 
 **Objectif :** identifier et sauvegarder les travaux Premium éventuellement déjà réalisés.
 
-Livrables :
+Résultat : aucun travail Premium local, arbre propre, aucun commit de sauvegarde requis.
 
-- branche proposée : `claude/premium-existing-work` ;
-- état Git complet ;
-- liste des fichiers modifiés ou nouveaux ;
-- commandes de vérification exécutées ;
-- commit de sauvegarde si des changements locaux existent ;
-- aucune nouvelle fonctionnalité dans ce commit de sauvegarde.
-
-### Codex — tâche C0
+### Codex — tâche C0 — terminée
 
 **Objectif :** vérifier la base distante et préparer les contrats de collaboration.
 
-Livrables :
+Résultats vérifiés :
 
-- confirmation du commit de départ ;
-- inventaire des endpoints existants ;
-- premier document de contrats API ;
-- matrice des permissions concernées ;
-- aucune modification métier avant la sauvegarde du travail existant de Claude.
+- Vitest existe, mais un seul fichier de tests partagés est présent ;
+- aucun test API ni test frontend n’est présent ;
+- aucun workflow CI n’existe ;
+- CORS explicite existe déjà ;
+- Helmet et la limitation de fréquence ne sont pas installés ;
+- l’API possède une gestion d’erreur centralisée simple ;
+- la connexion et la session unique existent, mais pas la récupération de mot de passe ;
+- le rollback des notifications échouées manque toujours dans `socket.tsx` ;
+- la suppression physique des produits existe toujours ;
+- l’idempotence générique des écritures sensibles manque ;
+- le modèle `CommandeClient` crée toujours dette et avance dès la saisie ;
+- l’ancienne clôture de caisse auditée sur `main` n’existe plus sous cette forme et ne doit pas servir de cible C1.
 
-**Barrière :** les vagues suivantes ne commencent qu’après identification des éventuels travaux locaux de Claude.
+**Barrière levée :** C1 et F1 peuvent commencer à partir du commit `f7880b90…`.
 
 ## 6. Vague 1 — filet de sécurité et système UI
 
-Les deux tâches peuvent commencer à partir du même commit propre.
+Les deux tâches commencent à partir du même commit propre : `f7880b90ed1e2b735189b5c06ad9c2d88ed7fe35` sur `main-a7fm5x`.
 
 ### Codex — C1 : backend, tests et CI
 
-Branche : `codex/backend-safety-c1`
+Branche : `codex/backend-safety-c1`, créée depuis `main-a7fm5x`
 
 Tâches :
 
-1. installer et configurer les tests API ;
-2. tester les permissions existantes ;
-3. reproduire par test la clôture qui mélange les caissiers et les jours ;
-4. tester les routes de notifications ;
-5. ajouter une CI exécutant typecheck, tests et build ;
-6. ajouter des réponses d’erreur API structurées ;
-7. ajouter les protections serveur de base : CORS explicite, en-têtes de sécurité et limitation de fréquence ;
-8. retirer les secrets de repli dangereux en production ;
-9. ne modifier aucun écran React.
+1. installer et configurer des tests API sans base de production ;
+2. tester l’authentification, la session unique et les permissions existantes ;
+3. tester les routes de notifications et l’isolation par destinataire ;
+4. ajouter une CI exécutant test, typecheck API et build web ;
+5. ajouter des identifiants de requête et un format d’erreur cohérent sans casser les messages actuels ;
+6. conserver le CORS existant et ajouter les en-têtes de sécurité ;
+7. ajouter une limitation de fréquence ciblée sur la connexion et les routes publiques sensibles ;
+8. vérifier l’absence de secret de repli dangereux en production ;
+9. documenter ce qui reste reporté : archivage produit, idempotence, commande financière et caisse ;
+10. ne modifier aucun écran React ni aucune règle métier financière dans C1.
 
 Critère de sortie : la CI échoue correctement sur une régression prouvée et les défauts critiques existants sont couverts par des tests.
 
 ### Claude — F1 : bibliothèque de composants Premium
 
-Branche : `claude/premium-ui-f1`
+Branche : `claude/premium-ui-f1`, créée depuis `main-a7fm5x`
 
 Tâches :
 
-1. toast Premium avec variantes succès, erreur, avertissement et information ;
+1. faire évoluer `FeedbackProvider` en toast Premium avec variantes succès, erreur, avertissement et information ;
 2. bouton Premium et tous ses états ;
 3. champ de mot de passe Premium ;
 4. zone de texte Premium auto-ajustable ;
@@ -162,15 +159,17 @@ Tâches :
 7. tableau ordinateur Premium ;
 8. pagination Premium générique ;
 9. états vide, chargement, hors ligne et réessayer ;
-10. accessibilité clavier, focus, contraste, tactile 44 px et `prefers-reduced-motion` ;
-11. tests frontend des composants ;
-12. ne modifier aucune route API ni migration.
+10. corriger dans `socket.tsx` le rollback de lecture des notifications et signaler l’échec via le toast ;
+11. conserver les quatre langues FR, LN, SW et EN pour tout nouveau texte visible ;
+12. accessibilité clavier, focus, contraste, tactile 44 px et `prefers-reduced-motion` ;
+13. tests frontend des composants ;
+14. ne modifier aucune route API, migration, contrat partagé ou dépendance.
 
 Critère de sortie : les composants sont réutilisables, ne contiennent aucune règle métier et fonctionnent en mobile comme sur ordinateur.
 
 ## 7. Vague 2 — correctifs serveur et scènes Premium
 
-Cette vague commence après fusion de C1 et rebasage des deux nouvelles branches.
+Cette vague commence après revue de C1 et F1 puis rebasage sur leur branche d’intégration commune.
 
 ### Codex — C2 : correctifs critiques de l’existant
 
@@ -178,15 +177,14 @@ Branche : `codex/backend-critical-c2`
 
 Tâches :
 
-1. créer de vraies sessions de caisse nominatives ;
-2. limiter chaque clôture à la bonne session et à la bonne journée Lomoto ;
-3. remplacer la suppression physique des produits par archivage ;
-4. valider strictement les dates et nombres reçus par l’API ;
-5. ajouter l’idempotence des ventes, commandes et règlements ;
-6. corriger la fiabilité serveur des notifications ;
-7. ajouter les contraintes de base nécessaires ;
-8. documenter les contrats modifiés ;
-9. ne modifier aucun fichier frontend.
+1. remplacer la suppression physique des produits par archivage ;
+2. valider strictement les dates et nombres reçus par l’API ;
+3. ajouter l’idempotence des commandes, règlements et dépenses ;
+4. centraliser `Africa/Kinshasa` au lieu des mélanges UTC/heure locale actuels ;
+5. préparer le modèle de session et de remise de caisse compatible avec le registre actuel ;
+6. ajouter les contraintes de base nécessaires ;
+7. documenter les contrats modifiés ;
+8. ne modifier aucun fichier frontend.
 
 ### Claude — F2 : connexion et enveloppe Premium
 
@@ -266,14 +264,15 @@ Elles seront traitées une fois la sécurité, l’authentification et l’envel
 
 ## 10. Ordre de fusion obligatoire
 
-1. branche de sauvegarde des éventuels travaux locaux Claude ;
+1. documentation de coordination version 2.0 vers `main-a7fm5x` ;
 2. `codex/backend-safety-c1` ;
 3. `claude/premium-ui-f1` ;
-4. `codex/backend-critical-c2` ;
-5. `codex/premium-services-c3` ;
-6. `claude/premium-shell-f2`, après rebasage et intégration réelle ;
-7. `claude/premium-integration-f3` ;
-8. documentation finale.
+4. branche d’intégration commune issue de `main-a7fm5x` ;
+5. `codex/backend-critical-c2` ;
+6. `codex/premium-services-c3` ;
+7. `claude/premium-shell-f2`, après rebasage et intégration réelle ;
+8. `claude/premium-integration-f3` ;
+9. documentation finale.
 
 Chaque branche est rebasée sur la dernière version validée avant sa revue. Aucune fusion automatique n’est autorisée.
 
@@ -312,45 +311,28 @@ Lorsqu’une tâche frontend a besoin d’un changement serveur :
 
 Lorsqu’une tâche backend nécessite un changement d’écran, Codex documente le nouvel état ou le nouveau message d’erreur et laisse Claude l’intégrer.
 
-## 13. Prompt initial à envoyer à Claude Code
+## 13. Prompt F1 à envoyer à Claude Code
 
 ```text
-Tu vas travailler en parallèle avec Codex sur l’application Boulangerie Lomoto.
+Le rapport F0 est validé. Lis la version 2.0 de PLAN_COORDINATION_CODEX_CLAUDE_LOMOTO.md et ETAT_REEL_MAIN_A7FM5X.md sur la branche agent/publish-coordination-docs.
 
-Commence uniquement par la tâche F0 du fichier PLAN_COORDINATION_CODEX_CLAUDE_LOMOTO.md.
+Exécute uniquement F1.
 
-Avant toute modification :
-1. indique la racine réelle du dépôt ;
-2. affiche la branche courante et le commit HEAD ;
-3. exécute git status --short ;
-4. vérifie si des fichiers Premium non publiés existent déjà, notamment LoginLamp.tsx, AuthShell.tsx, BirthdayCelebration.tsx, DigitalClock.tsx, ForgotPassword.tsx, ResetPassword.tsx, anniversaires.ts et la migration premium_auth_anniversaires ;
-5. compare ton état avec main au commit 27724820e540ff53f1ee63369a6eb2984af19b6f.
+Base obligatoire : main-a7fm5x au commit f7880b90ed1e2b735189b5c06ad9c2d88ed7fe35.
+Crée depuis cette base la branche claude/premium-ui-f1. N’utilise pas l’ancien main.
 
-S’il existe des changements locaux, crée une branche claude/premium-existing-work et fais uniquement un commit de sauvegarde fidèle. N’ajoute encore aucune fonctionnalité et ne refactorise rien.
+Respecte strictement la propriété frontend :
+- autorisé : apps/web/src/components/**, apps/web/src/index.css, docs/ui/** et tests frontend dédiés ;
+- apps/web/src/lib/socket.tsx est autorisé uniquement pour le rollback des notifications ;
+- interdit : prisma/**, apps/api/**, packages/shared/**, .github/workflows/**, package.json racine et package-lock.json.
 
-Ne touche jamais à prisma/**, apps/api/**, packages/shared/**, .github/workflows/**, au package.json racine ni au package-lock.json. Codex possède exclusivement ces zones.
+Fais évoluer l’existant au lieu de le dupliquer : FeedbackProvider, composants ui, traductions FR/LN/SW/EN et framer-motion déjà installée.
 
-Retourne-moi :
-- la branche ;
-- le commit de base ;
-- git status ;
-- la liste des changements existants ;
-- le SHA du commit de sauvegarde éventuel ;
-- les vérifications exécutées ;
-- tout blocage.
+N’implémente pas encore la lampe, la réinitialisation du mot de passe, l’horloge ni l’anniversaire : ils appartiennent à F2/F3.
 
-Arrête-toi ensuite et attends la validation avant F1.
+À la fin : lance les vérifications frontend disponibles, fournis la liste exacte des fichiers, les captures mobile/ordinateur, les limites restantes et le SHA du commit. Ne fusionne rien et attends la revue.
 ```
 
-## 14. Première action de Codex après le retour de Claude
+## 14. Action parallèle de Codex
 
-Dès que Claude transmet son état Git et son éventuel commit de sauvegarde, Codex :
-
-1. vérifie la branche sur GitHub ;
-2. compare ses fichiers à `main` ;
-3. retire du backlog tout ce qui est déjà correctement réalisé ;
-4. signale ce qui doit être corrigé ou conservé ;
-5. lance C1 sur une branche séparée ;
-6. autorise Claude à lancer F1 depuis une base propre.
-
-Cette synchronisation initiale est obligatoire : elle évite de refaire le travail Premium déjà présent ou de l’écraser.
+Codex lance `codex/backend-safety-c1` depuis le même commit `f7880b90…`, sans modifier les fichiers frontend. Claude lance F1 en parallèle. Les deux PR restent indépendantes et ne sont rapprochées qu’après leurs tests et leur revue croisée.
