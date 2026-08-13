@@ -24,7 +24,6 @@ vi.mock("./prisma.js", () => ({
 
 import {
   empreinteIdempotence,
-  ErreurIdempotence,
   executerEcritureIdempotente,
 } from "./idempotence.js";
 
@@ -119,7 +118,7 @@ describe("exécution idempotente C2", () => {
         vi.fn(),
         (valeur) => ({ statutHttp: 201, corps: valeur }),
       ),
-    ).rejects.toMatchObject<Partial<ErreurIdempotence>>({
+    ).rejects.toMatchObject({
       statutHttp: 409,
       code: "CLE_IDEMPOTENCE_REUTILISEE",
     });
