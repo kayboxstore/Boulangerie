@@ -4,6 +4,7 @@ import {
   avanceAvantCommande,
   calculerCommande,
   commandeCreateSchema,
+  dateISOSchema,
   formatFc,
   reglementCreateSchema,
   type AlerteDetteDTO,
@@ -15,6 +16,16 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
+import {
+  ajouterEnteteRejeu,
+  ErreurIdempotence,
+  executerEcritureIdempotente,
+} from "../lib/idempotence.js";
+import {
+  bornesJourLomoto,
+  dateSQLDepuisJourLomoto,
+  jourLomoto,
+} from "../lib/temps.js";
 
 export const commandesRouter = Router();
 
@@ -63,20 +74,11 @@ const INCLUDE_RELATIONS = {
   },
 } as const;
 
-/** Bornes [début, fin] du jour local contenant `d`. */
-function bornesDuJour(d: Date): [Date, Date] {
-  const debut = new Date(d);
-  debut.setHours(0, 0, 0, 0);
-  const fin = new Date(d);
-  fin.setHours(23, 59, 59, 999);
-  return [debut, fin];
-}
-
 // Résumé du jour (section 3.4) — accessible en lecture à tous les rôles ayant
 // accès au module Commandes (Chargé des commandes, Caissier(ère), DG).
 commandesRouter.get("/resume-jour", requirePermission("COMMANDES", "LECTURE"), async (_req, res, next) => {
   try {
-    const [debut, fin] = bornesDuJour(new Date());
+    const [debut, fin] = bornesJourLomoto();
     const duJour = await prisma.commandeClient.findMany({
       where: { dateCreation: { gte: debut, lte: fin } },
       select: { quantiteBacs: true, montantAPercevoir: true, montantRecu: true, dette: true },
@@ -85,7 +87,7 @@ commandesRouter.get("/resume-jour", requirePermission("COMMANDES", "LECTURE"), a
     const avecDette = duJour.filter((c) => c.dette > 0);
 
     const dto: ResumeCommandesJourDTO = {
-      date: debut.toISOString().slice(0, 10),
+      date: jourLomoto(debut),
       nombreCommandes: duJour.length,
       totalBacs: somme((c) => c.quantiteBacs),
       totalAPercevoir: somme((c) => c.montantAPercevoir),
@@ -107,8 +109,11 @@ commandesRouter.get("/resume-jour", requirePermission("COMMANDES", "LECTURE"), a
 commandesRouter.get("/livraisons-du-jour", requirePermission("COMMANDES", "LECTURE"), async (req, res, next) => {
   try {
     const { date } = req.query as Record<string, string | undefined>;
-    const dateStr = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : jourISO(new Date());
-    const dateObj = new Date(dateStr);
+    if (date && !dateISOSchema.safeParse(date).success) {
+      return res.status(400).json({ erreur: "Date invalide (AAAA-MM-JJ)" });
+    }
+    const dateStr = date ?? jourLomoto();
+    const dateObj = dateSQLDepuisJourLomoto(dateStr);
 
     const bons = await prisma.bonLivraison.findMany({
       where: { date: dateObj },
@@ -143,7 +148,7 @@ commandesRouter.get("/livraisons-du-jour", requirePermission("COMMANDES", "LECTU
  * et DG.
  */
 async function verifierAlertesDette(): Promise<void> {
-  const [debutAujourdhui] = bornesDuJour(new Date());
+  const [debutAujourdhui] = bornesJourLomoto();
 
   const enRetard = await prisma.commandeClient.findMany({
     where: {
@@ -169,13 +174,11 @@ async function verifierAlertesDette(): Promise<void> {
       emetteurId: null, // déclenchée par le système
       evenementRef: c.id,
       priorite: "HAUTE",
-      message: `Dette non payée — commande n°${c.numero} (${c.client.nom}) : ${formatFc(c.dette)} restant dû depuis le ${jourISO(c.dateCreation)}`,
+      message: `Dette non payée — commande n°${c.numero} (${c.client.nom}) : ${formatFc(c.dette)} restant dû depuis le ${jourLomoto(c.dateCreation)}`,
       donnees: { commandeId: c.id, numero: c.numero, dette: c.dette },
     });
   }
 }
-
-const jourISO = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
  * Déclenche la vérification paresseuse puis renvoie les dettes en retard encore
@@ -186,7 +189,7 @@ commandesRouter.get("/alertes-dette", requirePermission("COMMANDES", "LECTURE"),
   try {
     await verifierAlertesDette();
 
-    const [debutAujourdhui] = bornesDuJour(new Date());
+    const [debutAujourdhui] = bornesJourLomoto();
     const enRetard = await prisma.commandeClient.findMany({
       where: { dette: { gt: 0 }, dateCreation: { lt: debutAujourdhui } },
       include: { client: { select: { nom: true } } },
@@ -202,7 +205,7 @@ commandesRouter.get("/alertes-dette", requirePermission("COMMANDES", "LECTURE"),
       dateCreation: c.dateCreation.toISOString(),
       joursDepuis: Math.max(
         1,
-        Math.floor((debutAujourdhui.getTime() - bornesDuJour(c.dateCreation)[0].getTime()) / 86_400_000),
+        Math.floor((debutAujourdhui.getTime() - bornesJourLomoto(jourLomoto(c.dateCreation))[0].getTime()) / 86_400_000),
       ),
       alerteEnvoyeeLe: c.alerteDetteEnvoyeeLe?.toISOString() ?? null,
     }));
@@ -218,9 +221,19 @@ commandesRouter.get("/", requirePermission("COMMANDES", "LECTURE"), async (req, 
   try {
     const { typeClientId, du, au } = req.query as Record<string, string | undefined>;
 
+    if (du && !dateISOSchema.safeParse(du).success) {
+      return res.status(400).json({ erreur: "Date de début invalide (AAAA-MM-JJ)" });
+    }
+    if (au && !dateISOSchema.safeParse(au).success) {
+      return res.status(400).json({ erreur: "Date de fin invalide (AAAA-MM-JJ)" });
+    }
+    if (du && au && du > au) {
+      return res.status(400).json({ erreur: "La date de fin doit suivre la date de début" });
+    }
+
     const dateCreation: Prisma.DateTimeFilter = {};
-    if (du) dateCreation.gte = new Date(`${du}T00:00:00`);
-    if (au) dateCreation.lte = new Date(`${au}T23:59:59.999`);
+    if (du) dateCreation.gte = bornesJourLomoto(du)[0];
+    if (au) dateCreation.lte = bornesJourLomoto(au)[1];
 
     const commandes = await prisma.commandeClient.findMany({
       where: {
@@ -256,7 +269,10 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
     }
     const { clientId, quantiteBacs, montantRecu, strategie } = parsed.data;
 
-    const resultat = await prisma.$transaction(
+    const execution = await executerEcritureIdempotente(
+      req,
+      "POST:/api/commandes",
+      parsed.data,
       async (tx) => {
         const client = await tx.client.findUnique({
           where: { id: clientId },
@@ -264,14 +280,13 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
         });
         if (!client) throw new ErreurClientInconnu();
 
-        const [debut, fin] = bornesDuJour(new Date());
+        const [debut, fin] = bornesJourLomoto();
         const existante = await tx.commandeClient.findFirst({
           where: { clientId: client.id, dateCreation: { gte: debut, lte: fin } },
           include: INCLUDE_RELATIONS,
           orderBy: { numero: "asc" },
         });
 
-        // --- Cas 1 : pas de doublon → création normale ---------------------
         if (!existante) {
           const calcul = calculerCommande({
             quantiteBacs,
@@ -301,16 +316,7 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
           return { type: "creee" as const, commande: creee };
         }
 
-        // --- Cas 2 : doublon sans choix → on demande à l'utilisateur --------
-        if (!strategie) {
-          return { type: "conflit" as const, existante };
-        }
-
-        // --- Cas 3 : doublon avec choix → UPDATE de la MÊME commande -------
-        // Remplacer écrase l'ancienne saisie : les règlements déjà encaissés
-        // sur cette commande n'auraient plus de contrepartie cohérente (leur
-        // somme dépasserait le montant reçu). On refuse plutôt que de les
-        // effacer silencieusement — Modifier reste disponible.
+        if (!strategie) return { type: "conflit" as const, existante };
         if (strategie === "REMPLACER" && existante.reglements.length > 0) {
           return { type: "reglementsPresents" as const, existante };
         }
@@ -323,15 +329,11 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
               }
             : { quantiteBacs, montantRecu };
 
-        // L'avance à considérer est celle du client AVANT cette commande :
-        // on inverse l'effet qu'elle a déjà appliqué sur son solde, pour ne pas
-        // le compter deux fois (la commande est mise à jour, pas dupliquée).
         const avanceExistante = avanceAvantCommande({
           avanceDisponibleClient: client.avanceDisponible,
           avanceUtilisee: existante.avanceUtilisee,
           avanceGeneree: existante.avanceGeneree,
         });
-
         const calcul = calculerCommande({
           quantiteBacs: totaux.quantiteBacs,
           prixParBac: client.typeClient.prixParBac,
@@ -359,54 +361,80 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
         });
         return { type: "miseAJour" as const, commande: maj, strategie };
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      (resultat) => {
+        if (resultat.type === "conflit") {
+          const existant = versCommandeDTO(resultat.existante);
+          return {
+            statutHttp: 409,
+            corps: {
+              erreur: `${existant.client.nom} a déjà la commande n°${existant.numero} aujourd'hui (${existant.quantiteBacs} bac(s), reçu ${formatFc(existant.montantRecu)}). Choisissez Modifier ou Remplacer.`,
+              conflit: true,
+              commandeExistante: existant,
+              apercu: {
+                MODIFIER: {
+                  quantiteBacs: existant.quantiteBacs + quantiteBacs,
+                  montantRecu: existant.montantRecu + montantRecu,
+                },
+                REMPLACER: { quantiteBacs, montantRecu },
+              },
+            },
+          };
+        }
+        if (resultat.type === "reglementsPresents") {
+          return {
+            statutHttp: 409,
+            corps: {
+              erreur: `La commande n°${resultat.existante.numero} a déjà reçu ${resultat.existante.reglements.length} règlement(s) : elle ne peut pas être remplacée. Utilisez « Modifier ».`,
+            },
+          };
+        }
+        return {
+          statutHttp: resultat.type === "creee" ? 201 : 200,
+          corps: { commande: versCommandeDTO(resultat.commande) },
+        };
+      },
     );
 
-    if (resultat.type === "conflit") {
-      const existant = versCommandeDTO(resultat.existante);
-      return res.status(409).json({
-        erreur: `${existant.client.nom} a déjà la commande n°${existant.numero} aujourd'hui (${existant.quantiteBacs} bac(s), reçu ${formatFc(existant.montantRecu)}). Choisissez Modifier ou Remplacer.`,
-        conflit: true,
-        commandeExistante: existant,
-        apercu: {
-          MODIFIER: {
-            quantiteBacs: existant.quantiteBacs + quantiteBacs,
-            montantRecu: existant.montantRecu + montantRecu,
-          },
-          REMPLACER: { quantiteBacs, montantRecu },
+    ajouterEnteteRejeu(res, execution.rejoue);
+    if (!execution.rejoue && execution.valeur && "commande" in execution.corps) {
+      const dto = execution.corps.commande;
+      const valeur = execution.valeur;
+      const prefixe =
+        valeur.type === "creee"
+          ? `Commande n°${dto.numero}`
+          : `Commande n°${dto.numero} ${(valeur.strategie as StrategieDoublon) === "MODIFIER" ? "modifiée" : "remplacée"}`;
+
+      busEvenements.emettreEvenement({
+        type: "NOUVELLE_COMMANDE",
+        module: "COMMANDES",
+        emetteurId: req.utilisateur!.id,
+        evenementRef: dto.id,
+        message:
+          `${prefixe} — ${dto.client.nom} (${dto.qualite}) : ${dto.quantiteBacs} bac(s), ` +
+          `à percevoir ${formatFc(dto.montantAPercevoir)}, reçu ${formatFc(dto.montantRecu)}` +
+          (dto.dette > 0 ? ` — dette ${formatFc(dto.dette)}` : "") +
+          (dto.avanceGeneree > 0 ? ` — avance générée ${formatFc(dto.avanceGeneree)}` : ""),
+        donnees: {
+          commandeId: dto.id,
+          numero: dto.numero,
+          strategie: valeur.type === "miseAJour" ? valeur.strategie : null,
         },
       });
     }
 
-    if (resultat.type === "reglementsPresents") {
-      return res.status(409).json({
-        erreur: `La commande n°${resultat.existante.numero} a déjà reçu ${resultat.existante.reglements.length} règlement(s) : elle ne peut pas être remplacée. Utilisez « Modifier ».`,
-      });
-    }
-
-    const dto = versCommandeDTO(resultat.commande);
-    const prefixe =
-      resultat.type === "creee"
-        ? `Commande n°${dto.numero}`
-        : `Commande n°${dto.numero} ${(resultat.strategie as StrategieDoublon) === "MODIFIER" ? "modifiée" : "remplacée"}`;
-
-    busEvenements.emettreEvenement({
-      type: "NOUVELLE_COMMANDE",
-      module: "COMMANDES",
-      emetteurId: req.utilisateur!.id,
-      evenementRef: dto.id,
-      message:
-        `${prefixe} — ${dto.client.nom} (${dto.qualite}) : ${dto.quantiteBacs} bac(s), ` +
-        `à percevoir ${formatFc(dto.montantAPercevoir)}, reçu ${formatFc(dto.montantRecu)}` +
-        (dto.dette > 0 ? ` — dette ${formatFc(dto.dette)}` : "") +
-        (dto.avanceGeneree > 0 ? ` — avance générée ${formatFc(dto.avanceGeneree)}` : ""),
-      donnees: { commandeId: dto.id, numero: dto.numero, strategie: resultat.type === "miseAJour" ? resultat.strategie : null },
-    });
-
-    res.status(resultat.type === "creee" ? 201 : 200).json({ commande: dto });
+    res.status(execution.statutHttp).json(execution.corps);
   } catch (e) {
     if (e instanceof ErreurClientInconnu) {
       return res.status(400).json({ erreur: "Client inconnu" });
+    }
+    if (e instanceof ErreurIdempotence) {
+      return res.status(e.statutHttp).json({ erreur: e.message, code: e.code });
+    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return res.status(409).json({
+        erreur: "Une commande existe déjà pour ce client et ce jour à Kinshasa",
+        code: "COMMANDE_JOUR_EXISTANTE",
+      });
     }
     next(e);
   }
@@ -423,18 +451,18 @@ commandesRouter.post("/:id/reglements", requirePermission("COMMANDES", "ECRITURE
     }
     const { montant } = parsed.data;
 
-    const resultat = await prisma.$transaction(
+    const execution = await executerEcritureIdempotente(
+      req,
+      `POST:/api/commandes/${req.params.id}/reglements`,
+      parsed.data,
       async (tx) => {
         const commande = await tx.commandeClient.findUnique({
           where: { id: req.params.id },
           include: { client: true },
         });
-        if (!commande) return { erreur: 404 as const };
-        if (commande.dette <= 0) return { erreur: 409 as const };
+        if (!commande) return { type: "introuvable" as const };
+        if (commande.dette <= 0) return { type: "sansDette" as const };
 
-        // Recalcul à périmètre constant : mêmes bacs, même avance utilisée à
-        // l'époque (avanceExistante = avanceUtilisee reproduit brut/àPercevoir
-        // à l'identique) — seul le montant reçu cumulé change.
         const calcul = calculerCommande({
           quantiteBacs: commande.quantiteBacs,
           prixParBac: commande.montantBrut / commande.quantiteBacs,
@@ -464,33 +492,40 @@ commandesRouter.post("/:id/reglements", requirePermission("COMMANDES", "ECRITURE
           where: { id: commande.clientId },
           data: { avanceDisponible: commande.client.avanceDisponible + deltaAvance },
         });
-        return { commande: maj };
+        return { type: "reglee" as const, commande: maj };
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      (resultat) => {
+        if (resultat.type === "introuvable") {
+          return { statutHttp: 404, corps: { erreur: "Commande introuvable" } };
+        }
+        if (resultat.type === "sansDette") {
+          return { statutHttp: 409, corps: { erreur: "Cette commande n'a pas de dette à régler" } };
+        }
+        return { statutHttp: 201, corps: { commande: versCommandeDTO(resultat.commande) } };
+      },
     );
 
-    if ("erreur" in resultat) {
-      return resultat.erreur === 404
-        ? res.status(404).json({ erreur: "Commande introuvable" })
-        : res.status(409).json({ erreur: "Cette commande n'a pas de dette à régler" });
+    ajouterEnteteRejeu(res, execution.rejoue);
+    if (!execution.rejoue && execution.valeur?.type === "reglee" && "commande" in execution.corps) {
+      const dto = execution.corps.commande;
+      busEvenements.emettreEvenement({
+        type: "REGLEMENT_COMMANDE",
+        module: "COMMANDES",
+        emetteurId: req.utilisateur!.id,
+        evenementRef: dto.id,
+        message:
+          `Règlement de ${formatFc(montant)} sur la commande n°${dto.numero} — ${dto.client.nom}` +
+          (dto.dette > 0 ? ` — dette restante ${formatFc(dto.dette)}` : " — dette soldée") +
+          (dto.avanceGeneree > 0 ? ` — avance générée ${formatFc(dto.avanceGeneree)}` : ""),
+        donnees: { commandeId: dto.id, numero: dto.numero, montant },
+      });
     }
 
-    const dto = versCommandeDTO(resultat.commande);
-
-    busEvenements.emettreEvenement({
-      type: "REGLEMENT_COMMANDE",
-      module: "COMMANDES",
-      emetteurId: req.utilisateur!.id,
-      evenementRef: dto.id,
-      message:
-        `Règlement de ${formatFc(montant)} sur la commande n°${dto.numero} — ${dto.client.nom}` +
-        (dto.dette > 0 ? ` — dette restante ${formatFc(dto.dette)}` : " — dette soldée") +
-        (dto.avanceGeneree > 0 ? ` — avance générée ${formatFc(dto.avanceGeneree)}` : ""),
-      donnees: { commandeId: dto.id, numero: dto.numero, montant },
-    });
-
-    res.status(201).json({ commande: dto });
+    res.status(execution.statutHttp).json(execution.corps);
   } catch (e) {
+    if (e instanceof ErreurIdempotence) {
+      return res.status(e.statutHttp).json({ erreur: e.message, code: e.code });
+    }
     next(e);
   }
 });
