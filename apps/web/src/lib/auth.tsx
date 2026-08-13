@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { EtatInitialDTO, Langue, LoginResponse, Module, UtilisateurDTO } from "@lomoto/shared";
 import { aAcces, LANGUE_DEFAUT_PAR_DEFAUT, langueEffective } from "@lomoto/shared";
 import { api, getToken, setToken, surSessionRemplacee } from "./api";
@@ -25,13 +25,30 @@ interface AuthContextValue {
    *  compte Utilisateur (premier démarrage, ou juste après une réinitialisation). */
   premierLancement: boolean;
   /**
+   * Identifiant opaque et monotone de la session d'authentification courante
+   * (F3, isolation de session de Constellation Lomoto). Change après chaque
+   * authentification EFFECTIVE (restauration initiale réussie via
+   * `GET /api/auth/me`, `login()` réussi) ; `null` quand personne n'est
+   * connecté. Ne change JAMAIS pour une simple mise à jour d'identité dans la
+   * même session (`rafraichirIdentite()`). Ne contient jamais le jeton JWT
+   * brut — sert uniquement à qualifier des données mises en cache (ex. clé
+   * React Query) par session, pour qu'aucune donnée d'une session précédente
+   * ne survive à une déconnexion/reconnexion dans le même onglet.
+   */
+  sessionAuthId: string | null;
+  /**
    * Recharge l'identité depuis `GET /api/auth/me` sans repasser par `login()`
    * (F3, changement de mot de passe obligatoire) : après un `POST
    * /api/auth/mot-de-passe` réussi, `motDePasseDoitChanger` doit repasser à
    * `false` UNIQUEMENT une fois confirmé par le serveur — jamais en local en
    * anticipant la réponse.
+   *
+   * Retourne `true` si l'identité a bien été appliquée, `false` si la réponse
+   * a été ignorée parce que la session a changé pendant l'attente réseau
+   * (déconnexion, ou nouvelle connexion) — dans ce cas, aucun état n'est
+   * modifié : ni ancien utilisateur restauré, ni nouvel utilisateur écrasé.
    */
-  rafraichirIdentite: () => Promise<void>;
+  rafraichirIdentite: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -42,6 +59,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [chargement, setChargement] = useState(true);
   const [messageSessionRemplacee, setMessageSessionRemplacee] = useState<string | null>(null);
   const [premierLancement, setPremierLancement] = useState(false);
+  const [sessionAuthId, setSessionAuthId] = useState<string | null>(null);
+
+  // Génération de session (F3, même principe que socket.tsx) : incrémentée à
+  // chaque événement qui peut invalider une réponse réseau encore en vol
+  // (authentification effective OU déconnexion). `rafraichirIdentite()`
+  // capture la génération courante avant son appel réseau et la revérifie au
+  // retour — si elle a changé, la réponse tardive est intégralement ignorée.
+  const generationAuthRef = useRef(0);
+
+  const avancerGenerationAuth = useCallback((authentifie: boolean) => {
+    generationAuthRef.current += 1;
+    setSessionAuthId(authentifie ? `sess-${generationAuthRef.current}` : null);
+  }, []);
 
   // Applique la langue effective : préférence de l'utilisateur, sinon boutique.
   const appliquer = useCallback((u: UtilisateurDTO | null, defautBoutique: Langue) => {
@@ -82,10 +112,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUtilisateur(r.utilisateur);
         setLangueDefautBoutique(r.langueDefautBoutique);
         appliquer(r.utilisateur, r.langueDefautBoutique);
+        // Authentification effective (restauration initiale) : nouvel
+        // identifiant de session public (F3).
+        avancerGenerationAuth(true);
       })
       .catch(() => setToken(null))
       .finally(() => setChargement(false));
-  }, [appliquer]);
+  }, [appliquer, avancerGenerationAuth]);
 
   const login = useCallback(
     async (email: string, motDePasse: string) => {
@@ -98,8 +131,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLangueDefautBoutique(r.langueDefautBoutique);
       setMessageSessionRemplacee(null);
       appliquer(r.utilisateur, r.langueDefautBoutique);
+      // Authentification effective (nouvelle connexion) : nouvel identifiant
+      // de session public, distinct de toute session précédente (F3).
+      avancerGenerationAuth(true);
     },
-    [appliquer],
+    [appliquer, avancerGenerationAuth],
   );
 
   const logout = useCallback(() => {
@@ -108,7 +144,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMessageSessionRemplacee(null);
     // Retour à la langue par défaut de la boutique après déconnexion.
     appliquer(null, langueDefautBoutique);
-  }, [appliquer, langueDefautBoutique]);
+    // Plus aucune session : invalide aussi toute réponse réseau encore en vol
+    // pour la session précédente (F3, ex. rafraichirIdentite()).
+    avancerGenerationAuth(false);
+  }, [appliquer, langueDefautBoutique, avancerGenerationAuth]);
 
   const deconnexionForcee = useCallback(
     (message: string) => {
@@ -116,11 +155,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUtilisateur(null);
       setMessageSessionRemplacee(message);
       appliquer(null, langueDefautBoutique);
+      avancerGenerationAuth(false);
       // Couvre le cas réinitialisation (3.15) : plus aucun compte n'existe,
       // l'écran de connexion doit céder la place à l'assistant de premier lancement.
       rafraichirEtatInitial();
     },
-    [appliquer, langueDefautBoutique, rafraichirEtatInitial],
+    [appliquer, langueDefautBoutique, rafraichirEtatInitial, avancerGenerationAuth],
   );
 
   // Enregistre l'écouteur de session-remplacée auprès de lib/api.ts (401
@@ -131,11 +171,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => surSessionRemplacee(null);
   }, [deconnexionForcee]);
 
-  const rafraichirIdentite = useCallback(async () => {
+  const rafraichirIdentite = useCallback(async (): Promise<boolean> => {
+    // Barrière de fraîcheur (F3) : capture la génération courante avant
+    // l'appel réseau. Si une déconnexion ou une nouvelle connexion survient
+    // pendant l'attente (`logout()`/`deconnexionForcee()`/`login()`, tous
+    // incrémentent `generationAuthRef`), la réponse doit être intégralement
+    // ignorée — jamais restaurer un ancien utilisateur, jamais écraser un
+    // nouvel utilisateur déjà connecté.
+    const generationCapturee = generationAuthRef.current;
     const r = await api<{ utilisateur: UtilisateurDTO; langueDefautBoutique: Langue }>("/api/auth/me");
+    if (generationAuthRef.current !== generationCapturee) return false;
     setUtilisateur(r.utilisateur);
     setLangueDefautBoutique(r.langueDefautBoutique);
     appliquer(r.utilisateur, r.langueDefautBoutique);
+    return true;
   }, [appliquer]);
 
   const changerLangue = useCallback(
@@ -174,6 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         messageSessionRemplacee,
         deconnexionForcee,
         premierLancement,
+        sessionAuthId,
         rafraichirIdentite,
       }}
     >

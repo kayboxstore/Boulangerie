@@ -23,9 +23,10 @@ vi.mock("@/lib/api", () => {
 });
 
 const logoutMock = vi.fn();
-const rafraichirIdentiteMock = vi.fn().mockResolvedValue(undefined);
+const deconnexionForceeMock = vi.fn();
+const rafraichirIdentiteMock = vi.fn().mockResolvedValue(true);
 vi.mock("@/lib/auth", () => ({
-  useAuth: () => ({ logout: logoutMock, rafraichirIdentite: rafraichirIdentiteMock }),
+  useAuth: () => ({ logout: logoutMock, rafraichirIdentite: rafraichirIdentiteMock, deconnexionForcee: deconnexionForceeMock }),
 }));
 
 afterEach(() => {
@@ -108,11 +109,58 @@ describe("ChangementMotDePasseObligatoirePage — DOM (F3)", () => {
 
   it("succès : rafraîchit l'identité via le serveur et affiche un toast de confirmation (retour transitoire)", async () => {
     apiMock.mockResolvedValue(undefined);
+    rafraichirIdentiteMock.mockResolvedValueOnce(true);
     rendre();
     remplirEtSoumettre("tempo123", "motDePasseValide1", "motDePasseValide1");
 
     await waitFor(() => expect(rafraichirIdentiteMock).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Mot de passe changé avec succès.")).toBeTruthy();
+  });
+
+  it("le toast n'est émis qu'APRÈS la résolution réussie de /me, jamais avant (ordre, revue Codex)", async () => {
+    apiMock.mockResolvedValue(undefined);
+    let resoudreIdentite!: (v: boolean) => void;
+    rafraichirIdentiteMock.mockReturnValueOnce(new Promise((r) => (resoudreIdentite = r)));
+    rendre();
+    remplirEtSoumettre("tempo123", "motDePasseValide1", "motDePasseValide1");
+
+    await waitFor(() => expect(rafraichirIdentiteMock).toHaveBeenCalledTimes(1));
+    // Le POST a réussi et /me est encore en vol : aucun toast ne doit exister.
+    expect(screen.queryByText("Mot de passe changé avec succès.")).toBeNull();
+
+    resoudreIdentite(true);
+    expect(await screen.findByText("Mot de passe changé avec succès.")).toBeTruthy();
+  });
+
+  it("POST réussi puis /me en échec : aucun faux échec du POST, aucune invitation à resoumettre — déconnexion propre avec message persistant", async () => {
+    apiMock.mockResolvedValue(undefined);
+    rafraichirIdentiteMock.mockRejectedValueOnce(
+      new ApiError(0, "Impossible de contacter le serveur — vérifiez votre connexion internet."),
+    );
+    rendre();
+    remplirEtSoumettre("tempo123", "motDePasseValide1", "motDePasseValide1");
+
+    await waitFor(() => expect(deconnexionForceeMock).toHaveBeenCalledTimes(1));
+    expect(deconnexionForceeMock).toHaveBeenCalledWith(
+      "Votre mot de passe a bien été changé, mais nous n'avons pas pu confirmer votre session. Veuillez vous reconnecter avec votre nouveau mot de passe.",
+    );
+    // Pas de message trompeur invitant à resoumettre avec l'ancien mot de passe.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Mot de passe changé avec succès.")).toBeNull();
+  });
+
+  it("déconnexion pendant /me (réponse tardive) : ancien utilisateur jamais restauré et aucun toast", async () => {
+    apiMock.mockResolvedValue(undefined);
+    // rafraichirIdentite() retourne `false` quand la génération de session a
+    // changé pendant l'attente réseau (voir lib/auth.tsx) — ex. une
+    // déconnexion survenue entre-temps.
+    rafraichirIdentiteMock.mockResolvedValueOnce(false);
+    rendre();
+    remplirEtSoumettre("tempo123", "motDePasseValide1", "motDePasseValide1");
+
+    await waitFor(() => expect(rafraichirIdentiteMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("Mot de passe changé avec succès.")).toBeNull();
+    expect(deconnexionForceeMock).not.toHaveBeenCalled();
   });
 
   it("empêche une double soumission : l'API n'est appelée qu'une seule fois", async () => {

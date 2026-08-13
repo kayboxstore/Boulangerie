@@ -23,11 +23,14 @@ const LONGUEUR_MIN = 8;
  *
  * Après un `POST /api/auth/mot-de-passe` réussi (204), `rafraichirIdentite()`
  * recharge `GET /api/auth/me` : l'application normale ne revient QU'après
- * cette confirmation serveur, jamais en anticipant localement le succès.
+ * cette confirmation serveur, jamais en anticipant localement le succès. Le
+ * toast de succès n'est lui aussi émis qu'APRÈS cette confirmation (revue
+ * Codex) : annoncer un succès avant que l'identité soit effectivement
+ * rafraîchie serait trompeur si la confirmation échoue entre-temps.
  */
 export function ChangementMotDePasseObligatoirePage() {
   const { t } = useTranslation();
-  const { logout, rafraichirIdentite } = useAuth();
+  const { logout, rafraichirIdentite, deconnexionForcee } = useAuth();
   const { toast } = useFeedback();
   const [motDePasseActuel, setMotDePasseActuel] = useState("");
   const [nouveauMotDePasse, setNouveauMotDePasse] = useState("");
@@ -50,18 +53,41 @@ export function ChangementMotDePasseObligatoirePage() {
 
     setErreur(null);
     setEnCours(true);
+
     try {
       await api("/api/auth/mot-de-passe", {
         method: "POST",
         body: JSON.stringify({ motDePasseActuel, nouveauMotDePasse }),
       });
-      // Toast Premium (transitoire) : cet écran disparaît dès que
-      // `rafraichirIdentite()` confirme le nouvel état — pas de message
-      // persistant nécessaire ici, contrairement aux pages de récupération.
-      toast({ variante: "succes", message: t("auth.mandatoryChange.success") });
-      await rafraichirIdentite();
     } catch (err) {
+      // Le mot de passe n'a PAS été changé : formulaire et erreur normale,
+      // l'utilisateur peut corriger et resoumettre.
       setErreur(err instanceof ApiError ? err.message : t("auth.mandatoryChange.genericError"));
+      setEnCours(false);
+      return;
+    }
+
+    // Le POST a réussi : `motDePasseActuel` (l'ancien mot de passe temporaire)
+    // est désormais invalide côté serveur, quoi qu'il arrive ensuite — il ne
+    // doit plus jamais resservir à une resoumission depuis ce formulaire.
+    try {
+      const confirmee = await rafraichirIdentite();
+      if (confirmee) {
+        // Toast Premium (transitoire) : cet écran disparaît dès que l'identité
+        // confirmée fait repasser `motDePasseDoitChanger` à `false`.
+        toast({ variante: "succes", message: t("auth.mandatoryChange.success") });
+      }
+      // `confirmee === false` : la session a changé pendant l'attente réseau
+      // (déconnexion, ou une autre connexion) — ce composant est de toute
+      // façon en cours de démontage ; aucune action supplémentaire ici ne
+      // serait légitime (ni toast, ni erreur, ni restauration d'un ancien état).
+    } catch {
+      // Le mot de passe a bien été changé (POST confirmé ci-dessus), mais la
+      // confirmation d'identité via `/me` a échoué : resoumettre inviterait à
+      // réutiliser un mot de passe désormais invalide. Seule issue sûre :
+      // déconnexion propre avec un message persistant et localisé confirmant
+      // que le changement a bien eu lieu.
+      deconnexionForcee(t("auth.mandatoryChange.reconnectRequired"));
     } finally {
       setEnCours(false);
     }

@@ -1188,7 +1188,8 @@
       "passwordTooShort": "Mot de passe ya sika esengeli kozala na ba caractères 8 to koleka.",
       "passwordMismatch": "Ba mot de passe mibale ekokani te.",
       "success": "Mot de passe ebongisami malamu.",
-      "genericError": "Likambo moko esalemi. Meka lisusu na mwa ntango."
+      "genericError": "Likambo moko esalemi. Meka lisusu na mwa ntango.",
+      "reconnectRequired": "Mot de passe na yo ebongisami malamu, kasi tokokaki te kondima session na yo. Kota lisusu na mot de passe ya sika na yo."
     },
     "anniversaires": {
       "title": "Constellation Lomoto",

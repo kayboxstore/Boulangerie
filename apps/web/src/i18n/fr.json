@@ -1187,7 +1187,8 @@
       "passwordTooShort": "Le nouveau mot de passe doit contenir au moins 8 caractères.",
       "passwordMismatch": "Les deux mots de passe ne correspondent pas.",
       "success": "Mot de passe changé avec succès.",
-      "genericError": "Une erreur est survenue. Réessayez dans un instant."
+      "genericError": "Une erreur est survenue. Réessayez dans un instant.",
+      "reconnectRequired": "Votre mot de passe a bien été changé, mais nous n'avons pas pu confirmer votre session. Veuillez vous reconnecter avec votre nouveau mot de passe."
     },
     "anniversaires": {
       "title": "Constellation Lomoto",

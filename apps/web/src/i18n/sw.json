@@ -1188,7 +1188,8 @@
       "passwordTooShort": "Nenosiri jipya lazima liwe na herufi 8 au zaidi.",
       "passwordMismatch": "Manenosiri mawili hayafanani.",
       "success": "Nenosiri limebadilishwa kwa mafanikio.",
-      "genericError": "Hitilafu imetokea. Jaribu tena baada ya muda mfupi."
+      "genericError": "Hitilafu imetokea. Jaribu tena baada ya muda mfupi.",
+      "reconnectRequired": "Nenosiri lako limebadilishwa kwa mafanikio, lakini hatukuweza kuthibitisha kikao chako. Tafadhali ingia tena kwa nenosiri lako jipya."
     },
     "anniversaires": {
       "title": "Constellation Lomoto",

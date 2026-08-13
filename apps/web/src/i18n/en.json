@@ -1187,7 +1187,8 @@
       "passwordTooShort": "The new password must be at least 8 characters long.",
       "passwordMismatch": "The two passwords do not match.",
       "success": "Password changed successfully.",
-      "genericError": "Something went wrong. Please try again in a moment."
+      "genericError": "Something went wrong. Please try again in a moment.",
+      "reconnectRequired": "Your password was changed successfully, but we couldn't confirm your session. Please sign in again with your new password."
     },
     "anniversaires": {
       "title": "Constellation Lomoto",
