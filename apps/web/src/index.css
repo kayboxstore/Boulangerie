@@ -22,6 +22,13 @@
      solde de caisse négatif (3.1). */
   --rouge-alerte: #dc2626;
 
+  /* Couleurs d'état (bibliothèque Premium — toast, badges d'état). Le rouge
+     d'erreur reste le terracotta de marque (cohérence avec l'existant) ;
+     seules succès/avertissement/information sont nouvelles ici. */
+  --succes: #2e7d4f;
+  --avertissement: #b45309;
+  --information: #1d4ed8;
+
   --background: #faf8f3;
   --foreground: #0f1923;
   --card: #ffffff;
@@ -47,6 +54,10 @@
 .dark {
   /* Sur fond marine, un rouge plus clair reste lisible tout en restant vif. */
   --rouge-alerte: #f87171;
+  /* Idem : tons plus clairs pour rester lisibles/contrastés sur fond marine. */
+  --succes: #4ade80;
+  --avertissement: #fbbf24;
+  --information: #60a5fa;
   --background: #0f1923;
   --foreground: #faf8f3;
   --card: #16222e;
@@ -75,6 +86,9 @@
   --color-terracotta: var(--terracotta);
   --color-beige: var(--beige);
   --color-rouge-alerte: var(--rouge-alerte);
+  --color-succes: var(--succes);
+  --color-avertissement: var(--avertissement);
+  --color-information: var(--information);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -179,6 +193,18 @@
     opacity: 1;
     transform: none;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Toast Premium (FeedbackProvider.tsx, audit UX-17) — barre de durée. Animée
+   en CSS pur comme le reste des animations de cette feuille de style ;
+   `prefers-reduced-motion` est géré directement au niveau du composant via
+   la classe utilitaire Tailwind `motion-reduce:hidden`.
+   --------------------------------------------------------------------------- */
+
+@keyframes lomoto-toast-barre {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
 }
 
 /* ---------------------------------------------------------------------------

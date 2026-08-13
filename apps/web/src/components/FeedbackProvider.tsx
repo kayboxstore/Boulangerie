@@ -1,5 +1,13 @@
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, X } from "lucide-react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +18,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import {
+  DUREE_TOAST_DEFAUT_MS,
+  MAX_TOASTS_VISIBLES,
+  emettreToast,
+  selectionnerToastsVisibles,
+  sabonnerAuxToasts,
+  type ToastAffiche,
+  type ToastDemande,
+  type VarianteToast,
+} from "@/components/toast/toastBus";
 
 interface OptionsConfirmation {
   titre?: string;
@@ -20,28 +39,165 @@ interface OptionsConfirmation {
   destructive?: boolean;
 }
 
-interface ToastErreur {
-  id: number;
-  message: string;
-}
-
 interface FeedbackContextValue {
   /** Remplace window.confirm() par une boîte de dialogue cohérente avec le reste de l'app. */
   confirmer: (options: OptionsConfirmation) => Promise<boolean>;
-  /** Remplace window.alert() pour signaler un échec — bandeau discret, non bloquant. */
+  /** Toast Premium générique — succès, erreur, avertissement ou information (audit UX-17). */
+  toast: (demande: ToastDemande) => number;
+  /**
+   * Conservé pour compatibilité : ~36 appels existants dans le code utilisent
+   * cette signature. Équivalent à `toast({ variante: "erreur", message })`.
+   */
   toastErreur: (message: string) => void;
 }
 
 const FeedbackContext = createContext<FeedbackContextValue | null>(null);
 
-let prochainToastId = 0;
-const DUREE_TOAST_MS = 7000;
+const ICONES_VARIANTE: Record<VarianteToast, typeof AlertTriangle> = {
+  succes: CheckCircle2,
+  erreur: AlertTriangle,
+  avertissement: AlertTriangle,
+  information: Info,
+};
+
+const BORDURE_VARIANTE: Record<VarianteToast, string> = {
+  succes: "border-succes/30",
+  erreur: "border-terracotta/30",
+  avertissement: "border-avertissement/30",
+  information: "border-information/30",
+};
+
+// Icône "plus affirmée" (revue Codex) : badge circulaire teinté plutôt
+// qu'une simple icône nue — plus visible au premier coup d'œil.
+const BADGE_VARIANTE: Record<VarianteToast, string> = {
+  succes: "bg-succes/15 text-succes",
+  erreur: "bg-terracotta/15 text-terracotta",
+  avertissement: "bg-avertissement/15 text-avertissement",
+  information: "bg-information/15 text-information",
+};
+
+// Halo/gradient discret derrière le badge (référence Premium validée).
+const HALO_VARIANTE: Record<VarianteToast, string> = {
+  succes: "bg-succes",
+  erreur: "bg-terracotta",
+  avertissement: "bg-avertissement",
+  information: "bg-information",
+};
+
+function ToastItem({ toast, onFermer }: { toast: ToastAffiche; onFermer: (id: number) => void }) {
+  const { t } = useTranslation();
+  const duree = toast.dureeMs ?? DUREE_TOAST_DEFAUT_MS;
+  const [enPause, setEnPause] = useState(false);
+  const resteMsRef = useRef(duree);
+  const debutRef = useRef<number>(Date.now());
+  const minuteurRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const arreterMinuteur = useCallback(() => {
+    if (minuteurRef.current !== null) {
+      clearTimeout(minuteurRef.current);
+      minuteurRef.current = null;
+    }
+  }, []);
+
+  const demarrerMinuteur = useCallback(
+    (ms: number) => {
+      arreterMinuteur();
+      debutRef.current = Date.now();
+      minuteurRef.current = setTimeout(() => onFermer(toast.id), ms);
+    },
+    [arreterMinuteur, onFermer, toast.id],
+  );
+
+  useEffect(() => {
+    if (toast.persistant) return;
+    demarrerMinuteur(resteMsRef.current);
+    return arreterMinuteur;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Pause accessible (audit UX-17) : le survol OU le focus clavier suspend la
+  // fermeture automatique — sans cela, un lecteur au clavier n'aurait jamais
+  // le temps de lire le message avant sa disparition.
+  const pauser = useCallback(() => {
+    if (toast.persistant || enPause) return;
+    const ecoule = Date.now() - debutRef.current;
+    resteMsRef.current = Math.max(0, resteMsRef.current - ecoule);
+    arreterMinuteur();
+    setEnPause(true);
+  }, [arreterMinuteur, enPause, toast.persistant]);
+
+  const reprendre = useCallback(() => {
+    if (toast.persistant || !enPause) return;
+    setEnPause(false);
+    demarrerMinuteur(resteMsRef.current);
+  }, [demarrerMinuteur, enPause, toast.persistant]);
+
+  const Icone = ICONES_VARIANTE[toast.variante];
+
+  return (
+    <div
+      role={toast.variante === "erreur" || toast.variante === "avertissement" ? "alert" : "status"}
+      aria-live={toast.variante === "erreur" ? "assertive" : "polite"}
+      tabIndex={0}
+      onMouseEnter={pauser}
+      onMouseLeave={reprendre}
+      onFocus={pauser}
+      onBlur={reprendre}
+      className={cn(
+        "pointer-events-auto relative flex w-full max-w-sm items-start gap-3 overflow-hidden rounded-xl border bg-card p-3 shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        BORDURE_VARIANTE[toast.variante],
+      )}
+    >
+      {/* Halo/gradient discret (référence Premium validée) — purement décoratif. */}
+      <span
+        aria-hidden
+        className={cn("absolute -left-8 -top-8 h-24 w-24 rounded-full opacity-20 blur-2xl", HALO_VARIANTE[toast.variante])}
+      />
+
+      <span
+        className={cn(
+          "relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+          BADGE_VARIANTE[toast.variante],
+        )}
+      >
+        <Icone aria-hidden className="h-5 w-5" />
+      </span>
+
+      <div className="relative z-10 flex-1 py-1">
+        {toast.titre && <p className="font-semibold text-marine dark:text-creme">{toast.titre}</p>}
+        <p className="text-sm font-medium text-marine dark:text-creme">{toast.message}</p>
+      </div>
+
+      {/* Cible de fermeture ≥ 44×44 px (audit UX-04) — l'icône reste petite,
+          la zone cliquable réelle occupe tout le carré. */}
+      <button
+        type="button"
+        onClick={() => onFermer(toast.id)}
+        aria-label={t("common.close")}
+        className="relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <X className="h-4 w-4" />
+      </button>
+
+      {!toast.persistant && (
+        <span
+          aria-hidden
+          className="absolute inset-x-0 bottom-0 h-1 origin-left bg-current opacity-40 motion-reduce:hidden"
+          style={{
+            animation: `lomoto-toast-barre ${duree}ms linear forwards`,
+            animationPlayState: enPause ? "paused" : "running",
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
 export function FeedbackProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const [confirmation, setConfirmation] = useState<OptionsConfirmation | null>(null);
   const resolveRef = useRef<((valeur: boolean) => void) | null>(null);
-  const [toasts, setToasts] = useState<ToastErreur[]>([]);
+  const [toasts, setToasts] = useState<ToastAffiche[]>([]);
 
   const confirmer = useCallback((options: OptionsConfirmation) => {
     setConfirmation(options);
@@ -56,21 +212,41 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
     resolveRef.current = null;
   }, []);
 
+  // Retire un toast de la file COMPLÈTE (visible ou en attente) — s'il était
+  // visible, le suivant de la file prend automatiquement sa place au rendu
+  // suivant, sans logique supplémentaire.
   const retirerToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
+  // S'abonne au bus découplé (toastBus.ts) : reçoit aussi bien les appels du
+  // contexte `toast()` ci-dessous que ceux émis hors arbre React (lib/socket.tsx).
+  //
+  // Correction revue Codex : `toasts` est désormais la file COMPLÈTE, jamais
+  // plafonnée ici — un toast n'est plus jamais supprimé par la seule arrivée
+  // d'un nouveau (l'ancien `limiterToasts` gardait les 3 derniers arrivés et
+  // perdait silencieusement les précédents, y compris persistants). Seuls
+  // les `MAX_TOASTS_VISIBLES` premiers de la file sont rendus ci-dessous ;
+  // les suivants attendent leur tour, qui vient dès qu'une place se libère.
+  useEffect(() => {
+    return sabonnerAuxToasts((toast) => {
+      setToasts((prev) => [...prev, toast]);
+    });
+  }, []);
+
+  const toastsVisibles = selectionnerToastsVisibles(toasts, MAX_TOASTS_VISIBLES);
+
+  const toast = useCallback((demande: ToastDemande) => emettreToast(demande), []);
+
   const toastErreur = useCallback(
     (message: string) => {
-      const id = ++prochainToastId;
-      setToasts((prev) => [...prev, { id, message }]);
-      setTimeout(() => retirerToast(id), DUREE_TOAST_MS);
+      toast({ variante: "erreur", message });
     },
-    [retirerToast],
+    [toast],
   );
 
   return (
-    <FeedbackContext.Provider value={{ confirmer, toastErreur }}>
+    <FeedbackContext.Provider value={{ confirmer, toast, toastErreur }}>
       {children}
 
       <Dialog open={!!confirmation} onOpenChange={(ouvert) => !ouvert && repondre(false)}>
@@ -90,24 +266,11 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
         </DialogContent>
       </Dialog>
 
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            role="alert"
-            className="pointer-events-auto flex items-start gap-2 rounded-lg border border-terracotta/30 bg-card px-4 py-3 text-sm shadow-lg"
-          >
-            <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-terracotta" />
-            <p className="flex-1 font-medium text-marine dark:text-creme">{toast.message}</p>
-            <button
-              type="button"
-              onClick={() => retirerToast(toast.id)}
-              aria-label={t("common.close")}
-              className="shrink-0 text-muted-foreground opacity-70 transition-opacity hover:opacity-100"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+      {/* Position Premium validée : haut-droite sur ordinateur, centré en
+          haut sur mobile (plutôt que bas-droite partout). */}
+      <div className="pointer-events-none fixed inset-x-0 top-4 z-[100] flex flex-col items-center gap-2 px-4 sm:inset-x-auto sm:right-4 sm:items-end sm:px-0">
+        {toastsVisibles.map((toastAffiche) => (
+          <ToastItem key={toastAffiche.id} toast={toastAffiche} onFermer={retirerToast} />
         ))}
       </div>
     </FeedbackContext.Provider>
