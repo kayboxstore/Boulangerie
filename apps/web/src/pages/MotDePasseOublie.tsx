@@ -6,7 +6,6 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useFeedback } from "@/components/FeedbackProvider";
 
 const RE_EMAIL_SIMPLE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -19,11 +18,13 @@ const RE_EMAIL_SIMPLE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * elle affiche explicitement que l'intégration serveur est en attente
  * (tâche 9-10). `docs/coordination/PLAN_COORDINATION_CODEX_CLAUDE_LOMOTO.md`
  * §7 : « La PR F2 peut rester en brouillon tant que les API d'authentification
- * nécessaires ne sont pas fusionnées. »
+ * nécessaires ne sont pas fusionnées. » Une seule annonce accessible (revue
+ * Codex round 2) : le message persistant ci-dessous, jamais un toast en plus
+ * — un toast disparaît de lui-même, alors que cette information ne doit
+ * jamais s'effacer automatiquement.
  */
 export function MotDePasseOubliePage() {
   const { t } = useTranslation();
-  const { toast } = useFeedback();
   const [email, setEmail] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
   const [enAttenteIntegration, setEnAttenteIntegration] = useState(false);
@@ -38,8 +39,10 @@ export function MotDePasseOubliePage() {
     setErreur(null);
     // Volontairement AUCUN appel à api(...) ici : pas de faux jeton, pas de
     // faux succès, pas de message "e-mail envoyé" — voir la note d'en-tête.
+    // Volontairement AUCUN toast en plus du message persistant ci-dessous :
+    // les deux partagent le même texte, un toast ferait doublon (annonce
+    // répétée aux lecteurs d'écran) — voir la note d'en-tête.
     setEnAttenteIntegration(true);
-    toast({ variante: "information", message: t("auth.pendingServerIntegration") });
   }
 
   return (
@@ -91,7 +94,10 @@ export function MotDePasseOubliePage() {
             )}
           </form>
 
-          <Link to="/connexion" className="mt-6 block text-center text-sm font-medium text-terracotta hover:underline dark:text-or">
+          <Link
+            to="/connexion"
+            className="mt-6 flex min-h-11 items-center justify-center text-center text-sm font-medium text-terracotta hover:underline dark:text-or"
+          >
             {t("auth.backToLogin")}
           </Link>
         </div>

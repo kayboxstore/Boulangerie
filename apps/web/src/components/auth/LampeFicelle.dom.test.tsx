@@ -27,6 +27,13 @@ describe("LampeFicelle — DOM", () => {
     expect(document.activeElement).toBe(bouton);
   });
 
+  it("cible tactile réelle d'au moins 44×44 px (pas seulement l'icône de 36 px)", () => {
+    render(<LampeControlee />);
+    const bouton = screen.getByRole("button", { name: "Allumer la lampe" });
+    expect(bouton.className).toContain("min-h-11");
+    expect(bouton.className).toContain("min-w-11");
+  });
+
   it("le clic simple bascule l'état (aria-pressed + libellé accessible)", () => {
     render(<LampeControlee />);
     const bouton = screen.getByRole("button", { name: "Allumer la lampe" });
@@ -43,7 +50,7 @@ describe("LampeFicelle — DOM", () => {
     render(<LampeControlee />);
     const bouton = screen.getByRole("button", { name: "Allumer la lampe" });
 
-    fireEvent.pointerDown(bouton, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerDown(bouton, { pointerId: 1, clientY: 100, isPrimary: true, button: 0 });
     fireEvent.pointerMove(bouton, { pointerId: 1, clientY: 100 + SEUIL_GLISSEMENT_PX });
     fireEvent.pointerUp(bouton, { pointerId: 1, clientY: 100 + SEUIL_GLISSEMENT_PX });
 
@@ -54,7 +61,7 @@ describe("LampeFicelle — DOM", () => {
     render(<LampeControlee />);
     const bouton = screen.getByRole("button", { name: "Allumer la lampe" });
 
-    fireEvent.pointerDown(bouton, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerDown(bouton, { pointerId: 1, clientY: 100, isPrimary: true, button: 0 });
     fireEvent.pointerMove(bouton, { pointerId: 1, clientY: 100 + SEUIL_GLISSEMENT_PX - 5 });
     fireEvent.pointerUp(bouton, { pointerId: 1, clientY: 100 + SEUIL_GLISSEMENT_PX - 5 });
 
@@ -65,7 +72,7 @@ describe("LampeFicelle — DOM", () => {
     render(<LampeControlee />);
     const bouton = screen.getByRole("button", { name: "Allumer la lampe" });
 
-    fireEvent.pointerDown(bouton, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerDown(bouton, { pointerId: 1, clientY: 100, isPrimary: true, button: 0 });
     fireEvent.pointerMove(bouton, { pointerId: 1, clientY: 100 + SEUIL_GLISSEMENT_PX });
     fireEvent.pointerUp(bouton, { pointerId: 1, clientY: 100 + SEUIL_GLISSEMENT_PX });
     // Le navigateur émet un `click` de synthèse après le relâchement du pointeur.
@@ -80,11 +87,83 @@ describe("LampeFicelle — DOM", () => {
     render(<LampeFicelle allumee={false} onBasculer={surBasculer} reduireMouvement={false} />);
     const bouton = screen.getByRole("button", { name: "Allumer la lampe" });
 
-    fireEvent.pointerDown(bouton, { pointerId: 1, clientY: 0 });
+    fireEvent.pointerDown(bouton, { pointerId: 1, clientY: 0, isPrimary: true, button: 0 });
     fireEvent.pointerMove(bouton, { pointerId: 1, clientY: SEUIL_GLISSEMENT_PX });
     fireEvent.pointerMove(bouton, { pointerId: 1, clientY: SEUIL_GLISSEMENT_PX + 40 });
     fireEvent.pointerUp(bouton, { pointerId: 1, clientY: SEUIL_GLISSEMENT_PX + 40 });
 
     expect(surBasculer).toHaveBeenCalledTimes(1);
+  });
+
+  it("un pointeur étranger (jamais démarré ici) ne peut ni poursuivre ni terminer un geste", () => {
+    const surBasculer = vi.fn();
+    render(<LampeFicelle allumee={false} onBasculer={surBasculer} reduireMouvement={false} />);
+    const bouton = screen.getByRole("button", { name: "Allumer la lampe" });
+
+    // Aucun pointerDown préalable pour pointerId 7 : move/up doivent être des no-op.
+    fireEvent.pointerMove(bouton, { pointerId: 7, clientY: SEUIL_GLISSEMENT_PX + 40 });
+    fireEvent.pointerUp(bouton, { pointerId: 7, clientY: SEUIL_GLISSEMENT_PX + 40 });
+
+    expect(surBasculer).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Allumer la lampe" })).toBeTruthy();
+  });
+
+  it("un second pointeur (doigt secondaire) ne peut ni remplacer ni déclencher le geste actif", () => {
+    const surBasculer = vi.fn();
+    render(<LampeFicelle allumee={false} onBasculer={surBasculer} reduireMouvement={false} />);
+    const bouton = screen.getByRole("button", { name: "Allumer la lampe" });
+
+    // Premier pointeur (primaire) démarre le geste.
+    fireEvent.pointerDown(bouton, { pointerId: 1, clientY: 0, isPrimary: true, button: 0 });
+    // Second pointeur (doigt secondaire, non-primaire) tente de démarrer un geste concurrent.
+    fireEvent.pointerDown(bouton, { pointerId: 2, clientY: 0, isPrimary: false, button: 0 });
+    // Le second pointeur glisse seul, au-delà du seuil : il n'est pas propriétaire, donc no-op.
+    fireEvent.pointerMove(bouton, { pointerId: 2, clientY: SEUIL_GLISSEMENT_PX + 40 });
+    expect(surBasculer).not.toHaveBeenCalled();
+
+    // Le premier pointeur (propriétaire réel) peut toujours faire progresser le geste.
+    fireEvent.pointerMove(bouton, { pointerId: 1, clientY: SEUIL_GLISSEMENT_PX + 40 });
+    expect(surBasculer).toHaveBeenCalledTimes(1);
+  });
+
+  it("un clic droit (bouton secondaire) ne bascule jamais la lampe", () => {
+    const surBasculer = vi.fn();
+    render(<LampeFicelle allumee={false} onBasculer={surBasculer} reduireMouvement={false} />);
+    const bouton = screen.getByRole("button", { name: "Allumer la lampe" });
+
+    // pointerDown au bouton droit ne doit pas démarrer de geste de glissement...
+    fireEvent.pointerDown(bouton, { pointerId: 1, clientY: 0, isPrimary: true, button: 2 });
+    fireEvent.pointerMove(bouton, { pointerId: 1, clientY: SEUIL_GLISSEMENT_PX + 40 });
+    fireEvent.pointerUp(bouton, { pointerId: 1, clientY: SEUIL_GLISSEMENT_PX + 40 });
+    expect(surBasculer).not.toHaveBeenCalled();
+
+    // ... et un `click` au bouton droit (filet de sécurité) ne bascule pas non plus.
+    fireEvent.click(bouton, { button: 2 });
+    expect(surBasculer).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Allumer la lampe" })).toBeTruthy();
+  });
+
+  it("pointercancel nettoie complètement le geste sans neutraliser la prochaine activation clavier/clic", () => {
+    const surBasculer = vi.fn();
+    render(<LampeFicelle allumee={false} onBasculer={surBasculer} reduireMouvement={false} />);
+    const bouton = screen.getByRole("button", { name: "Allumer la lampe" });
+
+    // Glissement abouti puis annulé (au lieu d'un pointerup normal) : le
+    // basculement du glissement a déjà eu lieu, mais aucun `click` de
+    // synthèse ne suivra un `pointercancel`.
+    fireEvent.pointerDown(bouton, { pointerId: 1, clientY: 0, isPrimary: true, button: 0 });
+    fireEvent.pointerMove(bouton, { pointerId: 1, clientY: SEUIL_GLISSEMENT_PX + 40 });
+    expect(surBasculer).toHaveBeenCalledTimes(1);
+    fireEvent.pointerCancel(bouton, { pointerId: 1, clientY: SEUIL_GLISSEMENT_PX + 40 });
+
+    // Une activation clavier/clic normale, sans rapport avec le geste annulé,
+    // doit basculer l'état comme d'habitude — pas être avalée silencieusement.
+    fireEvent.click(bouton);
+    expect(surBasculer).toHaveBeenCalledTimes(2);
+
+    // Un nouveau geste de glissement (nouveau pointerId) démarre normalement.
+    fireEvent.pointerDown(bouton, { pointerId: 2, clientY: 0, isPrimary: true, button: 0 });
+    fireEvent.pointerMove(bouton, { pointerId: 2, clientY: SEUIL_GLISSEMENT_PX + 40 });
+    expect(surBasculer).toHaveBeenCalledTimes(3);
   });
 });

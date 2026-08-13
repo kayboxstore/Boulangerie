@@ -5,7 +5,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { AuthShell } from "./AuthShell";
 
-afterEach(cleanup);
+// jsdom n'implémente pas `window.matchMedia` nativement : la propriété est
+// donc absente (`undefined`) avant tout test, ce qu'on restaure explicitement
+// après chacun — sans quoi le mock d'un test pourrait fuiter vers le suivant.
+const matchMediaOriginal = window.matchMedia;
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  window.matchMedia = matchMediaOriginal;
+});
 
 /** Simule `window.matchMedia` pour une préférence donnée, comme `lib/theme.tsx` le fait déjà pour les tests de thème. */
 function simulerMatchMedia(reduireMouvement: boolean) {

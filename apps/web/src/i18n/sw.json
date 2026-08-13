@@ -1170,7 +1170,7 @@
       "passwordMismatch": "Manenosiri mawili hayafanani."
     },
     "clock": {
-      "ariaLabel": "Saa za sasa Kinshasa : {{heure}}"
+      "ariaLabel": "Saa za sasa Kinshasa : saa {{heures}}, dakika {{minutes}}, sekunde {{secondes}}"
     }
   }
 }

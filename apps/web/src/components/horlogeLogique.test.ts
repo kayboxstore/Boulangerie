@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FUSEAU_HORLOGE, decomposerHeureKinshasa, libelleAccessibleHeure } from "./horlogeLogique";
+import { FUSEAU_HORLOGE, dateTimeAttribut, decomposerHeureKinshasa } from "./horlogeLogique";
 
 describe("horlogeLogique — logique pure de l'horloge flip", () => {
   it("toujours le fuseau Africa/Kinshasa, quel que soit l'input", () => {
@@ -18,8 +18,7 @@ describe("horlogeLogique — logique pure de l'horloge flip", () => {
     expect(heure).toEqual({ heures: "00", minutes: "30", secondes: "00" });
   });
 
-  it("produit un libellé accessible complet, non tronqué", () => {
-    const libelle = libelleAccessibleHeure({ heures: "14", minutes: "32", secondes: "05" });
-    expect(libelle).toBe("14 h 32 min 05 s");
+  it("produit une valeur dateTime valide (hh:mm:ss) pour l'élément <time>", () => {
+    expect(dateTimeAttribut({ heures: "14", minutes: "32", secondes: "05" })).toBe("14:32:05");
   });
 });

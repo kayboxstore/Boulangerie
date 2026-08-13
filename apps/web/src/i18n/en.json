@@ -1169,7 +1169,7 @@
       "passwordMismatch": "The two passwords do not match."
     },
     "clock": {
-      "ariaLabel": "Current time in Kinshasa: {{heure}}"
+      "ariaLabel": "Current time in Kinshasa: {{heures}} hours {{minutes}} minutes {{secondes}} seconds"
     }
   }
 }

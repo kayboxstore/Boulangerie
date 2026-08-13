@@ -62,7 +62,7 @@ export function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="pl-9"
+                  className="h-11 pl-9"
                 />
               </div>
             </div>
@@ -70,7 +70,10 @@ export function LoginPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="motDePasse">{t("login.password")}</Label>
-                <Link to="/mot-de-passe-oublie" className="text-xs font-medium text-terracotta hover:underline dark:text-or">
+                <Link
+                  to="/mot-de-passe-oublie"
+                  className="inline-flex min-h-11 items-center text-xs font-medium text-terracotta hover:underline dark:text-or"
+                >
                   {t("auth.forgotPasswordLink")}
                 </Link>
               </div>

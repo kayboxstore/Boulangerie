@@ -7,7 +7,10 @@ import { MemoryRouter } from "react-router-dom";
 import { FeedbackProvider } from "@/components/FeedbackProvider";
 import { NouveauMotDePassePage } from "./NouveauMotDePasse";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function rendre() {
   return render(
@@ -67,13 +70,13 @@ describe("NouveauMotDePassePage — DOM", () => {
 
     expect(surFetch).not.toHaveBeenCalled();
 
+    // Une SEULE annonce accessible (revue Codex round 2) : le message
+    // persistant, jamais un toast en plus.
     const statuts = screen.getAllByRole("status");
-    const messagePersistant = statuts.find((el) => el.textContent?.includes("attend encore son intégration"));
-    expect(messagePersistant).toBeTruthy();
-    for (const el of statuts) {
-      expect(el.textContent).toContain("Aucune demande n'a été envoyée");
-      expect(el.textContent?.toLowerCase()).not.toContain("succès");
-    }
+    expect(statuts).toHaveLength(1);
+    expect(statuts[0].textContent).toContain("attend encore son intégration");
+    expect(statuts[0].textContent).toContain("Aucune demande n'a été envoyée");
+    expect(statuts[0].textContent?.toLowerCase()).not.toContain("succès");
   });
 
   it("propose un lien de retour vers la connexion", () => {

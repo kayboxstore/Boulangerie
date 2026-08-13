@@ -6,7 +6,6 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/ui/password-field";
-import { useFeedback } from "@/components/FeedbackProvider";
 
 const LONGUEUR_MIN = 8;
 
@@ -17,11 +16,13 @@ const LONGUEUR_MIN = 8;
  * expirables, à usage unique) appartiennent à Codex C3. Seule la validation
  * LOCALE (longueur minimale, confirmation identique) est effectuée ici ; une
  * soumission valide affiche explicitement l'attente d'intégration serveur,
- * jamais un message de succès.
+ * jamais un message de succès. Une seule annonce accessible (revue Codex
+ * round 2) : le message persistant ci-dessous, jamais un toast en plus — un
+ * toast disparaît de lui-même, alors que cette information ne doit jamais
+ * s'effacer automatiquement.
  */
 export function NouveauMotDePassePage() {
   const { t } = useTranslation();
-  const { toast } = useFeedback();
   const [motDePasse, setMotDePasse] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
@@ -40,9 +41,9 @@ export function NouveauMotDePassePage() {
       return;
     }
     setErreur(null);
-    // Volontairement AUCUN appel à api(...) ici — voir la note d'en-tête.
+    // Volontairement AUCUN appel à api(...) ici, ni de toast en plus du
+    // message persistant ci-dessous — voir la note d'en-tête.
     setEnAttenteIntegration(true);
-    toast({ variante: "information", message: t("auth.pendingServerIntegration") });
   }
 
   return (
@@ -103,7 +104,10 @@ export function NouveauMotDePassePage() {
             )}
           </form>
 
-          <Link to="/connexion" className="mt-6 block text-center text-sm font-medium text-terracotta hover:underline dark:text-or">
+          <Link
+            to="/connexion"
+            className="mt-6 flex min-h-11 items-center justify-center text-center text-sm font-medium text-terracotta hover:underline dark:text-or"
+          >
             {t("auth.backToLogin")}
           </Link>
         </div>

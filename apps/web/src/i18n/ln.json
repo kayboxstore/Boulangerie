@@ -1170,7 +1170,7 @@
       "passwordMismatch": "Ba mot de passe mibale ekokani te."
     },
     "clock": {
-      "ariaLabel": "Ngonga ya sikoyo na Kinshasa : {{heure}}"
+      "ariaLabel": "Ngonga ya sikoyo na Kinshasa : ngonga {{heures}}, miniti {{minutes}}, segonde {{secondes}}"
     }
   }
 }

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-import { decomposerHeureKinshasa, libelleAccessibleHeure } from "./horlogeLogique";
+import { dateTimeAttribut, decomposerHeureKinshasa } from "./horlogeLogique";
 
 export interface HorlogeFlipProps {
   className?: string;
@@ -26,10 +26,16 @@ function HorlogeFlip({ className }: HorlogeFlipProps) {
     return () => clearInterval(id);
   }, []);
 
+  // `role="timer"` + `aria-live="off"` (jamais "status") : le libellé change
+  // chaque seconde, une région bavarde interromprait continuellement les
+  // lecteurs d'écran. L'heure reste consultable à la demande (aria-label,
+  // `dateTime`), simplement pas annoncée automatiquement.
   return (
-    <div
-      role="status"
-      aria-label={t("auth.clock.ariaLabel", { heure: libelleAccessibleHeure(heure) })}
+    <time
+      role="timer"
+      aria-live="off"
+      dateTime={dateTimeAttribut(heure)}
+      aria-label={t("auth.clock.ariaLabel", { heures: heure.heures, minutes: heure.minutes, secondes: heure.secondes })}
       className={cn("flex items-center gap-0.5 font-mono text-xs tabular-nums", className)}
     >
       <ChiffreFlip valeur={heure.heures} />
@@ -41,7 +47,7 @@ function HorlogeFlip({ className }: HorlogeFlipProps) {
         :
       </span>
       <ChiffreFlip valeur={heure.secondes} className="hidden sm:inline-flex" />
-    </div>
+    </time>
   );
 }
 

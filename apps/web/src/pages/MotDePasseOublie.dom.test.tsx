@@ -7,7 +7,10 @@ import { MemoryRouter } from "react-router-dom";
 import { FeedbackProvider } from "@/components/FeedbackProvider";
 import { MotDePasseOubliePage } from "./MotDePasseOublie";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function rendre() {
   return render(
@@ -50,18 +53,16 @@ describe("MotDePasseOubliePage — DOM", () => {
     // fausse demande envoyée au serveur (tâche 9 : ne jamais simuler le succès).
     expect(surFetch).not.toHaveBeenCalled();
 
-    // Le message persistant (et le toast, qui partage le même texte) indiquent
-    // explicitement l'attente d'intégration serveur — jamais un texte laissant
-    // croire qu'un e-mail a été envoyé.
+    // Une SEULE annonce accessible (revue Codex round 2) : le message
+    // persistant, jamais un toast en plus — sans quoi le même texte serait
+    // annoncé deux fois aux lecteurs d'écran.
     const statuts = screen.getAllByRole("status");
-    const messagePersistant = statuts.find((el) => el.textContent?.includes("attend encore son intégration"));
-    expect(messagePersistant).toBeTruthy();
+    expect(statuts).toHaveLength(1);
+    expect(statuts[0].textContent).toContain("attend encore son intégration");
     // Le texte nie explicitement tout envoi ("Aucune demande n'a été envoyée") —
     // jamais une formulation positive laissant croire à un succès.
-    for (const el of statuts) {
-      expect(el.textContent).toContain("Aucune demande n'a été envoyée");
-      expect(el.textContent?.toLowerCase()).not.toContain("succès");
-    }
+    expect(statuts[0].textContent).toContain("Aucune demande n'a été envoyée");
+    expect(statuts[0].textContent?.toLowerCase()).not.toContain("succès");
   });
 
   it("propose un lien de retour vers la connexion", () => {

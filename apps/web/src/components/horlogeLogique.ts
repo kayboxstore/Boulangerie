@@ -34,7 +34,11 @@ export function decomposerHeureKinshasa(date: Date): HeureAffichee {
   };
 }
 
-/** Libellé accessible complet ("14 h 32 min 05 s"), pour aria-label — jamais déduit du seul texte affiché (qui peut être tronqué visuellement). */
-export function libelleAccessibleHeure(heure: HeureAffichee): string {
-  return `${heure.heures} h ${heure.minutes} min ${heure.secondes} s`;
+/**
+ * Valeur de l'attribut `dateTime` de l'élément `<time>` — format de temps
+ * valide au sens HTML (« hh:mm:ss »), toujours dérivé des mêmes valeurs à
+ * deux chiffres que l'affichage, jamais recalculé séparément.
+ */
+export function dateTimeAttribut(heure: HeureAffichee): string {
+  return `${heure.heures}:${heure.minutes}:${heure.secondes}`;
 }
