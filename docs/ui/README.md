@@ -349,6 +349,11 @@ panneau marine, marine/crème selon le thème dans l'en-tête mobile).
 
 ## Captures d'écran
 
-Connexion (bureau et mobile), variante `prefers-reduced-motion`, enveloppe
-authentifiée (bureau et mobile, tiroir de navigation ouvert) — voir le
-rapport de livraison F2.
+| | |
+|---|---|
+| Connexion — bureau | Connexion — mobile |
+| ![Connexion, bureau](screenshots/f2/01-desktop-login.png) | ![Connexion, mobile](screenshots/f2/02-mobile-login.png) |
+| Connexion — `prefers-reduced-motion` | Enveloppe authentifiée — bureau |
+| ![Connexion, variante prefers-reduced-motion](screenshots/f2/03-desktop-login-reduced-motion.png) | ![Enveloppe authentifiée, bureau](screenshots/f2/04-desktop-shell.png) |
+| Enveloppe authentifiée — mobile | Enveloppe authentifiée — mobile, tiroir ouvert |
+| ![Enveloppe authentifiée, mobile](screenshots/f2/05-mobile-shell.png) | ![Enveloppe authentifiée, mobile, tiroir de navigation ouvert](screenshots/f2/06-mobile-shell-menu-ouvert.png) |
