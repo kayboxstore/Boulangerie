@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  ID_RESTE_NON_CHARGE,
+  ajouterNotificationAvecPlafond,
   annulerApresEchec,
   annulerLectureCiblee,
   compterNonLues,
   confirmerSucces,
+  creerProprieteUnique,
   creerRegistreDePropriete,
   demarrerMarquerLue,
   demarrerToutMarquerLu,
@@ -91,12 +92,75 @@ describe("annulerLectureCiblee — préserve les arrivées concurrentes", () => 
 describe("compterNonLues — toujours dérivé, jamais un compteur indépendant", () => {
   it("combine le reste non chargé et le décompte réel du tableau", () => {
     const etat: EtatNotifications<Notif> = { notifications: jeu, resteNonLues: 5 };
-    expect(compterNonLues(etat)).toBe(5 + 2); // "1" et "2" non lus dans le tableau
+    expect(compterNonLues(etat)).toBe(5 + 2);
   });
 
   it("reflète immédiatement une modification du tableau, sans recalcul manuel", () => {
     const etat: EtatNotifications<Notif> = { notifications: marquerIdCommeLu(jeu, "1").notifications, resteNonLues: 5 };
-    expect(compterNonLues(etat)).toBe(5 + 1); // seul "2" reste non lu dans le tableau
+    expect(compterNonLues(etat)).toBe(5 + 1);
+  });
+});
+
+describe("ajouterNotificationAvecPlafond — round 4 : conserve le compteur lors du plafonnement", () => {
+  const PLAFOND = 3;
+
+  it("sous le plafond : ajout simple, resteNonLues inchangé", () => {
+    const etat: EtatNotifications<Notif> = { notifications: [{ id: "1", lu: false, titre: "A" }], resteNonLues: 0 };
+    const resultat = ajouterNotificationAvecPlafond(etat, { id: "2", lu: false, titre: "B" }, PLAFOND);
+    expect(resultat.notifications.map((n) => n.id)).toEqual(["2", "1"]);
+    expect(resultat.resteNonLues).toBe(0);
+  });
+
+  it("liste pleine, l'élément expulsé est NON LU : bascule dans resteNonLues", () => {
+    const etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "2", lu: false, titre: "B" },
+        { id: "3", lu: false, titre: "C" }, // sera expulsé, le plus ancien
+      ],
+      resteNonLues: 10,
+    };
+    const resultat = ajouterNotificationAvecPlafond(etat, { id: "4", lu: false, titre: "Nouvelle" }, PLAFOND);
+    expect(resultat.notifications.map((n) => n.id)).toEqual(["4", "1", "2"]);
+    expect(resultat.notifications.find((n) => n.id === "3")).toBeUndefined();
+    expect(resultat.resteNonLues).toBe(11); // +1 pour "3", non lu, expulsé
+    expect(compterNonLues(resultat)).toBe(compterNonLues(etat) + 1); // aucune perte : +1 nouvelle, +0 net sur les autres
+  });
+
+  it("liste pleine, l'élément expulsé est DÉJÀ LU : resteNonLues inchangé", () => {
+    const etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "2", lu: false, titre: "B" },
+        { id: "3", lu: true, titre: "C" }, // sera expulsé, déjà lu
+      ],
+      resteNonLues: 10,
+    };
+    const resultat = ajouterNotificationAvecPlafond(etat, { id: "4", lu: false, titre: "Nouvelle" }, PLAFOND);
+    expect(resultat.notifications.find((n) => n.id === "3")).toBeUndefined();
+    expect(resultat.resteNonLues).toBe(10); // aucun ajout : l'expulsé était déjà lu
+  });
+
+  it("plusieurs arrivées successives après avoir atteint le plafond : cumul correct", () => {
+    let etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "2", lu: true, titre: "B" },
+        { id: "3", lu: false, titre: "C" },
+      ],
+      resteNonLues: 0,
+    };
+    const totalAvant = compterNonLues(etat);
+
+    etat = ajouterNotificationAvecPlafond(etat, { id: "4", lu: false, titre: "D" }, PLAFOND); // expulse "3" (non lu) → +1
+    etat = ajouterNotificationAvecPlafond(etat, { id: "5", lu: false, titre: "E" }, PLAFOND); // expulse "2" (déjà lu) → +0
+    etat = ajouterNotificationAvecPlafond(etat, { id: "6", lu: false, titre: "F" }, PLAFOND); // expulse "1" (non lu) → +1
+
+    expect(etat.notifications.map((n) => n.id)).toEqual(["6", "5", "4"]);
+    // Chaque expulsion non lue ne fait que TRANSFÉRER son unité du décompte
+    // tableau vers resteNonLues (net nul) : seule l'arrivée de 3 nouvelles
+    // notifications non lues fait progresser le total, donc totalAvant + 3.
+    expect(compterNonLues(etat)).toBe(totalAvant + 3);
   });
 });
 
@@ -126,7 +190,7 @@ describe("creerRegistreDePropriete", () => {
     registre.confirmer(["1"]);
 
     const jetonB = Symbol("B");
-    registre.reclamer(["1"], jetonB); // ne doit avoir aucun effet sur un id confirmé
+    registre.reclamer(["1"], jetonB);
     expect(registre.idsEncoreReclamesPar(["1"], jetonB)).toEqual([]);
   });
 
@@ -136,9 +200,9 @@ describe("creerRegistreDePropriete", () => {
     const jetonB = Symbol("B");
     registre.reclamer(["1"], jetonA);
     registre.reclamer(["1"], jetonB);
-    registre.liberer(["1"], jetonA); // A tente de libérer ce qu'il ne possède plus
+    registre.liberer(["1"], jetonA);
 
-    expect(registre.idsEncoreReclamesPar(["1"], jetonB)).toEqual(["1"]); // B garde la main
+    expect(registre.idsEncoreReclamesPar(["1"], jetonB)).toEqual(["1"]);
   });
 
   it("identifiants indépendants : aucune influence croisée", () => {
@@ -153,13 +217,45 @@ describe("creerRegistreDePropriete", () => {
   });
 });
 
+describe("creerProprieteUnique — round 4 : jamais de confirmation terminale (le reste non chargé évolue)", () => {
+  it("réclamer puis vérifier la possession", () => {
+    const p = creerProprieteUnique<symbol>();
+    const jeton = Symbol("cycle-1");
+    p.reclamer(jeton);
+    expect(p.estPossedePar(jeton)).toBe(true);
+  });
+
+  it("un jeton plus récent reprend toujours la main, y compris après un précédent succès", () => {
+    const p = creerProprieteUnique<symbol>();
+    const jeton1 = Symbol("cycle-1");
+    p.reclamer(jeton1);
+    p.liberer(jeton1); // succès du 1er cycle
+
+    // Contrairement au registre à ids réels, RIEN n'empêche un second cycle
+    // de réclamer à nouveau ce même slot — le reste non chargé n'est jamais
+    // "terminal".
+    const jeton2 = Symbol("cycle-2");
+    p.reclamer(jeton2);
+    expect(p.estPossedePar(jeton2)).toBe(true);
+    expect(p.estPossedePar(jeton1)).toBe(false);
+  });
+
+  it("libérer() ne retire que la propriété du jeton correspondant", () => {
+    const p = creerProprieteUnique<symbol>();
+    const jetonA = Symbol("A");
+    const jetonB = Symbol("B");
+    p.reclamer(jetonA);
+    p.reclamer(jetonB); // B a repris la main
+    p.liberer(jetonA); // A tente de libérer ce qu'il ne possède plus
+
+    expect(p.estPossedePar(jetonB)).toBe(true);
+  });
+});
+
 /**
- * Scénarios de concurrence exigés en revue (round 3), exercés via les MÊMES
+ * Scénarios de concurrence exigés en revue, exercés via les MÊMES
  * orchestrateurs que `socket.tsx` (demarrerMarquerLue, demarrerToutMarquerLu,
  * confirmerSucces, annulerApresEchec) — aucune logique parallèle réécrite ici.
- * `etat` est réassigné pas à pas comme le serait `etatRef.current` dans le
- * composant réel, jamais lu/écrit "en parallèle" par accident : chaque étape
- * représente un évènement asynchrone résolu dans un ordre précis et contrôlé.
  */
 describe("Scénarios de concurrence individuel/global (mêmes orchestrateurs que socket.tsx)", () => {
   function etatInitial(): EtatNotifications<Notif> {
@@ -174,19 +270,20 @@ describe("Scénarios de concurrence individuel/global (mêmes orchestrateurs que
 
   it("1) individuel en vol → global réussi → individuel échoué : le succès global l'emporte", () => {
     const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
     let etat = etatInitial();
 
     const individuel = demarrerMarquerLue(etat, "1", registre);
     etat = individuel.etat;
     expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(true);
 
-    const global = demarrerToutMarquerLu(etat, registre);
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
     etat = global.etat;
 
-    etat = confirmerSucces(etat, global.idsReclames, registre);
+    etat = confirmerSucces(etat, global, registre, registreReste);
 
-    const resultat = annulerApresEchec(etat, individuel.idsReclames, individuel.jeton, individuel.resteNonLuesAvant, registre);
-    expect(resultat).toBeNull(); // l'individuel ne possède plus "1" : rien à annuler
+    const resultat = annulerApresEchec(etat, individuel, registre, registreReste);
+    expect(resultat).toBeNull();
 
     expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(true);
     expect(etat.notifications.find((n) => n.id === "2")?.lu).toBe(true);
@@ -195,26 +292,22 @@ describe("Scénarios de concurrence individuel/global (mêmes orchestrateurs que
 
   it("2) individuel en vol → global échoué → individuel réussi : la lecture individuelle reste acquise", () => {
     const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
     let etat = etatInitial();
 
     const individuel = demarrerMarquerLue(etat, "1", registre);
     etat = individuel.etat;
 
-    const global = demarrerToutMarquerLu(etat, registre);
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
     etat = global.etat;
 
-    const resultatGlobal = annulerApresEchec(etat, global.idsReclames, global.jeton, global.resteNonLuesAvant, registre);
+    const resultatGlobal = annulerApresEchec(etat, global, registre, registreReste);
     expect(resultatGlobal).not.toBeNull();
     etat = resultatGlobal!;
-    // "1" avait été marqué lu par l'individuel (pas par le global lui-même) —
-    // le rollback global le repasse temporairement à non lu, en attendant
-    // que l'issue réelle de l'appel individuel soit connue.
     expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(false);
     expect(etat.notifications.find((n) => n.id === "2")?.lu).toBe(false);
 
-    // L'appel individuel réussit ensuite : il réaffirme "1" comme lu, quelle
-    // que soit l'issue déjà connue du global.
-    etat = confirmerSucces(etat, individuel.idsReclames, registre);
+    etat = confirmerSucces(etat, individuel, registre, registreReste);
     expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(true);
     expect(etat.notifications.find((n) => n.id === "2")?.lu).toBe(false);
     expect(compterNonLues(etat)).toBe(1);
@@ -222,42 +315,41 @@ describe("Scénarios de concurrence individuel/global (mêmes orchestrateurs que
 
   it("3) individuel et global échouent tous les deux, individuel en premier : tout redevient non lu", () => {
     const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
     let etat = etatInitial();
 
     const individuel = demarrerMarquerLue(etat, "1", registre);
     etat = individuel.etat;
-    const global = demarrerToutMarquerLu(etat, registre);
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
     etat = global.etat;
 
-    const resultatIndividuel = annulerApresEchec(etat, individuel.idsReclames, individuel.jeton, individuel.resteNonLuesAvant, registre);
-    expect(resultatIndividuel).toBeNull(); // propriété déjà reprise par le global
-    // etat inchangé par cet échec
+    const resultatIndividuel = annulerApresEchec(etat, individuel, registre, registreReste);
+    expect(resultatIndividuel).toBeNull();
 
-    const resultatGlobal = annulerApresEchec(etat, global.idsReclames, global.jeton, global.resteNonLuesAvant, registre);
+    const resultatGlobal = annulerApresEchec(etat, global, registre, registreReste);
     expect(resultatGlobal).not.toBeNull();
     etat = resultatGlobal!;
 
     expect(etat.notifications.every((n) => !n.lu)).toBe(true);
-    expect(compterNonLues(etat)).toBe(2); // les DEUX notifications, pas seulement celle du global
+    expect(compterNonLues(etat)).toBe(2);
   });
 
   it("4) individuel et global échouent tous les deux, global en premier : tout redevient non lu", () => {
     const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
     let etat = etatInitial();
 
     const individuel = demarrerMarquerLue(etat, "1", registre);
     etat = individuel.etat;
-    const global = demarrerToutMarquerLu(etat, registre);
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
     etat = global.etat;
 
-    const resultatGlobal = annulerApresEchec(etat, global.idsReclames, global.jeton, global.resteNonLuesAvant, registre);
+    const resultatGlobal = annulerApresEchec(etat, global, registre, registreReste);
     expect(resultatGlobal).not.toBeNull();
     etat = resultatGlobal!;
     expect(etat.notifications.every((n) => !n.lu)).toBe(true);
 
-    // L'individuel échoue ensuite : il ne possède plus "1" (repris puis
-    // libéré par le rollback global) — rien à annuler une seconde fois.
-    const resultatIndividuel = annulerApresEchec(etat, individuel.idsReclames, individuel.jeton, individuel.resteNonLuesAvant, registre);
+    const resultatIndividuel = annulerApresEchec(etat, individuel, registre, registreReste);
     expect(resultatIndividuel).toBeNull();
 
     expect(etat.notifications.every((n) => !n.lu)).toBe(true);
@@ -271,38 +363,35 @@ describe("Scénarios de concurrence individuel/global (mêmes orchestrateurs que
     const premier = demarrerMarquerLue(etat, "1", registre);
     expect(premier.aDemarre).toBe(true);
 
-    // Le second appel lit l'état DÉJÀ optimiste du premier (comme le ferait
-    // `etatRef.current` en production) — "1" y est déjà lu.
     const second = demarrerMarquerLue(premier.etat, "1", registre);
-    expect(second.aDemarre).toBe(false); // rien à faire : pas de requête réseau, pas de réclamation
+    expect(second.aDemarre).toBe(false);
 
-    // Si le premier échoue ensuite, il possède toujours "1" (jamais repris) :
-    const resultat = annulerApresEchec(premier.etat, premier.idsReclames, premier.jeton, premier.resteNonLuesAvant, registre);
+    const registreReste = creerProprieteUnique<symbol>();
+    const resultat = annulerApresEchec(premier.etat, premier, registre, registreReste);
     expect(resultat).not.toBeNull();
     expect(resultat!.notifications.find((n) => n.id === "1")?.lu).toBe(false);
   });
 
   it("6) compteur global (120) très supérieur au nombre de notifications chargées (2) : restauré fidèlement, pas à 2", () => {
     const registre = creerRegistreDePropriete<symbol>();
-    // 120 non lues au total côté serveur, mais seules 2 sont chargées localement.
+    const registreReste = creerProprieteUnique<symbol>();
     let etat: EtatNotifications<Notif> = {
       notifications: [
         { id: "1", lu: false, titre: "A" },
         { id: "2", lu: false, titre: "B" },
       ],
-      resteNonLues: 118, // 120 - 2 chargées
+      resteNonLues: 118,
     };
     expect(compterNonLues(etat)).toBe(120);
 
-    const global = demarrerToutMarquerLu(etat, registre);
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
     etat = global.etat;
-    expect(compterNonLues(etat)).toBe(0); // tout optimistiquement lu, chargé ou non
+    expect(compterNonLues(etat)).toBe(0);
 
-    const resultat = annulerApresEchec(etat, global.idsReclames, global.jeton, global.resteNonLuesAvant, registre);
+    const resultat = annulerApresEchec(etat, global, registre, registreReste);
     expect(resultat).not.toBeNull();
     etat = resultat!;
 
-    // Exigence explicite de la revue : revient à 120, pas à 2.
     expect(compterNonLues(etat)).toBe(120);
     expect(etat.resteNonLues).toBe(118);
     expect(etat.notifications.every((n) => !n.lu)).toBe(true);
@@ -310,50 +399,211 @@ describe("Scénarios de concurrence individuel/global (mêmes orchestrateurs que
 
   it("7a) notification Socket.io reçue pendant une réussite : conservée telle quelle, comptée en plus", () => {
     const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
     let etat = etatInitial();
 
-    const global = demarrerToutMarquerLu(etat, registre);
-    etat = global.etat; // "1" et "2" lus, resteNonLues 0 → compterNonLues = 0
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
+    etat = global.etat;
 
-    // Une notification "3" arrive PENDANT l'appel réseau (avant sa résolution).
     etat = { notifications: [{ id: "3", lu: false, titre: "Nouvelle" }, ...etat.notifications], resteNonLues: etat.resteNonLues };
-    expect(compterNonLues(etat)).toBe(1); // uniquement la nouvelle arrivée
+    expect(compterNonLues(etat)).toBe(1);
 
-    etat = confirmerSucces(etat, global.idsReclames, registre);
+    etat = confirmerSucces(etat, global, registre, registreReste);
 
-    expect(etat.notifications.find((n) => n.id === "3")).toBeTruthy();
-    expect(etat.notifications.find((n) => n.id === "3")?.lu).toBe(false); // jamais touchée par la confirmation du global
+    expect(etat.notifications.find((n) => n.id === "3")?.lu).toBe(false);
     expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(true);
-    expect(compterNonLues(etat)).toBe(1); // toujours uniquement la nouvelle arrivée
+    expect(compterNonLues(etat)).toBe(1);
   });
 
   it("7b) notification Socket.io reçue pendant un rollback : conservée telle quelle, comptée en plus", () => {
     const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
     let etat = etatInitial();
 
-    const global = demarrerToutMarquerLu(etat, registre);
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
     etat = global.etat;
 
-    // Une notification "3" arrive PENDANT l'appel réseau, qui échoue ensuite.
     etat = { notifications: [{ id: "3", lu: false, titre: "Nouvelle" }, ...etat.notifications], resteNonLues: etat.resteNonLues };
 
-    const resultat = annulerApresEchec(etat, global.idsReclames, global.jeton, global.resteNonLuesAvant, registre);
+    const resultat = annulerApresEchec(etat, global, registre, registreReste);
     expect(resultat).not.toBeNull();
     etat = resultat!;
 
-    // "1" et "2" restaurés à non lu (le global les avait marqués lus) ; "3"
-    // n'a jamais été touché par le rollback (il n'en faisait pas partie).
     expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(false);
     expect(etat.notifications.find((n) => n.id === "2")?.lu).toBe(false);
     expect(etat.notifications.find((n) => n.id === "3")?.lu).toBe(false);
-    expect(compterNonLues(etat)).toBe(3); // les 2 restaurées + la nouvelle arrivée, aucune perdue ni comptée en double
+    expect(compterNonLues(etat)).toBe(3);
+  });
+});
+
+/**
+ * Corrections round 4 : cycles répétés du "reste non chargé" et réaffirmation
+ * après une réussite globale malgré une réinjection concurrente périmée.
+ */
+describe("Cycles du reste non chargé (round 4)", () => {
+  it("1) resteNonLues>0 → 1er global réussi → nouvelles non chargées apparaissent → 2e global démarré puis échoué : restauration exacte du NOUVEAU resteNonLues", () => {
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+    let etat: EtatNotifications<Notif> = {
+      notifications: [{ id: "1", lu: false, titre: "A" }],
+      resteNonLues: 50,
+    };
+
+    // 1er cycle global, réussi : libère le slot sans le "confirmer" définitivement.
+    const global1 = demarrerToutMarquerLu(etat, registre, registreReste);
+    etat = global1.etat;
+    expect(etat.resteNonLues).toBe(0);
+    etat = confirmerSucces(etat, global1, registre, registreReste);
+    expect(compterNonLues(etat)).toBe(0);
+
+    // De nouvelles notifications non chargées apparaissent côté serveur
+    // (ex. rechargement d'historique) : resteNonLues remonte à 30.
+    etat = { ...etat, resteNonLues: 30 };
+
+    // 2e cycle global : DOIT pouvoir réclamer le slot à nouveau (ce qui
+    // échouait avant la correction, le slot étant resté "confirmé").
+    const global2 = demarrerToutMarquerLu(etat, registre, registreReste);
+    expect(global2.aDemarre).toBe(true);
+    etat = global2.etat;
+    expect(etat.resteNonLues).toBe(0);
+
+    const resultat = annulerApresEchec(etat, global2, registre, registreReste);
+    expect(resultat).not.toBeNull();
+    etat = resultat!;
+
+    // Restauré au NOUVEAU resteNonLues (30), pas resté bloqué à 0 ni retombé à l'ancien (50).
+    expect(etat.resteNonLues).toBe(30);
   });
 
-  it("le reste non chargé (ID_RESTE_NON_CHARGE) n'est jamais réclamé par une action individuelle", () => {
+  it("2) global en vol → historique ancien réinjecté (notifications ET resteNonLues périmés) → succès global : compteur final cohérent à zéro pour le périmètre confirmé", () => {
     const registre = creerRegistreDePropriete<symbol>();
-    const etat: EtatNotifications<Notif> = { notifications: [{ id: "1", lu: false, titre: "A" }], resteNonLues: 50 };
+    const registreReste = creerProprieteUnique<symbol>();
+    let etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "2", lu: false, titre: "B" },
+      ],
+      resteNonLues: 10,
+    };
 
-    const individuel = demarrerMarquerLue(etat, "1", registre);
-    expect(individuel.idsReclames).not.toContain(ID_RESTE_NON_CHARGE);
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
+    etat = global.etat; // optimiste : "1" et "2" lus, resteNonLues 0
+
+    // Un `chargerHistorique()` concurrent (ex. reconnexion) résout PENDANT
+    // l'appel réseau du global et réinjecte un instantané périmé — antérieur
+    // à la lecture globale, donc encore non lu côté client à ce moment-là.
+    etat = {
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "2", lu: false, titre: "B" },
+      ],
+      resteNonLues: 10,
+    };
+
+    // Le global réussit malgré cette réinjection intercalée.
+    etat = confirmerSucces(etat, global, registre, registreReste);
+
+    expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(true);
+    expect(etat.notifications.find((n) => n.id === "2")?.lu).toBe(true);
+    expect(etat.resteNonLues).toBe(0); // réaffirmé, pas laissé à 10
+    expect(compterNonLues(etat)).toBe(0);
+  });
+});
+
+/**
+ * Isolation par génération de session (round 4). `socket.tsx` capture la
+ * génération courante au démarrage de chaque opération et la revérifie
+ * après l'attente réseau ; en cas de péremption (déconnexion, changement
+ * d'utilisateur), le résultat est intégralement ignoré. Ces tests
+ * reproduisent fidèlement cette structure (même gate, mêmes orchestrateurs)
+ * sans pouvoir monter le composant réel (jsdom/@testing-library absents —
+ * voir docs/ui/README.md).
+ */
+describe("Isolation par génération de session (round 4)", () => {
+  function gate<T>(estPerimee: boolean, action: () => T): T | "ignore" {
+    return estPerimee ? "ignore" : action();
+  }
+
+  it("1) action de A → déconnexion → échec tardif : l'état déconnecté (vide) n'est jamais modifié", () => {
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+    let generation = 1; // session de A
+
+    let etatDeA: EtatNotifications<Notif> = { notifications: [{ id: "1", lu: false, titre: "A" }], resteNonLues: 0 };
+    const generationCapturee = generation;
+    const demarrage = demarrerMarquerLue(etatDeA, "1", registre);
+    etatDeA = demarrage.etat;
+
+    // A se déconnecte pendant que la requête est en vol.
+    generation += 1;
+    let etatAffiche: EtatNotifications<Notif> = { notifications: [], resteNonLues: 0 }; // déconnecté
+
+    // La requête échoue APRÈS la déconnexion.
+    const resultat = gate(generation !== generationCapturee, () =>
+      annulerApresEchec(etatDeA, demarrage, registre, registreReste),
+    );
+
+    expect(resultat).toBe("ignore"); // jamais exécuté : la génération a changé
+    expect(etatAffiche).toEqual({ notifications: [], resteNonLues: 0 });
+  });
+
+  it("2) action de A → connexion de B → succès tardif de A : l'état de B reste intact", () => {
+    const registreA = creerRegistreDePropriete<symbol>();
+    const registreResteA = creerProprieteUnique<symbol>();
+    let generation = 1; // session de A
+
+    let etatDeA: EtatNotifications<Notif> = { notifications: [{ id: "1", lu: false, titre: "A" }], resteNonLues: 0 };
+    const generationCapturee = generation;
+    const demarrage = demarrerMarquerLue(etatDeA, "1", registreA);
+    etatDeA = demarrage.etat;
+
+    // B se connecte : nouvelle génération, nouveaux registres et nouvel état,
+    // exactement comme le fait le SocketProvider réel à chaque changement
+    // d'utilisateur.
+    generation += 1;
+    const registreB = creerRegistreDePropriete<symbol>();
+    const registreResteB = creerProprieteUnique<symbol>();
+    let etatDeB: EtatNotifications<Notif> = { notifications: [{ id: "9", lu: false, titre: "Notif de B" }], resteNonLues: 3 };
+    const etatDeBAvant = etatDeB;
+
+    // La requête de A réussit APRÈS la connexion de B.
+    const resultat = gate(generation !== generationCapturee, () =>
+      confirmerSucces(etatDeA, demarrage, registreA, registreResteA),
+    );
+
+    expect(resultat).toBe("ignore");
+    expect(etatDeB).toEqual(etatDeBAvant); // état de B jamais touché
+    expect(compterNonLues(etatDeB)).toBe(4); // resteNonLues (3) + 1 non lue dans le tableau ("9")
+    // Les registres de B, distincts de ceux de A, n'ont reçu aucune réclamation de A.
+    expect(registreB.idsEncoreReclamesPar(["1"], demarrage.jeton)).toEqual([]);
+  });
+
+  it("3) action de A → connexion de B → échec tardif de A : état et compteur de B intacts", () => {
+    const registreA = creerRegistreDePropriete<symbol>();
+    const registreResteA = creerProprieteUnique<symbol>();
+    let generation = 1;
+
+    let etatDeA: EtatNotifications<Notif> = { notifications: [{ id: "1", lu: false, titre: "A" }], resteNonLues: 0 };
+    const generationCapturee = generation;
+    const demarrage = demarrerMarquerLue(etatDeA, "1", registreA);
+    etatDeA = demarrage.etat;
+
+    generation += 1; // connexion de B
+    let etatDeB: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "9", lu: false, titre: "Notif de B" },
+        { id: "10", lu: true, titre: "Autre" },
+      ],
+      resteNonLues: 7,
+    };
+    const compteurDeBAvant = compterNonLues(etatDeB);
+
+    const resultat = gate(generation !== generationCapturee, () =>
+      annulerApresEchec(etatDeA, demarrage, registreA, registreResteA),
+    );
+
+    expect(resultat).toBe("ignore");
+    expect(compterNonLues(etatDeB)).toBe(compteurDeBAvant);
+    expect(etatDeB.notifications).toHaveLength(2);
   });
 });

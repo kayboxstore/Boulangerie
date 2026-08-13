@@ -17,9 +17,11 @@ import { api, getToken } from "./api";
 import { useAuth } from "./auth";
 import { emettreToast } from "@/components/toast/toastBus";
 import {
+  ajouterNotificationAvecPlafond,
   annulerApresEchec,
   compterNonLues,
   confirmerSucces,
+  creerProprieteUnique,
   creerRegistreDePropriete,
   demarrerMarquerLue,
   demarrerToutMarquerLu,
@@ -65,16 +67,32 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     setNonLues(compterNonLues(etat));
   }, []);
 
-  // Registre de propriété par identifiant (voir lib/notificationsRollback.ts) :
-  // survit aux re-rendus (useRef) pour que marquerLue et toutMarquerLu, même
-  // concurrents, sachent lequel des deux a le droit d'annuler quoi en cas
-  // d'échec réseau.
+  // Registres de propriété (voir lib/notificationsRollback.ts) : l'un pour
+  // les identifiants réels (terminal une fois confirmé), l'autre — à slot
+  // unique, jamais terminal — pour le "reste non chargé", qui peut légitimement
+  // redevenir non nul à chaque nouveau cycle `toutMarquerLu` (correction round 4).
   const registrePropriete = useRef(creerRegistreDePropriete<symbol>());
+  const registreReste = useRef(creerProprieteUnique<symbol>());
+
+  // Génération de session (correction round 4) : incrémentée à chaque entrée
+  // dans l'effet de connexion (connexion, changement d'utilisateur,
+  // déconnexion). Une opération capture la génération courante à son
+  // démarrage et la revérifie après l'attente réseau — si elle a changé
+  // (l'utilisateur s'est déconnecté, ou un autre utilisateur s'est connecté
+  // pendant que la requête était en vol), le résultat est intégralement
+  // ignoré : ni mise à jour d'état, ni toast. Les registres eux-mêmes sont
+  // recréés à chaque changement de génération, pour qu'aucune réclamation de
+  // la session précédente ne puisse influencer la suivante.
+  const generationRef = useRef(0);
 
   // Connexion Socket.io authentifiée — vit tant que l'utilisateur est connecté.
   // socket.io-client gère la reconnexion automatique ; à chaque reconnexion on
   // recharge l'historique pour rattraper ce qui a été manqué hors ligne.
   useEffect(() => {
+    generationRef.current += 1;
+    registrePropriete.current = creerRegistreDePropriete<symbol>();
+    registreReste.current = creerProprieteUnique<symbol>();
+
     if (!utilisateur) {
       appliquerEtat({ notifications: [], resteNonLues: 0 });
       setStatut("deconnecte");
@@ -133,13 +151,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
       socket.on("notification", (notification) => {
         if (!actif) return;
-        // Une arrivée temps réel ne touche jamais `resteNonLues` : la
-        // nouvelle notification est directement ajoutée au tableau chargé,
-        // et `compterNonLues` la comptabilise automatiquement (non lue).
-        appliquerEtat({
-          notifications: [notification, ...etatRef.current.notifications].slice(0, MAX_FEED),
-          resteNonLues: etatRef.current.resteNonLues,
-        });
+        // Plafonnement MAX_FEED : toute notification non lue expulsée du
+        // tableau bascule dans `resteNonLues` plutôt que de disparaître
+        // silencieusement (correction round 4).
+        appliquerEtat(ajouterNotificationAvecPlafond(etatRef.current, notification, MAX_FEED));
         // Rafraîchit les listes concernées par l'événement, sans rechargement.
         if (notification.module === "COMMANDES") {
           queryClient.invalidateQueries({ queryKey: ["commandes"] });
@@ -189,6 +204,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   // notificationsRollback.test.ts, sans aucune logique parallèle ici.
   const marquerLue = useCallback(
     async (id: string) => {
+      const generation = generationRef.current;
       const demarrage = demarrerMarquerLue(etatRef.current, id, registrePropriete.current);
       if (!demarrage.aDemarre) return; // déjà lue ou introuvable : rien à faire, rien à annuler
 
@@ -196,15 +212,16 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
       try {
         await api(`/api/notifications/${id}/lu`, { method: "POST" });
-        appliquerEtat(confirmerSucces(etatRef.current, demarrage.idsReclames, registrePropriete.current));
+        // Isolation par session (round 4) : si l'utilisateur s'est déconnecté
+        // ou qu'un autre s'est connecté pendant l'attente réseau, ce succès
+        // ne doit avoir AUCUN effet sur l'état affiché — ni mise à jour, ni
+        // toast, ni écriture dans un registre qui a déjà été recréé pour la
+        // nouvelle session.
+        if (generationRef.current !== generation) return;
+        appliquerEtat(confirmerSucces(etatRef.current, demarrage, registrePropriete.current, registreReste.current));
       } catch {
-        const resultat = annulerApresEchec(
-          etatRef.current,
-          demarrage.idsReclames,
-          demarrage.jeton,
-          demarrage.resteNonLuesAvant,
-          registrePropriete.current,
-        );
+        if (generationRef.current !== generation) return;
+        const resultat = annulerApresEchec(etatRef.current, demarrage, registrePropriete.current, registreReste.current);
         if (resultat === null) return; // une action plus récente (ex. toutMarquerLu) a repris la main entre-temps
         appliquerEtat(resultat);
         emettreToast({ variante: "erreur", message: t("premium.socket.echecMarquerLue") });
@@ -214,22 +231,19 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   );
 
   const toutMarquerLu = useCallback(async () => {
-    const demarrage = demarrerToutMarquerLu(etatRef.current, registrePropriete.current);
+    const generation = generationRef.current;
+    const demarrage = demarrerToutMarquerLu(etatRef.current, registrePropriete.current, registreReste.current);
     if (!demarrage.aDemarre) return;
 
     appliquerEtat(demarrage.etat);
 
     try {
       await api("/api/notifications/lu", { method: "POST" });
-      appliquerEtat(confirmerSucces(etatRef.current, demarrage.idsReclames, registrePropriete.current));
+      if (generationRef.current !== generation) return;
+      appliquerEtat(confirmerSucces(etatRef.current, demarrage, registrePropriete.current, registreReste.current));
     } catch {
-      const resultat = annulerApresEchec(
-        etatRef.current,
-        demarrage.idsReclames,
-        demarrage.jeton,
-        demarrage.resteNonLuesAvant,
-        registrePropriete.current,
-      );
+      if (generationRef.current !== generation) return;
+      const resultat = annulerApresEchec(etatRef.current, demarrage, registrePropriete.current, registreReste.current);
       if (resultat === null) return;
       appliquerEtat(resultat);
       emettreToast({ variante: "erreur", message: t("premium.socket.echecToutMarquerLu") });

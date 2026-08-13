@@ -15,11 +15,22 @@
  *   (`toutMarquerLu` réclame TOUS les ids actuels, pas seulement ceux
  *   qu'il modifie lui-même) et redéfinition du compteur non lu comme une
  *   valeur DÉRIVÉE (`resteNonLues` + décompte du tableau chargé) plutôt
- *   qu'un delta suivi indépendamment — un delta scalaire s'est révélé
- *   incorrect dès qu'une action reprend la propriété d'un identifiant déjà
- *   optimistiquement modifié par une autre (le delta de la seconde action
- *   ne "voit" pas la réduction déjà appliquée par la première si les deux
- *   finissent par échouer).
+ *   qu'un delta suivi indépendamment.
+ * - round 4 : le "reste non chargé" n'est plus un identifiant confirmable
+ *   au même titre qu'une notification réelle (une notification, une fois
+ *   lue, le reste pour toujours ; le reste non chargé, lui, est un agrégat
+ *   qui évolue à chaque nouveau cycle — le confirmer définitivement bloquait
+ *   tout cycle `toutMarquerLu` ultérieur). Il utilise désormais un slot de
+ *   propriété dédié, toujours réclamable (`creerProprieteUnique`). Un succès
+ *   global réaffirme aussi `resteNonLues = 0` pour SON périmètre (pas
+ *   seulement les identifiants réels), pour ne pas rester incohérent si un
+ *   rechargement d'historique concurrent avait réinjecté une valeur
+ *   périmée. Le plafonnement `MAX_FEED` (dans socket.tsx) doit désormais
+ *   transférer vers `resteNonLues` toute notification non lue expulsée du
+ *   tableau (`ajouterNotificationAvecPlafond`). Les opérations sont enfin
+ *   isolées par génération de session (voir socket.tsx) pour qu'une requête
+ *   commencée par un utilisateur ne puisse jamais modifier l'état affiché
+ *   après sa déconnexion ou la connexion d'un autre utilisateur.
  */
 
 export interface NotificationAvecLecture {
@@ -67,16 +78,6 @@ export function annulerLectureCiblee<T extends NotificationAvecLecture>(
   return notifications.map((n) => (ensemble.has(n.id) && n.lu ? { ...n, lu: false } : n));
 }
 
-/**
- * Identifiant réservé représentant les notifications non lues qui existent
- * côté serveur mais ne sont PAS chargées dans le tableau (l'API ne charge
- * qu'un sous-ensemble). Seul `toutMarquerLu` peut le réclamer/le restaurer —
- * aucune action individuelle ne porte sur des identifiants non chargés, donc
- * aucune concurrence possible sur ce point précis (contrairement aux ids
- * réels, potentiellement disputés entre une action individuelle et globale).
- */
-export const ID_RESTE_NON_CHARGE = "__reste_non_charge__";
-
 export interface EtatNotifications<T extends NotificationAvecLecture> {
   notifications: T[];
   /** Non lues côté serveur mais absentes de `notifications` (ex. au-delà de la page chargée). */
@@ -85,23 +86,45 @@ export interface EtatNotifications<T extends NotificationAvecLecture> {
 
 /**
  * Nombre total de notifications non lues À AFFICHER — toujours DÉRIVÉ,
- * jamais stocké indépendamment (voir l'historique des corrections en tête
- * de fichier). Combine ce qui n'est pas chargé (`resteNonLues`) et le
- * décompte réel du tableau chargé, qui reflète fidèlement chaque
- * modification déjà appliquée via les fonctions ci-dessus.
+ * jamais stocké indépendamment. Combine ce qui n'est pas chargé
+ * (`resteNonLues`) et le décompte réel du tableau chargé.
  */
 export function compterNonLues<T extends NotificationAvecLecture>(etat: EtatNotifications<T>): number {
   return etat.resteNonLues + etat.notifications.filter((n) => !n.lu).length;
 }
 
 /**
- * Registre de "propriété" par identifiant. Trois états possibles par id :
- * non réclamé, réclamé par un jeton (en attente de résolution réseau), ou
- * CONFIRMÉ (terminal — un succès réseau a eu lieu, pour n'importe quelle
- * action ; plus aucune reprise ni rollback futur ne peut l'affecter). Le
- * passage à "confirmé" est volontairement irréversible : dans ce modèle, un
- * identifiant ne peut jamais redevenir non lu autrement que par une nouvelle
- * notification distincte, jamais par une correction rétroactive.
+ * Ajoute une notification arrivée en temps réel, en respectant le plafond
+ * d'éléments chargés (`MAX_FEED`). Si l'ajout fait dépasser le plafond, les
+ * éléments expulsés (les plus anciens) qui étaient encore NON LUS
+ * transfèrent leur "non-lu" vers `resteNonLues` — sans quoi le compteur
+ * affiché deviendrait inférieur au compteur réel (correction demandée en
+ * revue, round 4 : une notification non lue expulsée du tableau reste non
+ * lue côté serveur, elle ne doit pas disparaître silencieusement).
+ */
+export function ajouterNotificationAvecPlafond<T extends NotificationAvecLecture>(
+  etat: EtatNotifications<T>,
+  nouvelle: T,
+  plafond: number,
+): EtatNotifications<T> {
+  const combinees = [nouvelle, ...etat.notifications];
+  if (combinees.length <= plafond) {
+    return { notifications: combinees, resteNonLues: etat.resteNonLues };
+  }
+  const conservees = combinees.slice(0, plafond);
+  const expulsees = combinees.slice(plafond);
+  const nonLuesExpulsees = expulsees.filter((n) => !n.lu).length;
+  return { notifications: conservees, resteNonLues: etat.resteNonLues + nonLuesExpulsees };
+}
+
+/**
+ * Registre de "propriété" par identifiant RÉEL. Trois états possibles par
+ * id : non réclamé, réclamé par un jeton (en attente de résolution réseau),
+ * ou CONFIRMÉ (terminal — un succès réseau a eu lieu, pour n'importe quelle
+ * action ; plus aucune reprise ni rollback futur ne peut l'affecter). Ce
+ * caractère terminal est correct pour une notification réelle (une fois
+ * lue, elle le reste) — voir `creerProprieteUnique` ci-dessous pour le
+ * "reste non chargé", qui n'a PAS cette propriété de terminalité.
  */
 export function creerRegistreDePropriete<Jeton>() {
   type EtatId = { statut: "reclame"; jeton: Jeton } | { statut: "confirme" };
@@ -138,13 +161,41 @@ export function creerRegistreDePropriete<Jeton>() {
 
 export type RegistrePropriete = ReturnType<typeof creerRegistreDePropriete<symbol>>;
 
+/**
+ * Propriété à SLOT UNIQUE, sans notion de confirmation terminale — utilisée
+ * pour le "reste non chargé", qui contrairement à une notification réelle
+ * n'est jamais définitivement figé (de nouvelles notifications non chargées
+ * peuvent réapparaître à tout moment, à chaque nouveau cycle `toutMarquerLu`).
+ * Réclamer écrase toujours le propriétaire précédent, y compris après un
+ * succès — un succès se contente de LIBÉRER, jamais de verrouiller.
+ */
+export function creerProprieteUnique<Jeton>() {
+  let proprietaire: Jeton | null = null;
+  return {
+    reclamer(jeton: Jeton): void {
+      proprietaire = jeton;
+    },
+    liberer(jeton: Jeton): void {
+      if (proprietaire === jeton) proprietaire = null;
+    },
+    estPossedePar(jeton: Jeton): boolean {
+      return proprietaire === jeton;
+    },
+  };
+}
+
+export type ProprieteUnique = ReturnType<typeof creerProprieteUnique<symbol>>;
+
 export interface DemarrageAction<T extends NotificationAvecLecture> {
   etat: EtatNotifications<T>;
   jeton: symbol;
   /** false = rien à faire ; l'appelant ne doit alors ni envoyer de requête réseau ni traiter succès/échec. */
   aDemarre: boolean;
+  /** Identifiants RÉELS réclamés dans `registre` (jamais de marqueur synthétique mélangé). */
   idsReclames: string[];
-  /** Valeur de `resteNonLues` à restaurer en cas d'échec — pertinent uniquement si `ID_RESTE_NON_CHARGE` fait partie de `idsReclames`. */
+  /** true pour `toutMarquerLu` : cette action a aussi la charge du "reste non chargé" (`registreReste`). */
+  gereLeReste: boolean;
+  /** Valeur de `resteNonLues` à restaurer en cas d'échec — pertinent uniquement si `gereLeReste`. */
   resteNonLuesAvant: number;
 }
 
@@ -160,7 +211,7 @@ export function demarrerMarquerLue<T extends NotificationAvecLecture>(
 ): DemarrageAction<T> {
   const { notifications, aChange } = marquerIdCommeLu(etat.notifications, id);
   if (!aChange) {
-    return { etat, jeton: Symbol("inutilise"), aDemarre: false, idsReclames: [], resteNonLuesAvant: 0 };
+    return { etat, jeton: Symbol("inutilise"), aDemarre: false, idsReclames: [], gereLeReste: false, resteNonLuesAvant: 0 };
   }
   const jeton = Symbol("marquerLue");
   registre.reclamer([id], jeton);
@@ -169,88 +220,106 @@ export function demarrerMarquerLue<T extends NotificationAvecLecture>(
     jeton,
     aDemarre: true,
     idsReclames: [id],
-    resteNonLuesAvant: 0, // une action individuelle ne touche jamais `resteNonLues`
+    gereLeReste: false, // une action individuelle ne touche jamais `resteNonLues`
+    resteNonLuesAvant: 0,
   };
 }
 
 /**
  * Orchestrateur pur pour une lecture GLOBALE. Réclame la propriété de TOUS
- * les identifiants actuellement chargés, plus `ID_RESTE_NON_CHARGE` — pas
- * seulement ceux qu'elle marque elle-même comme lus.
+ * les identifiants actuellement chargés (registre à ids réels) ET du slot
+ * "reste non chargé" (registre à slot unique, toujours réclamable).
  *
- * Correction demandée en revue (round 3) : réclamer seulement `idsTouches`
- * (les identifiants non lus AU MOMENT du démarrage) laisse un `marquerLue(id)`
- * déjà en vol conserver la propriété de son id, puisque cet id est déjà
- * `lu: true` localement et n'apparaît donc plus dans `idsTouches`. Si
- * `toutMarquerLu` réussit ensuite mais que le `marquerLue(id)` isolé échoue
- * après coup, son rollback individuel repasserait à tort cet id à `lu: false`
- * malgré la réussite de l'action globale. Réclamer TOUS les ids actuels
- * (lus ou non) neutralise ce cas : l'action globale l'emporte toujours sur
- * toute action individuelle plus ancienne sur le même id.
+ * Correction round 3 : réclamer seulement `idsTouches` (les identifiants non
+ * lus AU MOMENT du démarrage) laisse un `marquerLue(id)` déjà en vol
+ * conserver la propriété de son id. Réclamer TOUS les ids actuels neutralise
+ * ce cas : l'action globale l'emporte toujours sur toute action
+ * individuelle plus ancienne sur le même id.
  */
 export function demarrerToutMarquerLu<T extends NotificationAvecLecture>(
   etat: EtatNotifications<T>,
   registre: RegistrePropriete,
+  registreReste: ProprieteUnique,
 ): DemarrageAction<T> {
   const { notifications, idsTouches } = marquerTousCommeLus(etat.notifications);
   if (idsTouches.length === 0 && etat.resteNonLues === 0) {
-    return { etat, jeton: Symbol("inutilise"), aDemarre: false, idsReclames: [], resteNonLuesAvant: 0 };
+    return { etat, jeton: Symbol("inutilise"), aDemarre: false, idsReclames: [], gereLeReste: false, resteNonLuesAvant: 0 };
   }
-  const idsAReclamer = [...etat.notifications.map((n) => n.id), ID_RESTE_NON_CHARGE];
+  const idsAReclamer = etat.notifications.map((n) => n.id);
   const jeton = Symbol("toutMarquerLu");
   registre.reclamer(idsAReclamer, jeton);
+  registreReste.reclamer(jeton);
   return {
     etat: { notifications, resteNonLues: 0 },
     jeton,
     aDemarre: true,
     idsReclames: idsAReclamer,
+    gereLeReste: true,
     resteNonLuesAvant: etat.resteNonLues,
   };
 }
 
 /**
- * Succès : un succès réseau est toujours définitif. Confirme la propriété
- * (terminal, plus aucun rollback futur ne peut l'annuler) et RÉAFFIRME l'état
- * "lu" pour ces identifiants — nécessaire si une AUTRE action avait entre
- * temps repris puis perdu la propriété de l'un d'eux et l'avait remis à
- * `lu: false` par erreur avant que ce succès ne soit connu (voir le test
- * "individuel en vol → global échoué → individuel réussi").
+ * Succès : un succès réseau est toujours définitif.
+ * - Confirme la propriété des ids réels (terminal) et RÉAFFIRME leur état
+ *   "lu" — nécessaire si une AUTRE action avait entre temps repris puis
+ *   perdu leur propriété et les avait remis à `lu: false` par erreur.
+ * - Si cette action gère le reste non chargé ET qu'elle le possède encore
+ *   (aucun cycle `toutMarquerLu` plus récent ne l'a repris), réaffirme
+ *   `resteNonLues = 0` pour SON périmètre — corrige le cas où un
+ *   `chargerHistorique()` concurrent aurait réinjecté une valeur périmée
+ *   entre l'optimiste et la résolution réseau (correction round 4).
  */
 export function confirmerSucces<T extends NotificationAvecLecture>(
   etat: EtatNotifications<T>,
-  idsReclames: readonly string[],
+  demarrage: Pick<DemarrageAction<T>, "idsReclames" | "jeton" | "gereLeReste">,
   registre: RegistrePropriete,
+  registreReste: ProprieteUnique,
 ): EtatNotifications<T> {
-  registre.confirmer(idsReclames);
-  const idsReels = idsReclames.filter((id) => id !== ID_RESTE_NON_CHARGE);
-  const ensemble = new Set(idsReels);
+  registre.confirmer(demarrage.idsReclames);
+  const ensemble = new Set(demarrage.idsReclames);
   const dejaCorrect = etat.notifications.every((n) => !ensemble.has(n.id) || n.lu);
-  if (dejaCorrect) return etat; // rien à réaffirmer, évite un re-rendu inutile
-  const notifications = etat.notifications.map((n) => (ensemble.has(n.id) ? { ...n, lu: true } : n));
-  return { ...etat, notifications };
+  const notifications = dejaCorrect
+    ? etat.notifications
+    : etat.notifications.map((n) => (ensemble.has(n.id) ? { ...n, lu: true } : n));
+
+  let resteNonLues = etat.resteNonLues;
+  if (demarrage.gereLeReste && registreReste.estPossedePar(demarrage.jeton)) {
+    resteNonLues = 0;
+    registreReste.liberer(demarrage.jeton);
+  }
+
+  if (notifications === etat.notifications && resteNonLues === etat.resteNonLues) return etat;
+  return { notifications, resteNonLues };
 }
 
 /**
  * Échec : restaure UNIQUEMENT ce que ce jeton possède ENCORE au moment de
  * l'échec (jamais un remplacement complet par un instantané antérieur).
- * Renvoie `null` si une action plus récente a déjà repris la main sur tous
- * les identifiants concernés — dans ce cas il n'y a rien à annuler, et
- * l'appelant ne doit ni modifier l'état ni afficher de toast d'erreur (l'état
- * courant reflète déjà la décision de l'action qui a pris le relais).
+ * Renvoie `null` si une action plus récente a déjà repris la main sur tout
+ * ce que celle-ci gérait (ids réels ET reste non chargé) — dans ce cas il
+ * n'y a rien à annuler, et l'appelant ne doit ni modifier l'état ni
+ * afficher de toast d'erreur.
  */
 export function annulerApresEchec<T extends NotificationAvecLecture>(
   etat: EtatNotifications<T>,
-  idsReclames: readonly string[],
-  jeton: symbol,
-  resteNonLuesAvant: number,
+  demarrage: Pick<DemarrageAction<T>, "idsReclames" | "jeton" | "gereLeReste" | "resteNonLuesAvant">,
   registre: RegistrePropriete,
+  registreReste: ProprieteUnique,
 ): EtatNotifications<T> | null {
-  const idsARestaurer = registre.idsEncoreReclamesPar(idsReclames, jeton);
-  registre.liberer(idsARestaurer, jeton);
-  if (idsARestaurer.length === 0) return null;
+  const idsARestaurer = registre.idsEncoreReclamesPar(demarrage.idsReclames, demarrage.jeton);
+  registre.liberer(idsARestaurer, demarrage.jeton);
 
-  const idsReels = idsARestaurer.filter((id) => id !== ID_RESTE_NON_CHARGE);
-  const notifications = annulerLectureCiblee(etat.notifications, idsReels);
-  const resteNonLues = idsARestaurer.includes(ID_RESTE_NON_CHARGE) ? resteNonLuesAvant : etat.resteNonLues;
+  let resteNonLues = etat.resteNonLues;
+  let resteRestaure = false;
+  if (demarrage.gereLeReste && registreReste.estPossedePar(demarrage.jeton)) {
+    resteNonLues = demarrage.resteNonLuesAvant;
+    registreReste.liberer(demarrage.jeton);
+    resteRestaure = true;
+  }
+
+  if (idsARestaurer.length === 0 && !resteRestaure) return null;
+
+  const notifications = annulerLectureCiblee(etat.notifications, idsARestaurer);
   return { notifications, resteNonLues };
 }
