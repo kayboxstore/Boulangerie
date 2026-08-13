@@ -145,7 +145,8 @@ function PremiumTable<T>({
           onChange={(e) => setRecherche(e.target.value)}
           placeholder={t("premium.table.rechercherPlaceholder")}
           aria-label={t("premium.table.rechercherPlaceholder")}
-          className="max-w-sm"
+          // h-11 = 44px, local à ce champ (correction revue Codex round 3).
+          className="h-11 max-w-sm"
         />
       )}
 
@@ -171,7 +172,8 @@ function PremiumTable<T>({
                         <button
                           type="button"
                           onClick={() => basculerTri(colonne)}
-                          className="inline-flex items-center gap-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          // min-h-11 = 44px (correction revue Codex round 3).
+                          className="inline-flex min-h-11 items-center gap-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           {colonne.titre}
                           {triCle !== colonne.cle ? (

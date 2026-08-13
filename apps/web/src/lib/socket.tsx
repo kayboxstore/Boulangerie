@@ -17,10 +17,13 @@ import { api, getToken } from "./api";
 import { useAuth } from "./auth";
 import { emettreToast } from "@/components/toast/toastBus";
 import {
-  annulerLectureCiblee,
+  annulerApresEchec,
+  compterNonLues,
+  confirmerSucces,
   creerRegistreDePropriete,
-  marquerIdCommeLu,
-  marquerTousCommeLus,
+  demarrerMarquerLue,
+  demarrerToutMarquerLu,
+  type EtatNotifications,
 } from "./notificationsRollback";
 
 export type StatutConnexion = "connecte" | "reconnexion" | "deconnecte";
@@ -45,13 +48,35 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<NotificationDTO[]>([]);
   const [nonLues, setNonLues] = useState(0);
 
+  // Source canonique SYNCHRONE (correction revue Codex, round 3) : React ne
+  // garantit pas qu'un setter s'exécute avant la ligne suivante — capturer
+  // une variable dans `setNotifications(prev => ...)` puis la relire juste
+  // après (versions précédentes) n'est donc pas fiable. `etatRef` est la
+  // vérité immédiate ; `appliquerEtat` est l'UNIQUE façon de la modifier,
+  // et synchronise systématiquement la ref et l'état React exposé au
+  // contexte dans le même geste. `nonLues` exposé au contexte est toujours
+  // DÉRIVÉ via `compterNonLues` (voir notificationsRollback.ts) — jamais un
+  // compteur suivi indépendamment.
+  const etatRef = useRef<EtatNotifications<NotificationDTO>>({ notifications: [], resteNonLues: 0 });
+
+  const appliquerEtat = useCallback((etat: EtatNotifications<NotificationDTO>) => {
+    etatRef.current = etat;
+    setNotifications(etat.notifications);
+    setNonLues(compterNonLues(etat));
+  }, []);
+
+  // Registre de propriété par identifiant (voir lib/notificationsRollback.ts) :
+  // survit aux re-rendus (useRef) pour que marquerLue et toutMarquerLu, même
+  // concurrents, sachent lequel des deux a le droit d'annuler quoi en cas
+  // d'échec réseau.
+  const registrePropriete = useRef(creerRegistreDePropriete<symbol>());
+
   // Connexion Socket.io authentifiée — vit tant que l'utilisateur est connecté.
   // socket.io-client gère la reconnexion automatique ; à chaque reconnexion on
   // recharge l'historique pour rattraper ce qui a été manqué hors ligne.
   useEffect(() => {
     if (!utilisateur) {
-      setNotifications([]);
-      setNonLues(0);
+      appliquerEtat({ notifications: [], resteNonLues: 0 });
       setStatut("deconnecte");
       return;
     }
@@ -62,8 +87,14 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       api<{ notifications: NotificationDTO[]; nonLues: number }>("/api/notifications")
         .then((r) => {
           if (!actif) return;
-          setNotifications(r.notifications);
-          setNonLues(r.nonLues);
+          // Décompose le total autoritatif du serveur en "reste non chargé"
+          // + décompte du tableau reçu — voir compterNonLues, qui recombine
+          // les deux à l'affichage.
+          const nonLuesDansLeTableau = r.notifications.filter((n) => !n.lu).length;
+          appliquerEtat({
+            notifications: r.notifications,
+            resteNonLues: Math.max(0, r.nonLues - nonLuesDansLeTableau),
+          });
         })
         .catch(() => {});
     };
@@ -102,8 +133,13 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
       socket.on("notification", (notification) => {
         if (!actif) return;
-        setNotifications((prev) => [notification, ...prev].slice(0, MAX_FEED));
-        setNonLues((prev) => prev + 1);
+        // Une arrivée temps réel ne touche jamais `resteNonLues` : la
+        // nouvelle notification est directement ajoutée au tableau chargé,
+        // et `compterNonLues` la comptabilise automatiquement (non lue).
+        appliquerEtat({
+          notifications: [notification, ...etatRef.current.notifications].slice(0, MAX_FEED),
+          resteNonLues: etatRef.current.resteNonLues,
+        });
         // Rafraîchit les listes concernées par l'événement, sans rechargement.
         if (notification.module === "COMMANDES") {
           queryClient.invalidateQueries({ queryKey: ["commandes"] });
@@ -141,83 +177,64 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       socket?.disconnect();
       setStatut("deconnecte");
     };
+    // `appliquerEtat` est stable (useCallback à dépendances vides) ; `queryClient`
+    // et `deconnexionForcee` le sont également dans ce projet (contexte React
+    // stable) — dépendances inchangées par rapport à l'original pour ne pas
+    // risquer une reconnexion Socket.io à chaque rendu.
   }, [utilisateur?.id]);
 
-  // Registre de propriété par identifiant (voir lib/notificationsRollback.ts) :
-  // survit aux re-rendus (useRef) pour que marquerLue et toutMarquerLu, même
-  // concurrents, sachent lequel des deux a le droit d'annuler quoi en cas
-  // d'échec réseau. Un jeton par appel évite qu'un rollback tardif n'écrase
-  // une mutation plus récente ou déjà réussie sur le même identifiant.
-  const registrePropriete = useRef(creerRegistreDePropriete<symbol>());
-
-  // Rollback CIBLÉ (correction suite revue Codex) : on ne capture plus l'état
-  // précédent dans un setter React pour le rejouer tel quel après l'appel
-  // réseau (cela écrasait toute notification arrivée entre-temps). En cas
-  // d'échec, seul l'identifiant concerné est restauré, via un nouvel appel à
-  // `setNotifications` qui repart de l'état le plus frais — jamais d'un
-  // instantané figé avant l'attente réseau.
+  // marquerLue et toutMarquerLu délèguent l'intégralité de la décision
+  // (optimiste, propriété, restauration) aux orchestrateurs purs de
+  // notificationsRollback.ts — les MÊMES fonctions que celles exercées par
+  // notificationsRollback.test.ts, sans aucune logique parallèle ici.
   const marquerLue = useCallback(
     async (id: string) => {
-      let aChange = false;
-      setNotifications((prev) => {
-        const resultat = marquerIdCommeLu(prev, id);
-        aChange = resultat.aChange;
-        return resultat.notifications;
-      });
-      if (!aChange) return; // déjà lue ou introuvable : rien à faire, rien à annuler
+      const demarrage = demarrerMarquerLue(etatRef.current, id, registrePropriete.current);
+      if (!demarrage.aDemarre) return; // déjà lue ou introuvable : rien à faire, rien à annuler
 
-      setNonLues((c) => Math.max(0, c - 1));
-
-      const jeton = Symbol("marquerLue");
-      registrePropriete.current.reclamer([id], jeton);
+      appliquerEtat(demarrage.etat);
 
       try {
         await api(`/api/notifications/${id}/lu`, { method: "POST" });
-        registrePropriete.current.liberer([id], jeton);
+        appliquerEtat(confirmerSucces(etatRef.current, demarrage.idsReclames, registrePropriete.current));
       } catch {
-        const idsARestaurer = registrePropriete.current.idsEncorePossedesPar([id], jeton);
-        registrePropriete.current.liberer(idsARestaurer, jeton);
-        if (idsARestaurer.length === 0) return; // une action plus récente (ex. toutMarquerLu) a repris la main entre-temps
-
-        setNotifications((prev) => annulerLectureCiblee(prev, idsARestaurer));
-        setNonLues((c) => c + idsARestaurer.length);
+        const resultat = annulerApresEchec(
+          etatRef.current,
+          demarrage.idsReclames,
+          demarrage.jeton,
+          demarrage.resteNonLuesAvant,
+          registrePropriete.current,
+        );
+        if (resultat === null) return; // une action plus récente (ex. toutMarquerLu) a repris la main entre-temps
+        appliquerEtat(resultat);
         emettreToast({ variante: "erreur", message: t("premium.socket.echecMarquerLue") });
       }
     },
-    [t],
+    [t, appliquerEtat],
   );
 
   const toutMarquerLu = useCallback(async () => {
-    let idsTouches: string[] = [];
-    setNotifications((prev) => {
-      const resultat = marquerTousCommeLus(prev);
-      idsTouches = resultat.idsTouches;
-      return resultat.notifications;
-    });
-    if (idsTouches.length === 0) return;
+    const demarrage = demarrerToutMarquerLu(etatRef.current, registrePropriete.current);
+    if (!demarrage.aDemarre) return;
 
-    setNonLues(0);
-
-    // Cette action globale l'emporte sur toute action individuelle en cours
-    // pour les mêmes identifiants : un marquerLue(id) déjà en vol perd la
-    // propriété de son id et ne pourra plus l'annuler si son propre appel
-    // échoue après coup (voir notificationsRollback.test.ts).
-    const jeton = Symbol("toutMarquerLu");
-    registrePropriete.current.reclamer(idsTouches, jeton);
+    appliquerEtat(demarrage.etat);
 
     try {
       await api("/api/notifications/lu", { method: "POST" });
-      registrePropriete.current.liberer(idsTouches, jeton);
+      appliquerEtat(confirmerSucces(etatRef.current, demarrage.idsReclames, registrePropriete.current));
     } catch {
-      const idsARestaurer = registrePropriete.current.idsEncorePossedesPar(idsTouches, jeton);
-      registrePropriete.current.liberer(idsARestaurer, jeton);
-      if (idsARestaurer.length === 0) return;
-
-      setNotifications((prev) => annulerLectureCiblee(prev, idsARestaurer));
-      setNonLues((c) => c + idsARestaurer.length);
+      const resultat = annulerApresEchec(
+        etatRef.current,
+        demarrage.idsReclames,
+        demarrage.jeton,
+        demarrage.resteNonLuesAvant,
+        registrePropriete.current,
+      );
+      if (resultat === null) return;
+      appliquerEtat(resultat);
       emettreToast({ variante: "erreur", message: t("premium.socket.echecToutMarquerLu") });
     }
-  }, [t]);
+  }, [t, appliquerEtat]);
 
   const value = useMemo(
     () => ({ statut, notifications, nonLues, marquerLue, toutMarquerLu }),

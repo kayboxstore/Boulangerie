@@ -67,7 +67,8 @@ function DateHeurePicker({
         <Input
           id={idDate}
           type="date"
-          className="mt-1"
+          // h-11 = 44px, local à ce champ (correction revue Codex round 3).
+          className="mt-1 h-11"
           value={dateValue}
           min={dateMin}
           max={dateMax}
@@ -82,7 +83,7 @@ function DateHeurePicker({
         <Input
           id={idHeure}
           type="time"
-          className="mt-1"
+          className="mt-1 h-11"
           value={heureValue}
           required={requis}
           disabled={disabled}

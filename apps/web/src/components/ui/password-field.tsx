@@ -50,7 +50,11 @@ const PasswordField = React.forwardRef<HTMLInputElement, PasswordFieldProps>(
           <Input
             ref={ref}
             type={visible ? "text" : "password"}
-            className={cn("pr-12", className)}
+            // h-11 = 44px, en local à ce composant uniquement (correction
+            // revue Codex round 3) : Input reste à h-9 (36px) partout
+            // ailleurs, inchangé, pour ne pas affecter tous les écrans
+            // existants qui l'utilisent déjà.
+            className={cn("h-11 pr-12", className)}
             value={value}
             onChange={gererChangement}
             autoComplete={props.autoComplete ?? "current-password"}
