@@ -583,6 +583,54 @@ export interface RegistreCaisseDTO {
 
 
 
+// Préparation C2 — session et remise de caisse. Ces contrats enveloppent le
+// registre journalier actuel sans modifier son calcul.
+export const STATUTS_SESSION_CAISSE = ["OUVERTE", "FERMEE"] as const;
+export type StatutSessionCaisse = (typeof STATUTS_SESSION_CAISSE)[number];
+
+export const sessionCaisseOuvertureSchema = z.object({
+  date: dateISOSchema,
+  soldeOuverture: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0),
+});
+export type SessionCaisseOuvertureInput = z.infer<typeof sessionCaisseOuvertureSchema>;
+
+export const sessionCaisseFermetureSchema = z.object({
+  soldeTheoriqueFermeture: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0),
+  soldeCompteFermeture: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0),
+});
+export type SessionCaisseFermetureInput = z.infer<typeof sessionCaisseFermetureSchema>;
+
+export const remiseCaisseCreateSchema = z.object({
+  montant: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").positive("Le montant doit être positif"),
+  remisParNom: z.string().trim().min(1, "Le remettant est requis").max(120),
+  reference: z.string().trim().min(1).max(120).optional(),
+  observation: z.string().trim().max(500).optional(),
+});
+export type RemiseCaisseCreateInput = z.infer<typeof remiseCaisseCreateSchema>;
+
+export interface SessionCaisseDTO {
+  id: string;
+  date: string;
+  statut: StatutSessionCaisse;
+  soldeOuverture: number;
+  soldeTheoriqueFermeture: number | null;
+  soldeCompteFermeture: number | null;
+  ecartFermeture: number | null;
+  ouverteLe: string;
+  fermeeLe: string | null;
+}
+
+export interface RemiseCaisseDTO {
+  id: string;
+  sessionCaisseId: string;
+  montant: number;
+  remisParNom: string;
+  recuPar: { id: string; nom: string } | null;
+  reference: string | null;
+  observation: string | null;
+  dateRemise: string;
+}
+
 // ---------------------------------------------------------------------------
 // Stocks & matières premières (section 3.2)
 // ---------------------------------------------------------------------------

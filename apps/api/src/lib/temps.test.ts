@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bornesJourLomoto,
   dateSQLDepuisJourLomoto,
+  decalerJourLomoto,
   FUSEAU_LOMOTO,
   jourLomoto,
 } from "./temps.js";
@@ -20,6 +21,11 @@ describe("temps opérationnel Lomoto", () => {
     const [debut, fin] = bornesJourLomoto("2026-08-13");
     expect(debut.toISOString()).toBe("2026-08-12T23:00:00.000Z");
     expect(fin.toISOString()).toBe("2026-08-13T22:59:59.999Z");
+  });
+
+  it("décale les jours sans dépendre du fuseau du serveur", () => {
+    expect(decalerJourLomoto("2026-03-01", -1)).toBe("2026-02-28");
+    expect(decalerJourLomoto("2024-02-28", 1)).toBe("2024-02-29");
   });
 
   it("stabilise les colonnes SQL de type date", () => {

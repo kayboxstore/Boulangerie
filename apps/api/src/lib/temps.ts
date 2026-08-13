@@ -22,6 +22,15 @@ export function jourLomoto(instant: Date = new Date()): string {
   return `${valeur("year")}-${valeur("month")}-${valeur("day")}`;
 }
 
+/** Décale un jour civil sans dépendre du fuseau du processus Node. */
+export function decalerJourLomoto(jour: string, nombreDeJours: number): string {
+  if (!estDateISOValide(jour) || !Number.isInteger(nombreDeJours)) {
+    throw new RangeError("Décalage de jour Lomoto invalide");
+  }
+  const [annee, mois, date] = jour.split("-").map(Number);
+  return new Date(Date.UTC(annee, mois - 1, date + nombreDeJours)).toISOString().slice(0, 10);
+}
+
 /** Bornes UTC exactes d'un jour civil de Kinshasa, inclusives. */
 export function bornesJourLomoto(jour: string = jourLomoto()): [Date, Date] {
   if (!estDateISOValide(jour)) throw new RangeError("Date Lomoto invalide");
