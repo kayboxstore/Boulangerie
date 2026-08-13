@@ -2,6 +2,7 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import {
   calculerDepenseFarine,
+  dateISOSchema,
   depenseCreateSchema,
   depenseFarineSchema,
   formatFc,
@@ -16,6 +17,16 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
+import {
+  ajouterEnteteRejeu,
+  ErreurIdempotence,
+  executerEcritureIdempotente,
+} from "../lib/idempotence.js";
+import {
+  bornesJourLomoto,
+  dateSQLDepuisJourLomoto,
+  jourLomoto,
+} from "../lib/temps.js";
 
 export const caisseRouter = Router();
 
@@ -24,20 +35,6 @@ caisseRouter.use(requireAuth);
 const lecture = requirePermission("CAISSE", "LECTURE");
 const ecriture = requirePermission("CAISSE", "ECRITURE");
 
-const jour = (d: Date) => d.toISOString().slice(0, 10);
-const aujourdhui = () => jour(new Date());
-
-/** Date SQL (minuit UTC) pour les colonnes @db.Date. */
-const dateSQL = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
-
-/** Bornes [début, fin] du jour LOCAL — pour les colonnes DateTime horodatées. */
-function bornesLocales(iso: string): [Date, Date] {
-  const [a, m, j] = iso.split("-").map(Number);
-  return [new Date(a, m - 1, j, 0, 0, 0, 0), new Date(a, m - 1, j, 23, 59, 59, 999)];
-}
-
-const estDateValide = (v: string | undefined): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
-
 const versTauxDTO = (t: {
   id: string;
   date: Date;
@@ -45,7 +42,7 @@ const versTauxDTO = (t: {
   definiPar: { id: string; nom: string } | null;
 }): TauxDuJourDTO => ({
   id: t.id,
-  date: jour(t.date),
+  date: jourLomoto(t.date),
   valeur: t.valeur.toNumber(),
   definiPar: t.definiPar,
 });
@@ -61,7 +58,7 @@ const versDepenseDTO = (d: {
   enregistrePar: { id: string; nom: string } | null;
 }): DepenseCaisseDTO => ({
   id: d.id,
-  date: jour(d.date),
+  date: jourLomoto(d.date),
   motif: d.motif,
   montant: d.montant,
   origine: d.origine as OrigineDepense,
@@ -75,7 +72,7 @@ const INCLUDE_TAUX = { definiPar: { select: { id: true, nom: true } } } as const
 
 /** Sacs de farine consommés en production sur la date donnée (source du calcul). */
 async function sacsUtilisesLe(date: string): Promise<number> {
-  const [debut, fin] = bornesLocales(date);
+  const [debut, fin] = bornesJourLomoto(date);
   const agg = await prisma.production.aggregate({
     where: { date: { gte: debut, lte: fin } },
     _sum: { sacsUtilises: true },
@@ -93,7 +90,7 @@ async function sacsUtilisesLe(date: string): Promise<number> {
  *                   sur une commande créée le même jour.
  */
 async function construireRegistre(date: string): Promise<RegistreCaisseDTO> {
-  const [debut, fin] = bornesLocales(date);
+  const [debut, fin] = bornesJourLomoto(date);
 
   const commandesDuJour = await prisma.commandeClient.findMany({
     where: { dateCreation: { gte: debut, lte: fin } },
@@ -114,14 +111,14 @@ async function construireRegistre(date: string): Promise<RegistreCaisseDTO> {
   const dettesPayees = reglementsDuJour.reduce((s, r) => s + r.montant, 0);
 
   const depenses = await prisma.depenseCaisse.findMany({
-    where: { date: dateSQL(date) },
+    where: { date: dateSQLDepuisJourLomoto(date) },
     include: INCLUDE_DEPENSE,
     orderBy: { createdAt: "asc" },
   });
   const totalDepenses = depenses.reduce((s, d) => s + d.montant, 0);
 
   const taux = await prisma.tauxDuJour.findUnique({
-    where: { date: dateSQL(date) },
+    where: { date: dateSQLDepuisJourLomoto(date) },
     include: INCLUDE_TAUX,
   });
   const sacsUtilisesJour = await sacsUtilisesLe(date);
@@ -162,7 +159,10 @@ async function construireRegistre(date: string): Promise<RegistreCaisseDTO> {
 caisseRouter.get("/registre", lecture, async (req, res, next) => {
   try {
     const { date } = req.query as Record<string, string | undefined>;
-    const cible = estDateValide(date) ? date : aujourdhui();
+    if (date && !dateISOSchema.safeParse(date).success) {
+      return res.status(400).json({ erreur: "Date invalide (AAAA-MM-JJ)" });
+    }
+    const cible = date ?? jourLomoto();
     res.json({ registre: await construireRegistre(cible) });
   } catch (e) {
     next(e);
@@ -182,7 +182,7 @@ caisseRouter.put("/taux", ecriture, async (req, res, next) => {
     const { date, valeur } = parsed.data;
 
     const taux = await prisma.$transaction(async (tx) => {
-      const existant = await tx.tauxDuJour.findUnique({ where: { date: dateSQL(date) } });
+      const existant = await tx.tauxDuJour.findUnique({ where: { date: dateSQLDepuisJourLomoto(date) } });
       if (existant) {
         return tx.tauxDuJour.update({
           where: { id: existant.id },
@@ -191,7 +191,7 @@ caisseRouter.put("/taux", ecriture, async (req, res, next) => {
         });
       }
       return tx.tauxDuJour.create({
-        data: { date: dateSQL(date), valeur, definiParId: req.utilisateur!.id },
+        data: { date: dateSQLDepuisJourLomoto(date), valeur, definiParId: req.utilisateur!.id },
         include: INCLUDE_TAUX,
       });
     });
@@ -222,23 +222,42 @@ caisseRouter.post("/depenses", ecriture, async (req, res, next) => {
     }
     const { date, motif, montant } = parsed.data;
 
-    const depense = await prisma.depenseCaisse.create({
-      data: { date: dateSQL(date), motif, montant, origine: "MANUELLE", enregistreParId: req.utilisateur!.id },
-      include: INCLUDE_DEPENSE,
-    });
-    const dto = versDepenseDTO(depense);
+    const execution = await executerEcritureIdempotente(
+      req,
+      "POST:/api/caisse/depenses",
+      parsed.data,
+      async (tx) =>
+        tx.depenseCaisse.create({
+          data: {
+            date: dateSQLDepuisJourLomoto(date),
+            motif,
+            montant,
+            origine: "MANUELLE",
+            enregistreParId: req.utilisateur!.id,
+          },
+          include: INCLUDE_DEPENSE,
+        }),
+      (depense) => ({ statutHttp: 201, corps: { depense: versDepenseDTO(depense) } }),
+    );
 
-    busEvenements.emettreEvenement({
-      type: "REGISTRE_CAISSE",
-      module: "CAISSE",
-      emetteurId: req.utilisateur!.id,
-      evenementRef: dto.id,
-      message: `Dépense de caisse le ${dto.date} : ${dto.motif} — ${formatFc(dto.montant)}`,
-      donnees: { depenseId: dto.id, montant: dto.montant },
-    });
+    ajouterEnteteRejeu(res, execution.rejoue);
+    if (!execution.rejoue) {
+      const dto = execution.corps.depense;
+      busEvenements.emettreEvenement({
+        type: "REGISTRE_CAISSE",
+        module: "CAISSE",
+        emetteurId: req.utilisateur!.id,
+        evenementRef: dto.id,
+        message: `Dépense de caisse le ${dto.date} : ${dto.motif} — ${formatFc(dto.montant)}`,
+        donnees: { depenseId: dto.id, montant: dto.montant },
+      });
+    }
 
-    res.status(201).json({ depense: dto });
+    res.status(execution.statutHttp).json(execution.corps);
   } catch (e) {
+    if (e instanceof ErreurIdempotence) {
+      return res.status(e.statutHttp).json({ erreur: e.message, code: e.code });
+    }
     next(e);
   }
 });
@@ -254,7 +273,7 @@ caisseRouter.delete("/depenses/:id", ecriture, async (req, res, next) => {
       module: "CAISSE",
       emetteurId: req.utilisateur!.id,
       evenementRef: depense.id,
-      message: `Dépense retirée du registre du ${jour(depense.date)} : ${depense.motif} — ${formatFc(depense.montant)}`,
+      message: `Dépense retirée du registre du ${jourLomoto(depense.date)} : ${depense.motif} — ${formatFc(depense.montant)}`,
       donnees: { depenseId: depense.id },
     });
     res.status(204).end();
@@ -277,7 +296,7 @@ caisseRouter.put("/depenses/farine", ecriture, async (req, res, next) => {
     const { date, active } = parsed.data;
 
     const existante = await prisma.depenseCaisse.findFirst({
-      where: { date: dateSQL(date), origine: "FARINE" },
+      where: { date: dateSQLDepuisJourLomoto(date), origine: "FARINE" },
     });
 
     if (!active) {
@@ -289,7 +308,7 @@ caisseRouter.put("/depenses/farine", ecriture, async (req, res, next) => {
       return res.status(409).json({ erreur: "La dépense farine est déjà enregistrée pour cette date" });
     }
 
-    const taux = await prisma.tauxDuJour.findUnique({ where: { date: dateSQL(date) } });
+    const taux = await prisma.tauxDuJour.findUnique({ where: { date: dateSQLDepuisJourLomoto(date) } });
     if (!taux) {
       return res.status(409).json({ erreur: "Définissez d'abord le taux du jour pour cette date" });
     }
@@ -303,7 +322,7 @@ caisseRouter.put("/depenses/farine", ecriture, async (req, res, next) => {
     const valeurTaux = taux.valeur.toNumber();
     const depense = await prisma.depenseCaisse.create({
       data: {
-        date: dateSQL(date),
+        date: dateSQLDepuisJourLomoto(date),
         motif: MOTIF_DEPENSE_FARINE,
         montant: calculerDepenseFarine(valeurTaux, sacs),
         origine: "FARINE",
