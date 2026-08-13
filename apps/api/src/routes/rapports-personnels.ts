@@ -5,6 +5,7 @@ import {
   formatQuantite,
   STATUT_DECISION_ABSENCE_LABELS,
   TYPE_MOUVEMENT_LABELS,
+  dateISOSchema,
   TYPES_ACTIVITE,
   type ActiviteDTO,
   type PorteeRapportsDTO,
@@ -14,6 +15,7 @@ import {
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { bornesJourLomoto } from "../lib/temps.js";
 
 export const rapportsPersonnelsRouter = Router();
 
@@ -96,9 +98,19 @@ rapportsPersonnelsRouter.get("/", async (req, res, next) => {
     // supprimés — sont écartées au moment de la construction du DTO).
     const filtreAuteur = (champ: string) => (cibleIds ? { [champ]: { in: cibleIds } } : {});
 
+    if (du && !dateISOSchema.safeParse(du).success) {
+      return res.status(400).json({ erreur: "Date de début invalide (AAAA-MM-JJ)" });
+    }
+    if (au && !dateISOSchema.safeParse(au).success) {
+      return res.status(400).json({ erreur: "Date de fin invalide (AAAA-MM-JJ)" });
+    }
+    if (du && au && du > au) {
+      return res.status(400).json({ erreur: "La date de fin doit suivre la date de début" });
+    }
+
     const periode: Prisma.DateTimeFilter = {};
-    if (du) periode.gte = new Date(`${du}T00:00:00`);
-    if (au) periode.lte = new Date(`${au}T23:59:59.999`);
+    if (du) periode.gte = bornesJourLomoto(du)[0];
+    if (au) periode.lte = bornesJourLomoto(au)[1];
     const filtreDate = (champ: string) => (du || au ? { [champ]: periode } : {});
 
     const typesVoulus: TypeActivite[] =

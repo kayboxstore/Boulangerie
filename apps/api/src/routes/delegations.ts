@@ -23,13 +23,10 @@ const INCLUDE = {
   creePar: { select: { id: true, nom: true } },
 } as const;
 
-const jour = (d: Date) => d.toISOString().slice(0, 10);
-const aujourdhui = () => new Date().toISOString().slice(0, 10);
-
 const versDTO = (d: DelegationAvecRelations): DelegationDTO => {
-  const debut = jour(d.dateDebut);
-  const fin = jour(d.dateFin);
-  const auj = aujourdhui();
+  const debut = jourLomoto(d.dateDebut);
+  const fin = jourLomoto(d.dateFin);
+  const auj = jourLomoto();
   return {
     id: d.id,
     utilisateur: { id: d.utilisateur.id, nom: d.utilisateur.nom, roleNom: d.utilisateur.role.nom },
@@ -69,8 +66,8 @@ delegationsRouter.post("/", async (req, res, next) => {
       data: {
         utilisateurId,
         module,
-        dateDebut: new Date(dateDebut),
-        dateFin: new Date(dateFin),
+        dateDebut: dateSQLDepuisJourLomoto(dateDebut),
+        dateFin: dateSQLDepuisJourLomoto(dateFin),
         creeParId: req.utilisateur!.id,
       },
       include: INCLUDE,

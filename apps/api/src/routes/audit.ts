@@ -34,6 +34,16 @@ auditRouter.get("/", async (req, res, next) => {
   try {
     const { utilisateurId, module, dateDebut, dateFin } = req.query as Record<string, string | undefined>;
 
+    if (dateDebut && !dateISOSchema.safeParse(dateDebut).success) {
+      return res.status(400).json({ erreur: "Date de début invalide (AAAA-MM-JJ)" });
+    }
+    if (dateFin && !dateISOSchema.safeParse(dateFin).success) {
+      return res.status(400).json({ erreur: "Date de fin invalide (AAAA-MM-JJ)" });
+    }
+    if (dateDebut && dateFin && dateDebut > dateFin) {
+      return res.status(400).json({ erreur: "La date de fin doit suivre la date de début" });
+    }
+
     const where: Prisma.AuditLogWhereInput = {};
     if (utilisateurId) where.utilisateurId = utilisateurId;
     if (module && (MODULES as readonly string[]).includes(module)) {
@@ -41,9 +51,9 @@ auditRouter.get("/", async (req, res, next) => {
     }
     if (dateDebut || dateFin) {
       where.createdAt = {};
-      if (dateDebut) where.createdAt.gte = new Date(`${dateDebut}T00:00:00.000Z`);
+      if (dateDebut) where.createdAt.gte = bornesJourLomoto(dateDebut)[0];
       // Borne de fin inclusive : jusqu'à la fin de la journée indiquée.
-      if (dateFin) where.createdAt.lte = new Date(`${dateFin}T23:59:59.999Z`);
+      if (dateFin) where.createdAt.lte = bornesJourLomoto(dateFin)[1];
     }
 
     const entrees = await prisma.auditLog.findMany({

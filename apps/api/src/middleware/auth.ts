@@ -4,6 +4,7 @@ import { CODE_SESSION_REMPLACEE, LANGUES, MESSAGE_SESSION_REMPLACEE, MODULES } f
 import { aAcces } from "@lomoto/shared";
 import { verifyToken } from "../lib/jwt.js";
 import { prisma } from "../lib/prisma.js";
+import { dateSQLDepuisJourLomoto, jourLomoto } from "../lib/temps.js";
 import { contexteRequete } from "../lib/contexteRequete.js";
 import { logger } from "../lib/logger.js";
 import { estHorsPerimetreAdmin, notifierInterventionAdmin } from "../services/interventionsAdmin.js";
@@ -49,7 +50,7 @@ export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | n
     for (const module of MODULES) niveaux.set(module, "ECRITURE");
   }
 
-  const aujourdhui = new Date(new Date().toISOString().slice(0, 10)); // minuit UTC
+  const aujourdhui = dateSQLDepuisJourLomoto(jourLomoto());
   const delegations = await prisma.delegationRole.findMany({
     where: { utilisateurId: u.id, dateDebut: { lte: aujourdhui }, dateFin: { gte: aujourdhui } },
     select: { module: true },
