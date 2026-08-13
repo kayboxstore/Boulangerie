@@ -7,6 +7,7 @@ import {
   confirmerSucces,
   creerProprieteUnique,
   creerRegistreDePropriete,
+  creerSuiviFraicheurHistorique,
   demarrerMarquerLue,
   demarrerToutMarquerLu,
   marquerIdCommeLu,
@@ -901,5 +902,161 @@ describe("Isolation par génération de session (round 4)", () => {
     expect(resultat).toBe("ignore");
     expect(compterNonLues(etatDeB)).toBe(compteurDeBAvant);
     expect(etatDeB.notifications).toHaveLength(2);
+  });
+});
+
+describe("creerSuiviFraicheurHistorique — round 6 : barrière de fraîcheur pour chargerHistorique()", () => {
+  it("un jeton fraîchement démarré est valide", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const jeton = suivi.demarrerChargement(1);
+    expect(suivi.estEncoreValide(jeton, 1)).toBe(true);
+  });
+
+  it("une génération différente invalide le jeton", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const jeton = suivi.demarrerChargement(1);
+    expect(suivi.estEncoreValide(jeton, 2)).toBe(false);
+  });
+
+  it("une séquence plus récente invalide les jetons antérieurs", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const jetonA = suivi.demarrerChargement(1);
+    const jetonB = suivi.demarrerChargement(1);
+    expect(suivi.estEncoreValide(jetonA, 1)).toBe(false);
+    expect(suivi.estEncoreValide(jetonB, 1)).toBe(true);
+  });
+
+  it("enregistrerMutationLocale() invalide tout jeton déjà démarré", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const jeton = suivi.demarrerChargement(1);
+    suivi.enregistrerMutationLocale();
+    expect(suivi.estEncoreValide(jeton, 1)).toBe(false);
+  });
+
+  it("reinitialiser() remet séquence et révision à zéro pour une nouvelle génération", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    suivi.demarrerChargement(1);
+    suivi.enregistrerMutationLocale();
+    suivi.reinitialiser();
+    const jeton = suivi.demarrerChargement(2);
+    expect(jeton.sequence).toBe(1);
+    expect(jeton.revision).toBe(0);
+    expect(suivi.estEncoreValide(jeton, 2)).toBe(true);
+  });
+});
+
+/**
+ * Scénarios exigés en revue (round 6) : `chargerHistorique()` (GET
+ * `/api/notifications`) peut répondre APRÈS une action plus récente. Ces
+ * tests composent `creerSuiviFraicheurHistorique` avec les MÊMES
+ * orchestrateurs que `socket.tsx` — `suivi.enregistrerMutationLocale()` est
+ * appelé exactement là où `appliquerEtat()` l'appelle en production (à
+ * chaque écriture d'état par référence réellement nouvelle).
+ */
+describe("Barrière de fraîcheur de chargerHistorique() (round 6)", () => {
+  it("1) deux historiques concurrents : le plus ancien répond en dernier et est ignoré", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const generation = 1;
+
+    const jetonAncien = suivi.demarrerChargement(generation); // requête 1, lancée en premier
+    const jetonRecent = suivi.demarrerChargement(generation); // requête 2 (ex. reconnexion Socket.io), lancée juste après
+
+    // La requête 2 (la plus récente) répond en premier et s'applique.
+    expect(suivi.estEncoreValide(jetonRecent, generation)).toBe(true);
+
+    // La requête 1 (plus ancienne) répond ensuite : ignorée, quel que soit
+    // l'écart de temps, puisqu'elle n'est plus la dernière séquence lancée.
+    expect(suivi.estEncoreValide(jetonAncien, generation)).toBe(false);
+  });
+
+  it("2) historique en vol, puis succès de marquerLue : la réponse ancienne est ignorée", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const generation = 1;
+    let etat: EtatNotifications<Notif> = { notifications: [{ id: "1", lu: false, titre: "A" }], resteNonLues: 0 };
+
+    const jeton = suivi.demarrerChargement(generation);
+
+    // marquerLue("1") démarre puis réussit avant que l'historique ne réponde.
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+    const demarrage = demarrerMarquerLue(etat, "1", registre);
+    etat = demarrage.etat;
+    suivi.enregistrerMutationLocale(); // même geste que appliquerEtat() côté optimiste
+    etat = confirmerSucces(etat, demarrage, registre, registreReste);
+    suivi.enregistrerMutationLocale(); // même geste que appliquerEtat() côté confirmation
+
+    expect(suivi.estEncoreValide(jeton, generation)).toBe(false);
+    // L'historique périmé n'est donc jamais appliqué : "1" reste lue.
+    expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(true);
+  });
+
+  it("3) historique en vol, puis succès de toutMarquerLu : la réponse ancienne est ignorée", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const generation = 1;
+    let etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "2", lu: false, titre: "B" },
+      ],
+      resteNonLues: 0,
+    };
+
+    const jeton = suivi.demarrerChargement(generation);
+
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+    const demarrage = demarrerToutMarquerLu(etat, registre, registreReste);
+    etat = demarrage.etat;
+    suivi.enregistrerMutationLocale();
+    etat = confirmerSucces(etat, demarrage, registre, registreReste);
+    suivi.enregistrerMutationLocale();
+
+    expect(suivi.estEncoreValide(jeton, generation)).toBe(false);
+    expect(etat.notifications.every((n) => n.lu)).toBe(true);
+  });
+
+  it("4) historique en vol, puis arrivée Socket.io : la nouvelle notification et le compteur sont conservés", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const generation = 1;
+    let etat: EtatNotifications<Notif> = { notifications: [{ id: "1", lu: false, titre: "A" }], resteNonLues: 0 };
+
+    const jeton = suivi.demarrerChargement(generation);
+
+    // Une notification Socket.io arrive avant que l'historique ne réponde.
+    etat = ajouterNotificationAvecPlafond(etat, { id: "2", lu: false, titre: "Nouvelle" }, 100);
+    suivi.enregistrerMutationLocale();
+
+    expect(suivi.estEncoreValide(jeton, generation)).toBe(false);
+    // L'historique périmé n'est donc jamais appliqué : "2" et le compteur qu'elle a fait progresser sont conservés.
+    expect(etat.notifications.find((n) => n.id === "2")).toBeTruthy();
+    expect(compterNonLues(etat)).toBe(2);
+  });
+
+  it("5) changement d'utilisateur ou déconnexion pendant l'historique : jamais appliqué (génération périmée)", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    let generation = 1;
+    const jeton = suivi.demarrerChargement(generation);
+
+    // Déconnexion ou connexion d'un autre utilisateur : socket.tsx incrémente
+    // `generationRef` ET réinitialise le suivi à chaque entrée dans l'effet.
+    generation += 1;
+    suivi.reinitialiser();
+
+    expect(suivi.estEncoreValide(jeton, generation)).toBe(false);
+    // Un jeton frais de la NOUVELLE génération, lui, reste valide normalement.
+    const jetonNouveauContexte = suivi.demarrerChargement(generation);
+    expect(suivi.estEncoreValide(jetonNouveauContexte, generation)).toBe(true);
+  });
+
+  it("6) comportement normal : une réponse fraîche de la dernière requête est bien appliquée", () => {
+    const suivi = creerSuiviFraicheurHistorique();
+    const generation = 1;
+
+    const jeton = suivi.demarrerChargement(generation);
+    // Rien ne s'est produit entre le départ et le retour : la réponse s'applique.
+    expect(suivi.estEncoreValide(jeton, generation)).toBe(true);
+
+    const etat: EtatNotifications<Notif> = { notifications: [{ id: "1", lu: false, titre: "A" }], resteNonLues: 3 };
+    expect(compterNonLues(etat)).toBe(4);
   });
 });

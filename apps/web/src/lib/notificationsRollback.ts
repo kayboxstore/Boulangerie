@@ -43,6 +43,21 @@
  *   true` peut être le fruit d'une action individuelle encore en vol, pas
  *   encore confirmée : si le global la reprend, il doit hériter de son
  *   obligation de rollback, pas la perdre).
+ * - round 6 : `chargerHistorique()` (GET `/api/notifications`) appliquait sa
+ *   réponse dès lors que l'effet était encore actif, sans vérifier si une
+ *   requête d'historique plus récente avait été lancée entre-temps, ni si
+ *   une mutation locale plus récente (lecture individuelle/globale,
+ *   notification Socket.io) avait déjà changé l'état affiché — une réponse
+ *   réseau lente pouvait alors réinjecter des notifications non lues déjà
+ *   traitées, ou écraser une notification arrivée depuis. `creerSuiviFraicheurHistorique`
+ *   ajoute une barrière de fraîcheur À TROIS CONDITIONS avant d'appliquer
+ *   une réponse d'historique : (1) la génération de session — RÉUTILISE la
+ *   génération déjà introduite en round 4, ne recrée pas de mécanisme
+ *   concurrent ; (2) un numéro de séquence monotone, pour ne retenir que la
+ *   toute dernière requête d'historique lancée ; (3) une révision de mutation
+ *   locale, incrémentée par `socket.tsx` à chaque écriture RÉELLE de l'état
+ *   (voir `appliquerEtat`) — capturée au départ de la requête, revérifiée à
+ *   son retour.
  */
 
 export interface NotificationAvecLecture {
@@ -392,3 +407,58 @@ export function annulerApresEchec<T extends NotificationAvecLecture>(
   const notifications = annulerLectureCiblee(etat.notifications, idsARestaurer);
   return { notifications, resteNonLues };
 }
+
+/** Jeton capturé au lancement d'une requête d'historique, à revérifier à son retour. */
+export interface JetonFraicheurHistorique {
+  generation: number;
+  sequence: number;
+  revision: number;
+}
+
+/**
+ * Barrière de fraîcheur pour `chargerHistorique()` (round 6). La GÉNÉRATION
+ * n'est pas gérée ici : elle est fournie par l'appelant à chaque opération
+ * (`demarrerChargement`/`estEncoreValide`) pour RÉUTILISER telle quelle la
+ * génération de session déjà introduite en round 4 (`generationRef` dans
+ * socket.tsx), plutôt que de créer un second mécanisme concurrent.
+ *
+ * En revanche la SÉQUENCE (quelle requête d'historique est la plus récente)
+ * et la RÉVISION (une mutation locale a-t-elle eu lieu depuis le départ de
+ * la requête) sont spécifiques au chargement d'historique et gérées ici.
+ *
+ * Une réponse n'est appliquée que si les TROIS conditions tiennent encore :
+ * même génération, dernière séquence lancée, aucune révision depuis.
+ */
+export function creerSuiviFraicheurHistorique() {
+  let derniereSequence = 0;
+  let revision = 0;
+
+  return {
+    /** À appeler à chaque nouvelle génération (connexion, changement d'utilisateur, déconnexion) : évite toute confusion avec les séquences/révisions de la session précédente. */
+    reinitialiser(): void {
+      derniereSequence = 0;
+      revision = 0;
+    },
+    /**
+     * À appeler à chaque écriture RÉELLE de l'état affiché (voir
+     * `appliquerEtat` dans socket.tsx) : action optimiste, confirmation ou
+     * rollback utile (qui a effectivement changé quelque chose), arrivée
+     * d'une notification Socket.io, ou toute autre mutation locale. Périme
+     * immédiatement toute requête d'historique encore en vol.
+     */
+    enregistrerMutationLocale(): void {
+      revision += 1;
+    },
+    /** Démarre une nouvelle requête d'historique ; le jeton renvoyé doit être revérifié via `estEncoreValide` à la résolution (succès ou échec). */
+    demarrerChargement(generation: number): JetonFraicheurHistorique {
+      derniereSequence += 1;
+      return { generation, sequence: derniereSequence, revision };
+    },
+    /** Une réponse (ou une erreur) d'historique doit-elle encore être appliquée ? */
+    estEncoreValide(jeton: JetonFraicheurHistorique, generationActuelle: number): boolean {
+      return jeton.generation === generationActuelle && jeton.sequence === derniereSequence && jeton.revision === revision;
+    },
+  };
+}
+
+export type SuiviFraicheurHistorique = ReturnType<typeof creerSuiviFraicheurHistorique>;

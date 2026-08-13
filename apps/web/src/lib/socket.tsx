@@ -23,6 +23,7 @@ import {
   confirmerSucces,
   creerProprieteUnique,
   creerRegistreDePropriete,
+  creerSuiviFraicheurHistorique,
   demarrerMarquerLue,
   demarrerToutMarquerLu,
   type EtatNotifications,
@@ -61,7 +62,17 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   // compteur suivi indépendamment.
   const etatRef = useRef<EtatNotifications<NotificationDTO>>({ notifications: [], resteNonLues: 0 });
 
+  // Suivi de fraîcheur pour `chargerHistorique()` (correction round 6) — voir
+  // notificationsRollback.ts. `appliquerEtat` est l'UNIQUE point d'écriture
+  // de l'état, donc l'endroit exact où enregistrer qu'une mutation locale
+  // "utile" vient de se produire (l'égalité de référence distingue une
+  // écriture réelle d'un no-op, ex. `confirmerSucces` qui renvoie le même
+  // objet quand rien n'a changé) : toute requête d'historique encore en vol
+  // à ce moment doit être considérée périmée.
+  const fraicheurHistorique = useRef(creerSuiviFraicheurHistorique());
+
   const appliquerEtat = useCallback((etat: EtatNotifications<NotificationDTO>) => {
+    if (etat !== etatRef.current) fraicheurHistorique.current.enregistrerMutationLocale();
     etatRef.current = etat;
     setNotifications(etat.notifications);
     setNonLues(compterNonLues(etat));
@@ -92,6 +103,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     generationRef.current += 1;
     registrePropriete.current = creerRegistreDePropriete<symbol>();
     registreReste.current = creerProprieteUnique<symbol>();
+    fraicheurHistorique.current.reinitialiser();
 
     if (!utilisateur) {
       appliquerEtat({ notifications: [], resteNonLues: 0 });
@@ -102,9 +114,16 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     let actif = true;
 
     const chargerHistorique = () => {
+      // Barrière de fraîcheur (round 6) : une requête GET lancée avant une
+      // action peut répondre après elle (lecture individuelle/globale
+      // réussie, notification Socket.io, ou une requête d'historique plus
+      // récente). Le jeton capture génération + séquence + révision au
+      // départ ; `estEncoreValide` les revérifie toutes les trois au retour.
+      const jeton = fraicheurHistorique.current.demarrerChargement(generationRef.current);
       api<{ notifications: NotificationDTO[]; nonLues: number }>("/api/notifications")
         .then((r) => {
           if (!actif) return;
+          if (!fraicheurHistorique.current.estEncoreValide(jeton, generationRef.current)) return;
           // Décompose le total autoritatif du serveur en "reste non chargé"
           // + décompte du tableau reçu — voir compterNonLues, qui recombine
           // les deux à l'affichage.
@@ -114,7 +133,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
             resteNonLues: Math.max(0, r.nonLues - nonLuesDansLeTableau),
           });
         })
-        .catch(() => {});
+        .catch(() => {}); // déjà silencieux : une erreur périmée ne modifie rien et n'affiche aucun toast
     };
 
     chargerHistorique();
