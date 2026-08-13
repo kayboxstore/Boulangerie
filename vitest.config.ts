@@ -1,7 +1,10 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  test: {
-    include: ["packages/**/*.test.ts", "apps/**/*.test.ts"],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./apps/web/src", import.meta.url)),
+    },
   },
 });
