@@ -139,6 +139,12 @@ model Utilisateur {
   sauvegardesDeclenchees      SauvegardeBase[]      @relation("SauvegardesDeclenchees")
   tauxDefinis                 TauxDuJour[]          @relation("TauxDefinis")
   depensesEnregistrees        DepenseCaisse[]       @relation("DepensesEnregistrees")
+  produitsArchives            Produit[]             @relation("ProduitsArchives")
+  operationsIdempotentes      OperationIdempotente[]
+  sessionsCaisseOuvertes      SessionCaisse[]       @relation("SessionsCaisseOuvertes")
+  sessionsCaisseFermees       SessionCaisse[]       @relation("SessionsCaisseFermees")
+  remisesCaisseRecues         RemiseCaisse[]        @relation("RemisesCaisseRecues")
+  remisesCaisseEnregistrees   RemiseCaisse[]        @relation("RemisesCaisseEnregistrees")
   conversationsSupport        ConversationSupport[] @relation("ConversationsUtilisateur")
   conversationsSupportFermees ConversationSupport[] @relation("ConversationsSupportFermeesPar")
   messagesSupportEnvoyes      MessageSupport[]      @relation("MessagesSupportEnvoyes")
@@ -272,12 +278,18 @@ model Produit {
   tauxTaxe        Float                  @default(0)
   categorie       String
   actif           Boolean                @default(true)
+  archiveLe       DateTime?
+  archiveParId    String?
+  archivePar      Utilisateur?            @relation("ProduitsArchives", fields: [archiveParId], references: [id], onDelete: SetNull)
   recette         Recette?
   lignesPlanning  PlanningLigneProduit[]
   lignesSchema    SchemaCommandeLigne[]
   lignesLivraison BonLivraisonLigne[]
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
+
+  @@index([actif, nom])
+  @@index([archiveLe])
 }
 
 // --- Stocks & matières premières (section 3.2) ------------------------------
@@ -833,6 +845,72 @@ model DepenseCaisse {
   updatedAt       DateTime       @updatedAt
 
   @@index([date])
+}
+
+// Trace générique des écritures sensibles protégées par Idempotency-Key.
+// La réponse sérialisée permet de rejouer exactement le premier résultat.
+model OperationIdempotente {
+  id            String      @id @default(cuid())
+  utilisateurId String
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  portee        String
+  cle           String
+  empreinte     String
+  statutHttp    Int
+  reponse       Json
+  createdAt     DateTime    @default(now())
+
+  @@unique([utilisateurId, portee, cle])
+  @@index([createdAt])
+}
+
+enum StatutSessionCaisse {
+  OUVERTE
+  FERMEE
+}
+
+// Préparation C2 : une session enveloppe le registre journalier existant sans
+// recalculer ni dupliquer ses lignes. Les soldes de fermeture restent des
+// photographies vérifiables au moment de la clôture.
+model SessionCaisse {
+  id                       String              @id @default(cuid())
+  date                     DateTime            @unique @db.Date
+  statut                   StatutSessionCaisse @default(OUVERTE)
+  soldeOuverture           Int
+  soldeTheoriqueFermeture  Int?
+  soldeCompteFermeture     Int?
+  ecartFermeture           Int?
+  ouverteParId             String?
+  ouvertePar               Utilisateur?        @relation("SessionsCaisseOuvertes", fields: [ouverteParId], references: [id], onDelete: SetNull)
+  fermeeParId              String?
+  fermeePar                Utilisateur?        @relation("SessionsCaisseFermees", fields: [fermeeParId], references: [id], onDelete: SetNull)
+  ouverteLe                DateTime            @default(now())
+  fermeeLe                 DateTime?
+  remises                  RemiseCaisse[]
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+
+  @@index([statut, date])
+}
+
+// Remise contradictoire d'espèces rattachée à la session du jour. Le remettant
+// peut ne pas avoir de compte applicatif ; son nom reste donc figé en texte.
+model RemiseCaisse {
+  id                String         @id @default(cuid())
+  sessionCaisseId   String
+  sessionCaisse     SessionCaisse  @relation(fields: [sessionCaisseId], references: [id], onDelete: Restrict)
+  montant           Int
+  remisParNom       String
+  recuParId         String?
+  recuPar           Utilisateur?   @relation("RemisesCaisseRecues", fields: [recuParId], references: [id], onDelete: SetNull)
+  enregistreParId   String?
+  enregistrePar     Utilisateur?   @relation("RemisesCaisseEnregistrees", fields: [enregistreParId], references: [id], onDelete: SetNull)
+  reference         String?        @unique
+  observation       String?
+  dateRemise        DateTime       @default(now())
+  createdAt         DateTime       @default(now())
+
+  @@index([sessionCaisseId, dateRemise])
 }
 
 // Paramètres de la boutique (section 3.9) — clé/valeur, édités par l'Admin.
