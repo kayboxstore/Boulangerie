@@ -97,6 +97,26 @@ export function createApp() {
     }),
   );
   app.use(
+    "/api/auth/mot-de-passe-oublie",
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 5,
+      standardHeaders: "draft-8",
+      legacyHeaders: false,
+      handler: reponseLimitee,
+    }),
+  );
+  app.use(
+    ["/api/auth/reinitialisation", "/api/auth/reinitialisation/verifier"],
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 10,
+      standardHeaders: "draft-8",
+      legacyHeaders: false,
+      handler: reponseLimitee,
+    }),
+  );
+  app.use(
     ["/api/auth/etat-initial", "/api/auth/langue-defaut", "/api/premier-lancement"],
     rateLimit({
       windowMs: 15 * 60 * 1000,

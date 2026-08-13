@@ -126,7 +126,7 @@ export interface UtilisateurDTO {
   estAdminPrincipal: boolean;
   // Un mot de passe fourni par un administrateur doit être remplacé avant
   // d'accéder aux modules métier.
-  motDePasseDoitChanger: boolean;
+  motDePasseDoitChanger?: boolean;
   // Langue d'interface préférée (section 3.9) ; null = suivre la langue par
   // défaut de la boutique. `Langue` est défini plus bas dans ce fichier.
   languePreferee: Langue | null;
@@ -1052,7 +1052,7 @@ export interface CompteDTO {
   email: string;
   actif: boolean;
   estAdminPrincipal: boolean;
-  motDePasseDoitChanger: boolean;
+  motDePasseDoitChanger?: boolean;
   role: { id: string; nom: string };
   dateCreation: string;
 }

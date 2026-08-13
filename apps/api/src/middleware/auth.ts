@@ -66,6 +66,7 @@ export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | n
     nom: u.nom,
     email: u.email,
     estAdminPrincipal: u.estAdminPrincipal,
+    motDePasseDoitChanger: u.motDePasseDoitChanger,
     role: {
       id: u.role.id,
       nom: u.role.nom,
@@ -91,13 +92,26 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     // (plutôt que de surcharger chargerUtilisateur, appelé aussi hors HTTP).
     const session = await prisma.utilisateur.findUnique({
       where: { id: payload.sub },
-      select: { sessionActuelleId: true },
+      select: { sessionActuelleId: true, motDePasseDoitChanger: true },
     });
     if (!session) {
       return res.status(401).json({ erreur: "Compte introuvable ou désactivé" });
     }
     if (!payload.sid || payload.sid !== session.sessionActuelleId) {
       return res.status(401).json({ code: CODE_SESSION_REMPLACEE, erreur: MESSAGE_SESSION_REMPLACEE });
+    }
+
+    if (session.motDePasseDoitChanger) {
+      const chemin = req.originalUrl.split("?")[0];
+      const autorise =
+        (req.method === "GET" && chemin === "/api/auth/me") ||
+        (req.method === "POST" && chemin === "/api/auth/mot-de-passe");
+      if (!autorise) {
+        return res.status(403).json({
+          code: "MOT_DE_PASSE_A_CHANGER",
+          erreur: "Vous devez remplacer votre mot de passe temporaire avant de continuer.",
+        });
+      }
     }
 
     const utilisateur = await chargerUtilisateur(payload.sub);
