@@ -15,7 +15,11 @@ const ecritureParametres = requirePermission("PARAMETRES", "ECRITURE");
 
 produitsRouter.get("/", async (_req, res, next) => {
   try {
-    const produits = await prisma.produit.findMany({ orderBy: { nom: "asc" } });
+    const inclureArchives = _req.query.inclureArchives === "true";
+    const produits = await prisma.produit.findMany({
+      where: inclureArchives ? undefined : { actif: true },
+      orderBy: { nom: "asc" },
+    });
     res.json({ produits });
   } catch (e) {
     next(e);
@@ -39,7 +43,13 @@ produitsRouter.post("/", ecritureParametres, async (req, res, next) => {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
     const existant = await prisma.produit.findUnique({ where: { nom: parsed.data.nom } });
-    if (existant) return res.status(409).json({ erreur: "Un produit porte déjà ce nom" });
+    if (existant) {
+      return res.status(409).json({
+        erreur: existant.actif
+          ? "Un produit porte déjà ce nom"
+          : "Un produit archivé porte déjà ce nom. Réactivez-le au lieu d'en créer un nouveau.",
+      });
+    }
 
     const produit = await prisma.produit.create({ data: parsed.data });
     res.status(201).json({ produit });
@@ -65,13 +75,27 @@ produitsRouter.put("/:id", ecritureParametres, async (req, res, next) => {
       const r = await traiterActionCritique(
         req,
         "MODIFIER_TAUX_TAXE",
-        { produitId: existant.id, data: parsed.data },
+        {
+          produitId: existant.id,
+          data:
+            parsed.data.actif === false
+              ? { ...parsed.data, archiveLe: new Date(), archiveParId: req.utilisateur!.id }
+              : parsed.data.actif === true
+                ? { ...parsed.data, archiveLe: null, archiveParId: null }
+                : parsed.data,
+        },
         `modifier le taux de taxe de « ${existant.nom} » (${existant.tauxTaxe} % → ${parsed.data.tauxTaxe} %)`,
       );
       return res.status(r.http).json(r.body);
     }
 
-    const produit = await prisma.produit.update({ where: { id: req.params.id }, data: parsed.data });
+    const donnees =
+      parsed.data.actif === false
+        ? { ...parsed.data, archiveLe: new Date(), archiveParId: req.utilisateur!.id }
+        : parsed.data.actif === true
+          ? { ...parsed.data, archiveLe: null, archiveParId: null }
+          : parsed.data;
+    const produit = await prisma.produit.update({ where: { id: req.params.id }, data: donnees });
     res.json({ produit });
   } catch (e) {
     next(e);
@@ -83,7 +107,12 @@ produitsRouter.delete("/:id", ecritureParametres, async (req, res, next) => {
     const existant = await prisma.produit.findUnique({ where: { id: req.params.id } });
     if (!existant) return res.status(404).json({ erreur: "Produit introuvable" });
 
-    await prisma.produit.delete({ where: { id: req.params.id } });
+    if (existant.actif) {
+      await prisma.produit.update({
+        where: { id: req.params.id },
+        data: { actif: false, archiveLe: new Date(), archiveParId: req.utilisateur!.id },
+      });
+    }
     res.status(204).end();
   } catch (e) {
     next(e);
