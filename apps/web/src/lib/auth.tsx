@@ -24,6 +24,14 @@ interface AuthContextValue {
   /** Assistant de premier lancement (3.7) : true si la base ne contient aucun
    *  compte Utilisateur (premier démarrage, ou juste après une réinitialisation). */
   premierLancement: boolean;
+  /**
+   * Recharge l'identité depuis `GET /api/auth/me` sans repasser par `login()`
+   * (F3, changement de mot de passe obligatoire) : après un `POST
+   * /api/auth/mot-de-passe` réussi, `motDePasseDoitChanger` doit repasser à
+   * `false` UNIQUEMENT une fois confirmé par le serveur — jamais en local en
+   * anticipant la réponse.
+   */
+  rafraichirIdentite: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -123,6 +131,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => surSessionRemplacee(null);
   }, [deconnexionForcee]);
 
+  const rafraichirIdentite = useCallback(async () => {
+    const r = await api<{ utilisateur: UtilisateurDTO; langueDefautBoutique: Langue }>("/api/auth/me");
+    setUtilisateur(r.utilisateur);
+    setLangueDefautBoutique(r.langueDefautBoutique);
+    appliquer(r.utilisateur, r.langueDefautBoutique);
+  }, [appliquer]);
+
   const changerLangue = useCallback(
     async (langue: Langue | null) => {
       const r = await api<{ utilisateur: UtilisateurDTO; langueDefautBoutique: Langue }>("/api/auth/langue", {
@@ -159,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         messageSessionRemplacee,
         deconnexionForcee,
         premierLancement,
+        rafraichirIdentite,
       }}
     >
       {children}

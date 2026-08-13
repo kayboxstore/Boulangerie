@@ -1151,13 +1151,14 @@
     },
     "forgotPasswordLink": "Forgot your password?",
     "backToLogin": "Back to sign in",
-    "pendingServerIntegration": "This feature is still awaiting server-side integration. No request was sent.",
     "resetRequest": {
       "title": "Forgot password",
       "subtitle": "Enter your work email address to start account recovery.",
       "emailLabel": "Email address",
       "emailInvalid": "Enter a valid email address.",
-      "submit": "Send request"
+      "submit": "Send request",
+      "success": "If this address matches an active account, a reset link has just been sent. Check your inbox.",
+      "genericError": "Something went wrong. Please try again in a moment."
     },
     "resetPassword": {
       "title": "New password",
@@ -1166,7 +1167,32 @@
       "confirmPasswordLabel": "Confirm password",
       "submit": "Save new password",
       "passwordTooShort": "Password must be at least 8 characters long.",
-      "passwordMismatch": "The two passwords do not match."
+      "passwordMismatch": "The two passwords do not match.",
+      "verifying": "Verifying the reset link…",
+      "invalidTitle": "Invalid or expired link",
+      "invalidBody": "This reset link can no longer be used — it may have already been used or expired. You can request a new one.",
+      "requestNewLink": "Request a new link",
+      "successTitle": "Password updated",
+      "success": "Your password has been changed. You can now sign in with your new password.",
+      "goToLogin": "Go to sign in",
+      "genericError": "Something went wrong. Please try again in a moment."
+    },
+    "mandatoryChange": {
+      "title": "Temporary password",
+      "subtitle": "For your account's security, choose a new password before continuing.",
+      "currentPasswordLabel": "Current temporary password",
+      "newPasswordLabel": "New password",
+      "confirmPasswordLabel": "Confirm new password",
+      "submit": "Change password",
+      "passwordTooShort": "The new password must be at least 8 characters long.",
+      "passwordMismatch": "The two passwords do not match.",
+      "success": "Password changed successfully.",
+      "genericError": "Something went wrong. Please try again in a moment."
+    },
+    "anniversaires": {
+      "title": "Constellation Lomoto",
+      "body": "Birthday today: {{noms}} 🎂",
+      "and": "and"
     },
     "clock": {
       "ariaLabel": "Current time in Kinshasa: {{heures}} hours {{minutes}} minutes {{secondes}} seconds"

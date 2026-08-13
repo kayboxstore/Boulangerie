@@ -1152,13 +1152,14 @@
     },
     "forgotPasswordLink": "Obosani mot de passe?",
     "backToLogin": "Zonga na connexion",
-    "pendingServerIntegration": "Fonctionnalité oyo ezali kozela ete server esala yango. Demande moko te etindami.",
     "resetRequest": {
       "title": "Mot de passe ebosana",
       "subtitle": "Pesa adresse email na yo ya mosala mpo na kobanda kozongisa compte.",
       "emailLabel": "Adresse email",
       "emailInvalid": "Pesa adresse email ya solo.",
-      "submit": "Tinda demande"
+      "submit": "Tinda demande",
+      "success": "Soki adrese oyo ekokani na compte moko ya solo, lien ya kobongisa etindami sika oyo. Tala boîte na yo ya email.",
+      "genericError": "Likambo moko esalemi. Meka lisusu na mwa ntango."
     },
     "resetPassword": {
       "title": "Mot de passe ya sika",
@@ -1167,7 +1168,32 @@
       "confirmPasswordLabel": "Confirmer mot de passe",
       "submit": "Bomba mot de passe ya sika",
       "passwordTooShort": "Mot de passe esengeli kozala na ba caractères 8 to koleka.",
-      "passwordMismatch": "Ba mot de passe mibale ekokani te."
+      "passwordMismatch": "Ba mot de passe mibale ekokani te.",
+      "verifying": "Kotala soki lien ya kobongisa ezali ya solo…",
+      "invalidTitle": "Lien ezali ya solo te to esili ntango",
+      "invalidBody": "Lien oyo ekoki kosalisa lisusu te — ekoki kozala esili kosalelama to esili ntango. Okoki kosenga lien ya sika.",
+      "requestNewLink": "Senga lien ya sika",
+      "successTitle": "Mot de passe ebongisami",
+      "success": "Mot de passe na yo ebongisami malamu. Sikoyo okoki kokota na mot de passe ya sika.",
+      "goToLogin": "Kende na connexion",
+      "genericError": "Likambo moko esalemi. Meka lisusu na mwa ntango."
+    },
+    "mandatoryChange": {
+      "title": "Mot de passe ya ntango moke",
+      "subtitle": "Mpo na bokengi ya compte na yo, pona mot de passe ya sika liboso ya kokoba.",
+      "currentPasswordLabel": "Mot de passe ya ntango moke ya sikoyo",
+      "newPasswordLabel": "Mot de passe ya sika",
+      "confirmPasswordLabel": "Confirmer mot de passe ya sika",
+      "submit": "Bongisa mot de passe",
+      "passwordTooShort": "Mot de passe ya sika esengeli kozala na ba caractères 8 to koleka.",
+      "passwordMismatch": "Ba mot de passe mibale ekokani te.",
+      "success": "Mot de passe ebongisami malamu.",
+      "genericError": "Likambo moko esalemi. Meka lisusu na mwa ntango."
+    },
+    "anniversaires": {
+      "title": "Constellation Lomoto",
+      "body": "Anniversaire ya mokolo oyo : {{noms}} 🎂",
+      "and": "mpe"
     },
     "clock": {
       "ariaLabel": "Ngonga ya sikoyo na Kinshasa : ngonga {{heures}}, miniti {{minutes}}, segonde {{secondes}}"

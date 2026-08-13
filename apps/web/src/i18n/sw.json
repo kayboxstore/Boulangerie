@@ -1152,13 +1152,14 @@
     },
     "forgotPasswordLink": "Umesahau nenosiri?",
     "backToLogin": "Rudi kwenye kuingia",
-    "pendingServerIntegration": "Kipengele hiki bado kinasubiri kuunganishwa upande wa seva. Hakuna ombi lililotumwa.",
     "resetRequest": {
       "title": "Nenosiri limesahaulika",
       "subtitle": "Weka anwani yako ya barua pepe ya kazi ili kuanza kurejesha akaunti.",
       "emailLabel": "Anwani ya barua pepe",
       "emailInvalid": "Weka anwani sahihi ya barua pepe.",
-      "submit": "Tuma ombi"
+      "submit": "Tuma ombi",
+      "success": "Kama anwani hii inalingana na akaunti hai, kiungo cha kuweka upya kimetumwa. Angalia sanduku lako la barua pepe.",
+      "genericError": "Hitilafu imetokea. Jaribu tena baada ya muda mfupi."
     },
     "resetPassword": {
       "title": "Nenosiri jipya",
@@ -1167,7 +1168,32 @@
       "confirmPasswordLabel": "Thibitisha nenosiri",
       "submit": "Hifadhi nenosiri jipya",
       "passwordTooShort": "Nenosiri lazima liwe na herufi 8 au zaidi.",
-      "passwordMismatch": "Manenosiri mawili hayafanani."
+      "passwordMismatch": "Manenosiri mawili hayafanani.",
+      "verifying": "Inathibitisha kiungo cha kuweka upya…",
+      "invalidTitle": "Kiungo si sahihi au kimeisha muda",
+      "invalidBody": "Kiungo hiki hakiwezi kutumika tena — huenda kimeshatumika au kimeisha muda. Unaweza kuomba kiungo kipya.",
+      "requestNewLink": "Omba kiungo kipya",
+      "successTitle": "Nenosiri limesasishwa",
+      "success": "Nenosiri lako limebadilishwa. Sasa unaweza kuingia kwa nenosiri lako jipya.",
+      "goToLogin": "Nenda kuingia",
+      "genericError": "Hitilafu imetokea. Jaribu tena baada ya muda mfupi."
+    },
+    "mandatoryChange": {
+      "title": "Nenosiri la muda",
+      "subtitle": "Kwa usalama wa akaunti yako, chagua nenosiri jipya kabla ya kuendelea.",
+      "currentPasswordLabel": "Nenosiri la muda la sasa",
+      "newPasswordLabel": "Nenosiri jipya",
+      "confirmPasswordLabel": "Thibitisha nenosiri jipya",
+      "submit": "Badilisha nenosiri",
+      "passwordTooShort": "Nenosiri jipya lazima liwe na herufi 8 au zaidi.",
+      "passwordMismatch": "Manenosiri mawili hayafanani.",
+      "success": "Nenosiri limebadilishwa kwa mafanikio.",
+      "genericError": "Hitilafu imetokea. Jaribu tena baada ya muda mfupi."
+    },
+    "anniversaires": {
+      "title": "Constellation Lomoto",
+      "body": "Sherehe ya leo : {{noms}} 🎂",
+      "and": "na"
     },
     "clock": {
       "ariaLabel": "Saa za sasa Kinshasa : saa {{heures}}, dakika {{minutes}}, sekunde {{secondes}}"

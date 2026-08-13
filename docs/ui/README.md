@@ -357,3 +357,153 @@ panneau marine, marine/crème selon le thème dans l'en-tête mobile).
 | ![Connexion, variante prefers-reduced-motion](screenshots/f2/03-desktop-login-reduced-motion.png) | ![Enveloppe authentifiée, bureau](screenshots/f2/04-desktop-shell.png) |
 | Enveloppe authentifiée — mobile | Enveloppe authentifiée — mobile, tiroir ouvert |
 | ![Enveloppe authentifiée, mobile](screenshots/f2/05-mobile-shell.png) | ![Enveloppe authentifiée, mobile, tiroir de navigation ouvert](screenshots/f2/06-mobile-shell-menu-ouvert.png) |
+
+---
+
+# F3 — Intégration Premium finale
+
+> Base : `agent/integration-wave-1` au commit `12dc08526de9ae736842ce69ea05e0fb58622490`
+> (F2 fusionnée, intègre C2 + C3 — services premium sécurisés).
+> Branche : `claude/premium-integration-f3`.
+
+Cette tâche commence après fusion de C3 (plan de coordination §8) : les pages
+visuelles provisoires de F2 sont désormais connectées aux vrais endpoints
+d'authentification, et deux parcours entièrement nouveaux sont intégrés — le
+changement de mot de passe obligatoire et « Constellation Lomoto ».
+
+## Endpoints connectés
+
+| Endpoint (contrat C3) | Composant frontend |
+|---|---|
+| `POST /api/auth/mot-de-passe-oublie` | `pages/MotDePasseOublie.tsx` |
+| `POST /api/auth/reinitialisation/verifier` | `pages/NouveauMotDePasse.tsx` (au chargement) |
+| `POST /api/auth/reinitialisation` | `pages/NouveauMotDePasse.tsx` (soumission) |
+| `POST /api/auth/mot-de-passe` | `pages/ChangementMotDePasseObligatoire.tsx` |
+| `GET /api/auth/me` | `lib/auth.tsx` (`rafraichirIdentite`, nouveau) |
+| `POST /api/auth/anniversaires/aujourdhui` | `components/ConstellationLomoto.tsx` |
+
+Aucun nouvel endpoint créé, aucun contrat C3 modifié — uniquement des lectures
+et intégrations frontend, conformément au périmètre autorisé (`apps/web/src/**`,
+`docs/ui/**` ; `apps/api/**`/`prisma/**`/`packages/shared/**`/`docs/api-contracts/**`
+lus seulement).
+
+## A. Récupération du mot de passe
+
+- **`pages/MotDePasseOublie.tsx`** — tous les messages provisoires « intégration
+  serveur en attente » (F2) sont supprimés. Réponse `202` toujours identique
+  affichée (anti-énumération PRÉSERVÉE : le corps de la réponse n'est jamais lu
+  ni utilisé pour distinguer un compte existant d'un compte inexistant — un seul
+  message générique, localisé, dans les 4 langues). `400` (format rejeté côté
+  serveur), `429` (limitation de fréquence) et panne réseau affichent le message
+  du serveur (déjà en français via `lib/api.ts`, convention existante de
+  l'application). Double soumission empêchée par un garde synchrone (`enCours`).
+- **`pages/NouveauMotDePasse.tsx`** — jeton lu UNIQUEMENT depuis l'URL
+  (`?jeton=…`, format exact posé par `apps/api/src/services/email.ts`), jamais
+  journalisé, jamais affiché dans un toast, jamais persisté dans `localStorage`
+  (vérifié par test — voir plus bas). Vérifié via `POST
+  .../reinitialisation/verifier` **au chargement**, avant d'autoriser le
+  formulaire : jeton absent, mal formé, inconnu, expiré ou déjà utilisé
+  aboutissent tous au même état « lien invalide », avec un lien direct vers
+  `/mot-de-passe-oublie` pour permettre une nouvelle demande. Un jeton consommé
+  entre la vérification et la soumission (code serveur
+  `JETON_INVALIDE_OU_EXPIRE`) bascule sur ce même état. Après succès (`204`),
+  le retour à la connexion est proposé par un bouton proéminent, jamais un
+  simple lien perdu dans la page.
+
+## B. Changement obligatoire du mot de passe
+
+`utilisateur.motDePasseDoitChanger` (contrat C3) déclenche
+`pages/ChangementMotDePasseObligatoire.tsx`, rendue par `App.tsx` **à la place
+entière** de l'application authentifiée — pas de `<Layout>`, pas de
+`<Routes>` métier montées, quel que soit le chemin déjà présent dans l'URL :
+une navigation directe vers une URL métier pendant cet état retombe donc
+systématiquement sur cet écran bloquant (testé). Socket.io ne se connecte pas
+non plus tant que ce drapeau est actif — garde symétrique ajoutée dans
+`lib/socket.tsx` (`if (!utilisateur || utilisateur.motDePasseDoitChanger)`),
+cohérente avec le serveur qui refuse déjà toute route métier avec `403
+MOT_DE_PASSE_A_CHANGER` pour ce compte. Le formulaire appelle uniquement
+`POST /api/auth/mot-de-passe` (aucun nouvel endpoint). Après succès,
+`rafraichirIdentite()` (nouvelle méthode de `lib/auth.tsx`, `GET
+/api/auth/me`) recharge l'identité — l'application normale ne revient
+**qu'après cette confirmation serveur**, jamais en anticipant localement le
+succès. Un toast Premium confirme le changement (retour transitoire, l'écran
+disparaît de toute façon) ; une déconnexion reste proposée en échappatoire.
+
+## C. Constellation Lomoto
+
+**`components/ConstellationLomoto.tsx`** + **`anniversairesLogique.ts`**
+(logique pure de regroupement). Appelle `POST
+/api/auth/anniversaires/aujourdhui` **une seule fois par authentification**
+via `useQuery` (`staleTime: Infinity`) — pas de second indicateur dans
+`localStorage`, la réponse serveur (`dejaAffiche`) fait seule foi. N'affiche
+rien si `noms` est vide ou si `dejaAffiche` vaut `true` (les deux cas renvoient
+une liste vide, donc un seul test). Plusieurs anniversaires sont déjà groupés
+par le serveur en un seul appel ; `formaterListeNoms()` compose uniquement le
+texte affiché (« Alain », « Alain et Zoé », « Alain, Zoé et Marie » — la
+conjonction est fournie par l'appelant, traduite dans les 4 langues, jamais
+codée en dur). Le DTO `AnniversairesDuJourDTO` ne contient ni âge ni date de
+naissance : rien à filtrer, rien à déduire. Une erreur réseau ne bloque jamais
+l'application (`retry: false`, échec silencieux — même convention que les
+requêtes paresseuses de `Layout.tsx`).
+
+Accessibilité : réutilise le `Dialog` Radix déjà utilisé ailleurs dans
+l'application (`components/ui/dialog.tsx`) — focus piégé, `Échap` ferme,
+`role="dialog"` natif. Le focus est rendu à un emplacement logique à la
+fermeture (`<main id="contenu-principal">`, posé par `Layout.tsx`), pas laissé
+retomber sur `<body>`. Animation décorative (étoiles scintillantes, entrée en
+fondu — `.lomoto-constellation-*`, `index.css`, même convention que
+`.lomoto-authshell-*` de F2) suspendue par `usePrefersReducedMotion()` (double
+barrière CSS/JS, même modèle que F2).
+
+## D. Toasts et notifications
+
+Toast Premium (F1) réservé aux retours transitoires (changement de mot de
+passe obligatoire réussi) ; les informations qui demandent lecture/action
+restent des messages persistants (`role="status"`/`role="alert"` inline,
+comme en F2) — jamais les deux pour le même contenu (aucune double annonce).
+Le rollback concurrent des notifications (`lib/notificationsRollback.ts`,
+validé en F1) est **intact** : la seule modification de `lib/socket.tsx` est
+la garde d'entrée de connexion citée en §B, aucune des fonctions de rollback
+elles-mêmes n'a été touchée — confirmé par les 65 tests existants de
+`notificationsRollback.test.ts`, toujours tous passants.
+
+## Garanties de confidentialité (jeton de réinitialisation)
+
+- Jamais journalisé (`console.*`) ;
+- jamais affiché dans un toast ni dans un message persistant ;
+- jamais persisté dans `localStorage` (seul `lomoto_token`, le JWT de session,
+  y est écrit par `lib/api.ts` — comportement préexistant, non lié au jeton de
+  réinitialisation) ;
+- vit uniquement dans l'état React dérivé de l'URL (`useSearchParams`),
+  jamais recopié ailleurs.
+
+## Tests ajoutés
+
+| Fichier | Couvre |
+|---|---|
+| `pages/MotDePasseOublie.dom.test.tsx` (réécrit) | Appel réel de l'API, `202` (message persistant unique), anti-énumération (même message quel que soit le corps serveur), `400`, `429`, panne réseau, double soumission empêchée |
+| `pages/NouveauMotDePasse.dom.test.tsx` (réécrit) | Jeton absent/valide/invalide, vérification au chargement, panne réseau pendant la vérification (conservateur), succès `204` + retour connexion proéminent, jeton invalidé entre vérification et soumission, erreur réseau à la soumission (formulaire préservé), double soumission empêchée, jeton jamais dans `localStorage` |
+| `pages/ChangementMotDePasseObligatoire.dom.test.tsx` (nouveau) | Validation locale, appel API, mot de passe actuel incorrect (401), panne réseau, succès (toast + `rafraichirIdentite`), double soumission empêchée, déconnexion |
+| `App.dom.test.tsx` (nouveau) | Blocage de toute URL métier tant que `motDePasseDoitChanger` est actif (aucun `<nav>` monté), sur plusieurs chemins, avec échappatoire de déconnexion |
+| `components/anniversairesLogique.test.ts` (nouveau) | Regroupement pur des noms (0/1/2/3+ personnes), conjonction fournie par l'appelant, non-mutation du tableau d'entrée |
+| `components/ConstellationLomoto.dom.test.tsx` (nouveau) | Aucun anniversaire, déjà affiché, un seul, plusieurs groupés (une seule célébration), absence d'âge/date de naissance, échec réseau non bloquant, appel unique par montage, clavier (`Échap` + retour de focus), `prefers-reduced-motion` |
+
+Résultat : `npm test` → **343/343 tests passants** (41 fichiers, +42 tests F3).
+`npm run build` (tsc + vite) et `npm audit` (0 vulnérabilité) passent
+également. `npm ci` exécuté avec succès avant la vérification finale.
+
+## Captures d'écran
+
+Prises avec Playwright (Chromium) sur l'application réellement compilée —
+réponses serveur simulées par interception réseau (`page.route`), jamais de
+maquette statique. Le fichier `sessionStorage` `lomoto_splash_vu` est
+pré-rempli pour ne pas capturer l'écran de démarrage (7 s).
+
+| | |
+|---|---|
+| Récupération — bureau | Récupération — mobile |
+| ![Récupération du mot de passe, bureau](screenshots/f3/01-recuperation-bureau.png) | ![Récupération du mot de passe, mobile](screenshots/f3/02-recuperation-mobile.png) |
+| Lien de réinitialisation expiré | Changement de mot de passe obligatoire |
+| ![Lien invalide ou expiré, avec lien pour en redemander un](screenshots/f3/03-lien-expire.png) | ![Écran bloquant de changement du mot de passe temporaire](screenshots/f3/04-changement-obligatoire.png) |
+| Constellation Lomoto — plusieurs anniversaires | Constellation Lomoto — `prefers-reduced-motion` |
+| ![Célébration Constellation Lomoto avec trois anniversaires groupés](screenshots/f3/05-constellation-lomoto.png) | ![Constellation Lomoto sans animation décorative](screenshots/f3/06-constellation-reduced-motion.png) |

@@ -1151,13 +1151,14 @@
     },
     "forgotPasswordLink": "Mot de passe oublié ?",
     "backToLogin": "Retour à la connexion",
-    "pendingServerIntegration": "Cette fonctionnalité attend encore son intégration côté serveur. Aucune demande n'a été envoyée.",
     "resetRequest": {
       "title": "Mot de passe oublié",
       "subtitle": "Indiquez votre adresse e-mail professionnelle pour amorcer la récupération.",
       "emailLabel": "Adresse e-mail",
       "emailInvalid": "Saisissez une adresse e-mail valide.",
-      "submit": "Envoyer la demande"
+      "submit": "Envoyer la demande",
+      "success": "Si cette adresse correspond à un compte actif, un lien de réinitialisation vient d'être envoyé. Vérifiez votre boîte de réception.",
+      "genericError": "Une erreur est survenue. Réessayez dans un instant."
     },
     "resetPassword": {
       "title": "Nouveau mot de passe",
@@ -1166,7 +1167,32 @@
       "confirmPasswordLabel": "Confirmer le mot de passe",
       "submit": "Enregistrer le nouveau mot de passe",
       "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères.",
-      "passwordMismatch": "Les deux mots de passe ne correspondent pas."
+      "passwordMismatch": "Les deux mots de passe ne correspondent pas.",
+      "verifying": "Vérification du lien de réinitialisation…",
+      "invalidTitle": "Lien invalide ou expiré",
+      "invalidBody": "Ce lien de réinitialisation n'est plus utilisable — il a peut-être déjà servi ou a expiré. Vous pouvez en demander un nouveau.",
+      "requestNewLink": "Demander un nouveau lien",
+      "successTitle": "Mot de passe mis à jour",
+      "success": "Votre mot de passe a bien été changé. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
+      "goToLogin": "Aller à la connexion",
+      "genericError": "Une erreur est survenue. Réessayez dans un instant."
+    },
+    "mandatoryChange": {
+      "title": "Mot de passe temporaire",
+      "subtitle": "Pour la sécurité de votre compte, choisissez un nouveau mot de passe avant de continuer.",
+      "currentPasswordLabel": "Mot de passe temporaire actuel",
+      "newPasswordLabel": "Nouveau mot de passe",
+      "confirmPasswordLabel": "Confirmer le nouveau mot de passe",
+      "submit": "Changer le mot de passe",
+      "passwordTooShort": "Le nouveau mot de passe doit contenir au moins 8 caractères.",
+      "passwordMismatch": "Les deux mots de passe ne correspondent pas.",
+      "success": "Mot de passe changé avec succès.",
+      "genericError": "Une erreur est survenue. Réessayez dans un instant."
+    },
+    "anniversaires": {
+      "title": "Constellation Lomoto",
+      "body": "Anniversaire du jour : {{noms}} 🎂",
+      "and": "et"
     },
     "clock": {
       "ariaLabel": "Heure actuelle à Kinshasa : {{heures}} h {{minutes}} min {{secondes}} s"
