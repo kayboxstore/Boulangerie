@@ -82,6 +82,45 @@ describe("PasswordField — DOM", () => {
     expect(elementAide!.textContent).toContain("Faible");
   });
 
+  it("préserve un aria-describedby externe préexistant : les deux identifiants cohabitent, chacun pointant vers un élément réel", () => {
+    function Formulaire() {
+      const [valeur, setValeur] = React.useState("abcdefgh");
+      return (
+        <div>
+          <p id="erreur-formulaire">Ce champ est requis.</p>
+          <PasswordField
+            id="mdp-creation"
+            afficherRobustesse
+            aria-describedby="erreur-formulaire"
+            value={valeur}
+            onChange={(e) => setValeur(e.target.value)}
+          />
+        </div>
+      );
+    }
+    render(<Formulaire />);
+
+    const champ = screen.getByDisplayValue("abcdefgh") as HTMLInputElement;
+    const idsDecrivant = (champ.getAttribute("aria-describedby") ?? "").split(" ").filter(Boolean);
+
+    // Les DEUX identifiants doivent être présents : celui généré pour la
+    // robustesse ET celui fourni par l'appelant — ni l'un ni l'autre écrasé.
+    expect(idsDecrivant).toHaveLength(2);
+    expect(idsDecrivant).toContain("erreur-formulaire");
+
+    // Chacun pointe vers un élément réellement présent dans le document.
+    for (const id of idsDecrivant) {
+      const element = document.getElementById(id);
+      expect(element).not.toBeNull();
+    }
+
+    // L'élément externe reste bien celui fourni par l'appelant, avec son propre contenu.
+    expect(document.getElementById("erreur-formulaire")?.textContent).toBe("Ce champ est requis.");
+    // L'élément généré pour la robustesse contient bien le texte d'aide affiché.
+    const idRobustesse = idsDecrivant.find((id) => id !== "erreur-formulaire")!;
+    expect(document.getElementById(idRobustesse)?.textContent).toContain("Faible");
+  });
+
   it("n'ajoute pas d'aria-describedby quand la robustesse n'est pas affichée", () => {
     render(<PasswordField value="secret" onChange={() => {}} />);
     const champ = screen.getByDisplayValue("secret") as HTMLInputElement;

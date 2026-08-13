@@ -43,7 +43,7 @@ function DeclencheurToast() {
 }
 
 describe("FeedbackProvider + toastBus — DOM", () => {
-  it("affiche les quatre variantes de toast avec le rôle ARIA attendu", () => {
+  it("affiche les quatre variantes de toast, réellement rendues et contrôlées dans le DOM", () => {
     render(<FeedbackProvider>{null}</FeedbackProvider>);
 
     emettre({ variante: "succes", message: "Opération réussie" });
@@ -51,16 +51,25 @@ describe("FeedbackProvider + toastBus — DOM", () => {
     emettre({ variante: "avertissement", message: "Attention à ceci" });
     emettre({ variante: "erreur", message: "Une erreur est survenue" });
 
-    // succès/information → role="status" (aria-live polite) ; erreur/avertissement → role="alert".
-    const statuts = screen.getAllByRole("status");
-    const alertes = screen.getAllByRole("alert");
-    expect(statuts).toHaveLength(2);
-    expect(alertes).toHaveLength(1); // le 4ᵉ toast (erreur) est en file d'attente, MAX_TOASTS_VISIBLES=3
-
+    // succès/information → role="status" (aria-live polite) ; avertissement/erreur → role="alert".
+    // MAX_TOASTS_VISIBLES=3 : le 4ᵉ (erreur) est d'abord en file d'attente, pas encore dans le DOM.
+    expect(screen.getAllByRole("status")).toHaveLength(2);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
     expect(screen.getByText("Opération réussie")).toBeTruthy();
     expect(screen.getByText("Pour votre information")).toBeTruthy();
     expect(screen.getByText("Attention à ceci")).toBeTruthy();
     expect(screen.queryByText("Une erreur est survenue")).toBeNull();
+
+    // Libère une place : le 4ᵉ toast (erreur) doit alors être RÉELLEMENT rendu,
+    // avec le rôle ARIA attendu — les quatre variantes sont ainsi toutes
+    // vérifiées dans le DOM, pas seulement les trois premières.
+    fireEvent.click(screen.getAllByRole("button", { name: "Fermer" })[0]);
+
+    const erreur = screen.getByText("Une erreur est survenue");
+    expect(erreur).toBeTruthy();
+    const conteneurErreur = erreur.closest('[role="alert"]');
+    expect(conteneurErreur).not.toBeNull();
+    expect(screen.getAllByRole("alert")).toHaveLength(2); // avertissement + erreur, désormais toutes deux visibles
   });
 
   it("émission via le contexte useFeedback() fonctionne comme l'émission directe via le bus", () => {
@@ -112,7 +121,7 @@ describe("FeedbackProvider + toastBus — DOM", () => {
     expect(screen.queryByText("D (en file d'attente)")).toBeNull();
   });
 
-  it("temporisation contrôlée par de faux minuteurs : fermeture automatique après la durée par défaut, suspendue au survol", () => {
+  it("temporisation contrôlée par de faux minuteurs : le survol suspend puis reprend pour le VRAI temps restant", () => {
     vi.useFakeTimers();
     render(<FeedbackProvider>{null}</FeedbackProvider>);
     emettre({ variante: "succes", message: "Disparaît tout seul" });
@@ -120,19 +129,108 @@ describe("FeedbackProvider + toastBus — DOM", () => {
     const toastEl = screen.getByText("Disparaît tout seul").closest('[role="status"]') as HTMLElement;
     expect(toastEl).not.toBeNull();
 
-    // Le survol suspend le minuteur : même après la durée complète, le toast reste.
+    // Une partie de la durée s'écoule AVANT le survol (2000 ms sur 6000 ms) :
+    // le temps restant au moment de la pause doit donc être de 4000 ms, pas
+    // la durée totale — c'est précisément ce que ce test doit prouver.
+    const ECOULE_AVANT_SURVOL = 2000;
+    const RESTE_ATTENDU = DUREE_TOAST_DEFAUT_MS - ECOULE_AVANT_SURVOL;
+    act(() => {
+      vi.advanceTimersByTime(ECOULE_AVANT_SURVOL);
+    });
+    expect(screen.getByText("Disparaît tout seul")).toBeTruthy();
+
     fireEvent.mouseEnter(toastEl);
+    // Même la durée totale (6000 ms) ne suffit plus à fermer le toast tant
+    // qu'il reste en pause — la preuve que le minuteur est bien arrêté, pas
+    // seulement ralenti.
     act(() => {
       vi.advanceTimersByTime(DUREE_TOAST_DEFAUT_MS);
     });
     expect(screen.getByText("Disparaît tout seul")).toBeTruthy();
 
-    // Sortie du survol : le minuteur reprend pour le temps restant (la durée complète, non consommée).
     fireEvent.mouseLeave(toastEl);
+    // Juste avant l'expiration du temps restant réel (4000 ms) : encore présent.
+    act(() => {
+      vi.advanceTimersByTime(RESTE_ATTENDU - 1);
+    });
+    expect(screen.getByText("Disparaît tout seul")).toBeTruthy();
+
+    // Exactement à l'expiration du temps restant : retiré.
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.queryByText("Disparaît tout seul")).toBeNull();
+  });
+
+  it("pause multi-source : focus actif + entrée/sortie du survol → aucune reprise avant le blur, temps restant conservé", () => {
+    vi.useFakeTimers();
+    render(<FeedbackProvider>{null}</FeedbackProvider>);
+    emettre({ variante: "succes", message: "Focus puis survol" });
+    const toastEl = screen.getByText("Focus puis survol").closest('[role="status"]') as HTMLElement;
+
+    const ECOULE_AVANT_FOCUS = 1000;
+    const RESTE_ATTENDU = DUREE_TOAST_DEFAUT_MS - ECOULE_AVANT_FOCUS;
+    act(() => {
+      vi.advanceTimersByTime(ECOULE_AVANT_FOCUS);
+    });
+
+    fireEvent.focus(toastEl); // 1ʳᵉ source de pause : fige le temps restant à RESTE_ATTENDU
+    fireEvent.mouseEnter(toastEl); // 2ᵉ source de pause, s'ajoute sans rien changer
+    fireEvent.mouseLeave(toastEl); // relâche le survol : le focus maintient ENCORE la pause
+
+    // Sans la correction : mouseleave aurait relancé le minuteur ici alors
+    // que le focus est toujours actif. Toute la durée par défaut ne doit
+    // donc pas suffire à fermer le toast.
     act(() => {
       vi.advanceTimersByTime(DUREE_TOAST_DEFAUT_MS);
     });
-    expect(screen.queryByText("Disparaît tout seul")).toBeNull();
+    expect(screen.getByText("Focus puis survol")).toBeTruthy();
+
+    fireEvent.blur(toastEl); // dernière source relâchée : reprise, pour le temps restant conservé (RESTE_ATTENDU)
+    act(() => {
+      vi.advanceTimersByTime(RESTE_ATTENDU - 1);
+    });
+    expect(screen.getByText("Focus puis survol")).toBeTruthy();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.queryByText("Focus puis survol")).toBeNull();
+  });
+
+  it("pause multi-source : survol actif + focus/blur → aucune reprise avant le mouseleave, temps restant conservé", () => {
+    vi.useFakeTimers();
+    render(<FeedbackProvider>{null}</FeedbackProvider>);
+    emettre({ variante: "succes", message: "Survol puis focus" });
+    const toastEl = screen.getByText("Survol puis focus").closest('[role="status"]') as HTMLElement;
+
+    const ECOULE_AVANT_SURVOL = 1500;
+    const RESTE_ATTENDU = DUREE_TOAST_DEFAUT_MS - ECOULE_AVANT_SURVOL;
+    act(() => {
+      vi.advanceTimersByTime(ECOULE_AVANT_SURVOL);
+    });
+
+    fireEvent.mouseEnter(toastEl); // 1ʳᵉ source de pause : fige le temps restant à RESTE_ATTENDU
+    fireEvent.focus(toastEl); // 2ᵉ source de pause, s'ajoute sans rien changer
+    fireEvent.blur(toastEl); // relâche le focus : le survol maintient ENCORE la pause
+
+    // Sans la correction : blur aurait relancé le minuteur ici alors que le
+    // survol est toujours actif.
+    act(() => {
+      vi.advanceTimersByTime(DUREE_TOAST_DEFAUT_MS);
+    });
+    expect(screen.getByText("Survol puis focus")).toBeTruthy();
+
+    fireEvent.mouseLeave(toastEl); // dernière source relâchée : reprise, pour le temps restant conservé
+    act(() => {
+      vi.advanceTimersByTime(RESTE_ATTENDU - 1);
+    });
+    expect(screen.getByText("Survol puis focus")).toBeTruthy();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.queryByText("Survol puis focus")).toBeNull();
   });
 
   it("temporisation : un toast non survolé se ferme tout seul après la durée par défaut", () => {
