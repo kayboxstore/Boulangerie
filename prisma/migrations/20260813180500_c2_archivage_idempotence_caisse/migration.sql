@@ -142,11 +142,13 @@ ALTER TABLE "RemiseCaisse"
   ADD CONSTRAINT "RemiseCaisse_remettant_non_vide" CHECK (length(trim("remisParNom")) > 0);
 
 -- Une seule commande par client et jour OPÉRATIONNEL de Kinshasa, y compris
--- sous concurrence. L'index d'expression complète le contrôle applicatif.
+-- sous concurrence. Prisma stocke les instants UTC en timestamp sans fuseau et
+-- Kinshasa reste à UTC+1 toute l'année : cette expression est donc immuable,
+-- contrairement à une conversion timestamptz -> date dépendante de la session.
 CREATE UNIQUE INDEX "CommandeClient_client_jour_lomoto_key"
   ON "CommandeClient" (
     "clientId",
-    (("dateCreation" AT TIME ZONE 'Africa/Kinshasa')::date)
+    (("dateCreation" + INTERVAL '1 hour')::date)
   );
 
 -- Une seule dépense farine par date.
