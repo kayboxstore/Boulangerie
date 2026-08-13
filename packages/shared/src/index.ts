@@ -23,6 +23,25 @@ z.setErrorMap((issue, ctx) => {
   }
 });
 
+
+// ---------------------------------------------------------------------------
+// Validation primitive commune — C2
+// ---------------------------------------------------------------------------
+
+export const DATE_ISO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Valide le format ET l'existence calendaire (2026-02-31 est refusé). */
+export function estDateISOValide(valeur: string): boolean {
+  if (!DATE_ISO_REGEX.test(valeur)) return false;
+  const date = new Date(`${valeur}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === valeur;
+}
+
+export const dateISOSchema = z
+  .string()
+  .regex(DATE_ISO_REGEX, "Date invalide (AAAA-MM-JJ)")
+  .refine(estDateISOValide, "Cette date n'existe pas dans le calendrier");
+
 // ---------------------------------------------------------------------------
 // Modules & niveaux d'accès (matrice de permissions — section 2 de la spec)
 // ---------------------------------------------------------------------------
@@ -70,9 +89,9 @@ export type LoginInput = z.infer<typeof loginSchema>;
 
 export const produitCreateSchema = z.object({
   nom: z.string().trim().min(1, "Le nom est requis").max(120),
-  prixVente: z.number().int("Montant en Fc entier").min(0, "Le prix doit être positif"),
+  prixVente: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0, "Le prix doit être positif"),
   // Le pain est exonéré de TVA — 0 par défaut ; taux configurable pour d'autres articles.
-  tauxTaxe: z.number().min(0).max(100).default(0),
+  tauxTaxe: z.number().finite("Le nombre doit être fini").min(0).max(100).default(0),
   categorie: z.string().trim().min(1, "La catégorie est requise").max(60),
   actif: z.boolean().default(true),
 });
@@ -247,8 +266,8 @@ export const STRATEGIE_DOUBLON_LABELS: Record<StrategieDoublon, string> = {
 
 export const commandeCreateSchema = z.object({
   clientId: z.string().min(1, "Le client est requis"),
-  quantiteBacs: z.number().int("Nombre de bacs entier").min(1, "Au moins 1 bac"),
-  montantRecu: z.number().int("Montant en Fc entier").min(0, "Le montant reçu doit être positif"),
+  quantiteBacs: z.number().finite("Le nombre doit être fini").int("Nombre de bacs entier").min(1, "Au moins 1 bac"),
+  montantRecu: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0, "Le montant reçu doit être positif"),
   /**
    * Absent = saisie normale ; si un doublon existe, l'API répond 409 avec la
    * commande en conflit pour que l'UI propose le choix. Présent = le choix a
@@ -312,8 +331,8 @@ export interface TypeClientDTO {
 // écriture réservée à l'Administrateur. Les montants sont en Fc.
 export const typeClientCreateSchema = z.object({
   nom: z.string().trim().min(1, "Le nom est requis").max(60),
-  prixParBac: z.number().int("Montant en Fc entier").min(0, "Le prix doit être positif"),
-  commissionParBac: z.number().int("Montant en Fc entier").min(0, "La commission doit être positive").default(0),
+  prixParBac: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0, "Le prix doit être positif"),
+  commissionParBac: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0, "La commission doit être positive").default(0),
 });
 export type TypeClientCreateInput = z.infer<typeof typeClientCreateSchema>;
 
@@ -333,7 +352,7 @@ export interface ZoneDepositaireDTO {
 
 export const zoneDepositaireCreateSchema = z.object({
   nom: z.string().trim().min(1, "Le nom est requis").max(80),
-  ordre: z.number().int().min(0).max(10_000).default(0),
+  ordre: z.number().finite("Le nombre doit être fini").int().min(0).max(10_000).default(0),
 });
 export type ZoneDepositaireCreateInput = z.infer<typeof zoneDepositaireCreateSchema>;
 
@@ -429,7 +448,7 @@ export interface ResumeCommandesJourDTO {
 // Règlement ultérieur d'une dette (section 3.4) : le montant s'ajoute au
 // montant reçu, dette et avances recalculées via calculerCommande().
 export const reglementCreateSchema = z.object({
-  montant: z.number().int("Montant en Fc entier").min(1, "Le montant doit être positif"),
+  montant: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(1, "Le montant doit être positif"),
 });
 export type ReglementCreateInput = z.infer<typeof reglementCreateSchema>;
 
@@ -486,7 +505,7 @@ export function calculerDepenseFarine(taux: number, sacsUtilises: number): numbe
 
 export const tauxDuJourSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
-  valeur: z.number().positive("Le taux doit etre strictement positif").max(1_000_000),
+  valeur: z.number().finite("Le nombre doit être fini").positive("Le taux doit etre strictement positif").max(1_000_000),
 });
 export type TauxDuJourInput = z.infer<typeof tauxDuJourSchema>;
 
@@ -506,7 +525,7 @@ export const MOTIF_DEPENSE_FARINE = "Achat farine";
 export const depenseCreateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
   motif: z.string().trim().min(1, "Le motif est requis").max(200),
-  montant: z.number().int("Montant en Fc entier").min(1, "Le montant doit etre positif"),
+  montant: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(1, "Le montant doit etre positif"),
 });
 export type DepenseCreateInput = z.infer<typeof depenseCreateSchema>;
 
@@ -644,7 +663,7 @@ const quantiteIngredient = z
   .number()
   .min(0, "Quantité négative impossible")
   .max(1_000_000, "Quantité trop élevée");
-const nbBacs = z.number().int("Nombre entier de bacs").min(0, "Nombre de bacs négatif impossible");
+const nbBacs = z.number().finite("Le nombre doit être fini").int("Nombre entier de bacs").min(0, "Nombre de bacs négatif impossible");
 
 // --- a) Planning de production ---------------------------------------------
 
@@ -969,7 +988,7 @@ export const commandeFournisseurCreateSchema = z.object({
           .number()
           .refine((q) => Number.isFinite(q) && Math.round(q * 1000) === q * 1000, "Au plus 3 décimales")
           .refine((q) => q > 0, "La quantité doit être strictement positive"),
-        prixUnitaire: z.number().int("Montant en Fc entier").min(0, "Le prix doit être positif"),
+        prixUnitaire: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0, "Le prix doit être positif"),
       }),
     )
     .min(1, "Au moins une ligne"),
@@ -1033,8 +1052,8 @@ export const travailleurCreateSchema = z.object({
   // même raison que departementId. joursTravaillesParMois est individuel par
   // agent (26 jours, 13 jours…) — jamais une valeur fixe pour tous, sert de
   // diviseur du taux journalier dans le calcul de paie.
-  salaireMensuel: z.number().int().positive("Le salaire doit être un montant positif"),
-  joursTravaillesParMois: z.number().int().min(1, "Au moins 1 jour").max(31, "Au plus 31 jours"),
+  salaireMensuel: z.number().finite("Le nombre doit être fini").int().positive("Le salaire doit être un montant positif"),
+  joursTravaillesParMois: z.number().finite("Le nombre doit être fini").int().min(1, "Au moins 1 jour").max(31, "Au plus 31 jours"),
 });
 export type TravailleurCreateInput = z.infer<typeof travailleurCreateSchema>;
 
@@ -1066,8 +1085,8 @@ export const travailleurUpdateSchema = travailleurCreateSchema.partial().extend(
   groupeId: z.string().nullable().optional(),
   // null = retirer explicitement (fiche revient à l'état "salaire non
   // renseigné" — le calcul de paie sera alors bloqué pour ce Travailleur).
-  salaireMensuel: z.number().int().positive().nullable().optional(),
-  joursTravaillesParMois: z.number().int().min(1).max(31).nullable().optional(),
+  salaireMensuel: z.number().finite("Le nombre doit être fini").int().positive().nullable().optional(),
+  joursTravaillesParMois: z.number().finite("Le nombre doit être fini").int().min(1).max(31).nullable().optional(),
 });
 export type TravailleurUpdateInput = z.infer<typeof travailleurUpdateSchema>;
 
@@ -1254,7 +1273,7 @@ export const sanctionCreateSchema = z
     type: z.enum(TYPES_SANCTION),
     motif: z.string().trim().min(1, "Le motif est requis").max(500),
     date: dateISO,
-    montant: z.number().int().positive().optional(),
+    montant: z.number().finite("Le nombre doit être fini").int().positive().optional(),
   })
   .refine((d) => d.type !== "RETENUE" || d.montant !== undefined, {
     message: "Le montant est requis pour une retenue",
@@ -1434,7 +1453,7 @@ export interface SectionDocument {
 const sectionSchema = z.object({
   titre: z.string().max(200),
   entetes: z.array(z.string().max(120)).max(20),
-  lignes: z.array(z.array(z.union([z.string().max(400), z.number()])).max(20)).max(2000),
+  lignes: z.array(z.array(z.union([z.string().max(400), z.number().finite("Le nombre doit être fini")])).max(20)).max(2000),
 });
 
 export const documentExportSchema = z.object({
