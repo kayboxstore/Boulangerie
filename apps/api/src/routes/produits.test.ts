@@ -63,6 +63,28 @@ describe("archivage des produits C2", () => {
     });
   });
 
+  it("crée de façon cohérente un produit demandé initialement inactif", async () => {
+    mocks.findUnique.mockResolvedValue(null);
+    mocks.create.mockImplementation(async ({ data }) => ({ id: "produit-2", ...data }));
+
+    const res = await request(appProduits()).post("/").send({
+      nom: "Pain test",
+      prixVente: 100,
+      tauxTaxe: 0,
+      categorie: "Pain",
+      actif: false,
+    });
+
+    expect(res.status).toBe(201);
+    expect(mocks.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        actif: false,
+        archiveLe: expect.any(Date),
+        archiveParId: "admin-1",
+      }),
+    });
+  });
+
   it("archive au lieu de supprimer physiquement", async () => {
     mocks.findUnique.mockResolvedValue({ id: "produit-1", nom: "Baguette", actif: true });
     mocks.update.mockResolvedValue({});

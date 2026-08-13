@@ -51,7 +51,11 @@ produitsRouter.post("/", ecritureParametres, async (req, res, next) => {
       });
     }
 
-    const produit = await prisma.produit.create({ data: parsed.data });
+    const donnees =
+      parsed.data.actif === false
+        ? { ...parsed.data, archiveLe: new Date(), archiveParId: req.utilisateur!.id }
+        : parsed.data;
+    const produit = await prisma.produit.create({ data: donnees });
     res.status(201).json({ produit });
   } catch (e) {
     next(e);
