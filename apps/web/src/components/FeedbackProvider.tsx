@@ -84,6 +84,8 @@ const HALO_VARIANTE: Record<VarianteToast, string> = {
   information: "bg-information",
 };
 
+type SourcePause = "survol" | "focus";
+
 function ToastItem({ toast, onFermer }: { toast: ToastAffiche; onFermer: (id: number) => void }) {
   const { t } = useTranslation();
   const duree = toast.dureeMs ?? DUREE_TOAST_DEFAUT_MS;
@@ -91,6 +93,13 @@ function ToastItem({ toast, onFermer }: { toast: ToastAffiche; onFermer: (id: nu
   const resteMsRef = useRef(duree);
   const debutRef = useRef<number>(Date.now());
   const minuteurRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Round F1-DOM : un unique booléen `enPause` ne peut pas représenter deux
+  // sources de pause indépendantes (survol ET focus clavier) actives en même
+  // temps. Un `mouseleave` alors que le focus est toujours présent — ou un
+  // `blur` alors que le survol continue — relançait à tort le minuteur.
+  // L'ensemble des sources ENCORE actives est la seule source de vérité : le
+  // minuteur ne reprend que lorsque la DERNIÈRE source est relâchée.
+  const sourcesPauseRef = useRef<Set<SourcePause>>(new Set());
 
   const arreterMinuteur = useCallback(() => {
     if (minuteurRef.current !== null) {
@@ -118,19 +127,32 @@ function ToastItem({ toast, onFermer }: { toast: ToastAffiche; onFermer: (id: nu
   // Pause accessible (audit UX-17) : le survol OU le focus clavier suspend la
   // fermeture automatique — sans cela, un lecteur au clavier n'aurait jamais
   // le temps de lire le message avant sa disparition.
-  const pauser = useCallback(() => {
-    if (toast.persistant || enPause) return;
-    const ecoule = Date.now() - debutRef.current;
-    resteMsRef.current = Math.max(0, resteMsRef.current - ecoule);
-    arreterMinuteur();
-    setEnPause(true);
-  }, [arreterMinuteur, enPause, toast.persistant]);
+  const pauser = useCallback(
+    (source: SourcePause) => {
+      if (toast.persistant) return;
+      const sources = sourcesPauseRef.current;
+      const etaitDejaEnPause = sources.size > 0;
+      sources.add(source);
+      if (etaitDejaEnPause) return; // une autre source maintenait déjà la pause : rien de plus à figer
+      const ecoule = Date.now() - debutRef.current;
+      resteMsRef.current = Math.max(0, resteMsRef.current - ecoule);
+      arreterMinuteur();
+      setEnPause(true);
+    },
+    [arreterMinuteur, toast.persistant],
+  );
 
-  const reprendre = useCallback(() => {
-    if (toast.persistant || !enPause) return;
-    setEnPause(false);
-    demarrerMinuteur(resteMsRef.current);
-  }, [demarrerMinuteur, enPause, toast.persistant]);
+  const reprendre = useCallback(
+    (source: SourcePause) => {
+      if (toast.persistant) return;
+      const sources = sourcesPauseRef.current;
+      sources.delete(source);
+      if (sources.size > 0) return; // au moins une autre source maintient encore la pause
+      setEnPause(false);
+      demarrerMinuteur(resteMsRef.current);
+    },
+    [demarrerMinuteur, toast.persistant],
+  );
 
   const Icone = ICONES_VARIANTE[toast.variante];
 
@@ -139,10 +161,10 @@ function ToastItem({ toast, onFermer }: { toast: ToastAffiche; onFermer: (id: nu
       role={toast.variante === "erreur" || toast.variante === "avertissement" ? "alert" : "status"}
       aria-live={toast.variante === "erreur" ? "assertive" : "polite"}
       tabIndex={0}
-      onMouseEnter={pauser}
-      onMouseLeave={reprendre}
-      onFocus={pauser}
-      onBlur={reprendre}
+      onMouseEnter={() => pauser("survol")}
+      onMouseLeave={() => reprendre("survol")}
+      onFocus={() => pauser("focus")}
+      onBlur={() => reprendre("focus")}
       className={cn(
         "pointer-events-auto relative flex w-full max-w-sm items-start gap-3 overflow-hidden rounded-xl border bg-card p-3 shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         BORDURE_VARIANTE[toast.variante],

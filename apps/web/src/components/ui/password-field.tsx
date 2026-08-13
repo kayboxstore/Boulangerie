@@ -28,16 +28,33 @@ export interface PasswordFieldProps extends Omit<React.ComponentProps<typeof Inp
 }
 
 const PasswordField = React.forwardRef<HTMLInputElement, PasswordFieldProps>(
-  ({ className, afficherRobustesse = false, value, onChange, ...props }, ref) => {
+  (
+    { className, afficherRobustesse = false, value, onChange, "aria-describedby": ariaDescribedbyExterne, ...props },
+    ref,
+  ) => {
     const { t } = useTranslation();
     const [visible, setVisible] = React.useState(false);
     const [valeurLocale, setValeurLocale] = React.useState("");
+    // Identifiant stable pour associer programmatiquement l'indicateur de
+    // robustesse au champ (aria-describedby) — sans cela, un lecteur d'écran
+    // n'annonce jamais cette aide, uniquement visible à l'œil (défaut révélé
+    // par les tests DOM round F1-DOM, corrigé ici).
+    const idRobustesseGenere = React.useId();
+    const idRobustesse = props.id ? `${props.id}-robustesse` : idRobustesseGenere;
 
     // Le composant peut être contrôlé (`value` fourni par l'appelant) ou non ;
     // dans les deux cas on garde une copie locale pour calculer la robustesse
     // sans forcer l'appelant à faire ce calcul lui-même.
     const valeurActuelle = value !== undefined ? String(value) : valeurLocale;
     const robustesse = React.useMemo(() => evaluerRobustesseMotDePasse(valeurActuelle), [valeurActuelle]);
+    const afficheRobustesseActuellement = afficherRobustesse && valeurActuelle.length > 0;
+    // `aria-describedby` externe (fourni par l'appelant, ex. un message
+    // d'erreur de formulaire) est PRÉSERVÉ, jamais écrasé — les deux
+    // identifiants cohabitent, comme le permet cet attribut (liste séparée
+    // par des espaces).
+    const ariaDescribedby = afficheRobustesseActuellement
+      ? [idRobustesse, ariaDescribedbyExterne].filter(Boolean).join(" ")
+      : ariaDescribedbyExterne;
 
     const gererChangement = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (value === undefined) setValeurLocale(e.target.value);
@@ -58,6 +75,7 @@ const PasswordField = React.forwardRef<HTMLInputElement, PasswordFieldProps>(
             value={value}
             onChange={gererChangement}
             autoComplete={props.autoComplete ?? "current-password"}
+            aria-describedby={ariaDescribedby || undefined}
             {...props}
           />
           <button
@@ -77,8 +95,8 @@ const PasswordField = React.forwardRef<HTMLInputElement, PasswordFieldProps>(
           </button>
         </div>
 
-        {afficherRobustesse && valeurActuelle.length > 0 && (
-          <div className="mt-1.5" aria-live="polite">
+        {afficheRobustesseActuellement && (
+          <div id={idRobustesse} className="mt-1.5" aria-live="polite">
             <div className="flex gap-1" aria-hidden>
               {[0, 1, 2, 3].map((index) => (
                 <span
