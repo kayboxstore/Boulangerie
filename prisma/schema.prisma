@@ -96,6 +96,7 @@ model Utilisateur {
   nom                         String
   email                       String                @unique
   motDePasseHash              String
+  motDePasseDoitChanger        Boolean               @default(false)
   roleId                      String
   role                        Role                  @relation(fields: [roleId], references: [id])
   actif                       Boolean               @default(true)
@@ -145,9 +146,38 @@ model Utilisateur {
   sessionsCaisseFermees       SessionCaisse[]       @relation("SessionsCaisseFermees")
   remisesCaisseRecues         RemiseCaisse[]        @relation("RemisesCaisseRecues")
   remisesCaisseEnregistrees   RemiseCaisse[]        @relation("RemisesCaisseEnregistrees")
+  jetonsReinitialisation       JetonReinitialisationMotDePasse[]
+  affichagesAnniversaire       AffichageAnniversaire[]
   conversationsSupport        ConversationSupport[] @relation("ConversationsUtilisateur")
   conversationsSupportFermees ConversationSupport[] @relation("ConversationsSupportFermeesPar")
   messagesSupportEnvoyes      MessageSupport[]      @relation("MessagesSupportEnvoyes")
+}
+
+// Jeton de récupération : seul le SHA-256 est stocké, jamais le secret envoyé.
+model JetonReinitialisationMotDePasse {
+  id            String      @id @default(cuid())
+  utilisateurId String
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  jetonHash     String      @unique
+  expireLe      DateTime
+  utiliseLe     DateTime?
+  createdAt     DateTime    @default(now())
+
+  @@index([utilisateurId, createdAt])
+  @@index([expireLe])
+}
+
+// Réservation atomique de la célébration : une ligne au plus par utilisateur
+// et par jour civil de Kinshasa, même si plusieurs appareils interrogent l'API.
+model AffichageAnniversaire {
+  id            String      @id @default(cuid())
+  utilisateurId String
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  date          DateTime    @db.Date
+  createdAt     DateTime    @default(now())
+
+  @@unique([utilisateurId, date])
+  @@index([date])
 }
 
 // Notification métier (section 3.10) : persistée pour le rattrapage hors ligne,
@@ -584,6 +614,7 @@ model Travailleur {
   telephone              String?
   poste                  String
   dateEmbauche           DateTime       @db.Date
+  dateNaissance           DateTime?      @db.Date
   utilisateurId          String?        @unique
   utilisateur            Utilisateur?   @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
   pointages              Pointage[]
