@@ -31,6 +31,18 @@
  *   isolées par génération de session (voir socket.tsx) pour qu'une requête
  *   commencée par un utilisateur ne puisse jamais modifier l'état affiché
  *   après sa déconnexion ou la connexion d'un autre utilisateur.
+ * - round 5 : `annulerApresEchec` restaurait `lu: false` pour TOUS les ids
+ *   encore réclamés par le jeton en échec — y compris ceux qui étaient déjà
+ *   réellement lus avant que l'action ne démarre (ex. `toutMarquerLu` échoue
+ *   après avoir réclamé une notification A déjà lue et une notification B non
+ *   lue : A redevenait, à tort, non lue). Le registre distingue désormais
+ *   deux notions par identifiant réclamé : la PROPRIÉTÉ (qui gère la
+ *   concurrence, inchangée) et l'OBLIGATION DE ROLLBACK `doitRestaurerNonLu`
+ *   (calculée au moment de la réclamation, jamais recalculée après coup à
+ *   partir du seul `lu === false` courant — une notification affichée `lu:
+ *   true` peut être le fruit d'une action individuelle encore en vol, pas
+ *   encore confirmée : si le global la reprend, il doit hériter de son
+ *   obligation de rollback, pas la perdre).
  */
 
 export interface NotificationAvecLecture {
@@ -117,25 +129,47 @@ export function ajouterNotificationAvecPlafond<T extends NotificationAvecLecture
   return { notifications: conservees, resteNonLues: etat.resteNonLues + nonLuesExpulsees };
 }
 
+/** Un identifiant réclamé porte, en plus du jeton propriétaire, l'obligation de rollback calculée au moment de la réclamation. */
+export interface EntreeReclamation {
+  id: string;
+  /** true si un échec de CETTE action doit remettre cet identifiant à `lu: false`. */
+  doitRestaurerNonLu: boolean;
+}
+
 /**
  * Registre de "propriété" par identifiant RÉEL. Trois états possibles par
- * id : non réclamé, réclamé par un jeton (en attente de résolution réseau),
- * ou CONFIRMÉ (terminal — un succès réseau a eu lieu, pour n'importe quelle
- * action ; plus aucune reprise ni rollback futur ne peut l'affecter). Ce
- * caractère terminal est correct pour une notification réelle (une fois
- * lue, elle le reste) — voir `creerProprieteUnique` ci-dessous pour le
- * "reste non chargé", qui n'a PAS cette propriété de terminalité.
+ * id : non réclamé, réclamé par un jeton (en attente de résolution réseau,
+ * avec son obligation de rollback `doitRestaurerNonLu`), ou CONFIRMÉ
+ * (terminal — un succès réseau a eu lieu, pour n'importe quelle action ; plus
+ * aucune reprise ni rollback futur ne peut l'affecter). Ce caractère terminal
+ * est correct pour une notification réelle (une fois lue, elle le reste) —
+ * voir `creerProprieteUnique` ci-dessous pour le "reste non chargé", qui n'a
+ * PAS cette propriété de terminalité.
+ *
+ * PROPRIÉTÉ et OBLIGATION DE ROLLBACK sont deux notions distinctes (round 5) :
+ * la propriété gère la concurrence (qui a le droit de confirmer/annuler cet
+ * id) ; l'obligation de rollback dit si un échec de CE propriétaire doit
+ * remettre l'id à `lu: false`. Un identifiant réclamé par `toutMarquerLu`
+ * peut très bien rester la propriété de cette action tout en ayant
+ * `doitRestaurerNonLu = false` (il était déjà réellement lu) — un échec le
+ * laisse alors intact.
  */
 export function creerRegistreDePropriete<Jeton>() {
-  type EtatId = { statut: "reclame"; jeton: Jeton } | { statut: "confirme" };
+  type EtatId = { statut: "reclame"; jeton: Jeton; doitRestaurerNonLu: boolean } | { statut: "confirme" };
   const etats = new Map<string, EtatId>();
 
   return {
-    /** Réclame la propriété des identifiants donnés — sans effet sur un identifiant déjà confirmé (terminal). */
-    reclamer(ids: readonly string[], jeton: Jeton): void {
-      for (const id of ids) {
+    /**
+     * Réclame la propriété des identifiants donnés, avec leur obligation de
+     * rollback respective — sans effet sur un identifiant déjà confirmé
+     * (terminal). L'obligation est fournie par l'appelant (voir
+     * `demarrerMarquerLue`/`demarrerToutMarquerLu`), jamais recalculée ici à
+     * partir d'un état courant.
+     */
+    reclamer(entrees: readonly EntreeReclamation[], jeton: Jeton): void {
+      for (const { id, doitRestaurerNonLu } of entrees) {
         if (etats.get(id)?.statut === "confirme") continue;
-        etats.set(id, { statut: "reclame", jeton });
+        etats.set(id, { statut: "reclame", jeton, doitRestaurerNonLu });
       }
     },
     /** Marque définitivement confirmé — un succès réseau l'emporte toujours, quel que soit le propriétaire courant. */
@@ -149,12 +183,22 @@ export function creerRegistreDePropriete<Jeton>() {
         if (actuel?.statut === "reclame" && actuel.jeton === jeton) etats.delete(id);
       }
     },
-    /** Sous-ensemble des identifiants ENCORE réclamés (ni repris, ni confirmés) par ce jeton précisément. */
+    /** Sous-ensemble des identifiants ENCORE réclamés (ni repris, ni confirmés) par ce jeton précisément — propriété seule, indépendamment de l'obligation de rollback. */
     idsEncoreReclamesPar(ids: readonly string[], jeton: Jeton): string[] {
       return ids.filter((id) => {
         const actuel = etats.get(id);
         return actuel?.statut === "reclame" && actuel.jeton === jeton;
       });
+    },
+    /**
+     * Obligation de rollback ACTUELLE d'un identifiant encore réclamé (pour
+     * qu'une action qui le reprend hérite de cette obligation plutôt que de
+     * la recalculer sur le seul `lu` affiché — voir la note d'en-tête).
+     * `false` si l'identifiant n'est pas réclamé (non trouvé ou confirmé).
+     */
+    doitRestaurerNonLu(id: string): boolean {
+      const actuel = etats.get(id);
+      return actuel?.statut === "reclame" ? actuel.doitRestaurerNonLu : false;
     },
   };
 }
@@ -214,7 +258,10 @@ export function demarrerMarquerLue<T extends NotificationAvecLecture>(
     return { etat, jeton: Symbol("inutilise"), aDemarre: false, idsReclames: [], gereLeReste: false, resteNonLuesAvant: 0 };
   }
   const jeton = Symbol("marquerLue");
-  registre.reclamer([id], jeton);
+  // Une lecture individuelle ne démarre que sur une notification non lue
+  // (voir `marquerIdCommeLu` ci-dessus, `aChange` serait `false` sinon) :
+  // son obligation de rollback est donc toujours vraie.
+  registre.reclamer([{ id, doitRestaurerNonLu: true }], jeton);
   return {
     etat: { ...etat, notifications },
     jeton,
@@ -235,6 +282,17 @@ export function demarrerMarquerLue<T extends NotificationAvecLecture>(
  * conserver la propriété de son id. Réclamer TOUS les ids actuels neutralise
  * ce cas : l'action globale l'emporte toujours sur toute action
  * individuelle plus ancienne sur le même id.
+ *
+ * Correction round 5 : réclamer un id ne signifie pas qu'un échec doit le
+ * remettre à `lu: false` — un id réellement déjà lu (sans opération en vol)
+ * doit rester lu même si CETTE action globale échoue. Pour chaque id
+ * réclamé, l'obligation de rollback (`doitRestaurerNonLu`) est déterminée
+ * ainsi, à partir de l'état AFFICHÉ avant le passage optimiste de
+ * `marquerTousCommeLus` : non lu → obligation vraie ; déjà affiché lu mais
+ * objet d'une réclamation en cours (action individuelle non confirmée) →
+ * hérite de l'obligation de cette réclamation, jamais recalculée sur le seul
+ * `lu` courant ; déjà réellement lu et sans réclamation en cours → obligation
+ * fausse.
  */
 export function demarrerToutMarquerLu<T extends NotificationAvecLecture>(
   etat: EtatNotifications<T>,
@@ -245,15 +303,18 @@ export function demarrerToutMarquerLu<T extends NotificationAvecLecture>(
   if (idsTouches.length === 0 && etat.resteNonLues === 0) {
     return { etat, jeton: Symbol("inutilise"), aDemarre: false, idsReclames: [], gereLeReste: false, resteNonLuesAvant: 0 };
   }
-  const idsAReclamer = etat.notifications.map((n) => n.id);
   const jeton = Symbol("toutMarquerLu");
-  registre.reclamer(idsAReclamer, jeton);
+  const entrees: EntreeReclamation[] = etat.notifications.map((n) => ({
+    id: n.id,
+    doitRestaurerNonLu: !n.lu || registre.doitRestaurerNonLu(n.id),
+  }));
+  registre.reclamer(entrees, jeton);
   registreReste.reclamer(jeton);
   return {
     etat: { notifications, resteNonLues: 0 },
     jeton,
     aDemarre: true,
-    idsReclames: idsAReclamer,
+    idsReclames: entrees.map((e) => e.id),
     gereLeReste: true,
     resteNonLuesAvant: etat.resteNonLues,
   };
@@ -300,6 +361,13 @@ export function confirmerSucces<T extends NotificationAvecLecture>(
  * ce que celle-ci gérait (ids réels ET reste non chargé) — dans ce cas il
  * n'y a rien à annuler, et l'appelant ne doit ni modifier l'état ni
  * afficher de toast d'erreur.
+ *
+ * Round 5 : la PROPRIÉTÉ (tous les ids encore possédés par ce jeton, y
+ * compris ceux qui étaient déjà réellement lus) est TOUJOURS libérée — sans
+ * quoi ces ids resteraient verrouillés indéfiniment. Seul le SOUS-ENSEMBLE
+ * dont `doitRestaurerNonLu` vaut vrai est repassé à `lu: false` : une
+ * notification réellement lue avant le démarrage de l'action n'est jamais
+ * touchée, quel que soit l'ordre de résolution des actions concurrentes.
  */
 export function annulerApresEchec<T extends NotificationAvecLecture>(
   etat: EtatNotifications<T>,
@@ -307,8 +375,9 @@ export function annulerApresEchec<T extends NotificationAvecLecture>(
   registre: RegistrePropriete,
   registreReste: ProprieteUnique,
 ): EtatNotifications<T> | null {
-  const idsARestaurer = registre.idsEncoreReclamesPar(demarrage.idsReclames, demarrage.jeton);
-  registre.liberer(idsARestaurer, demarrage.jeton);
+  const idsEncorePossedes = registre.idsEncoreReclamesPar(demarrage.idsReclames, demarrage.jeton);
+  const idsARestaurer = idsEncorePossedes.filter((id) => registre.doitRestaurerNonLu(id));
+  registre.liberer(idsEncorePossedes, demarrage.jeton);
 
   let resteNonLues = etat.resteNonLues;
   let resteRestaure = false;

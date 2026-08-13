@@ -168,7 +168,7 @@ describe("creerRegistreDePropriete", () => {
   it("un rollback n'agit que sur ce qu'il possède encore", () => {
     const registre = creerRegistreDePropriete<symbol>();
     const jetonA = Symbol("marquerLue-1");
-    registre.reclamer(["1"], jetonA);
+    registre.reclamer([{ id: "1", doitRestaurerNonLu: true }], jetonA);
     expect(registre.idsEncoreReclamesPar(["1"], jetonA)).toEqual(["1"]);
   });
 
@@ -176,8 +176,8 @@ describe("creerRegistreDePropriete", () => {
     const registre = creerRegistreDePropriete<symbol>();
     const jetonA = Symbol("A");
     const jetonB = Symbol("B");
-    registre.reclamer(["1"], jetonA);
-    registre.reclamer(["1"], jetonB);
+    registre.reclamer([{ id: "1", doitRestaurerNonLu: true }], jetonA);
+    registre.reclamer([{ id: "1", doitRestaurerNonLu: true }], jetonB);
 
     expect(registre.idsEncoreReclamesPar(["1"], jetonA)).toEqual([]);
     expect(registre.idsEncoreReclamesPar(["1"], jetonB)).toEqual(["1"]);
@@ -186,11 +186,11 @@ describe("creerRegistreDePropriete", () => {
   it("confirmer() rend un identifiant définitivement irrécupérable, même par un jeton plus récent", () => {
     const registre = creerRegistreDePropriete<symbol>();
     const jetonA = Symbol("A");
-    registre.reclamer(["1"], jetonA);
+    registre.reclamer([{ id: "1", doitRestaurerNonLu: true }], jetonA);
     registre.confirmer(["1"]);
 
     const jetonB = Symbol("B");
-    registre.reclamer(["1"], jetonB);
+    registre.reclamer([{ id: "1", doitRestaurerNonLu: true }], jetonB);
     expect(registre.idsEncoreReclamesPar(["1"], jetonB)).toEqual([]);
   });
 
@@ -198,8 +198,8 @@ describe("creerRegistreDePropriete", () => {
     const registre = creerRegistreDePropriete<symbol>();
     const jetonA = Symbol("A");
     const jetonB = Symbol("B");
-    registre.reclamer(["1"], jetonA);
-    registre.reclamer(["1"], jetonB);
+    registre.reclamer([{ id: "1", doitRestaurerNonLu: true }], jetonA);
+    registre.reclamer([{ id: "1", doitRestaurerNonLu: true }], jetonB);
     registre.liberer(["1"], jetonA);
 
     expect(registre.idsEncoreReclamesPar(["1"], jetonB)).toEqual(["1"]);
@@ -208,12 +208,53 @@ describe("creerRegistreDePropriete", () => {
   it("identifiants indépendants : aucune influence croisée", () => {
     const registre = creerRegistreDePropriete<symbol>();
     const jetonGlobal = Symbol("toutMarquerLu");
-    registre.reclamer(["1", "2"], jetonGlobal);
+    registre.reclamer(
+      [
+        { id: "1", doitRestaurerNonLu: true },
+        { id: "2", doitRestaurerNonLu: true },
+      ],
+      jetonGlobal,
+    );
     const jetonIndividuel = Symbol("marquerLue-3");
-    registre.reclamer(["3"], jetonIndividuel);
+    registre.reclamer([{ id: "3", doitRestaurerNonLu: true }], jetonIndividuel);
 
     expect(registre.idsEncoreReclamesPar(["1", "2"], jetonGlobal)).toEqual(["1", "2"]);
     expect(registre.idsEncoreReclamesPar(["3"], jetonIndividuel)).toEqual(["3"]);
+  });
+
+  describe("doitRestaurerNonLu — round 5 : distinction propriété / obligation de rollback", () => {
+    it("un id réclamé avec doitRestaurerNonLu=false n'est pas restauré même s'il reste possédé", () => {
+      const registre = creerRegistreDePropriete<symbol>();
+      const jeton = Symbol("global");
+      registre.reclamer([{ id: "dejaLue", doitRestaurerNonLu: false }], jeton);
+
+      expect(registre.idsEncoreReclamesPar(["dejaLue"], jeton)).toEqual(["dejaLue"]); // propriété : oui
+      expect(registre.doitRestaurerNonLu("dejaLue")).toBe(false); // obligation de rollback : non
+    });
+
+    it("un id repris hérite de l'obligation de rollback qu'un jeton plus récent lui attribue explicitement", () => {
+      const registre = creerRegistreDePropriete<symbol>();
+      const jetonIndividuel = Symbol("individuel");
+      registre.reclamer([{ id: "1", doitRestaurerNonLu: true }], jetonIndividuel);
+      expect(registre.doitRestaurerNonLu("1")).toBe(true);
+
+      // Le jeton global lit l'obligation existante AVANT de réclamer à son tour (c'est demarrerToutMarquerLu qui fait cette lecture) —
+      // ici on vérifie seulement que reclamer() écrase bien avec la nouvelle valeur fournie par l'appelant.
+      const jetonGlobal = Symbol("global");
+      registre.reclamer([{ id: "1", doitRestaurerNonLu: registre.doitRestaurerNonLu("1") }], jetonGlobal);
+      expect(registre.doitRestaurerNonLu("1")).toBe(true);
+      expect(registre.idsEncoreReclamesPar(["1"], jetonIndividuel)).toEqual([]); // propriété reprise
+    });
+
+    it("doitRestaurerNonLu() renvoie false pour un id non réclamé ou confirmé", () => {
+      const registre = creerRegistreDePropriete<symbol>();
+      expect(registre.doitRestaurerNonLu("inconnu")).toBe(false);
+
+      const jeton = Symbol("A");
+      registre.reclamer([{ id: "1", doitRestaurerNonLu: true }], jeton);
+      registre.confirmer(["1"]);
+      expect(registre.doitRestaurerNonLu("1")).toBe(false); // confirmé = terminal, plus d'obligation
+    });
   });
 });
 
@@ -433,6 +474,261 @@ describe("Scénarios de concurrence individuel/global (mêmes orchestrateurs que
     expect(etat.notifications.find((n) => n.id === "2")?.lu).toBe(false);
     expect(etat.notifications.find((n) => n.id === "3")?.lu).toBe(false);
     expect(compterNonLues(etat)).toBe(3);
+  });
+});
+
+/**
+ * Rollback ciblé de `toutMarquerLu` (round 5) : `annulerApresEchec` ne doit
+ * jamais repasser à `lu: false` une notification qui était RÉELLEMENT déjà
+ * lue avant le démarrage de l'action, même si le global en a réclamé la
+ * propriété (pour la concurrence). Seul le sous-ensemble dont
+ * `doitRestaurerNonLu` vaut vrai est restauré. Tous les scénarios exigés en
+ * revue, exercés via les mêmes orchestrateurs que `socket.tsx`.
+ */
+describe("Rollback ciblé de toutMarquerLu (round 5)", () => {
+  it("1) mélange d'une notification déjà lue et d'une non lue → global échoué : la déjà-lue reste lue, l'autre redevient non lue", () => {
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+    let etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "A", lu: true, titre: "Déjà lue" },
+        { id: "B", lu: false, titre: "Non lue" },
+      ],
+      resteNonLues: 0,
+    };
+
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
+    etat = global.etat;
+    expect(etat.notifications.every((n) => n.lu)).toBe(true);
+
+    const resultat = annulerApresEchec(etat, global, registre, registreReste);
+    expect(resultat).not.toBeNull();
+    etat = resultat!;
+
+    expect(etat.notifications.find((n) => n.id === "A")?.lu).toBe(true); // reste lue
+    expect(etat.notifications.find((n) => n.id === "B")?.lu).toBe(false); // redevient non lue
+  });
+
+  it("2) toutes les notifications chargées déjà lues + resteNonLues>0 → global échoué : seul le reste non chargé est restauré", () => {
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+    let etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "A", lu: true, titre: "Déjà lue A" },
+        { id: "B", lu: true, titre: "Déjà lue B" },
+      ],
+      resteNonLues: 5,
+    };
+
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
+    expect(global.aDemarre).toBe(true); // resteNonLues>0 suffit à démarrer, même si idsTouches est vide
+    etat = global.etat;
+    expect(etat.resteNonLues).toBe(0);
+
+    const resultat = annulerApresEchec(etat, global, registre, registreReste);
+    expect(resultat).not.toBeNull();
+    etat = resultat!;
+
+    expect(etat.resteNonLues).toBe(5); // restauré
+    expect(etat.notifications.every((n) => n.lu)).toBe(true); // jamais repassées à non lues
+  });
+
+  it("3a) deux globaux concurrents qui échouent, échec du premier puis du second : le second (dernier propriétaire) restaure, le premier n'a plus rien à faire", () => {
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+    let etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "2", lu: false, titre: "B" },
+      ],
+      resteNonLues: 0,
+    };
+
+    const global1 = demarrerToutMarquerLu(etat, registre, registreReste);
+    etat = global1.etat; // tout est déjà lu de façon optimiste
+
+    // Une nouvelle notification non lue arrive (ex. Socket.io) avant que
+    // global1 ne se résolve : c'est ce qui permet à un second appel
+    // `toutMarquerLu()` de démarrer légitimement (le garde-fou de
+    // `demarrerToutMarquerLu` bloque sinon un second appel sur un état déjà
+    // entièrement lu) — et de reprendre la propriété de TOUS les ids
+    // actuels, y compris ceux déjà réclamés par global1.
+    etat = {
+      notifications: [{ id: "3", lu: false, titre: "Nouvelle" }, ...etat.notifications],
+      resteNonLues: etat.resteNonLues,
+    };
+    const global2 = demarrerToutMarquerLu(etat, registre, registreReste);
+    expect(global2.aDemarre).toBe(true);
+    etat = global2.etat;
+
+    const resultat1 = annulerApresEchec(etat, global1, registre, registreReste);
+    expect(resultat1).toBeNull(); // global1 ne possède plus rien : global2 a tout repris
+
+    const resultat2 = annulerApresEchec(etat, global2, registre, registreReste);
+    expect(resultat2).not.toBeNull();
+    etat = resultat2!;
+    expect(etat.notifications.every((n) => !n.lu)).toBe(true);
+  });
+
+  it("3b) deux globaux concurrents qui échouent, échec du second puis du premier : même résultat final, ordre inverse", () => {
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+    let etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "2", lu: false, titre: "B" },
+      ],
+      resteNonLues: 0,
+    };
+
+    const global1 = demarrerToutMarquerLu(etat, registre, registreReste);
+    etat = global1.etat;
+    etat = {
+      notifications: [{ id: "3", lu: false, titre: "Nouvelle" }, ...etat.notifications],
+      resteNonLues: etat.resteNonLues,
+    };
+    const global2 = demarrerToutMarquerLu(etat, registre, registreReste);
+    expect(global2.aDemarre).toBe(true);
+    etat = global2.etat;
+
+    const resultat2 = annulerApresEchec(etat, global2, registre, registreReste);
+    expect(resultat2).not.toBeNull();
+    etat = resultat2!;
+    expect(etat.notifications.every((n) => !n.lu)).toBe(true);
+
+    const resultat1 = annulerApresEchec(etat, global1, registre, registreReste);
+    expect(resultat1).toBeNull(); // global1 avait déjà perdu la propriété avant même de se résoudre
+
+    expect(etat.notifications.every((n) => !n.lu)).toBe(true);
+  });
+
+  it("4) individuel optimiste → global démarré → global échoué → individuel réussi : la notification déjà lue avant reste intacte", () => {
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+    let etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "2", lu: false, titre: "B" },
+        { id: "dejaLue", lu: true, titre: "C" },
+      ],
+      resteNonLues: 0,
+    };
+
+    const individuel = demarrerMarquerLue(etat, "1", registre);
+    etat = individuel.etat;
+
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
+    etat = global.etat;
+    expect(etat.notifications.every((n) => n.lu)).toBe(true);
+
+    const resultatGlobal = annulerApresEchec(etat, global, registre, registreReste);
+    expect(resultatGlobal).not.toBeNull();
+    etat = resultatGlobal!;
+    // "1" hérite de l'obligation de rollback de l'individuel, encore en vol.
+    expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(false);
+    expect(etat.notifications.find((n) => n.id === "2")?.lu).toBe(false);
+    expect(etat.notifications.find((n) => n.id === "dejaLue")?.lu).toBe(true); // jamais touchée
+
+    etat = confirmerSucces(etat, individuel, registre, registreReste);
+    expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(true);
+    expect(etat.notifications.find((n) => n.id === "2")?.lu).toBe(false);
+    expect(etat.notifications.find((n) => n.id === "dejaLue")?.lu).toBe(true);
+  });
+
+  it("5a) individuel optimiste → global démarré → les deux échouent (individuel en premier) : la notification déjà lue avant reste intacte", () => {
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+    let etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "2", lu: false, titre: "B" }, // reste non lue : sans elle le global n'aurait plus rien à faire et ne démarrerait pas
+        { id: "dejaLue", lu: true, titre: "C" },
+      ],
+      resteNonLues: 0,
+    };
+
+    const individuel = demarrerMarquerLue(etat, "1", registre);
+    etat = individuel.etat;
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
+    expect(global.aDemarre).toBe(true);
+    etat = global.etat;
+
+    const resultatIndividuel = annulerApresEchec(etat, individuel, registre, registreReste);
+    expect(resultatIndividuel).toBeNull(); // le global a repris la propriété de "1"
+
+    const resultatGlobal = annulerApresEchec(etat, global, registre, registreReste);
+    expect(resultatGlobal).not.toBeNull();
+    etat = resultatGlobal!;
+
+    expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(false);
+    expect(etat.notifications.find((n) => n.id === "2")?.lu).toBe(false);
+    expect(etat.notifications.find((n) => n.id === "dejaLue")?.lu).toBe(true);
+  });
+
+  it("5b) individuel optimiste → global démarré → les deux échouent (global en premier) : la notification déjà lue avant reste intacte", () => {
+    const registre = creerRegistreDePropriete<symbol>();
+    const registreReste = creerProprieteUnique<symbol>();
+    let etat: EtatNotifications<Notif> = {
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "2", lu: false, titre: "B" },
+        { id: "dejaLue", lu: true, titre: "C" },
+      ],
+      resteNonLues: 0,
+    };
+
+    const individuel = demarrerMarquerLue(etat, "1", registre);
+    etat = individuel.etat;
+    const global = demarrerToutMarquerLu(etat, registre, registreReste);
+    expect(global.aDemarre).toBe(true);
+    etat = global.etat;
+
+    const resultatGlobal = annulerApresEchec(etat, global, registre, registreReste);
+    expect(resultatGlobal).not.toBeNull();
+    etat = resultatGlobal!;
+    expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(false);
+    expect(etat.notifications.find((n) => n.id === "2")?.lu).toBe(false);
+
+    const resultatIndividuel = annulerApresEchec(etat, individuel, registre, registreReste);
+    expect(resultatIndividuel).toBeNull(); // le global avait déjà repris (puis relâché) la propriété de "1"
+
+    expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(false);
+    expect(etat.notifications.find((n) => n.id === "dejaLue")?.lu).toBe(true);
+  });
+
+  it("6) une notification réellement déjà lue avant l'action n'est jamais repassée à lu:false, succès ou échec du global", () => {
+    const construireEtat = (): EtatNotifications<Notif> => ({
+      notifications: [
+        { id: "1", lu: false, titre: "A" },
+        { id: "dejaLue", lu: true, titre: "C" },
+      ],
+      resteNonLues: 0,
+    });
+
+    // Cas succès.
+    {
+      const registre = creerRegistreDePropriete<symbol>();
+      const registreReste = creerProprieteUnique<symbol>();
+      let etat = construireEtat();
+      const global = demarrerToutMarquerLu(etat, registre, registreReste);
+      etat = global.etat;
+      etat = confirmerSucces(etat, global, registre, registreReste);
+      expect(etat.notifications.find((n) => n.id === "dejaLue")?.lu).toBe(true);
+    }
+
+    // Cas échec.
+    {
+      const registre = creerRegistreDePropriete<symbol>();
+      const registreReste = creerProprieteUnique<symbol>();
+      let etat = construireEtat();
+      const global = demarrerToutMarquerLu(etat, registre, registreReste);
+      etat = global.etat;
+      const resultat = annulerApresEchec(etat, global, registre, registreReste);
+      expect(resultat).not.toBeNull();
+      etat = resultat!;
+      expect(etat.notifications.find((n) => n.id === "dejaLue")?.lu).toBe(true);
+      expect(etat.notifications.find((n) => n.id === "1")?.lu).toBe(false);
+    }
   });
 });
 
