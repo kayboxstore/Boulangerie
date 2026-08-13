@@ -148,7 +148,7 @@ export interface LoginResponse {
 
 // ---------------------------------------------------------------------------
 // Assistant de premier lancement (section 3.7, nouveau) — DTO ici, schémas de
-// saisie plus bas (après la déclaration de `dateISO`, section Travailleurs).
+// saisie plus bas (dans la section Travailleurs).
 // ---------------------------------------------------------------------------
 
 export interface EtatInitialDTO {
@@ -504,7 +504,7 @@ export function calculerDepenseFarine(taux: number, sacsUtilises: number): numbe
 }
 
 export const tauxDuJourSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+  date: dateISOSchemaSchema,
   valeur: z.number().finite("Le nombre doit être fini").positive("Le taux doit etre strictement positif").max(1_000_000),
 });
 export type TauxDuJourInput = z.infer<typeof tauxDuJourSchema>;
@@ -523,7 +523,7 @@ export type OrigineDepense = (typeof ORIGINES_DEPENSE)[number];
 export const MOTIF_DEPENSE_FARINE = "Achat farine";
 
 export const depenseCreateSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+  date: dateISOSchemaSchema,
   motif: z.string().trim().min(1, "Le motif est requis").max(200),
   montant: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(1, "Le montant doit etre positif"),
 });
@@ -531,7 +531,7 @@ export type DepenseCreateInput = z.infer<typeof depenseCreateSchema>;
 
 /** Case a cocher de la depense farine : activer ou retirer la ligne du jour. */
 export const depenseFarineSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+  date: dateISOSchemaSchema,
   active: z.boolean(),
 });
 export type DepenseFarineInput = z.infer<typeof depenseFarineSchema>;
@@ -589,7 +589,7 @@ export const STATUTS_SESSION_CAISSE = ["OUVERTE", "FERMEE"] as const;
 export type StatutSessionCaisse = (typeof STATUTS_SESSION_CAISSE)[number];
 
 export const sessionCaisseOuvertureSchema = z.object({
-  date: dateISOSchema,
+  date: dateISOSchemaSchema,
   soldeOuverture: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0),
 });
 export type SessionCaisseOuvertureInput = z.infer<typeof sessionCaisseOuvertureSchema>;
@@ -716,7 +716,7 @@ const nbBacs = z.number().finite("Le nombre doit être fini").int("Nombre entier
 // --- a) Planning de production ---------------------------------------------
 
 export const planningCreateSchema = z.object({
-  datePrevue: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+  datePrevue: dateISOSchema,
   nombreBacsCommandes: nbBacs,
   /** Détail par produit du catalogue (Carré, Baguette…). */
   lignes: z
@@ -781,7 +781,7 @@ export type SchemaCommandeLigneClientInput = z.infer<typeof schemaCommandeLigneC
 
 /** Remplace, pour une date donnée, l'ensemble des commandes clients du Schéma. */
 export const schemaCommandeJourSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+  date: dateISOSchemaSchema,
   clients: z.array(schemaCommandeLigneClientSchema).max(200).default([]),
 });
 export type SchemaCommandeJourInput = z.infer<typeof schemaCommandeJourSchema>;
@@ -827,7 +827,7 @@ export type BonLivraisonLigneClientInput = z.infer<typeof bonLivraisonLigneClien
 
 /** Remplace, pour une date donnée, l'ensemble des bons de livraison. */
 export const bonLivraisonJourSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)"),
+  date: dateISOSchemaSchema,
   clients: z.array(bonLivraisonLigneClientSchema).max(200).default([]),
 });
 export type BonLivraisonJourInput = z.infer<typeof bonLivraisonJourSchema>;
@@ -1082,13 +1082,11 @@ export function formatQuantite(quantite: number, unite: string): string {
 // Travailleurs (section 3.18)
 // ---------------------------------------------------------------------------
 
-const dateISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide (AAAA-MM-JJ)");
-
 export const travailleurCreateSchema = z.object({
   nom: z.string().trim().min(1, "Le nom est requis").max(120),
   telephone: z.string().trim().max(30).optional(),
   poste: z.string().trim().min(1, "Le poste est requis").max(80),
-  dateEmbauche: dateISO,
+  dateEmbauche: dateISOSchema,
   // Lien optionnel vers un compte Utilisateur (si la personne a un accès à l'app).
   utilisateurId: z.string().optional(),
   // Départements & Groupes (3.18, nouveau) : obligatoire pour toute nouvelle
@@ -1114,7 +1112,7 @@ export const premierLancementTravailleurSchema = z.object({
   nom: z.string().trim().min(1, "Le nom est requis").max(120),
   telephone: z.string().trim().max(30).optional(),
   poste: z.string().trim().min(1, "Le poste est requis").max(80),
-  dateEmbauche: dateISO,
+  dateEmbauche: dateISOSchema,
 });
 export type PremierLancementTravailleurInput = z.infer<typeof premierLancementTravailleurSchema>;
 
@@ -1247,7 +1245,7 @@ export const STATUT_DECISION_ABSENCE_LABELS: Record<StatutDecisionAbsence, strin
 // EN_ATTENTE côté serveur, jamais choisi à la déclaration.
 export const absenceDeclarerSchema = z.object({
   travailleurId: z.string().min(1, "Le travailleur est requis"),
-  date: dateISO,
+  date: dateISOSchema,
   motif: z.string().trim().min(1, "Le motif est requis").max(500),
 });
 export type AbsenceDeclarerInput = z.infer<typeof absenceDeclarerSchema>;
@@ -1320,7 +1318,7 @@ export const sanctionCreateSchema = z
     travailleurId: z.string().min(1, "Le travailleur est requis"),
     type: z.enum(TYPES_SANCTION),
     motif: z.string().trim().min(1, "Le motif est requis").max(500),
-    date: dateISO,
+    date: dateISOSchema,
     montant: z.number().finite("Le nombre doit être fini").int().positive().optional(),
   })
   .refine((d) => d.type !== "RETENUE" || d.montant !== undefined, {
