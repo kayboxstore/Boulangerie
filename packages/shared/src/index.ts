@@ -504,7 +504,7 @@ export function calculerDepenseFarine(taux: number, sacsUtilises: number): numbe
 }
 
 export const tauxDuJourSchema = z.object({
-  date: dateISOSchemaSchema,
+  date: dateISOSchema,
   valeur: z.number().finite("Le nombre doit être fini").positive("Le taux doit etre strictement positif").max(1_000_000),
 });
 export type TauxDuJourInput = z.infer<typeof tauxDuJourSchema>;
@@ -523,7 +523,7 @@ export type OrigineDepense = (typeof ORIGINES_DEPENSE)[number];
 export const MOTIF_DEPENSE_FARINE = "Achat farine";
 
 export const depenseCreateSchema = z.object({
-  date: dateISOSchemaSchema,
+  date: dateISOSchema,
   motif: z.string().trim().min(1, "Le motif est requis").max(200),
   montant: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(1, "Le montant doit etre positif"),
 });
@@ -531,7 +531,7 @@ export type DepenseCreateInput = z.infer<typeof depenseCreateSchema>;
 
 /** Case a cocher de la depense farine : activer ou retirer la ligne du jour. */
 export const depenseFarineSchema = z.object({
-  date: dateISOSchemaSchema,
+  date: dateISOSchema,
   active: z.boolean(),
 });
 export type DepenseFarineInput = z.infer<typeof depenseFarineSchema>;
@@ -589,7 +589,7 @@ export const STATUTS_SESSION_CAISSE = ["OUVERTE", "FERMEE"] as const;
 export type StatutSessionCaisse = (typeof STATUTS_SESSION_CAISSE)[number];
 
 export const sessionCaisseOuvertureSchema = z.object({
-  date: dateISOSchemaSchema,
+  date: dateISOSchema,
   soldeOuverture: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0),
 });
 export type SessionCaisseOuvertureInput = z.infer<typeof sessionCaisseOuvertureSchema>;
@@ -781,7 +781,7 @@ export type SchemaCommandeLigneClientInput = z.infer<typeof schemaCommandeLigneC
 
 /** Remplace, pour une date donnée, l'ensemble des commandes clients du Schéma. */
 export const schemaCommandeJourSchema = z.object({
-  date: dateISOSchemaSchema,
+  date: dateISOSchema,
   clients: z.array(schemaCommandeLigneClientSchema).max(200).default([]),
 });
 export type SchemaCommandeJourInput = z.infer<typeof schemaCommandeJourSchema>;
@@ -827,7 +827,7 @@ export type BonLivraisonLigneClientInput = z.infer<typeof bonLivraisonLigneClien
 
 /** Remplace, pour une date donnée, l'ensemble des bons de livraison. */
 export const bonLivraisonJourSchema = z.object({
-  date: dateISOSchemaSchema,
+  date: dateISOSchema,
   clients: z.array(bonLivraisonLigneClientSchema).max(200).default([]),
 });
 export type BonLivraisonJourInput = z.infer<typeof bonLivraisonJourSchema>;
