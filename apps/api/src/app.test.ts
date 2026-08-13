@@ -26,6 +26,23 @@ describe("sécurité HTTP de l’API", () => {
     });
   });
 
+  it("limite les demandes répétées de récupération, même invalides", async () => {
+    const app = createApp();
+
+    for (let tentative = 0; tentative < 5; tentative += 1) {
+      const res = await request(app)
+        .post("/api/auth/mot-de-passe-oublie")
+        .send({ email: "adresse-invalide" });
+      expect(res.status).toBe(400);
+    }
+
+    const bloquee = await request(app)
+      .post("/api/auth/mot-de-passe-oublie")
+      .send({ email: "adresse-invalide" });
+    expect(bloquee.status).toBe(429);
+    expect(bloquee.body.code).toBe("TROP_DE_REQUETES");
+  });
+
   it("limite les tentatives répétées de connexion", async () => {
     const app = createApp();
 

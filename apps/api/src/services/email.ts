@@ -84,3 +84,36 @@ export async function envoyerRapport(params: {
     );
   }
 }
+
+
+/** Envoie le lien de récupération sans jamais journaliser ni stocker le jeton brut. */
+export async function envoyerLienReinitialisation(params: {
+  destinataire: string;
+  jeton: string;
+  expireLe: Date;
+}): Promise<void> {
+  const origine = process.env.APP_PUBLIC_URL ?? "https://www.boulangerie-lomoto.com";
+  const url = new URL("/nouveau-mot-de-passe", origine);
+  url.searchParams.set("jeton", params.jeton);
+  const transport = obtenirTransporteur();
+
+  try {
+    await transport.sendMail({
+      from: `"Boulangerie Lomoto" <${process.env.GMAIL_USER}>`,
+      to: params.destinataire,
+      subject: "Boulangerie Lomoto — réinitialisation de votre mot de passe",
+      text: [
+        "Une demande de réinitialisation a été reçue pour votre compte.",
+        `Ouvrez ce lien avant ${params.expireLe.toISOString()} :`,
+        url.toString(),
+        "Ce lien est à usage unique. Si vous n'êtes pas à l'origine de la demande, ignorez ce message.",
+        `—\nBoulangerie Lomoto · ${TAGLINE}`,
+      ].join("\n\n"),
+    });
+  } catch (e) {
+    throw new ErreurEmail(
+      502,
+      `L'envoi a échoué : ${e instanceof Error ? e.message : "erreur SMTP inconnue"}`,
+    );
+  }
+}

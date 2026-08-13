@@ -8,11 +8,14 @@ import {
   MAX_COMPTES_ADMIN,
   ROLE_ADMINISTRATEUR,
   type CompteDTO,
+  type MotDePasseTemporaireDTO,
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { traiterActionCritique } from "../services/actionsCritiques.js";
 import { busEvenements } from "../lib/events.js";
+import { genererMotDePasseTemporaire } from "../lib/recuperationMotDePasse.js";
+import { invaliderSessionUtilisateur } from "../lib/realtime.js";
 
 export const equipeRouter = Router();
 
@@ -30,6 +33,7 @@ const versCompteDTO = (u: CompteAvecRole): CompteDTO => ({
   email: u.email,
   actif: u.actif,
   estAdminPrincipal: u.estAdminPrincipal,
+  motDePasseDoitChanger: u.motDePasseDoitChanger,
   role: u.role,
   dateCreation: u.createdAt.toISOString(),
 });
@@ -111,7 +115,7 @@ equipeRouter.post("/", requirePermission("EQUIPE", "ECRITURE"), async (req, res,
     }
 
     const compte = await prisma.$transaction(async (tx) => {
-      const c = await tx.utilisateur.create({ data: { nom, email, roleId, motDePasseHash }, include: INCLUDE_COMPTE });
+      const c = await tx.utilisateur.create({ data: { nom, email, roleId, motDePasseHash, motDePasseDoitChanger: true }, include: INCLUDE_COMPTE });
       await tx.travailleur.update({ where: { id: travailleur.id }, data: { utilisateurId: c.id } });
       return c;
     });
@@ -120,6 +124,48 @@ equipeRouter.post("/", requirePermission("EQUIPE", "ECRITURE"), async (req, res,
     next(e);
   }
 });
+
+
+equipeRouter.post(
+  "/:id/mot-de-passe-temporaire",
+  requirePermission("EQUIPE", "ECRITURE"),
+  async (req, res, next) => {
+    try {
+      if (req.params.id === req.utilisateur!.id) {
+        return res.status(409).json({ erreur: "Utilisez votre profil pour modifier votre propre mot de passe" });
+      }
+      const cible = await prisma.utilisateur.findUnique({
+        where: { id: req.params.id },
+        select: { id: true, estAdminPrincipal: true },
+      });
+      if (!cible) return res.status(404).json({ erreur: "Compte introuvable" });
+      if (cible.estAdminPrincipal && !req.utilisateur!.estAdminPrincipal) {
+        return res.status(403).json({
+          erreur: "Seul l'Administrateur principal peut réinitialiser son propre compte",
+        });
+      }
+
+      const motDePasseTemporaire = genererMotDePasseTemporaire();
+      await prisma.utilisateur.update({
+        where: { id: cible.id },
+        data: {
+          motDePasseHash: await bcrypt.hash(motDePasseTemporaire, 10),
+          motDePasseDoitChanger: true,
+          sessionActuelleId: null,
+        },
+      });
+      invaliderSessionUtilisateur(cible.id);
+
+      const resultat: MotDePasseTemporaireDTO = {
+        motDePasseTemporaire,
+        doitChanger: true,
+      };
+      return res.status(201).json(resultat);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 // Activation / désactivation d'un compte (section 3.14) — action directe (pas
 // critique), tout Admin. Un compte inactif ne peut plus se connecter (login

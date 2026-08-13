@@ -124,6 +124,9 @@ export interface UtilisateurDTO {
   // Compte Administrateur principal (section 2) — décide de l'exécution directe
   // vs différée des tâches critiques, et de l'accès aux approbations.
   estAdminPrincipal: boolean;
+  // Un mot de passe fourni par un administrateur doit être remplacé avant
+  // d'accéder aux modules métier.
+  motDePasseDoitChanger?: boolean;
   // Langue d'interface préférée (section 3.9) ; null = suivre la langue par
   // défaut de la boutique. `Langue` est défini plus bas dans ce fichier.
   languePreferee: Langue | null;
@@ -985,6 +988,54 @@ export const compteUpdateSchema = z.object({
 });
 export type CompteUpdateInput = z.infer<typeof compteUpdateSchema>;
 
+export const demandeReinitialisationSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Adresse e-mail invalide").max(254),
+});
+export type DemandeReinitialisationInput = z.infer<typeof demandeReinitialisationSchema>;
+
+export const verificationReinitialisationSchema = z.object({
+  jeton: z.string().min(32, "Jeton invalide").max(256),
+});
+export type VerificationReinitialisationInput = z.infer<typeof verificationReinitialisationSchema>;
+
+export const reinitialisationMotDePasseSchema = verificationReinitialisationSchema.extend({
+  nouveauMotDePasse: z
+    .string()
+    .min(8, "Le nouveau mot de passe doit faire au moins 8 caractères")
+    .max(100),
+});
+export type ReinitialisationMotDePasseInput = z.infer<typeof reinitialisationMotDePasseSchema>;
+
+export const profilPriveUpdateSchema = z.object({
+  dateNaissance: dateISOSchema.nullable(),
+});
+export type ProfilPriveUpdateInput = z.infer<typeof profilPriveUpdateSchema>;
+
+export interface ProfilPriveDTO {
+  id: string;
+  nom: string;
+  email: string;
+  roleNom: string;
+  languePreferee: Langue | null;
+  travailleur: {
+    id: string;
+    poste: string;
+    departementNom: string | null;
+    dateNaissance: string | null;
+  } | null;
+}
+
+export interface AnniversairesDuJourDTO {
+  date: string;
+  noms: string[];
+  dejaAffiche: boolean;
+}
+
+export interface MotDePasseTemporaireDTO {
+  motDePasseTemporaire: string;
+  doitChanger: true;
+}
+
 export const motDePasseUpdateSchema = z.object({
   motDePasseActuel: z.string().min(1, "Le mot de passe actuel est requis"),
   nouveauMotDePasse: z
@@ -1001,6 +1052,7 @@ export interface CompteDTO {
   email: string;
   actif: boolean;
   estAdminPrincipal: boolean;
+  motDePasseDoitChanger?: boolean;
   role: { id: string; nom: string };
   dateCreation: string;
 }

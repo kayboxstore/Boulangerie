@@ -45,11 +45,14 @@ export function initRealtime(httpServer: HttpServer): IoServer {
       // un socket ouvert avec un sid périmé n'est pas admis.
       const session = await prisma.utilisateur.findUnique({
         where: { id: payload.sub },
-        select: { sessionActuelleId: true },
+        select: { sessionActuelleId: true, motDePasseDoitChanger: true },
       });
       if (!session) return next(new Error("Compte introuvable ou désactivé"));
       if (!payload.sid || payload.sid !== session.sessionActuelleId) {
         return next(new Error(MESSAGE_SESSION_REMPLACEE));
+      }
+      if (session.motDePasseDoitChanger) {
+        return next(new Error("Mot de passe temporaire à remplacer"));
       }
 
       const utilisateur = await chargerUtilisateur(payload.sub);

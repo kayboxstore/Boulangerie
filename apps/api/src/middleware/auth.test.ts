@@ -17,7 +17,7 @@ vi.mock("../lib/prisma.js", () => ({
   },
 }));
 
-import { requireAuth, requirePermission } from "./auth.js";
+import { cheminAutoriseAvecMotDePasseTemporaire, requireAuth, requirePermission } from "./auth.js";
 
 const utilisateurPersistant = {
   id: "utilisateur-1",
@@ -80,6 +80,20 @@ describe("authentification et permissions serveur", () => {
     expect(res.body.utilisateurId).toBe("utilisateur-1");
   });
 
+  it("bloque les modules métier tant que le mot de passe temporaire n'est pas remplacé", async () => {
+    mocks.verifyToken.mockReturnValue({ sub: "utilisateur-1", roleId: "role-1", sid: "session-active" });
+    mocks.utilisateurFindUnique.mockResolvedValueOnce({
+      sessionActuelleId: "session-active",
+      motDePasseDoitChanger: true,
+    });
+
+    const res = await request(appProtegee()).get("/commandes").set("Authorization", "Bearer jeton");
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("MOT_DE_PASSE_A_CHANGER");
+    expect(mocks.utilisateurFindUnique).toHaveBeenCalledTimes(1);
+  });
+
   it("refuse une session active dépourvue de la permission demandée", async () => {
     mocks.verifyToken.mockReturnValue({ sub: "utilisateur-1", roleId: "role-1", sid: "session-active" });
     mocks.utilisateurFindUnique
@@ -92,5 +106,26 @@ describe("authentification et permissions serveur", () => {
     const res = await request(appProtegee()).get("/commandes").set("Authorization", "Bearer jeton");
 
     expect(res.status).toBe(403);
+  });
+});
+
+
+describe("cloisonnement du mot de passe temporaire", () => {
+  it("autorise uniquement la lecture de la session et le remplacement du secret", () => {
+    expect(cheminAutoriseAvecMotDePasseTemporaire("GET", "/api/auth/me")).toBe(true);
+    expect(cheminAutoriseAvecMotDePasseTemporaire("POST", "/api/auth/mot-de-passe")).toBe(true);
+    expect(cheminAutoriseAvecMotDePasseTemporaire("POST", "/api/auth/mot-de-passe?source=temporaire")).toBe(true);
+  });
+
+  it("refuse les modules métier, le profil et une mauvaise méthode HTTP", () => {
+    expect(cheminAutoriseAvecMotDePasseTemporaire("GET", "/api/produits")).toBe(false);
+    expect(cheminAutoriseAvecMotDePasseTemporaire("GET", "/api/auth/profil")).toBe(false);
+    expect(cheminAutoriseAvecMotDePasseTemporaire("GET", "/api/auth/mot-de-passe")).toBe(false);
+    expect(cheminAutoriseAvecMotDePasseTemporaire("POST", "/api/auth/me")).toBe(false);
+  });
+
+  it("refuse les préfixes trompeurs", () => {
+    expect(cheminAutoriseAvecMotDePasseTemporaire("GET", "/api/auth/me/permissions")).toBe(false);
+    expect(cheminAutoriseAvecMotDePasseTemporaire("POST", "/api/auth/mot-de-passe/contourner")).toBe(false);
   });
 });
