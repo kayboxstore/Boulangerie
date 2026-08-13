@@ -77,6 +77,14 @@ export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | n
   };
 }
 
+export function cheminAutoriseAvecMotDePasseTemporaire(methode: string, originalUrl: string): boolean {
+  const chemin = originalUrl.split("?")[0];
+  return (
+    (methode === "GET" && chemin === "/api/auth/me") ||
+    (methode === "POST" && chemin === "/api/auth/mot-de-passe")
+  );
+}
+
 /** Exige un JWT valide ; attache l'utilisateur (rôle + permissions) à la requête. */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
@@ -102,11 +110,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     }
 
     if (session.motDePasseDoitChanger) {
-      const chemin = req.originalUrl.split("?")[0];
-      const autorise =
-        (req.method === "GET" && chemin === "/api/auth/me") ||
-        (req.method === "POST" && chemin === "/api/auth/mot-de-passe");
-      if (!autorise) {
+      if (!cheminAutoriseAvecMotDePasseTemporaire(req.method, req.originalUrl)) {
         return res.status(403).json({
           code: "MOT_DE_PASSE_A_CHANGER",
           erreur: "Vous devez remplacer votre mot de passe temporaire avant de continuer.",
