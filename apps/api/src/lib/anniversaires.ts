@@ -16,6 +16,7 @@ export function nomsAnniversairesDuJour(
   travailleurs: TravailleurAvecNaissance[],
   jour: string,
 ): string[] {
+  if (!estDateISOValide(jour)) throw new RangeError("Jour d'anniversaire invalide");
   return travailleurs
     .filter((t): t is { nom: string; dateNaissance: Date } => !!t.dateNaissance)
     .filter((t) => estAnniversaireLe(t.dateNaissance, jour))
