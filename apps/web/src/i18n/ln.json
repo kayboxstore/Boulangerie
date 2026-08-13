@@ -1144,5 +1144,33 @@
       "echecMarquerLue": "Ekoki te kotanga notifikasio oyo lokola etangami. Meka lisusu.",
       "echecToutMarquerLu": "Ekoki te kotanga ba-notifikasio nyonso lokola etangami. Meka lisusu."
     }
+  },
+  "auth": {
+    "lamp": {
+      "turnOn": "Pelisa mwinda",
+      "turnOff": "Boma mwinda"
+    },
+    "forgotPasswordLink": "Obosani mot de passe?",
+    "backToLogin": "Zonga na connexion",
+    "pendingServerIntegration": "Fonctionnalité oyo ezali kozela ete server esala yango. Demande moko te etindami.",
+    "resetRequest": {
+      "title": "Mot de passe ebosana",
+      "subtitle": "Pesa adresse email na yo ya mosala mpo na kobanda kozongisa compte.",
+      "emailLabel": "Adresse email",
+      "emailInvalid": "Pesa adresse email ya solo.",
+      "submit": "Tinda demande"
+    },
+    "resetPassword": {
+      "title": "Mot de passe ya sika",
+      "subtitle": "Pona mot de passe ya sika mpo na compte na yo.",
+      "newPasswordLabel": "Mot de passe ya sika",
+      "confirmPasswordLabel": "Confirmer mot de passe",
+      "submit": "Bomba mot de passe ya sika",
+      "passwordTooShort": "Mot de passe esengeli kozala na ba caractères 8 to koleka.",
+      "passwordMismatch": "Ba mot de passe mibale ekokani te."
+    },
+    "clock": {
+      "ariaLabel": "Ngonga ya sikoyo na Kinshasa : {{heure}}"
+    }
   }
 }

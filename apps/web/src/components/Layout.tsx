@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { IndicateurConnexion } from "@/components/IndicateurConnexion";
 import { ChargementModule } from "@/components/ChargementModule";
+import { HorlogeFlip } from "@/components/HorlogeFlip";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 // La cloche de notifications tire framer-motion : chargée en lazy pour garder
@@ -101,7 +102,8 @@ const navigation: EntreeNav[] = [
 
 type LienNavigation = ReturnType<typeof calculerLiens>[number];
 
-function calculerLiens(
+/** Exportée pour test (F2, tâche 11) : navigation basée sur les rôles, dédupliquée entre desktop et mobile. */
+export function calculerLiens(
   peutLire: (m: Module) => boolean,
   peutEcrire: (m: Module) => boolean,
   t: (cle: string) => string,
@@ -191,16 +193,7 @@ export function Layout() {
   // menu laisserait le tiroir ouvert par-dessus le nouvel écran.
   useEffect(() => setMenuOuvert(false), [location.pathname]);
 
-  const liens = navigation.map((n) => {
-    const aPermission = !n.module || (n.ecriture ? peutEcrire(n.module) : peutLire(n.module));
-    const construit = !!n.to;
-    return {
-      ...n,
-      label: t(n.labelKey),
-      actif: aPermission && construit,
-      motif: !aPermission ? t("nav.outOfScope") : !construit ? t("nav.moduleComingSoon") : undefined,
-    };
-  });
+  const liens = calculerLiens(peutLire, peutEcrire, t);
 
   return (
     <div className="flex min-h-screen bg-background print:bg-white">
@@ -326,6 +319,7 @@ export function Layout() {
             </NavLink>
           </div>
           <div className="flex items-center gap-1 [&_button]:text-creme/80 [&_button:hover]:bg-creme/10 [&_button:hover]:text-creme">
+            <HorlogeFlip className="mr-1 text-creme/70" />
             <BasculeTheme />
             <Suspense fallback={<ClocheStatique />}>
               <NotificationBell />
@@ -341,6 +335,7 @@ export function Layout() {
 
         {/* Barre supérieure (desktop) : statut temps réel + notifications */}
         <div className="no-print hidden items-center justify-end gap-3 border-b bg-card px-6 py-2 md:flex">
+          <HorlogeFlip className="mr-auto text-muted-foreground" />
           <IndicateurConnexion etendu />
           <BasculeTheme />
           <Suspense fallback={<ClocheStatique />}>

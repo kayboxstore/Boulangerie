@@ -1144,5 +1144,33 @@
       "echecMarquerLue": "Imeshindikana kuweka arifa hii kama imesomwa. Jaribu tena.",
       "echecToutMarquerLu": "Imeshindikana kuweka arifa zote kama zimesomwa. Jaribu tena."
     }
+  },
+  "auth": {
+    "lamp": {
+      "turnOn": "Washa taa",
+      "turnOff": "Zima taa"
+    },
+    "forgotPasswordLink": "Umesahau nenosiri?",
+    "backToLogin": "Rudi kwenye kuingia",
+    "pendingServerIntegration": "Kipengele hiki bado kinasubiri kuunganishwa upande wa seva. Hakuna ombi lililotumwa.",
+    "resetRequest": {
+      "title": "Nenosiri limesahaulika",
+      "subtitle": "Weka anwani yako ya barua pepe ya kazi ili kuanza kurejesha akaunti.",
+      "emailLabel": "Anwani ya barua pepe",
+      "emailInvalid": "Weka anwani sahihi ya barua pepe.",
+      "submit": "Tuma ombi"
+    },
+    "resetPassword": {
+      "title": "Nenosiri jipya",
+      "subtitle": "Chagua nenosiri jipya kwa akaunti yako.",
+      "newPasswordLabel": "Nenosiri jipya",
+      "confirmPasswordLabel": "Thibitisha nenosiri",
+      "submit": "Hifadhi nenosiri jipya",
+      "passwordTooShort": "Nenosiri lazima liwe na herufi 8 au zaidi.",
+      "passwordMismatch": "Manenosiri mawili hayafanani."
+    },
+    "clock": {
+      "ariaLabel": "Saa za sasa Kinshasa : {{heure}}"
+    }
   }
 }
