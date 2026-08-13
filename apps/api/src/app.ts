@@ -1,5 +1,8 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -38,7 +41,18 @@ export function createApp() {
   // Render (et tout hébergeur derrière un reverse proxy) transmet la requête
   // en interne ; sans ceci, req.hostname/req.protocol refléteraient le proxy,
   // pas le domaine réellement visité par le navigateur.
-  app.set("trust proxy", true);
+  const hopsProxy = Number.parseInt(process.env.TRUST_PROXY_HOPS ?? (process.env.NODE_ENV === "production" ? "1" : "0"), 10);
+  app.set("trust proxy", Number.isInteger(hopsProxy) && hopsProxy > 0 ? hopsProxy : false);
+
+  // Identifiant de corrélation généré par le serveur. Il est renvoyé au client
+  // et inclus dans les erreurs, afin de retrouver précisément la requête dans
+  // les journaux sans exposer de détail technique.
+  app.use((_req, res, next) => {
+    const idRequete = randomUUID();
+    res.locals.idRequete = idRequete;
+    res.setHeader("X-Request-Id", idRequete);
+    next();
+  });
 
   // Domaine canonique = www.boulangerie-lomoto.com (voir le commentaire dans
   // lib/origines.ts sur pourquoi c'est www et pas l'apex) : l'apex redirige
@@ -52,6 +66,7 @@ export function createApp() {
     next();
   });
 
+  app.use(helmet());
   app.use(cors({ origin: verifierOrigine, credentials: true }));
   // 5 Mo plutôt que le défaut 100 Ko : l'Assistant (3.19) stocke les captures
   // d'écran en base64 directement dans le corps JSON (pas d'upload fichier).
@@ -60,6 +75,37 @@ export function createApp() {
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", app: "Boulangerie Lomoto API" });
   });
+
+  const reponseLimitee = (_req: express.Request, res: express.Response) =>
+    res.status(429).json({
+      erreur: "Trop de tentatives. Patientez quelques minutes avant de réessayer.",
+      code: "TROP_DE_REQUETES",
+      idRequete: res.locals.idRequete,
+    });
+
+  // Les limites sont ciblées sur les routes publiques qui déclenchent le plus
+  // de travail ou qui pourraient servir à une attaque par force brute. Les
+  // routes métier authentifiées gardent leurs propres permissions.
+  app.use(
+    "/api/auth/login",
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 10,
+      standardHeaders: "draft-8",
+      legacyHeaders: false,
+      handler: reponseLimitee,
+    }),
+  );
+  app.use(
+    ["/api/auth/etat-initial", "/api/auth/langue-defaut", "/api/premier-lancement"],
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 60,
+      standardHeaders: "draft-8",
+      legacyHeaders: false,
+      handler: reponseLimitee,
+    }),
+  );
 
   app.use("/api/auth", authRouter);
   app.use("/api/produits", produitsRouter);
@@ -112,13 +158,26 @@ export function createApp() {
 
   // 404 JSON pour les routes /api non trouvées.
   app.use("/api", (_req, res) => {
-    res.status(404).json({ erreur: "Ressource introuvable" });
+    res.status(404).json({
+      erreur: "Ressource introuvable",
+      code: "RESSOURCE_INTROUVABLE",
+      idRequete: res.locals.idRequete,
+    });
   });
 
   // Gestion d'erreurs centralisée
   app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    logger.error("Erreur non gérée", { erreur: err, methode: req.method, chemin: req.path });
-    res.status(500).json({ erreur: "Erreur interne du serveur" });
+    logger.error("Erreur non gérée", {
+      erreur: err,
+      methode: req.method,
+      chemin: req.path,
+      idRequete: res.locals.idRequete,
+    });
+    res.status(500).json({
+      erreur: "Erreur interne du serveur",
+      code: "ERREUR_INTERNE",
+      idRequete: res.locals.idRequete,
+    });
   });
 
   return app;

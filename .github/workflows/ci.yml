@@ -1,0 +1,43 @@
+name: Vérifications
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - main-a7fm5x
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JWT_SECRET: ci-secret-uniquement-pour-les-tests
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Générer le client Prisma
+        run: npx prisma generate
+
+      - name: Exécuter les tests
+        run: npm test
+
+      - name: Vérifier et compiler
+        run: npm run build
