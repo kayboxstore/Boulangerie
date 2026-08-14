@@ -424,6 +424,7 @@
     "clientCreateError": "Kosala ekoki te",
     "createClient": "Kosala kiliya",
     "manageClients": "Kobongisa baklient",
+    "confirmAcceptances": "Kondima acceptation",
     "backToCommandes": "Kozonga na bakomande",
     "clientsCardTitle": "Baklient",
     "clientsCardDesc": "Molongo ya baklient bakomami — nkombo, numero ya telefone, qualité mpe zone ya kotika biloko.",
@@ -644,6 +645,32 @@
         "SIGNALER_DEPOT": "Epesami epai ya klient eyebisami."
       }
     }
+  },
+  "acceptations": {
+    "title": "Kondima ba acceptation",
+    "subtitle": "Endimisi motango endimami mpe ezongisami mpo na kotinda moko moko oyo ezali kozela — kaka kondima oyo ekoki kokomisa commande facturable.",
+    "backToOrders": "Kozonga na ba commandes",
+    "descWrite": "Koma na esika ekesani motango endimami mpe motango ezongisami mpo na produit moko na moko epesami, na nsima kondima.",
+    "descRead": "Kotánga kaka — kondima acceptation esengeli na droit ya kokoma na Commandes.",
+    "loading": "Kozela ba livraisons oyo ezali kozela…",
+    "empty": "Ata livraison moko te ezali kozela kondima mpo na mokolo oyo.",
+    "colClient": "Klient",
+    "colDeposited": "Epesami",
+    "confirmButton": "Kondima acceptation",
+    "dialogTitle": "Kondima acceptation — {{client}}",
+    "dialogDesc": "Koma na esika ekesani motango endimami mpe motango ezongisami mpo na produit moko na moko epesami. Motango ezangi, soki ezali, ekomamaka na serveur — ekomamaka awa te.",
+    "financialEffectWarning": "Kondima oyo ekoki kokomisa commande facturable : kaka motango ENDIMAMI nde ekokoma facturable, motango ezongisami te. Kaka commande moko ekosalema mpo na endimi moko.",
+    "deposited": "Epesami : {{n}}",
+    "accepted": "Endimami",
+    "returned": "Ezongisami",
+    "sumExceedsDeposited": "Endimami + ezongisami eleki motango epesami ({{deposited}}).",
+    "bonRetourne": "Papier ya kotinda ezongisami",
+    "bonRetourneAlready": "Papier ezongisami mpe ekomami.",
+    "observations": "Maloba ya kobakisa (esengeli te)",
+    "versionObsolete": "Cycle oyo ebongwanaki na ntango kaka moko na moto mosusu. Ba données ezongisami — talá ezalela ya sika liboso ya kobanda lisusu.",
+    "errorGeneric": "Mabe moko esalemaki na kondima ya acceptation oyo. Meka lisusu na moke.",
+    "successWithOrder": "Acceptation endimami — commande n°{{numero}} esalemi mpo na bacs {{bacs}} facturable.",
+    "successWithoutOrder": "Acceptation endimami — ata motango moko endimami te, ata commande moko esalemi te."
   },
   "production": {
     "title": "Bosali",

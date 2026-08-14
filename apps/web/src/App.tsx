@@ -40,6 +40,10 @@ const ProduitsPage = lazy(() => import("@/pages/Produits").then((m) => ({ defaul
 const CommandesPage = lazy(() => import("@/pages/Commandes").then((m) => ({ default: m.CommandesPage })));
 // Sous-module de Commandes (3.4) : fiche client, écran à part pour ne pas encombrer /commandes.
 const ClientsPage = lazy(() => import("@/pages/Clients").then((m) => ({ default: m.ClientsPage })));
+// Sous-module de Commandes (F5B, vague 3) : confirmation d'acceptation du cycle C4.
+const AcceptationsLivraisonPage = lazy(() =>
+  import("@/pages/AcceptationsLivraison").then((m) => ({ default: m.AcceptationsLivraisonPage })),
+);
 const CommissionsPage = lazy(() => import("@/pages/Commissions").then((m) => ({ default: m.CommissionsPage })));
 const CaissePage = lazy(() => import("@/pages/Caisse").then((m) => ({ default: m.CaissePage })));
 const StocksPage = lazy(() => import("@/pages/Stocks").then((m) => ({ default: m.StocksPage })));
@@ -182,6 +186,14 @@ function AppAuthentifiee() {
           element={
             <RequiertLecture module="COMMANDES">
               <ClientsPage />
+            </RequiertLecture>
+          }
+        />
+        <Route
+          path="/commandes/acceptations"
+          element={
+            <RequiertLecture module="COMMANDES">
+              <AcceptationsLivraisonPage />
             </RequiertLecture>
           }
         />

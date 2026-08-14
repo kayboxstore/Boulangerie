@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HandCoins, Layers, Plus, RotateCcw, TriangleAlert, UserPlus, Users } from "lucide-react";
+import { ClipboardCheck, HandCoins, Layers, Plus, RotateCcw, TriangleAlert, UserPlus, Users } from "lucide-react";
 // TriangleAlert sert au doublon ET au bandeau de dettes non payées.
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -304,6 +304,12 @@ export function CommandesPage() {
             <Link to="/commandes/clients">
               <Users className="h-4 w-4" />
               {t("commandes.manageClients")}
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link to="/commandes/acceptations">
+              <ClipboardCheck className="h-4 w-4" />
+              {t("commandes.confirmAcceptances")}
             </Link>
           </Button>
           {editable && (
