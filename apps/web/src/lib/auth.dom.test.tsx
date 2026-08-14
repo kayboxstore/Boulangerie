@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import "@/i18n";
+import { useState } from "react";
 import type { UtilisateurDTO } from "@lomoto/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -72,15 +73,31 @@ const ROUTES_PRE_CONNEXION = {
 /** Sonde exposant l'état de useAuth() dans le DOM, pour piloter login/logout/rafraichirIdentite depuis les tests. */
 function SondeAuth() {
   const { utilisateur, sessionAuthId, chargement, login, logout, rafraichirIdentite } = useAuth();
+  // Capture explicitement le résultat de rafraichirIdentite() — y compris une
+  // ÉVENTUELLE exception — pour vérifier depuis les tests qu'un rejet tardif
+  // d'une session périmée ne se propage JAMAIS jusqu'à l'appelant (round 3,
+  // revue Codex) : seul un rejet appartenant à la session COURANTE doit
+  // ressortir comme `erreur:...`.
+  const [resultatRafraichir, setResultatRafraichir] = useState("attente");
+  async function declencherRafraichir() {
+    setResultatRafraichir("attente");
+    try {
+      const confirmee = await rafraichirIdentite();
+      setResultatRafraichir(confirmee ? "true" : "false");
+    } catch (err) {
+      setResultatRafraichir(`erreur:${err instanceof Error ? err.message : "inconnue"}`);
+    }
+  }
   return (
     <div>
       <div data-testid="chargement">{String(chargement)}</div>
       <div data-testid="utilisateur">{utilisateur?.nom ?? "aucun"}</div>
       <div data-testid="session-id">{sessionAuthId ?? "aucune"}</div>
+      <div data-testid="resultat-rafraichir">{resultatRafraichir}</div>
       <button onClick={() => void login("a@boulangerie-lomoto.com", "peu importe")}>connecter-a</button>
       <button onClick={() => void login("b@boulangerie-lomoto.com", "peu importe")}>connecter-b</button>
       <button onClick={() => logout()}>deconnecter</button>
-      <button onClick={() => void rafraichirIdentite()}>rafraichir</button>
+      <button onClick={() => void declencherRafraichir()}>rafraichir</button>
     </div>
   );
 }
@@ -182,6 +199,87 @@ describe("AuthProvider — rafraichirIdentite() et sessionAuthId (F3, revue Code
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.getByTestId("utilisateur").textContent).toBe("Chef B");
     expect(screen.getByTestId("session-id").textContent).toBe(idSessionB);
+  });
+
+  it("round 3 — déconnexion pendant rafraichirIdentite() en vol, puis REJET tardif : false, aucune restauration, aucune exception propagée", async () => {
+    let rejeterMe!: (err: unknown) => void;
+    routerApi({
+      ...ROUTES_PRE_CONNEXION,
+      "/api/auth/login": loginRoute((email) => utilisateurFactice(email, "Chef A")),
+      "/api/auth/me": () => new Promise((_r, reject) => (rejeterMe = reject)),
+    });
+    rendre();
+    await waitFor(() => expect(screen.getByTestId("chargement").textContent).toBe("false"));
+    fireEvent.click(screen.getByRole("button", { name: "connecter-a" }));
+    await waitFor(() => expect(screen.getByTestId("utilisateur").textContent).toBe("Chef A"));
+
+    // rafraichirIdentite() de A part, reste en vol...
+    fireEvent.click(screen.getByRole("button", { name: "rafraichir" }));
+    // ...puis A se déconnecte AVANT que /me ne rejette.
+    fireEvent.click(screen.getByRole("button", { name: "deconnecter" }));
+    await waitFor(() => expect(screen.getByTestId("utilisateur").textContent).toBe("aucun"));
+
+    // Le rejet tardif de /me arrive maintenant : il ne doit ni restaurer
+    // l'ancien utilisateur, ni ressortir comme une exception (ce qui
+    // déclencherait à tort une déconnexion forcée côté appelant, ex.
+    // ChangementMotDePasseObligatoirePage).
+    rejeterMe(new Error("panne réseau tardive"));
+    await waitFor(() => expect(screen.getByTestId("resultat-rafraichir").textContent).toBe("false"));
+    expect(screen.getByTestId("utilisateur").textContent).toBe("aucun");
+    expect(screen.getByTestId("session-id").textContent).toBe("aucune");
+  });
+
+  it("round 3 — déconnexion de A puis connexion de B, ensuite REJET tardif du /me de A : B reste connecté, sessionAuthId inchangé, aucune exception propagée", async () => {
+    let rejeterMe!: (err: unknown) => void;
+    routerApi({
+      ...ROUTES_PRE_CONNEXION,
+      "/api/auth/login": loginRoute((email) =>
+        email === "a@boulangerie-lomoto.com" ? utilisateurFactice(email, "Chef A") : utilisateurFactice(email, "Chef B"),
+      ),
+      "/api/auth/me": () => new Promise((_r, reject) => (rejeterMe = reject)),
+    });
+    rendre();
+    await waitFor(() => expect(screen.getByTestId("chargement").textContent).toBe("false"));
+    fireEvent.click(screen.getByRole("button", { name: "connecter-a" }));
+    await waitFor(() => expect(screen.getByTestId("utilisateur").textContent).toBe("Chef A"));
+
+    // rafraichirIdentite() de A part, reste en vol...
+    fireEvent.click(screen.getByRole("button", { name: "rafraichir" }));
+    // ...A se déconnecte, puis B se connecte AVANT que /me de A ne rejette.
+    fireEvent.click(screen.getByRole("button", { name: "deconnecter" }));
+    fireEvent.click(screen.getByRole("button", { name: "connecter-b" }));
+    await waitFor(() => expect(screen.getByTestId("utilisateur").textContent).toBe("Chef B"));
+    const idSessionB = screen.getByTestId("session-id").textContent;
+
+    // Le rejet tardif de /me (déclenché pour A) arrive maintenant : B doit
+    // rester connecté, sans exception propagée (donc aucune déconnexion
+    // forcée tardive ni aucun toast qui appartiendrait à la session de A).
+    rejeterMe(new Error("panne réseau tardive de la session A"));
+    await waitFor(() => expect(screen.getByTestId("resultat-rafraichir").textContent).toBe("false"));
+    expect(screen.getByTestId("utilisateur").textContent).toBe("Chef B");
+    expect(screen.getByTestId("session-id").textContent).toBe(idSessionB);
+  });
+
+  it("round 3 — rejet de /me SANS changement de génération : l'erreur est bien propagée (parcours de reconnexion obligatoire conservé)", async () => {
+    routerApi({
+      ...ROUTES_PRE_CONNEXION,
+      "/api/auth/login": loginRoute((email) => utilisateurFactice(email, "Chef A")),
+      "/api/auth/me": () => Promise.reject(new Error("le serveur a refusé /me")),
+    });
+    rendre();
+    await waitFor(() => expect(screen.getByTestId("chargement").textContent).toBe("false"));
+    fireEvent.click(screen.getByRole("button", { name: "connecter-a" }));
+    await waitFor(() => expect(screen.getByTestId("utilisateur").textContent).toBe("Chef A"));
+
+    // Aucune déconnexion ni nouvelle connexion entre-temps : la génération
+    // n'a pas changé, l'échec appartient bien à la session courante — il DOIT
+    // ressortir comme une exception pour que l'appelant (ex.
+    // ChangementMotDePasseObligatoirePage) puisse déclencher son parcours de
+    // reconnexion obligatoire avec le message persistant dédié.
+    fireEvent.click(screen.getByRole("button", { name: "rafraichir" }));
+    await waitFor(() => expect(screen.getByTestId("resultat-rafraichir").textContent).toBe("erreur:le serveur a refusé /me"));
+    // La session A elle-même reste inchangée par cet échec ponctuel.
+    expect(screen.getByTestId("utilisateur").textContent).toBe("Chef A");
   });
 
   it("restauration initiale réussie via /api/auth/me attribue aussi un sessionAuthId, sans jamais exposer le jeton", async () => {

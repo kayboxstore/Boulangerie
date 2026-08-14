@@ -172,14 +172,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [deconnexionForcee]);
 
   const rafraichirIdentite = useCallback(async (): Promise<boolean> => {
-    // Barrière de fraîcheur (F3) : capture la génération courante avant
-    // l'appel réseau. Si une déconnexion ou une nouvelle connexion survient
-    // pendant l'attente (`logout()`/`deconnexionForcee()`/`login()`, tous
-    // incrémentent `generationAuthRef`), la réponse doit être intégralement
-    // ignorée — jamais restaurer un ancien utilisateur, jamais écraser un
-    // nouvel utilisateur déjà connecté.
+    // Barrière de fraîcheur (F3, durcie en revue round 3) : capture la
+    // génération courante avant l'appel réseau. Si une déconnexion ou une
+    // nouvelle connexion survient pendant l'attente (`logout()`/
+    // `deconnexionForcee()`/`login()`, tous incrémentent `generationAuthRef`),
+    // la réponse doit être intégralement ignorée — jamais restaurer un ancien
+    // utilisateur, jamais écraser un nouvel utilisateur déjà connecté. La
+    // barrière doit couvrir la RÉSOLUTION *et* le REJET de `/api/auth/me` :
+    // un rejet tardif d'une session A périmée (ex. déconnectée puis remplacée
+    // par une session B) ne doit jamais se propager comme une erreur de la
+    // session B courante — ça déclencherait à tort une déconnexion forcée de B.
     const generationCapturee = generationAuthRef.current;
-    const r = await api<{ utilisateur: UtilisateurDTO; langueDefautBoutique: Langue }>("/api/auth/me");
+    let r: { utilisateur: UtilisateurDTO; langueDefautBoutique: Langue };
+    try {
+      r = await api<{ utilisateur: UtilisateurDTO; langueDefautBoutique: Langue }>("/api/auth/me");
+    } catch (err) {
+      // Génération inchangée : l'échec appartient bien à la session courante,
+      // l'appelant (ex. ChangementMotDePasseObligatoirePage) doit le traiter
+      // normalement (parcours de reconnexion obligatoire).
+      if (generationAuthRef.current === generationCapturee) throw err;
+      // Génération changée entre-temps : réponse d'une session déjà périmée,
+      // intégralement ignorée — ni restauration, ni propagation, ni déconnexion.
+      return false;
+    }
     if (generationAuthRef.current !== generationCapturee) return false;
     setUtilisateur(r.utilisateur);
     setLangueDefautBoutique(r.langueDefautBoutique);
