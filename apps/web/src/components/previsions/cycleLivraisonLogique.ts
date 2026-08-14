@@ -1,26 +1,29 @@
 /**
  * Logique pure du cycle « prévision J → livraison J+1 » (F4 round 1,
- * corrigée round 2, restructurée round 3, complétée round 4 suite à la
- * revue Codex).
+ * corrigée round 2, restructurée round 3, complétée round 4, corrigée round
+ * 5-6, connectée round I4 suite aux revues Codex).
  *
- * Le contrat C4 (backend) EXISTE désormais : `docs/api-contracts/C4_PREVISIONS_COMMANDES_REELLES.md`,
- * implémenté sur la branche `codex/previsions-commandes-c4` (PR brouillon #12,
- * HEAD `b6f2642c2651538a6e0c12959e194b14cb0e253b`). Cette PR n'est PAS encore
- * fusionnée dans `agent/integration-wave-2`, base de F4 — ce fichier reste
- * donc pour l'instant un vocabulaire et des exemples purement frontend,
- * SANS appel réseau, SANS simuler un succès serveur, SANS créer de commande
- * financière depuis le navigateur. Les noms utilisés sont EXACTEMENT ceux du
- * contrat C4 (`STATUTS_CYCLE_LIVRAISON`, §3) pour qu'un futur rebase sur C4
- * n'ait qu'à brancher les données réelles (notamment `CycleLivraisonDTO.statut`
- * directement dans `statutActif`), sans renommer.
+ * I4 : C4 est fusionné dans `agent/integration-wave-2` (PR #12) et F4 est
+ * rebasé dessus. Les onze statuts C4 exacts et leurs types ne sont donc plus
+ * dupliqués ici : ils sont réexportés depuis `@lomoto/shared/cycles-livraison`
+ * (contrat `docs/api-contracts/C4_PREVISIONS_COMMANDES_REELLES.md`, §3), la
+ * même source que le backend. `StatutCycleLivraison` est désormais
+ * littéralement le type de `CycleLivraisonDTO.statut`.
  */
 
+import { STATUTS_CYCLE_LIVRAISON } from "@lomoto/shared/cycles-livraison";
+import type { StatutCycleLivraison } from "@lomoto/shared/cycles-livraison";
+
+export { STATUTS_CYCLE_LIVRAISON };
+export type { StatutCycleLivraison };
+
 /**
- * Chronologie linéaire du cycle — sous-ensemble ORDONNÉ des onze statuts C4,
- * utilisant EXACTEMENT les mêmes chaînes. S'arrête à `EN_ATTENTE_CONFIRMATION` :
- * le dépôt chez le client est l'ACTION qui fait passer `EN_TOURNEE` →
+ * Chronologie linéaire du cycle — sous-ensemble ORDONNÉ, présentation-only,
+ * des onze statuts C4 ci-dessus. S'arrête à `EN_ATTENTE_CONFIRMATION` : le
+ * dépôt chez le client est l'ACTION qui fait passer `EN_TOURNEE` →
  * `EN_ATTENTE_CONFIRMATION` (contrat C4 §7, `SIGNALER_DEPOT`) — il n'existe
- * AUCUN statut serveur `DEPOSEE`, ce vocabulaire n'en invente donc pas.
+ * AUCUN statut serveur `DEPOSEE`. Un test dédié vérifie que ce sous-ensemble
+ * correspond exactement aux sept premiers éléments de `STATUTS_CYCLE_LIVRAISON`.
  */
 export const STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON = [
   "PREVISION",
@@ -53,18 +56,54 @@ export const STATUTS_FINAUX_CYCLE_LIVRAISON = [
 
 export type StatutFinalCycleLivraison = (typeof STATUTS_FINAUX_CYCLE_LIVRAISON)[number];
 
-/**
- * Les onze statuts C4 exacts (contrat §3), chronologie puis statuts finaux
- * concaténés dans le même ordre que `STATUTS_CYCLE_LIVRAISON` côté contrat —
- * pratique pour un futur rebase, où `CycleLivraisonDTO.statut` pourra être
- * passé directement à `statutActif` sans conversion ni renommage.
- */
-export const STATUTS_CYCLE_LIVRAISON = [
-  ...STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON,
-  ...STATUTS_FINAUX_CYCLE_LIVRAISON,
-] as const;
+function estStatutChronologique(statut: StatutCycleLivraison): statut is StatutChronologieCycleLivraison {
+  return (STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON as readonly string[]).includes(statut);
+}
 
-export type StatutCycleLivraison = (typeof STATUTS_CYCLE_LIVRAISON)[number];
+/** Clé i18n du libellé d'un statut C4, quel que soit son groupe (I4). */
+export function cleLibelleStatutCycle(statut: StatutCycleLivraison): string {
+  return estStatutChronologique(statut)
+    ? `previsions.chronologie.${statut}.label`
+    : `previsions.statutsFinaux.${statut}.label`;
+}
+
+/** Clé i18n de la description accessible d'un statut C4, quel que soit son groupe (I4). */
+export function cleDescriptionStatutCycle(statut: StatutCycleLivraison): string {
+  return estStatutChronologique(statut)
+    ? `previsions.chronologie.${statut}.description`
+    : `previsions.statutsFinaux.${statut}.description`;
+}
+
+export type VarianteBadgeStatutCycle = "secondary" | "gold" | "destructive" | "outline";
+
+const VARIANTE_PAR_STATUT_CHRONOLOGIE: Record<StatutChronologieCycleLivraison, VarianteBadgeStatutCycle> = {
+  PREVISION: "outline",
+  RETENUE_PRODUCTION: "outline",
+  PREPAREE: "outline",
+  REMISE_MAGASIN: "outline",
+  CHARGEE: "secondary",
+  EN_TOURNEE: "secondary",
+  EN_ATTENTE_CONFIRMATION: "gold",
+};
+
+const VARIANTE_PAR_STATUT_FINAL: Record<StatutFinalCycleLivraison, VarianteBadgeStatutCycle> = {
+  PARTIELLEMENT_ACCEPTEE: "gold",
+  ACCEPTEE: "secondary",
+  RETOUR_TOTAL: "destructive",
+  ANNULEE: "outline",
+};
+
+/**
+ * Couleur de badge cohérente pour un statut C4, quel que soit son groupe
+ * (I4) — même mapping utilisé par la légende (`EtapesCycleLivraison`) et par
+ * tout badge de statut réel affiché ailleurs (ex. `BonsLivraison`), pour ne
+ * jamais désynchroniser les couleurs d'un même statut entre deux écrans.
+ */
+export function varianteBadgeStatutCycle(statut: StatutCycleLivraison): VarianteBadgeStatutCycle {
+  return estStatutChronologique(statut)
+    ? VARIANTE_PAR_STATUT_CHRONOLOGIE[statut]
+    : VARIANTE_PAR_STATUT_FINAL[statut];
+}
 
 /**
  * Quantités DISTINCTES de la livraison, présentées en PARALLÈLE (round 3) —
@@ -85,57 +124,14 @@ export type StatutCycleLivraison = (typeof STATUTS_CYCLE_LIVRAISON)[number];
  *
  * Ce fichier ne relie donc jamais ces trois résultats entre eux par une
  * flèche dans l'interface — la relation entre eux est arithmétique
- * (bornes/calcul ci-dessus), pas une suite logistique à représenter.
+ * (bornes/calcul ci-dessus, garantie par le serveur), pas une suite
+ * logistique à représenter. Depuis I4, les valeurs réelles proviennent
+ * directement de `CycleLivraisonDTO.totaux`/`CycleLivraisonLigneDTO` — ce
+ * fichier ne les recalcule jamais côté client.
  */
 export const RESULTATS_CYCLE_LIVRAISON = ["accepte", "retourne", "manquant"] as const;
 
 export type ResultatCycleLivraison = (typeof RESULTATS_CYCLE_LIVRAISON)[number];
-
-/**
- * Exemple illustratif de la règle « seule la quantité acceptée devient
- * facturable » (contrat C4, invariant 3 : « seule la quantité acceptée
- * devient une CommandeClient »). Exemple obligatoire : prévision 50,
- * acceptation 40 → 40 facturables.
- *
- * La quantité facturable suit UNIQUEMENT la quantité acceptée — elle n'est
- * PAS plafonnée par la prévision (annonce non contractuelle : rien
- * n'empêche une acceptation supérieure à ce qui avait été annoncé).
- * « Facturable » est présenté comme la SEULE conséquence directionnelle de
- * l'acceptation, séparée de la chronologie logistique et des statuts finaux :
- * jamais reliée à « retourné », « manquant », ni à un statut final.
- *
- * Une fois F4 rebasé sur C4, l'interface devra utiliser directement
- * `estFacturable` et `commande` renvoyés par `GET
- * /api/production/cycles-livraison` (contrat C4 §5) au lieu de ce calcul
- * client — ce round ne simule PAS encore leur présence, ce calcul reste un
- * exemple pédagogique local, jamais la source de vérité.
- */
-export function calculerQuantiteFacturableIndicative(params: { quantiteAcceptee: number }): number {
-  return Math.max(0, params.quantiteAcceptee);
-}
-
-/**
- * Illustre `quantiteManquante = quantiteChargee - quantiteDeposee` (contrat
- * C4 §4, calcul SERVEUR — jamais saisi côté client). Purement pédagogique :
- * une fois connecté à C4, la valeur affichée sera toujours
- * `CycleLivraisonLigneDTO.quantiteManquante`, jamais recalculée ici.
- */
-export function calculerQuantiteManquanteIndicative(params: { quantiteChargee: number; quantiteDeposee: number }): number {
-  return Math.max(0, params.quantiteChargee - params.quantiteDeposee);
-}
-
-/**
- * Illustre la règle `quantiteAcceptee + quantiteRetournee <= quantiteDeposee`
- * (contrat C4 §4). Purement pédagogique — ne valide rien côté client une
- * fois connecté à C4, où cette contrainte est garantie par le serveur.
- */
-export function respecteLimiteAccepteRetourne(params: {
-  quantiteDeposee: number;
-  quantiteAcceptee: number;
-  quantiteRetournee: number;
-}): boolean {
-  return params.quantiteAcceptee + params.quantiteRetournee <= params.quantiteDeposee;
-}
 
 /**
  * Écart simple (constatée − prévue), utilisé pour les badges d'écart par

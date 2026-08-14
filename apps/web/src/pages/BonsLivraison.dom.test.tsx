@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { BonLivraisonJourDTO, SchemaCommandeJourDTO } from "@lomoto/shared";
+import type { CycleLivraisonDTO } from "@lomoto/shared/cycles-livraison";
 import { FeedbackProvider } from "@/components/FeedbackProvider";
 import { BonsLivraisonPage } from "./BonsLivraison";
 
@@ -80,9 +81,40 @@ function schemaDataFixture(): SchemaCommandeJourDTO {
   };
 }
 
+function cycleFixture(overrides?: Partial<CycleLivraisonDTO>): CycleLivraisonDTO {
+  return {
+    id: "cycle-c1",
+    dateLivraison: "2026-08-14",
+    client: { id: "c1", nom: "Dépôt Alpha", typeClientNom: "Dépositaire", zoneDepositaireId: null, zoneDepositaireNom: null },
+    statut: "EN_ATTENTE_CONFIRMATION",
+    version: 6,
+    lignes: [],
+    totaux: {
+      prevu: 10,
+      retenuProduction: 10,
+      prepare: 10,
+      remisMagasin: 10,
+      charge: 10,
+      depose: 7,
+      accepte: null,
+      retourne: null,
+      manquant: null,
+    },
+    livrePar: "Jean",
+    bonRetourne: false,
+    anomalieOuverte: false,
+    typesAnomalie: [],
+    estFacturable: false,
+    commande: null,
+    derniereTransitionLe: "2026-08-14T08:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function routerApi(reponses: {
   bonsLivraison?: () => unknown;
   schemaCommande?: () => unknown;
+  cyclesLivraison?: () => unknown;
 }) {
   apiMock.mockImplementation((path: string) => {
     if (path.startsWith("/api/production/bons-livraison?")) {
@@ -91,6 +123,11 @@ function routerApi(reponses: {
     if (path.startsWith("/api/zones-depositaires")) return Promise.resolve({ zones: [] });
     if (path.startsWith("/api/production/schema-commande?")) {
       return reponses.schemaCommande ? Promise.resolve(reponses.schemaCommande()) : Promise.resolve(schemaDataFixture());
+    }
+    if (path.startsWith("/api/production/cycles-livraison?")) {
+      return reponses.cyclesLivraison
+        ? Promise.resolve(reponses.cyclesLivraison())
+        : Promise.resolve({ date: "2026-08-14", cycles: [], totaux: { prevu: 0, charge: 0, accepte: 0, facturable: 0 } });
     }
     return Promise.reject(new Error(`route non simulée dans ce test : ${path}`));
   });
@@ -131,6 +168,8 @@ describe("BonsLivraisonPage — DOM (F4 round 1)", () => {
       if (path.startsWith("/api/production/bons-livraison?")) return Promise.reject(new Error("panne réseau"));
       if (path.startsWith("/api/zones-depositaires")) return Promise.resolve({ zones: [] });
       if (path.startsWith("/api/production/schema-commande?")) return Promise.resolve(schemaDataFixture());
+      if (path.startsWith("/api/production/cycles-livraison?"))
+        return Promise.resolve({ date: "2026-08-14", cycles: [], totaux: { prevu: 0, charge: 0, accepte: 0, facturable: 0 } });
       return Promise.reject(new Error("route non simulée"));
     });
     rendre();
@@ -174,17 +213,17 @@ describe("BonsLivraisonPage — DOM (F4 round 1)", () => {
     expect(screen.getAllByText("Dépôt Alpha")).toHaveLength(2);
   });
 
-  it("affiche la légende du cycle sans aucun statut actif (round 2 : aucune donnée serveur ne le justifie), avec le rappel que cet écran n'est pas encore raccordé au suivi détaillé (round 3, texte neutralisé round 5)", async () => {
+  it("affiche la légende du cycle sans aucun statut actif — le statut réel de chaque client s'affiche à sa propre ligne, jamais dans la légende partagée (round 2, connectée en I4)", async () => {
     routerApi({});
     rendre();
 
     await screen.findByRole("table");
     const chronologie = screen.getByRole("list", { name: "Chronologie du cycle prévision → livraison" });
     expect(chronologie).toBeTruthy();
+    // La légende générique n'a jamais aria-current sans cycle réel à côté.
     expect(document.querySelector('[aria-current="step"]')).toBeNull();
-    expect(screen.getByText(/s'afficheront ici dès que cet écran sera raccordé/)).toBeTruthy();
-    // round 5, revue indépendante : aucune référence interne (numéro de PR)
-    // ne doit fuiter dans un texte utilisateur.
+    expect(screen.getByText(/proviennent du cycle de livraison réel/)).toBeTruthy();
+    // aucune référence interne (numéro de PR) ne doit fuiter dans un texte utilisateur.
     expect(screen.queryByText(/PR #12/)).toBeNull();
   });
 
@@ -193,6 +232,8 @@ describe("BonsLivraisonPage — DOM (F4 round 1)", () => {
       if (path.startsWith("/api/production/bons-livraison?")) return Promise.resolve(jourDataFixture());
       if (path.startsWith("/api/zones-depositaires")) return Promise.resolve({ zones: [] });
       if (path.startsWith("/api/production/schema-commande?")) return Promise.reject(new Error("panne réseau du Schéma"));
+      if (path.startsWith("/api/production/cycles-livraison?"))
+        return Promise.resolve({ date: "2026-08-14", cycles: [], totaux: { prevu: 0, charge: 0, accepte: 0, facturable: 0 } });
       return Promise.reject(new Error("route non simulée"));
     });
     rendre();
@@ -202,5 +243,63 @@ describe("BonsLivraisonPage — DOM (F4 round 1)", () => {
     expect(alerte.textContent).toContain("Impossible de charger le Schéma de commande");
     // L'échec du Schéma ne doit ni bloquer l'écran, ni inventer un écart à zéro.
     expect(screen.queryByLabelText(/Prévu :/)).toBeNull();
+  });
+
+  it("surface visiblement l'échec de chargement du cycle de livraison (I4)", async () => {
+    apiMock.mockImplementation((path: string) => {
+      if (path.startsWith("/api/production/bons-livraison?")) return Promise.resolve(jourDataFixture());
+      if (path.startsWith("/api/zones-depositaires")) return Promise.resolve({ zones: [] });
+      if (path.startsWith("/api/production/schema-commande?")) return Promise.resolve(schemaDataFixture());
+      if (path.startsWith("/api/production/cycles-livraison?")) return Promise.reject(new Error("panne réseau du cycle"));
+      return Promise.reject(new Error("route non simulée"));
+    });
+    rendre();
+
+    await screen.findByRole("table");
+    const alerte = await screen.findByRole("alert");
+    expect(alerte.textContent).toContain("Impossible de charger le cycle de livraison");
+  });
+
+  it("affiche le statut réel du cycle à côté du client concerné, sans résultats avant l'acceptation (I4)", async () => {
+    routerApi({ cyclesLivraison: () => ({ date: "2026-08-14", cycles: [cycleFixture()], totaux: { prevu: 10, charge: 10, accepte: 0, facturable: 0 } }) });
+    rendre();
+
+    await screen.findByRole("table");
+    // "En attente de confirmation" apparaît trois fois : une fois dans la
+    // légende statique (chronologie complète, toujours affichée) et deux
+    // fois pour le statut réel du client (tableau desktop + carte mobile).
+    const statuts = await screen.findAllByText("En attente de confirmation");
+    expect(statuts).toHaveLength(3);
+    // Avant acceptation (totaux.accepte === null côté serveur) : aucun résultat inventé.
+    expect(screen.queryByText(/Accepté 0/)).toBeNull();
+    expect(screen.queryByText(/Facturable /)).toBeNull();
+  });
+
+  it("affiche les résultats accepté/retourné/manquant et le facturable une fois l'acceptation confirmée (I4)", async () => {
+    routerApi({
+      cyclesLivraison: () => ({
+        date: "2026-08-14",
+        cycles: [
+          cycleFixture({
+            statut: "PARTIELLEMENT_ACCEPTEE",
+            totaux: { prevu: 10, retenuProduction: 10, prepare: 10, remisMagasin: 10, charge: 10, depose: 7, accepte: 5, retourne: 2, manquant: 0 },
+            estFacturable: true,
+            commande: { id: "commande-1", numero: 42, quantiteBacs: 5 },
+          }),
+        ],
+        totaux: { prevu: 10, charge: 10, accepte: 5, facturable: 5 },
+      }),
+    });
+    rendre();
+
+    await screen.findByRole("table");
+    // Une occurrence dans la légende statique + deux pour le statut réel
+    // (tableau desktop + carte mobile), comme pour EN_ATTENTE_CONFIRMATION ci-dessus.
+    const statuts = await screen.findAllByText("Partiellement acceptée");
+    expect(statuts).toHaveLength(3);
+    const resultats = await screen.findAllByText((contenu) => contenu.includes("Accepté 5") && contenu.includes("Retourné 2") && contenu.includes("Manquant 0"));
+    expect(resultats).toHaveLength(2);
+    const facturables = await screen.findAllByText((contenu) => contenu.includes("Facturable") && contenu.includes("5"));
+    expect(facturables).toHaveLength(2);
   });
 });

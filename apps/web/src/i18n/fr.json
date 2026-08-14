@@ -515,9 +515,10 @@
     "gapTooltip": "Commandé (Schéma de commande) : {{commande}} — Livré : {{livre}}",
     "gapProductTooltip": "Prévu : {{prevu}} — Saisi : {{livre}}",
     "cycleLegendTitle": "Où en est cette livraison ?",
-    "cyclePendingNote": "Ce total correspond à la quantité signalée comme déposée, pas encore à une acceptation client. Les résultats Accepté, Retourné, Manquant et Facturable s'afficheront ici dès que cet écran sera raccordé au suivi détaillé du cycle de livraison.",
+    "cycleConnectedNote": "Le statut, l'accepté, le retourné, le manquant et le facturable affichés pour chaque Dépositaire proviennent du cycle de livraison réel, dès qu'ils existent.",
     "loading": "Chargement des bons de livraison…",
     "schemaLoadError": "Impossible de charger le Schéma de commande de cette date — les écarts par produit ne sont pas disponibles pour le moment.",
+    "cycleLoadError": "Impossible de charger le cycle de livraison de cette date — le statut et les résultats détaillés ne sont pas disponibles pour le moment.",
     "print": "Imprimer",
     "printError": "Impression impossible",
     "saveError": "Enregistrement impossible"

@@ -516,9 +516,10 @@
     "gapTooltip": "Iliyoagizwa (Fomu ya agizo) : {{commande}} — Iliyotolewa : {{livre}}",
     "gapProductTooltip": "Ilivyotabiriwa: {{prevu}} — Ilivyoingizwa: {{livre}}",
     "cycleLegendTitle": "Usafirishaji huu upo wapi?",
-    "cyclePendingNote": "Jumla hii inalingana na kiasi kilichoripotiwa kuwekwa, si bado kukubaliwa na mteja. Matokeo Imekubaliwa, Imerudishwa, Inayokosekana na Inayolipiwa yataonekana hapa mara skrini hii itakapounganishwa na ufuatiliaji wa kina wa mzunguko wa usafirishaji.",
+    "cycleConnectedNote": "Hali, kilichokubaliwa, kilichorudishwa, kinachokosekana na kinacholipiwa vinavyoonyeshwa kwa kila Dépositaire vinatoka kwenye mzunguko halisi wa usafirishaji, mara vinapokuwepo.",
     "loading": "Inapakia hati za usafirishaji…",
     "schemaLoadError": "Imeshindwa kupakia Fomu ya agizo ya tarehe hii — tofauti kwa kila bidhaa hazipatikani kwa sasa.",
+    "cycleLoadError": "Imeshindwa kupakia mzunguko wa usafirishaji wa tarehe hii — hali na matokeo ya kina hayapatikani kwa sasa.",
     "print": "Chapisha",
     "printError": "Imeshindwa kuchapisha",
     "saveError": "Imeshindwa kuhifadhi"

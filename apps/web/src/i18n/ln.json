@@ -516,9 +516,10 @@
     "gapTooltip": "Esengami (Schéma de commande) : {{commande}} — Epesami : {{livre}}",
     "gapProductTooltip": "Esengami : {{prevu}} — Ekomami : {{livre}}",
     "cycleLegendTitle": "Kotinda oyo ezali wapi ?",
-    "cyclePendingNote": "Motango oyo ezali kaka oyo elobami ete epesami, endimami na klient nanu te. Bosuki Endimami, Ezongisami, Ezangi mpe Ekofutisa ekomonana awa tango écran oyo ekokangana na bolandi ya cycle ya kotinda.",
+    "cycleConnectedNote": "Statut, endimami, ezongisami, ezangi mpe ekofutisa oyo emonani mpo na Dépositaire moko na moko ewuti na cycle ya kotinda ya solo, soki ezali.",
     "loading": "Kozela ba bon ya kotinda biloko…",
     "schemaLoadError": "Kozwa Fiche ya komande ya mokolo oyo ekoki te — bokeseni na produit na produit ezali nanu te na ntango oyo.",
+    "cycleLoadError": "Kozwa cycle ya kotinda ya mokolo oyo ekoki te — statut na basuki ezali komonana te na ntango oyo.",
     "print": "Kobimisa na papier",
     "printError": "Kobimisa na papier ekoki te",
     "saveError": "Kobomba ekoki te"

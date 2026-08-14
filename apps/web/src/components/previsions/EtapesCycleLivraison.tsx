@@ -3,22 +3,23 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
+  cleDescriptionStatutCycle,
+  cleLibelleStatutCycle,
   RESULTATS_CYCLE_LIVRAISON,
   STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON,
   STATUTS_FINAUX_CYCLE_LIVRAISON,
+  varianteBadgeStatutCycle,
   type ResultatCycleLivraison,
   type StatutCycleLivraison,
-  type StatutFinalCycleLivraison,
+  type VarianteBadgeStatutCycle,
 } from "./cycleLivraisonLogique";
 
 /**
  * Légende visuelle du cycle « prévision J → livraison J+1 » (F4 round 1,
- * corrigée round 2, restructurée round 3, complétée round 4 suite à la
- * revue Codex). Purement présentationnel : aucun appel réseau, aucune
- * donnée réelle par commande — le contrat C4 existe (PR #12, branche
- * `codex/previsions-commandes-c4`) mais n'est pas encore fusionné dans la
- * base de F4 ; cette légende sert à préparer le vocabulaire de l'écran en
- * restant déjà alignée sur les noms exacts du contrat, prête pour le rebase.
+ * corrigée round 2, restructurée round 3, complétée round 4, connectée à C4
+ * en I4). Purement présentationnel : aucun appel réseau ici — c'est l'écran
+ * appelant (ex. `BonsLivraison`) qui charge les cycles réels et peut passer
+ * un `statutActif` réel via `CycleLivraisonDTO.statut`.
  *
  * Structure en QUATRE blocs, jamais mélangés :
  * 1. `chronologie` : liste ORDONNÉE des sept statuts C4 séquentiels, de
@@ -40,35 +41,19 @@ import {
  *
  * `statutActif`, optionnel, accepte l'un des ONZE statuts C4 (chronologie OU
  * final) et marque le badge correspondant avec `aria-current="step"` —
- * réservé à un écran qui connaît RÉELLEMENT le statut en cours pour une
- * ligne donnée à partir d'une donnée serveur (après rebase sur C4, en lui
- * passant directement `CycleLivraisonDTO.statut`). Ne jamais le renseigner
- * avec une valeur fixe/devinée : afficher un statut actif sans donnée
- * serveur laisserait croire à un suivi qui n'existe pas encore.
+ * réservé à un écran qui connaît RÉELLEMENT le statut en cours pour un cycle
+ * donné à partir d'une donnée serveur (`CycleLivraisonDTO.statut`). Ne
+ * jamais le renseigner avec une valeur fixe/devinée : afficher un statut
+ * actif sans donnée serveur laisserait croire à un suivi qui n'existe pas.
+ * Cette légende reste volontairement générique (pas de `statutActif`) sur un
+ * écran qui liste PLUSIEURS cycles à la fois, chacun dans un statut
+ * potentiellement différent — le statut réel de chaque cycle s'affiche alors
+ * à côté de sa propre ligne, pas dans cette légende partagée.
  */
 export interface EtapesCycleLivraisonProps {
   statutActif?: StatutCycleLivraison;
   className?: string;
 }
-
-type VarianteBadge = "secondary" | "gold" | "destructive" | "outline";
-
-const VARIANTE_PAR_STATUT: Record<(typeof STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON)[number], VarianteBadge> = {
-  PREVISION: "outline",
-  RETENUE_PRODUCTION: "outline",
-  PREPAREE: "outline",
-  REMISE_MAGASIN: "outline",
-  CHARGEE: "secondary",
-  EN_TOURNEE: "secondary",
-  EN_ATTENTE_CONFIRMATION: "gold",
-};
-
-const VARIANTE_PAR_STATUT_FINAL: Record<StatutFinalCycleLivraison, VarianteBadge> = {
-  PARTIELLEMENT_ACCEPTEE: "gold",
-  ACCEPTEE: "secondary",
-  RETOUR_TOTAL: "destructive",
-  ANNULEE: "outline",
-};
 
 const VARIANTE_PAR_RESULTAT: Record<ResultatCycleLivraison, "secondary" | "destructive"> = {
   accepte: "secondary",
@@ -76,8 +61,8 @@ const VARIANTE_PAR_RESULTAT: Record<ResultatCycleLivraison, "secondary" | "destr
   manquant: "destructive",
 };
 
-/** Badge + description accessible (aria-describedby, jamais title seul — round 2). */
-function BadgeDecrit({
+/** Badge + description accessible (aria-describedby, jamais title seul — round 2). Réutilisé hors de ce fichier (ex. BonsLivraison) pour tout badge de statut C4 réel. */
+export function BadgeDecrit({
   id,
   variante,
   actif,
@@ -85,7 +70,7 @@ function BadgeDecrit({
   description,
 }: {
   id: string;
-  variante: VarianteBadge;
+  variante: VarianteBadgeStatutCycle;
   actif?: boolean;
   texte: string;
   description: string;
@@ -119,10 +104,10 @@ export function EtapesCycleLivraison({ statutActif, className }: EtapesCycleLivr
           <li key={statut} className="flex items-center gap-1.5">
             <BadgeDecrit
               id={`${idBase}-chrono-${statut}`}
-              variante={VARIANTE_PAR_STATUT[statut]}
+              variante={varianteBadgeStatutCycle(statut)}
               actif={statut === statutActif}
-              texte={t(`previsions.chronologie.${statut}.label`)}
-              description={t(`previsions.chronologie.${statut}.description`)}
+              texte={t(cleLibelleStatutCycle(statut))}
+              description={t(cleDescriptionStatutCycle(statut))}
             />
             {index < STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON.length - 1 && (
               <span aria-hidden className="text-muted-foreground">
@@ -145,10 +130,10 @@ export function EtapesCycleLivraison({ statutActif, className }: EtapesCycleLivr
             <li key={statut}>
               <BadgeDecrit
                 id={`${idBase}-final-${statut}`}
-                variante={VARIANTE_PAR_STATUT_FINAL[statut]}
+                variante={varianteBadgeStatutCycle(statut)}
                 actif={statut === statutActif}
-                texte={t(`previsions.statutsFinaux.${statut}.label`)}
-                description={t(`previsions.statutsFinaux.${statut}.description`)}
+                texte={t(cleLibelleStatutCycle(statut))}
+                description={t(cleDescriptionStatutCycle(statut))}
               />
             </li>
           ))}

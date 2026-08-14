@@ -515,9 +515,10 @@
     "gapTooltip": "Ordered (Order form): {{commande}} — Delivered: {{livre}}",
     "gapProductTooltip": "Forecast: {{prevu}} — Entered: {{livre}}",
     "cycleLegendTitle": "Where is this delivery in the cycle?",
-    "cyclePendingNote": "This total reflects the quantity reported as dropped off, not yet a client acceptance. The Accepted, Returned, Missing and Billable results will appear here once this screen is wired to the detailed delivery cycle tracking.",
+    "cycleConnectedNote": "The status, accepted, returned, missing and billable quantities shown for each Dépositaire come from the real delivery cycle, as soon as they exist.",
     "loading": "Loading delivery notes…",
     "schemaLoadError": "Could not load this date's Order sheet — per-product gaps are unavailable for now.",
+    "cycleLoadError": "Could not load the delivery cycle for this date — the status and detailed results are not available right now.",
     "print": "Print",
     "printError": "Could not print",
     "saveError": "Could not save"

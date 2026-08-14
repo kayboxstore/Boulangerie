@@ -1,9 +1,10 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Printer, Save, Truck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type { BonLivraisonClientDTO, BonLivraisonJourDTO, SchemaCommandeJourDTO, ZoneDepositaireDTO } from "@lomoto/shared";
+import type { CycleLivraisonDTO } from "@lomoto/shared/cycles-livraison";
 import { api, getToken } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { dateISOKinshasa } from "@/lib/dateKinshasa";
@@ -17,8 +18,13 @@ import { CarteLigne, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/ca
 import { EtatChargement, EtatErreur, EtatVide } from "@/components/ui/etats";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { EtapesCycleLivraison } from "@/components/previsions/EtapesCycleLivraison";
-import { calculerEcartQuantite } from "@/components/previsions/cycleLivraisonLogique";
+import { BadgeDecrit, EtapesCycleLivraison } from "@/components/previsions/EtapesCycleLivraison";
+import {
+  calculerEcartQuantite,
+  cleDescriptionStatutCycle,
+  cleLibelleStatutCycle,
+  varianteBadgeStatutCycle,
+} from "@/components/previsions/cycleLivraisonLogique";
 
 // Date par défaut calculée dans le fuseau Africa/Kinshasa (F4 round 2, revue
 // Codex) — voir lib/dateKinshasa.ts pour la raison (toISOString() calcule en
@@ -56,6 +62,45 @@ function EcartProduit({ prevu, livre, schemaChargee, t }: { prevu: number; livre
     >
       {ecart > 0 ? `+${ecart}` : ecart}
     </span>
+  );
+}
+
+/**
+ * Résumé du cycle C4 réel pour ce client à cette date (I4, après fusion et
+ * rebase sur C4) — statut, quantités accepté/retourné/manquant et
+ * facturable, directement depuis `CycleLivraisonDTO` (contrat C4 §4-5).
+ * Aucun recalcul côté client : les quantités accepté/retourné/manquant ne
+ * s'affichent que lorsque le serveur les fournit (`totaux.accepte !== null`,
+ * c'est-à-dire après l'acceptation) — jamais un zéro par défaut avant coup.
+ */
+function ResumeCycle({
+  cycle,
+  t,
+}: {
+  cycle: CycleLivraisonDTO;
+  t: (k: string, o?: Record<string, unknown>) => string;
+}) {
+  const idBase = useId();
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <BadgeDecrit
+        id={`${idBase}-statut`}
+        variante={varianteBadgeStatutCycle(cycle.statut)}
+        texte={t(cleLibelleStatutCycle(cycle.statut))}
+        description={t(cleDescriptionStatutCycle(cycle.statut))}
+      />
+      {cycle.totaux.accepte !== null && (
+        <span className="text-muted-foreground">
+          {t("previsions.resultats.accepte.label")} {cycle.totaux.accepte} · {t("previsions.resultats.retourne.label")}{" "}
+          {cycle.totaux.retourne ?? 0} · {t("previsions.resultats.manquant.label")} {cycle.totaux.manquant ?? 0}
+        </span>
+      )}
+      {cycle.estFacturable && cycle.commande && (
+        <Badge variant="gold">
+          {t("previsions.facturable.label")} {cycle.commande.quantiteBacs}
+        </Badge>
+      )}
+    </div>
   );
 }
 
@@ -109,6 +154,25 @@ export function BonsLivraisonPage() {
     }
     return carte;
   }, [schemaData]);
+
+  // Cycle de livraison C4 réel (I4, après fusion et rebase sur C4) : statut,
+  // accepté/retourné/manquant et facturable par client, directement depuis
+  // le serveur — contrat C4 §5. Lecture seule ici aussi : cet écran ne
+  // déclenche aucune transition, il affiche l'état déjà connu du serveur.
+  const { data: cyclesData, isError: erreurCyclesQuery } = useQuery({
+    queryKey: ["cycles-livraison", date],
+    queryFn: () =>
+      api<{ date: string; cycles: CycleLivraisonDTO[]; totaux: Record<string, number> }>(
+        `/api/production/cycles-livraison?date=${date}`,
+      ),
+  });
+  const cycleParClient = useMemo(() => {
+    const carte = new Map<string, CycleLivraisonDTO>();
+    for (const cycle of cyclesData?.cycles ?? []) {
+      carte.set(cycle.client.id, cycle);
+    }
+    return carte;
+  }, [cyclesData]);
 
   const [editions, setEditions] = useState<Record<string, string>>({});
   const [erreur, setErreur] = useState<string | null>(null);
@@ -239,25 +303,26 @@ export function BonsLivraisonPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Légende du cycle (F4 round 1, restructurée round 3) : rappelle que
-              la quantité saisie ici correspond à la quantité signalée comme
-              déposée, pas encore à une acceptation client. Le contrat C4
-              existe (PR #12, branche codex/previsions-commandes-c4) mais
-              n'est pas encore fusionné dans la base de F4 — cet écran n'y
-              est pas encore raccordé (round 3). AUCUN statut n'est marqué
-              actif ici (round 2) : cet écran ne connaît pas réellement le
-              statut en cours pour une ligne donnée (aucune donnée serveur ne
-              l'indique aujourd'hui), donc `statutActif` n'est jamais
-              renseigné avec une valeur devinée. */}
+          {/* Légende du cycle (F4 round 1, restructurée round 3, connectée à
+              C4 en I4 après fusion de la PR #12 et rebase de cette branche).
+              Cette légende reste générique (AUCUN `statutActif`, round 2) :
+              cet écran liste PLUSIEURS cycles à la fois, chacun potentiellement
+              dans un statut différent — le statut RÉEL de chaque client
+              s'affiche à côté de sa propre ligne via `ResumeCycle`, jamais ici. */}
           <div className="rounded-lg border border-dashed p-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("bonsLivraison.cycleLegendTitle")}
             </p>
             <EtapesCycleLivraison className="mb-2" />
-            <p className="text-xs text-muted-foreground">{t("bonsLivraison.cyclePendingNote")}</p>
+            <p className="text-xs text-muted-foreground">{t("bonsLivraison.cycleConnectedNote")}</p>
             {erreurSchemaQuery && (
               <p role="alert" className="mt-2 text-xs font-medium text-terracotta">
                 {t("bonsLivraison.schemaLoadError")}
+              </p>
+            )}
+            {erreurCyclesQuery && (
+              <p role="alert" className="mt-2 text-xs font-medium text-terracotta">
+                {t("bonsLivraison.cycleLoadError")}
               </p>
             )}
           </div>
@@ -305,9 +370,13 @@ export function BonsLivraisonPage() {
                             (s, l) => s + nombre(valeurChamp(editions, c.clientId, l.produitId, String(l.quantite || ""))),
                             0,
                           );
+                          const cycle = cycleParClient.get(c.clientId);
                           return (
                             <TableRow key={c.clientId}>
-                              <TableCell className="whitespace-nowrap font-medium">{c.clientNom}</TableCell>
+                              <TableCell className="font-medium">
+                                <div className="whitespace-nowrap">{c.clientNom}</div>
+                                {cycle && <ResumeCycle cycle={cycle} t={t} />}
+                              </TableCell>
                               {c.lignes.map((l) => {
                                 const livreProduit = nombre(
                                   valeurChamp(editions, c.clientId, l.produitId, String(l.quantite || "")),
@@ -407,6 +476,7 @@ export function BonsLivraisonPage() {
                         (s, l) => s + nombre(valeurChamp(editions, c.clientId, l.produitId, String(l.quantite || ""))),
                         0,
                       );
+                      const cycle = cycleParClient.get(c.clientId);
                       return (
                         <CarteLigne key={c.clientId}>
                           <CarteLigneTitre>
@@ -423,6 +493,7 @@ export function BonsLivraisonPage() {
                               )}
                             </span>
                           </CarteLigneTitre>
+                          {cycle && <ResumeCycle cycle={cycle} t={t} />}
                           {c.lignes.map((l) => {
                             const livreProduit = nombre(valeurChamp(editions, c.clientId, l.produitId, String(l.quantite || "")));
                             const prevuProduit = prevuParClientProduit.get(`${c.clientId}:${l.produitId}`) ?? 0;
