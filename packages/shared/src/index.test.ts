@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { aAcces, calculerCommande, calculerDepenseFarine, type PermissionDTO } from "./index.js";
+import {
+  aAcces,
+  calculerCommande,
+  calculerDepenseFarine,
+  controleQualiteSchema,
+  pertesJustifiees,
+  type PermissionDTO,
+} from "./index.js";
 
 describe("calculerCommande (section 3.4)", () => {
   it("sans avance ni dette : montant à percevoir = montant brut", () => {
@@ -84,5 +91,35 @@ describe("aAcces (matrice de permissions)", () => {
 
   it("module absent de la liste équivaut à AUCUN", () => {
     expect(aAcces(permissions, "TRAVAILLEURS", "LECTURE")).toBe(false);
+  });
+});
+
+describe("pertesJustifiees (section 3.3 f — clôture de Production)", () => {
+  it("aucune perte requise quand bacsFoutus = 0", () => {
+    expect(pertesJustifiees({ bacsFoutus: 0, pertes: [] })).toBe(true);
+  });
+
+  it("refuse tant que la somme des motifs ne couvre pas exactement bacsFoutus", () => {
+    expect(pertesJustifiees({ bacsFoutus: 5, pertes: [{ nombreBacs: 3 }] })).toBe(false);
+    expect(pertesJustifiees({ bacsFoutus: 5, pertes: [{ nombreBacs: 3 }, { nombreBacs: 3 }] })).toBe(false);
+  });
+
+  it("accepte une somme exactement égale, répartie sur plusieurs motifs", () => {
+    expect(pertesJustifiees({ bacsFoutus: 5, pertes: [{ nombreBacs: 2 }, { nombreBacs: 3 }] })).toBe(true);
+  });
+});
+
+describe("controleQualiteSchema (section 3.3 f)", () => {
+  it("CONFORME sans motif est valide", () => {
+    expect(controleQualiteSchema.safeParse({ verdict: "CONFORME" }).success).toBe(true);
+  });
+
+  it("NON_CONFORME sans motif est refusé", () => {
+    const r = controleQualiteSchema.safeParse({ verdict: "NON_CONFORME" });
+    expect(r.success).toBe(false);
+  });
+
+  it("NON_CONFORME avec motif est valide", () => {
+    expect(controleQualiteSchema.safeParse({ verdict: "NON_CONFORME", motifId: "m1" }).success).toBe(true);
   });
 });

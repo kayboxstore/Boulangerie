@@ -292,6 +292,32 @@ observations.
   toujours l'indépendance volontaire décrite ci-dessus, juste une visibilité
   immédiate en cas d'écart.
 
+**f) Contrôle qualité, pertes motivées et clôture** *(Lot 4.5/4.6/4.8 du plan
+d'attaque — bouton « Qualité » sur chaque ligne de la liste des productions
+enregistrées)* — une Production naît **OUVERTE** ; elle se **CLOTURE**
+explicitement une fois les deux conditions suivantes réunies, et devient alors
+définitivement verrouillée (plus aucune modification possible, y compris sur
+les champs déjà saisis à l'enregistrement) :
+
+- **Pertes motivées** : si `bacsFoutus` > 0, la répartition par motif (« Cuisson
+  ratée », « Casse / manutention », « Invendu périmé »… liste fixe mais
+  extensible, même principe que les motifs de don) doit avoir une somme
+  **exactement égale** à `bacsFoutus` — contrairement aux dons, purement
+  informatifs, l'exhaustivité est ici exigée avant clôture. Si `bacsFoutus` =
+  0, aucune ligne n'est requise.
+- **Contrôle qualité enregistré** : un verdict Conforme / Non conforme, avec un
+  motif de non-conformité obligatoire dans ce dernier cas (« Cuisson
+  insuffisante », « Aspect non conforme », « Poids non conforme »… liste fixe
+  extensible), des observations libres facultatives, et la personne/date du
+  contrôle.
+
+Tant que la Production est OUVERTE, les pertes et le contrôle qualité peuvent
+être saisis ou corrigés librement (remplacement intégral de la répartition des
+pertes à chaque enregistrement, un seul contrôle qualité par Production). La
+tentative de clôture est refusée avec un message explicite si l'une des deux
+conditions manque ; une fois clôturée, la date et l'auteur de la clôture sont
+affichés en permanence sur la fiche.
+
 **Écarts** — pour une date donnée, vue comparant prévisions (a) et réalisations
 (b + c) sur : bacs, sacs de farine, levure, huile, sel. Chaque paire affiche
 `écart = réalisé − prévu`.
@@ -641,8 +667,12 @@ SchemaCommande (id, date, clientId, créePar)                   # une ligne par 
 SchemaCommandeLigne (schemaCommandeId, produitId, quantite)    # détail par produit, alimente PlanningLigneProduit
 BonLivraison (id, date, clientId, bacsVides, livrePar?, observations?, créePar)  # une ligne par (date, Dépositaire), indépendant du Schéma
 BonLivraisonLigne (bonLivraisonId, produitId, quantite)        # détail par produit LIVRÉ
-Production (id, numero, date, bacsProduits, bacsLivresDepositaires, bacsLivresMamans, bacsVendusVC, bacsRestants, bacsFoutus, kgFarineAbimes?, sacsUtilises, paquetsLevureUtilises, kgSelUtilises, quantiteHuileUtilisee, observations, enregistrePar)
+Production (id, numero, date, bacsProduits, bacsLivresDepositaires, bacsLivresMamans, bacsVendusVC, bacsRestants, bacsFoutus, kgFarineAbimes?, sacsUtilises, paquetsLevureUtilises, kgSelUtilises, quantiteHuileUtilisee, observations, enregistrePar, statut, clotureeLe?, clotureePar?)  # statut: ouverte | cloturee (3.3 f)
 ProductionDon (productionId, motifDonId, nombreBacs)           # répartition des bacs donnés par motif
+MotifPerte (id, nom)                                           # liste fixe extensible : Cuisson ratée, Casse/manutention, Invendu périmé… (3.3 f)
+ProductionPerte (productionId, motifPerteId, nombreBacs)       # répartition des bacs foutus par motif — somme exigée = bacsFoutus avant clôture
+MotifNonConformite (id, nom)                                   # liste fixe extensible : Cuisson insuffisante, Aspect non conforme, Poids non conforme… (3.3 f)
+ControleQualite (productionId, verdict, motifId?, observations?, controlePar?, controleLe)  # verdict: conforme | non_conforme — un seul par Production (3.3 f)
 MatierePremiere (id, nom, code?, unité, quantitéStock, seuilAlerte)   # code = FARINE|LEVURE|SEL|HUILE, relie les ingrédients saisis en production au stock
 MouvementStock (id, matierePremiereId, type, quantité, date, référence)
 Fournisseur (id, nom, contact)

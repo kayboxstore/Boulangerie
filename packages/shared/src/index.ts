@@ -195,6 +195,9 @@ export const TYPES_EVENEMENT = [
   // mécanisme que DETTE_NON_PAYEE — le jour suivant une absence encore
   // EN_ATTENTE, jamais renvoyé une fois parti (alerteEnvoyeeLe).
   "ABSENCE_EN_ATTENTE",
+  // Clôture d'une Production (section 3.3 f) : verrou définitif après contrôle
+  // qualité et justification des pertes.
+  "PRODUCTION_CLOTUREE",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -915,7 +918,62 @@ export interface ProductionDTO {
   /** Réconciliation : somme des destinations et écart vs bacs produits. */
   totalDestinations: number;
   ecartReconciliation: number;
+  /** Clôture, contrôle qualité et pertes (section 3.3 f). */
+  statut: StatutProduction;
+  clotureeLe: string | null;
+  clotureePar: { id: string; nom: string } | null;
+  pertes: { motifPerteId: string; motifNom: string; nombreBacs: number }[];
+  totalPertes: number;
+  controleQualite: ControleQualiteDTO | null;
 }
+
+// --- f) Contrôle qualité, pertes et clôture de Production -------------------
+
+export const STATUTS_PRODUCTION = ["OUVERTE", "CLOTUREE"] as const;
+export type StatutProduction = (typeof STATUTS_PRODUCTION)[number];
+
+export const VERDICTS_QUALITE = ["CONFORME", "NON_CONFORME"] as const;
+export type VerdictQualite = (typeof VERDICTS_QUALITE)[number];
+
+export interface MotifPerteDTO {
+  id: string;
+  nom: string;
+}
+
+export interface MotifNonConformiteDTO {
+  id: string;
+  nom: string;
+}
+
+export interface ControleQualiteDTO {
+  verdict: VerdictQualite;
+  motifId: string | null;
+  motifNom: string | null;
+  observations: string | null;
+  controlePar: { id: string; nom: string } | null;
+  controleLe: string;
+}
+
+/** Remplace intégralement la répartition des pertes d'une Production — même idiome que les dons. */
+export const productionPertesSchema = z.object({
+  pertes: z
+    .array(z.object({ motifPerteId: z.string().min(1), nombreBacs: nbBacs }))
+    .max(20),
+});
+export type ProductionPertesInput = z.infer<typeof productionPertesSchema>;
+
+/** Motif exigé quand le verdict est NON_CONFORME, facultatif sinon (section 3.3 f). */
+export const controleQualiteSchema = z
+  .object({
+    verdict: z.enum(VERDICTS_QUALITE),
+    motifId: z.string().min(1).optional(),
+    observations: z.string().trim().max(2000).optional(),
+  })
+  .refine((d) => d.verdict !== "NON_CONFORME" || !!d.motifId, {
+    message: "Un motif est requis quand le contrôle qualité est non conforme",
+    path: ["motifId"],
+  });
+export type ControleQualiteInput = z.infer<typeof controleQualiteSchema>;
 
 /**
  * Réconciliation des bacs (section 3.3 b) : un écart est signalé mais
@@ -938,6 +996,16 @@ export function totalDestinationsBacs(p: {
     p.bacsFoutus +
     p.dons.reduce((s, d) => s + d.nombreBacs, 0)
   );
+}
+
+/**
+ * Une Production ne peut se clôturer que si ses pertes sont exhaustivement
+ * motivées : la somme des lignes ProductionPerte doit égaler exactement
+ * bacsFoutus (contrairement aux dons, purement informatifs). Fonction
+ * partagée pour que le front affiche le même état bloquant que le back.
+ */
+export function pertesJustifiees(p: { bacsFoutus: number; pertes: { nombreBacs: number }[] }): boolean {
+  return p.pertes.reduce((s, l) => s + l.nombreBacs, 0) === p.bacsFoutus;
 }
 
 // --- Écarts prévu / réalisé -------------------------------------------------

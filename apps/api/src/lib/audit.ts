@@ -54,6 +54,10 @@ const MODELE_MODULE: Record<string, string> = {
   ProductionDon: "PRODUCTION",
   MotifDon: "PRODUCTION",
   Production: "PRODUCTION",
+  ProductionPerte: "PRODUCTION",
+  MotifPerte: "PRODUCTION",
+  ControleQualite: "PRODUCTION",
+  MotifNonConformite: "PRODUCTION",
   // Schéma de commande (3.3 d)
   SchemaCommande: "PRODUCTION",
   SchemaCommandeLigne: "PRODUCTION",

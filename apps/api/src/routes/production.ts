@@ -3,10 +3,13 @@ import { Prisma } from "@prisma/client";
 import {
   bonLivraisonJourSchema,
   aAcces,
+  controleQualiteSchema,
   formatQuantite,
   NOMS_PRODUITS_SCHEMA_COMMANDE,
+  pertesJustifiees,
   planningCreateSchema,
   productionCreateSchema,
+  productionPertesSchema,
   schemaCommandeJourSchema,
   totalDestinationsBacs,
   type BonLivraisonClientDTO,
@@ -15,6 +18,8 @@ import {
   type EcartsProductionDTO,
   type LigneEcartDTO,
   type MotifDonDTO,
+  type MotifNonConformiteDTO,
+  type MotifPerteDTO,
   type PlanningProductionDTO,
   type ProductionDTO,
   type SchemaCommandeClientDTO,
@@ -504,19 +509,45 @@ productionRouter.get("/motifs-don", lecture, async (_req, res, next) => {
   }
 });
 
+// --- Motifs de perte et de non-conformité (liste fixe extensible, section 3.3 f) ---
+
+productionRouter.get("/motifs-perte", lecture, async (_req, res, next) => {
+  try {
+    const motifs = await prisma.motifPerte.findMany({ orderBy: { nom: "asc" } });
+    res.json({ motifs: motifs.map((m): MotifPerteDTO => ({ id: m.id, nom: m.nom })) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+productionRouter.get("/motifs-non-conformite", lecture, async (_req, res, next) => {
+  try {
+    const motifs = await prisma.motifNonConformite.findMany({ orderBy: { nom: "asc" } });
+    res.json({ motifs: motifs.map((m): MotifNonConformiteDTO => ({ id: m.id, nom: m.nom })) });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // --- Productions enregistrées (section 3.3 b + c) ---------------------------
 
 type ProductionAvecRelations = Prisma.ProductionGetPayload<{
   include: {
     dons: { include: { motifDon: { select: { id: true; nom: true } } } };
+    pertes: { include: { motifPerte: { select: { id: true; nom: true } } } };
+    controleQualite: { include: { motif: { select: { id: true; nom: true } }; controlePar: { select: { id: true; nom: true } } } };
     enregistrePar: { select: { id: true; nom: true } };
+    clotureePar: { select: { id: true; nom: true } };
     mouvements: { include: { matierePremiere: { select: { nom: true; unite: true } } } };
   };
 }>;
 
 const INCLUDE_PRODUCTION = {
   dons: { include: { motifDon: { select: { id: true, nom: true } } } },
+  pertes: { include: { motifPerte: { select: { id: true, nom: true } } } },
+  controleQualite: { include: { motif: { select: { id: true, nom: true } }, controlePar: { select: { id: true, nom: true } } } },
   enregistrePar: { select: { id: true, nom: true } },
+  clotureePar: { select: { id: true, nom: true } },
   mouvements: { include: { matierePremiere: { select: { nom: true, unite: true } } } },
 } as const;
 
@@ -525,6 +556,11 @@ const versProductionDTO = (p: ProductionAvecRelations): ProductionDTO => {
     motifDonId: d.motifDonId,
     motifNom: d.motifDon.nom,
     nombreBacs: d.nombreBacs,
+  }));
+  const pertes = p.pertes.map((l) => ({
+    motifPerteId: l.motifPerteId,
+    motifNom: l.motifPerte.nom,
+    nombreBacs: l.nombreBacs,
   }));
   const totalDestinations = totalDestinationsBacs({
     bacsLivresDepositaires: p.bacsLivresDepositaires,
@@ -560,6 +596,21 @@ const versProductionDTO = (p: ProductionAvecRelations): ProductionDTO => {
     })),
     totalDestinations,
     ecartReconciliation: totalDestinations - p.bacsProduits,
+    statut: p.statut,
+    clotureeLe: p.clotureeLe ? p.clotureeLe.toISOString() : null,
+    clotureePar: p.clotureePar,
+    pertes,
+    totalPertes: pertes.reduce((s, l) => s + l.nombreBacs, 0),
+    controleQualite: p.controleQualite
+      ? {
+          verdict: p.controleQualite.verdict,
+          motifId: p.controleQualite.motifId,
+          motifNom: p.controleQualite.motif?.nom ?? null,
+          observations: p.controleQualite.observations,
+          controlePar: p.controleQualite.controlePar,
+          controleLe: p.controleQualite.createdAt.toISOString(),
+        }
+      : null,
   };
 };
 
@@ -698,6 +749,137 @@ productionRouter.post("/productions", ecriture, async (req, res, next) => {
     res.status(201).json({ production: dto, avertissements });
   } catch (e) {
     if (e instanceof ErreurStock) return res.status(e.status).json({ erreur: e.message });
+    next(e);
+  }
+});
+
+// --- Contrôle qualité, pertes et clôture (section 3.3 f) --------------------
+//
+// Une Production naît OUVERTE : ses pertes et son contrôle qualité peuvent
+// être saisis ou corrigés librement tant qu'elle n'est pas clôturée. La
+// clôture verrouille définitivement l'ensemble (aucune modification possible
+// ensuite, y compris des champs déjà immuables comme bacsProduits).
+
+async function chargerProductionOuverte(id: string) {
+  const production = await prisma.production.findUnique({ where: { id }, include: INCLUDE_PRODUCTION });
+  if (!production) return { erreur: { status: 404 as const, message: "Production introuvable" } };
+  if (production.statut === "CLOTUREE") {
+    return { erreur: { status: 409 as const, message: "Cette production est clôturée : plus aucune modification possible" } };
+  }
+  return { production };
+}
+
+// Remplace intégralement la répartition des pertes — même idiome que les dons
+// et que le Schéma de commande (plus simple et plus sûr qu'un diff ligne à ligne).
+productionRouter.put("/productions/:id/pertes", ecriture, async (req, res, next) => {
+  try {
+    const { production, erreur } = await chargerProductionOuverte(req.params.id);
+    if (erreur) return res.status(erreur.status).json({ erreur: erreur.message });
+
+    const parsed = productionPertesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const { pertes } = parsed.data;
+
+    const motifIds = pertes.map((x) => x.motifPerteId);
+    if (new Set(motifIds).size !== motifIds.length) {
+      return res.status(400).json({ erreur: "Un motif de perte apparaît deux fois" });
+    }
+    if (motifIds.length > 0) {
+      const connus = await prisma.motifPerte.count({ where: { id: { in: motifIds } } });
+      if (connus !== motifIds.length) {
+        return res.status(400).json({ erreur: "Motif de perte inconnu" });
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.productionPerte.deleteMany({ where: { productionId: production!.id } });
+      if (pertes.length > 0) {
+        await tx.productionPerte.createMany({
+          data: pertes.map((l) => ({ productionId: production!.id, motifPerteId: l.motifPerteId, nombreBacs: l.nombreBacs })),
+        });
+      }
+    });
+
+    const complete = await prisma.production.findUniqueOrThrow({ where: { id: production!.id }, include: INCLUDE_PRODUCTION });
+    res.json({ production: versProductionDTO(complete) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Un seul contrôle qualité par Production — upsert.
+productionRouter.put("/productions/:id/controle-qualite", ecriture, async (req, res, next) => {
+  try {
+    const { production, erreur } = await chargerProductionOuverte(req.params.id);
+    if (erreur) return res.status(erreur.status).json({ erreur: erreur.message });
+
+    const parsed = controleQualiteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const { verdict, motifId, observations } = parsed.data;
+
+    if (motifId) {
+      const connu = await prisma.motifNonConformite.findUnique({ where: { id: motifId } });
+      if (!connu) return res.status(400).json({ erreur: "Motif de non-conformité inconnu" });
+    }
+
+    await prisma.controleQualite.upsert({
+      where: { productionId: production!.id },
+      update: { verdict, motifId: motifId ?? null, observations: observations ?? null, controleParId: req.utilisateur!.id },
+      create: {
+        productionId: production!.id,
+        verdict,
+        motifId: motifId ?? null,
+        observations: observations ?? null,
+        controleParId: req.utilisateur!.id,
+      },
+    });
+
+    const complete = await prisma.production.findUniqueOrThrow({ where: { id: production!.id }, include: INCLUDE_PRODUCTION });
+    res.json({ production: versProductionDTO(complete) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Verrou définitif : exige un contrôle qualité enregistré et, si bacsFoutus >
+// 0, des lignes de perte dont la somme égale exactement bacsFoutus.
+productionRouter.post("/productions/:id/cloturer", ecriture, async (req, res, next) => {
+  try {
+    const { production, erreur } = await chargerProductionOuverte(req.params.id);
+    if (erreur) return res.status(erreur.status).json({ erreur: erreur.message });
+
+    if (!production!.controleQualite) {
+      return res.status(400).json({ code: "CONTROLE_QUALITE_MANQUANT", erreur: "Le contrôle qualité doit être enregistré avant la clôture" });
+    }
+    const totalPertes = production!.pertes.reduce((s, l) => s + l.nombreBacs, 0);
+    if (!pertesJustifiees({ bacsFoutus: production!.bacsFoutus, pertes: production!.pertes })) {
+      return res.status(400).json({
+        code: "PERTES_NON_JUSTIFIEES",
+        erreur: `Les pertes ne sont pas entièrement motivées : ${totalPertes} bac(s) motivé(s) pour ${production!.bacsFoutus} bac(s) foutu(s)`,
+      });
+    }
+
+    const cloturee = await prisma.production.update({
+      where: { id: production!.id },
+      data: { statut: "CLOTUREE", clotureeLe: new Date(), clotureeParId: req.utilisateur!.id },
+      include: INCLUDE_PRODUCTION,
+    });
+
+    const dto = versProductionDTO(cloturee);
+    busEvenements.emettreEvenement({
+      type: "PRODUCTION_CLOTUREE",
+      module: "PRODUCTION",
+      emetteurId: req.utilisateur!.id,
+      evenementRef: dto.id,
+      message: `Production n°${dto.numero} clôturée`,
+      donnees: { productionId: dto.id, numero: dto.numero },
+    });
+    res.json({ production: dto });
+  } catch (e) {
     next(e);
   }
 });

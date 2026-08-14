@@ -318,6 +318,14 @@ async function main() {
     await prisma.motifDon.upsert({ where: { nom }, update: {}, create: { nom } });
   }
 
+  // --- Motifs de perte et de non-conformité (section 3.3 f) — liste fixe extensible ---
+  for (const nom of ["Cuisson ratée", "Casse / manutention", "Invendu périmé"]) {
+    await prisma.motifPerte.upsert({ where: { nom }, update: {}, create: { nom } });
+  }
+  for (const nom of ["Cuisson insuffisante", "Aspect non conforme", "Poids non conforme"]) {
+    await prisma.motifNonConformite.upsert({ where: { nom }, update: {}, create: { nom } });
+  }
+
   // --- Fournisseurs de démonstration (section 3.6) ---
   const fournisseurs = [
     { nom: "Minoterie du Congo", contact: "+243 820 000 010 — Av. des Moulins, Kinshasa" },
