@@ -94,4 +94,54 @@ Aucune dépendance vers un changement de contrat backend n'est identifiée : le 
 
 ---
 
-Ce document sera mis à jour après F5A/F5B/I5.
+## 8. Mise à jour après F5A + F5B + I5 (14 août 2026)
+
+**Les sections 1 à 7 ci-dessus décrivent l'état constaté juste après la vague 2, avant la vague 3 — elles sont conservées telles quelles comme référence historique de l'audit initial.** Cette section documente ce qui a changé depuis.
+
+**Base auditée pour cette mise à jour :** `agent/integration-wave-3` @ `9204adf10fface43f082310bd6be09a5d4c2e49a` (F5A fusionnée via PR #15, F5B fusionnée via PR #16, ancestralité et absence d'écart de contenu vérifiées à chaque fusion).
+
+### 8.1 Ce qui est passé de « préparé » à « réellement utilisable »
+
+Les sept transitions du cycle C4, listées en section 2 comme inaccessibles depuis l'écran, le sont désormais toutes :
+
+- **F5A** (`BonsLivraison.tsx`, permission `PRODUCTION:ECRITURE`) : `RETENIR_PRODUCTION`, `CONFIRMER_PREPARATION`, `CONFIRMER_REMISE_MAGASIN`, `CONFIRMER_CHARGEMENT`, `CONFIRMER_DEPART`, `SIGNALER_DEPOT` — un bouton d'action apparaît sur chaque ligne cliente dont le statut a une action Production suivante, masqué si l'utilisateur n'a pas la permission.
+- **F5B** (`/commandes/acceptations`, permission `COMMANDES:ECRITURE`) : `CONFIRMER_ACCEPTATION` — seule action pouvant créer une commande facturable, avec idempotence obligatoire côté client et serveur, saisie accepté/retourné séparée par produit, jamais de manquant saisi côté client.
+- **I5** : un test d'intégration bout en bout (`apps/api/src/routes/cyclesLivraison.parcoursComplet.test.ts`) enchaîne réellement les sept transitions sur un état simulé persistant entre les appels (pas un état refabriqué à chaque étape comme dans les tests unitaires existants) — vérifie que chaque étape lit correctement ce que la précédente a laissé, que la version s'incrémente à chaque transition, et que la commande facturable finale porte le bon montant. Couvre aussi le rejet d'une transition hors ordre et d'une version obsolète sans écrasement silencieux.
+
+### 8.2 Ce qui reste inchangé
+
+- Le backend C4 n'a été modifié ni par F5A, ni par F5B, ni par I5 — aucun manque contractuel n'a été démontré.
+- Les concepts hors périmètre C4 (prospects, visites, validation de dépositaire formalisée, contrôle qualité) restent absents, comme en section 4.
+- Le repli `?? 0` (P2, section 5) a été corrigé en F5A (tiret distinct) — voir `DETTE_TECHNIQUE_VAGUE_2.md`, item 1 marqué résolu.
+- Les assertions sémantiques lingala/swahili (P2, section 5) restent en attente d'une relecture native — non traitées, comme annoncé.
+
+### 8.3 Constats P0/P1/P2/P3 après F5A + F5B + I5
+
+| Sévérité | Constat | Statut |
+|---|---|---|
+| P0/P1 | Aucun connu sur `agent/integration-wave-3` | Zéro — double revue indépendante à chaque tranche (F5A, F5B), CI verte à chaque fusion |
+| P2 | Repli `?? 0` sur retourné/manquant | **Résolu en F5A** |
+| P2 | Assertions sémantiques lingala/swahili | Toujours en attente d'une relecture native |
+| P3 | Chunk `index-*.js` du build web > 500 kB | Pré-existant, toujours non traité, hors périmètre |
+
+### 8.4 Estimation d'avancement réactualisée — même méthode, même circuit-cœur de 15 étapes
+
+Seules les étapes directement concernées par F5A/F5B changent de score ; les dix autres restent identiques à la section 7 (méthode inchangée : 0 = absent, 0,5 = partiellement construit, 1 = utilisable de bout en bout par un rôle réel).
+
+| Étape | Score avant vague 3 | Score après F5A+F5B+I5 | Justification du changement |
+|---|---|---|---|
+| Lot de production réel | 0,5 | **1** | `RETENIR_PRODUCTION`/`CONFIRMER_PREPARATION` exécutables depuis l'écran (F5A) |
+| Remise au magasin | 0,5 | **1** | `CONFIRMER_REMISE_MAGASIN` exécutable depuis l'écran (F5A) |
+| Chargement | 0,5 | **1** | `CONFIRMER_CHARGEMENT` exécutable depuis l'écran, chauffeur saisi (F5A) |
+| Tournée | 0,5 | **1** | `CONFIRMER_DEPART` exécutable depuis l'écran (F5A) |
+| Livraison acceptée | 0,5 | **1** | `SIGNALER_DEPOT` (F5A) et `CONFIRMER_ACCEPTATION` (F5B) tous deux exécutables depuis l'écran, parcours bout en bout vérifié par test d'intégration (I5) |
+
+**Nouvelle somme : 11 / 15 ≈ 73 %** de ce circuit-cœur est construit (contre 57 % avant la vague 3).
+
+**Lecture stricte réactualisée** (score = 1 uniquement, utilisable de bout en bout sans intervention technique) : Prévision, Plan de production, Lot de production réel, Remise au magasin, Chargement, Tournée, Livraison acceptée, Montant facturable, Paiement = **9/15 ≈ 60 %** réellement opérationnel pour un utilisateur final (contre 27 % avant la vague 3).
+
+Ce qui reste à 0 ou 0,5 sur ce circuit-cœur (Prospect, Dépositaire validé, Qualité, Argent transporté, Remise contradictoire à la caisse, Clôture de caisse) est **hors du périmètre F5A/F5B/I5** — aucune de ces étapes n'a été touchée par la vague 3, et cette estimation ne prétend pas le contraire. Comme en section 7, ce chiffre porte uniquement sur le circuit prévision→paiement et ignore volontairement le reste de l'application déjà livré ; il reste complémentaire, pas substitutif, à l'estimation de coordination globale.
+
+### 8.5 Prochaine étape
+
+I5 est fonctionnellement terminée (test d'intégration bout en bout vert, aucune régression, 0 P0/P1). Une PR brouillon vers `agent/integration-wave-3` sera ouverte pour cette dernière tranche. **Aucune fusion vers `main-a7fm5x` n'a été faite ni n'est prévue sans nouvelle autorisation explicite d'Augustin** — la vague 3 reste entièrement contenue dans `agent/integration-wave-3` en attendant cette décision.
