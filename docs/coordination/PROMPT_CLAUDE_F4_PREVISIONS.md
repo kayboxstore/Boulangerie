@@ -51,7 +51,7 @@ Démarre le frontend de la vague 2 sans inventer le backend.
 
 ## Limite de ce round
 
-Le contrat C4 n’est pas encore publié dans `docs/api-contracts`. Donc :
+Le contrat C4 est désormais publié sur `codex/previsions-commandes-c4` dans `docs/api-contracts/C4_PREVISIONS_COMMANDES_REELLES.md` (PR #12). Utilise-le comme référence de vocabulaire et de DTO. L’intégration réseau définitive attend toutefois l’implémentation et la fusion de C4. Donc :
 
 - n’invente aucune route ni aucun DTO ;
 - n’ajoute aucun faux succès réseau ;
@@ -59,7 +59,7 @@ Le contrat C4 n’est pas encore publié dans `docs/api-contracts`. Donc :
 - ne crée aucune commande financière côté navigateur ;
 - si une intégration nécessite le futur contrat, laisse une frontière explicite et testable, puis documente le point d’attente.
 
-Tu peux utiliser les DTO existants seulement pour auditer et afficher les écrans actuels. La connexion au nouveau cycle attendra le contrat C4.
+Tu peux préparer les adaptateurs et les composants contre le contrat C4, mais la connexion réelle au nouveau cycle attendra que les endpoints C4 soient implémentés puis intégrés dans `agent/integration-wave-2`.
 
 ## Zones autorisées
 
