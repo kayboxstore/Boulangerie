@@ -1,51 +1,105 @@
 import { describe, expect, it } from "vitest";
 import {
-  ETAPES_CYCLE_LIVRAISON,
+  RESULTATS_CYCLE_LIVRAISON,
+  STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON,
   calculerEcartQuantite,
   calculerQuantiteFacturableIndicative,
+  calculerQuantiteManquanteIndicative,
+  respecteLimiteAccepteRetourne,
 } from "./cycleLivraisonLogique";
 
-describe("ETAPES_CYCLE_LIVRAISON", () => {
-  it("contient exactement les onze étapes attendues, dans l'ordre métier (remisMagasin inclus, round 2)", () => {
-    expect(ETAPES_CYCLE_LIVRAISON).toEqual([
-      "prevu",
-      "retenuProduction",
-      "prepare",
-      "remisMagasin",
-      "charge",
-      "depose",
-      "enAttenteConfirmation",
-      "accepte",
-      "retourne",
-      "manquant",
-      "facturable",
+describe("STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON — round 3 (statuts C4 exacts)", () => {
+  it("contient exactement les sept statuts C4, dans l'ordre, utilisant les chaînes exactes du contrat", () => {
+    expect(STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON).toEqual([
+      "PREVISION",
+      "RETENUE_PRODUCTION",
+      "PREPAREE",
+      "REMISE_MAGASIN",
+      "CHARGEE",
+      "EN_TOURNEE",
+      "EN_ATTENTE_CONFIRMATION",
     ]);
   });
 
-  it("remisMagasin (remise Production → Magasin) est bien distincte de charge (remise Magasin → Chauffeur)", () => {
-    const indexRemis = ETAPES_CYCLE_LIVRAISON.indexOf("remisMagasin");
-    const indexCharge = ETAPES_CYCLE_LIVRAISON.indexOf("charge");
-    expect(indexRemis).toBeGreaterThanOrEqual(0);
-    expect(indexCharge).toBeGreaterThan(indexRemis);
+  it("EN_TOURNEE se trouve exactement entre CHARGEE et EN_ATTENTE_CONFIRMATION", () => {
+    const indexChargee = STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON.indexOf("CHARGEE");
+    const indexEnTournee = STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON.indexOf("EN_TOURNEE");
+    const indexAttente = STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON.indexOf("EN_ATTENTE_CONFIRMATION");
+    expect(indexEnTournee).toBe(indexChargee + 1);
+    expect(indexAttente).toBe(indexEnTournee + 1);
+  });
+
+  it("la chronologie s'arrête à EN_ATTENTE_CONFIRMATION : aucun statut ACCEPTEE/RETOUR_TOTAL/ANNULEE n'y figure", () => {
+    expect(STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON).not.toContain("ACCEPTEE");
+    expect(STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON).not.toContain("PARTIELLEMENT_ACCEPTEE");
+    expect(STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON).not.toContain("RETOUR_TOTAL");
+    expect(STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON).not.toContain("ANNULEE");
+    expect(STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON[STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON.length - 1]).toBe(
+      "EN_ATTENTE_CONFIRMATION",
+    );
+  });
+
+  it("aucun statut DEPOSEE inventé : le dépôt est une action (SIGNALER_DEPOT), jamais un statut de cette liste", () => {
+    expect(STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON as readonly string[]).not.toContain("DEPOSEE");
+    expect(STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON as readonly string[]).not.toContain("DEPOSE");
   });
 });
 
-describe("calculerQuantiteFacturableIndicative — suit l'accepté, jamais plafonné par la prévision (round 2)", () => {
+describe("RESULTATS_CYCLE_LIVRAISON — groupe parallèle, non chronologique (round 3)", () => {
+  it("contient exactement accepté, retourné, manquant", () => {
+    expect(RESULTATS_CYCLE_LIVRAISON).toEqual(["accepte", "retourne", "manquant"]);
+  });
+
+  it("n'est pas un sous-ensemble de la chronologie (deux groupes bien distincts)", () => {
+    for (const resultat of RESULTATS_CYCLE_LIVRAISON) {
+      expect(STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON as readonly string[]).not.toContain(resultat);
+    }
+  });
+});
+
+describe("calculerQuantiteFacturableIndicative — conséquence de l'accepté uniquement, jamais plafonnée par la prévision", () => {
   it("exemple obligatoire : acceptation 40 (prévision 50) → 40 facturables", () => {
     expect(calculerQuantiteFacturableIndicative({ quantiteAcceptee: 40 })).toBe(40);
   });
 
-  it("acceptation supérieure à la prévision : le facturable suit l'accepté, sans être plafonné (non-linéarité round 2)", () => {
-    // Prévision 50, mais 60 réellement acceptés le jour même : les 60 restent facturables.
+  it("acceptation supérieure à la prévision : le facturable suit l'accepté, sans être plafonné", () => {
     expect(calculerQuantiteFacturableIndicative({ quantiteAcceptee: 60 })).toBe(60);
   });
 
-  it("aucune acceptation : rien n'est facturable, quelle que soit la prévision", () => {
+  it("aucune acceptation : rien n'est facturable", () => {
     expect(calculerQuantiteFacturableIndicative({ quantiteAcceptee: 0 })).toBe(0);
   });
 
   it("valeur négative défensive : jamais de facturable négatif", () => {
     expect(calculerQuantiteFacturableIndicative({ quantiteAcceptee: -5 })).toBe(0);
+  });
+});
+
+describe("calculerQuantiteManquanteIndicative — manquant = chargé − déposé (règle exacte C4 §4)", () => {
+  it("exemple de référence du contrat : chargement 45, dépôt 43 → manquant 2", () => {
+    expect(calculerQuantiteManquanteIndicative({ quantiteChargee: 45, quantiteDeposee: 43 })).toBe(2);
+  });
+
+  it("dépôt intégral : aucun manquant", () => {
+    expect(calculerQuantiteManquanteIndicative({ quantiteChargee: 45, quantiteDeposee: 45 })).toBe(0);
+  });
+
+  it("jamais de manquant négatif (défensif)", () => {
+    expect(calculerQuantiteManquanteIndicative({ quantiteChargee: 40, quantiteDeposee: 45 })).toBe(0);
+  });
+});
+
+describe("respecteLimiteAccepteRetourne — accepté + retourné <= déposé (règle exacte C4 §4)", () => {
+  it("exemple de référence du contrat : dépôt 43, acceptation 40, retour 3 → respecte la limite (égalité)", () => {
+    expect(respecteLimiteAccepteRetourne({ quantiteDeposee: 43, quantiteAcceptee: 40, quantiteRetournee: 3 })).toBe(true);
+  });
+
+  it("somme strictement inférieure au déposé : respecte la limite", () => {
+    expect(respecteLimiteAccepteRetourne({ quantiteDeposee: 43, quantiteAcceptee: 40, quantiteRetournee: 2 })).toBe(true);
+  });
+
+  it("somme supérieure au déposé : viole la limite", () => {
+    expect(respecteLimiteAccepteRetourne({ quantiteDeposee: 43, quantiteAcceptee: 40, quantiteRetournee: 5 })).toBe(false);
   });
 });
 

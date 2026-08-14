@@ -516,7 +516,7 @@
     "gapTooltip": "Iliyoagizwa (Fomu ya agizo) : {{commande}} — Iliyotolewa : {{livre}}",
     "gapProductTooltip": "Ilivyotabiriwa: {{prevu}} — Ilivyoingizwa: {{livre}}",
     "cycleLegendTitle": "Usafirishaji huu upo wapi?",
-    "cyclePendingNote": "Jumla hii inalingana na hatua « Imewekwa ». Hatua za Imekubaliwa, Imerudishwa, Inayokosekana na Inayolipiwa zitapatikana mkataba wa seva ujao (C4) utakapotolewa.",
+    "cyclePendingNote": "Jumla hii inalingana na kiasi kilichoripotiwa kuwekwa, si bado kukubaliwa na mteja. Matokeo Imekubaliwa, Imerudishwa, Inayokosekana na Inayolipiwa yapo katika mkataba C4 (PR #12), bado haujaunganishwa katika msingi huu — skrini hii bado haijaunganishwa nayo.",
     "loading": "Inapakia hati za usafirishaji…",
     "schemaLoadError": "Imeshindwa kupakia Fomu ya agizo ya tarehe hii — tofauti kwa kila bidhaa hazipatikani kwa sasa.",
     "print": "Chapisha",
@@ -524,52 +524,56 @@
     "saveError": "Imeshindwa kuhifadhi"
   },
   "previsions": {
-    "etapesLegende": "Hatua za mzunguko wa utabiri → usafirishaji",
-    "etapes": {
-      "prevu": {
+    "chronologieLegende": "Mpangilio wa muda wa mzunguko wa utabiri → usafirishaji",
+    "chronologie": {
+      "PREVISION": {
         "label": "Utabiri",
         "description": "Kiasi alichotangaza mteja siku ya J kwa ajili ya usafirishaji siku ya J+1 (Msimamizi wa maagizo) — hakiathiri fedha wala deni."
       },
-      "retenuProduction": {
+      "RETENUE_PRODUCTION": {
         "label": "Kimehifadhiwa kwa uzalishaji",
         "description": "Kiasi kilichohifadhiwa kwa uzalishaji, kinaweza kutofautiana na kiasi kilichotangazwa (Uzalishaji)."
       },
-      "prepare": {
+      "PREPAREE": {
         "label": "Kimeandaliwa",
         "description": "Kiasi kilichozalishwa na Uzalishaji, bado hakijakabidhiwa kwa Ghala."
       },
-      "remisMagasin": {
+      "REMISE_MAGASIN": {
         "label": "Kimekabidhiwa Ghala",
-        "description": "Ukabidhi kutoka Uzalishaji kwenda Ghala, uliothibitishwa na pande zote mbili — hatua ya kwanza kati ya ukabidhi mbili unaofuatiliwa na mkataba C4."
+        "description": "Ukabidhi kutoka Uzalishaji kwenda Ghala, uliothibitishwa na pande zote mbili (hali ya C4 REMISE_MAGASIN) — hakithibitishi kuwa mteja amepokea."
       },
-      "charge": {
+      "CHARGEE": {
         "label": "Kimepakiwa",
         "description": "Kiasi kilichokabidhiwa kwa dereva kwa ajili ya safari (Ghala) — hakithibitishi kuwa mteja amepokea."
       },
-      "depose": {
-        "label": "Kimewekwa",
-        "description": "Kiasi kilichowekwa kwa mteja na dereva — fedha iliyobebwa bado haijapokelewa rasmi."
+      "EN_TOURNEE": {
+        "label": "Njiani",
+        "description": "Dereva anasafirisha kiasi hicho (hali ya C4 EN_TOURNEE) — bado hakuna upokeaji uliothibitishwa."
       },
-      "enAttenteConfirmation": {
+      "EN_ATTENTE_CONFIRMATION": {
         "label": "Inasubiri uthibitisho",
-        "description": "Kimewekwa, lakini bado hakijathibitishwa na mteja au mtu mwenye ruhusa."
-      },
+        "description": "Kiasi kimewekwa kwa mteja (kitendo SIGNALER_DEPOT), lakini kiasi kilichokubaliwa bado hakijathibitishwa. Hakuna athari ya kifedha."
+      }
+    },
+    "resultatsTitre": "Matokeo ya usafirishaji (kila moja ni huru dhidi ya mengine)",
+    "resultats": {
       "accepte": {
         "label": "Imekubaliwa",
-        "description": "Kiasi kilichothibitishwa na mteja au mtu mwenye ruhusa — ndicho msingi pekee wa kulipiwa."
+        "description": "Kiasi kilichothibitishwa na mteja au mtu mwenye ruhusa — ndicho msingi pekee wa kulipiwa. Kinaingizwa tofauti na kilichorudishwa ; jumla ya kilichokubaliwa na kilichorudishwa haiwezi kuzidi kilichowekwa."
       },
       "retourne": {
         "label": "Imerudishwa",
-        "description": "Kiasi kilichorudishwa, hakikubaliwa — kinabaki kuonekana, hakilipiwi kamwe."
+        "description": "Kiasi kilichorudishwa, hakikubaliwa — kinabaki kuonekana, hakilipiwi kamwe. Kinaingizwa tofauti na kilichokubaliwa ; jumla haiwezi kuzidi kilichowekwa."
       },
       "manquant": {
         "label": "Inayokosekana",
-        "description": "Tofauti iliyobainika (hati haipo au haijarudishwa) — inabaki kuonekana, halipiwi kamwe."
-      },
-      "facturable": {
-        "label": "Inayolipiwa",
-        "description": "Ni kiasi kilichokubaliwa tu kinachokuwa agizo la kulipiwa, mkataba wa seva (C4) utakapopatikana."
+        "description": "Tofauti inayohesabiwa na seva: kilichopakiwa toa kilichowekwa. Inabaki kuonekana, halipiwi kamwe, wala haiingizwi na mteja."
       }
+    },
+    "consequenceLegende": "Matokeo ya kukubaliwa",
+    "facturable": {
+      "label": "Inayolipiwa",
+      "description": "Kiasi kinacholipiwa ni sawa na kiasi kilichokubaliwa, bila kikomo cha utabiri — agizo moja tu kwa kila kukubaliwa (mkataba C4, PR #12, bado haujaunganishwa katika msingi huu)."
     }
   },
   "production": {

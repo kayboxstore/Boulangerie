@@ -515,7 +515,7 @@
     "gapTooltip": "Ordered (Order form): {{commande}} — Delivered: {{livre}}",
     "gapProductTooltip": "Forecast: {{prevu}} — Entered: {{livre}}",
     "cycleLegendTitle": "Where is this delivery in the cycle?",
-    "cyclePendingNote": "This total reflects the \"Dropped off\" step. The Accepted, Returned, Missing and Billable steps will be available once the next server contract (C4) ships.",
+    "cyclePendingNote": "This total reflects the quantity reported as dropped off, not yet a client acceptance. The Accepted, Returned, Missing and Billable results exist in the C4 contract (PR #12), not yet merged into this base — this screen isn't wired to it yet.",
     "loading": "Loading delivery notes…",
     "schemaLoadError": "Could not load this date's Order sheet — per-product gaps are unavailable for now.",
     "print": "Print",
@@ -523,52 +523,56 @@
     "saveError": "Could not save"
   },
   "previsions": {
-    "etapesLegende": "Forecast → delivery cycle steps",
-    "etapes": {
-      "prevu": {
+    "chronologieLegende": "Forecast → delivery cycle timeline",
+    "chronologie": {
+      "PREVISION": {
         "label": "Forecast",
         "description": "Quantity announced by the client on D for a delivery on D+1 (Order clerk) — creates no sale and no debt."
       },
-      "retenuProduction": {
+      "RETENUE_PRODUCTION": {
         "label": "Held for production",
         "description": "Quantity held for production, possibly different from the announced quantity (Production)."
       },
-      "prepare": {
+      "PREPAREE": {
         "label": "Prepared",
         "description": "Quantity actually produced by Production, not yet handed to the Store."
       },
-      "remisMagasin": {
+      "REMISE_MAGASIN": {
         "label": "Handed to Store",
-        "description": "Handoff from Production to the Store, confirmed by both — the first of the two handoffs the C4 contract tracks."
+        "description": "Handoff from Production to the Store, confirmed by both (C4 status REMISE_MAGASIN) — does not prove the client received it."
       },
-      "charge": {
+      "CHARGEE": {
         "label": "Loaded",
         "description": "Quantity handed to the driver for the round (Store) — does not prove the client received it."
       },
-      "depose": {
-        "label": "Dropped off",
-        "description": "Quantity dropped off at the client by the driver — cash carried is not yet collected."
+      "EN_TOURNEE": {
+        "label": "On the road",
+        "description": "The driver is transporting the delivery (C4 status EN_TOURNEE) — no receipt is confirmed yet."
       },
-      "enAttenteConfirmation": {
+      "EN_ATTENTE_CONFIRMATION": {
         "label": "Awaiting confirmation",
-        "description": "Drop-off done, but not yet confirmed by the client or an authorized role."
-      },
+        "description": "The drop-off at the client happened (SIGNALER_DEPOT action), but the accepted quantity is not yet confirmed. No financial effect."
+      }
+    },
+    "resultatsTitre": "Delivery results (independent of one another)",
+    "resultats": {
       "accepte": {
         "label": "Accepted",
-        "description": "Quantity confirmed by the client or an authorized role — the only billable basis."
+        "description": "Quantity confirmed by the client or an authorized role — the only billable basis. Entered separately from returns; accepted + returned can never exceed the dropped-off quantity."
       },
       "retourne": {
         "label": "Returned",
-        "description": "Quantity taken back, not accepted — stays visible, never billed."
+        "description": "Quantity taken back, not accepted — stays visible, never billed. Entered separately from accepted; accepted + returned can never exceed the dropped-off quantity."
       },
       "manquant": {
         "label": "Missing",
-        "description": "Gap noticed (missing or unreturned slip) — stays visible, never billed."
-      },
-      "facturable": {
-        "label": "Billable",
-        "description": "Only the accepted quantity becomes a billable order, once the server contract (C4) is available."
+        "description": "Gap computed by the server: loaded minus dropped off. Stays visible, never billed, never entered by the client."
       }
+    },
+    "consequenceLegende": "Consequence of acceptance",
+    "facturable": {
+      "label": "Billable",
+      "description": "The billable quantity equals the accepted quantity, with no cap from the forecast — a single order is created per acceptance (C4 contract, PR #12, not yet merged into this base)."
     }
   },
   "production": {

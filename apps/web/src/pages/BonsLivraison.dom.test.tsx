@@ -174,15 +174,15 @@ describe("BonsLivraisonPage — DOM (F4 round 1)", () => {
     expect(screen.getAllByText("Dépôt Alpha")).toHaveLength(2);
   });
 
-  it("affiche la légende du cycle sans aucune étape active (round 2 : aucune donnée serveur ne justifie « Déposé » actif), avec le rappel d'attente du contrat C4", async () => {
+  it("affiche la légende du cycle sans aucun statut actif (round 2 : aucune donnée serveur ne le justifie), avec le rappel que cet écran n'est pas encore raccordé au contrat C4 (round 3)", async () => {
     routerApi({});
     rendre();
 
     await screen.findByRole("table");
-    const listeEtapes = screen.getByRole("list", { name: "Étapes du cycle prévision → livraison" });
-    expect(listeEtapes).toBeTruthy();
+    const chronologie = screen.getByRole("list", { name: "Chronologie du cycle prévision → livraison" });
+    expect(chronologie).toBeTruthy();
     expect(document.querySelector('[aria-current="step"]')).toBeNull();
-    expect(screen.getByText(/Les étapes Accepté, Retourné, Manquant et Facturable/)).toBeTruthy();
+    expect(screen.getByText(/existent dans le contrat C4 \(PR #12\)/)).toBeTruthy();
   });
 
   it("surface visiblement l'échec de chargement du Schéma de commande (round 2, revue Codex)", async () => {

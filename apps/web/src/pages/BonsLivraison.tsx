@@ -239,13 +239,16 @@ export function BonsLivraisonPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Légende du cycle (F4 round 1) : rappelle que la quantité saisie ici
-              correspond à l'étape « Déposé », pas encore à une acceptation
-              client — les étapes suivantes attendent le contrat serveur C4.
-              Round 2 (revue Codex) : AUCUNE étape n'est marquée active ici —
-              cet écran ne connaît pas réellement l'étape en cours pour une
-              ligne donnée (aucune donnée serveur ne l'indique aujourd'hui),
-              donc `etapeActive` n'est jamais renseigné avec une valeur devinée. */}
+          {/* Légende du cycle (F4 round 1, restructurée round 3) : rappelle que
+              la quantité saisie ici correspond à la quantité signalée comme
+              déposée, pas encore à une acceptation client. Le contrat C4
+              existe (PR #12, branche codex/previsions-commandes-c4) mais
+              n'est pas encore fusionné dans la base de F4 — cet écran n'y
+              est pas encore raccordé (round 3). AUCUN statut n'est marqué
+              actif ici (round 2) : cet écran ne connaît pas réellement le
+              statut en cours pour une ligne donnée (aucune donnée serveur ne
+              l'indique aujourd'hui), donc `statutActif` n'est jamais
+              renseigné avec une valeur devinée. */}
           <div className="rounded-lg border border-dashed p-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("bonsLivraison.cycleLegendTitle")}

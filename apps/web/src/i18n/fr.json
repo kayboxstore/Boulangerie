@@ -515,7 +515,7 @@
     "gapTooltip": "Commandé (Schéma de commande) : {{commande}} — Livré : {{livre}}",
     "gapProductTooltip": "Prévu : {{prevu}} — Saisi : {{livre}}",
     "cycleLegendTitle": "Où en est cette livraison ?",
-    "cyclePendingNote": "Ce total correspond à l'étape « Déposé ». Les étapes Accepté, Retourné, Manquant et Facturable seront disponibles avec le prochain contrat serveur (C4).",
+    "cyclePendingNote": "Ce total correspond à la quantité signalée comme déposée, pas encore à une acceptation client. Les résultats Accepté, Retourné, Manquant et Facturable existent dans le contrat C4 (PR #12), pas encore fusionnée dans cette base — cet écran n'y est pas encore raccordé.",
     "loading": "Chargement des bons de livraison…",
     "schemaLoadError": "Impossible de charger le Schéma de commande de cette date — les écarts par produit ne sont pas disponibles pour le moment.",
     "print": "Imprimer",
@@ -523,52 +523,56 @@
     "saveError": "Enregistrement impossible"
   },
   "previsions": {
-    "etapesLegende": "Étapes du cycle prévision → livraison",
-    "etapes": {
-      "prevu": {
-        "label": "Prévu",
+    "chronologieLegende": "Chronologie du cycle prévision → livraison",
+    "chronologie": {
+      "PREVISION": {
+        "label": "Prévision",
         "description": "Quantité annoncée par le client en J pour une livraison en J+1 (Chargé des commandes) — ne crée ni vente ni dette."
       },
-      "retenuProduction": {
-        "label": "Retenu production",
+      "RETENUE_PRODUCTION": {
+        "label": "Retenue Production",
         "description": "Quantité retenue pour la production, éventuellement différente de la quantité annoncée (Production)."
       },
-      "prepare": {
-        "label": "Préparé",
+      "PREPAREE": {
+        "label": "Préparée",
         "description": "Quantité réellement produite par la Production, pas encore remise au Magasin."
       },
-      "remisMagasin": {
-        "label": "Remis au Magasin",
-        "description": "Remise de la Production au Magasin, confirmée par les deux — trace la première des deux remises attendues par le contrat C4."
+      "REMISE_MAGASIN": {
+        "label": "Remise au Magasin",
+        "description": "Remise de la Production au Magasin, confirmée par les deux (statut C4 REMISE_MAGASIN) — ne prouve pas la réception du client."
       },
-      "charge": {
-        "label": "Chargé",
+      "CHARGEE": {
+        "label": "Chargée",
         "description": "Quantité remise au chauffeur pour la tournée (Magasin) — ne prouve pas la réception du client."
       },
-      "depose": {
-        "label": "Déposé",
-        "description": "Quantité déposée chez le client par le chauffeur — le cash transporté n'est pas encore encaissé."
+      "EN_TOURNEE": {
+        "label": "En tournée",
+        "description": "Le chauffeur transporte la livraison (statut C4 EN_TOURNEE) — aucune réception n'est encore confirmée."
       },
-      "enAttenteConfirmation": {
+      "EN_ATTENTE_CONFIRMATION": {
         "label": "En attente de confirmation",
-        "description": "Dépôt effectué, mais pas encore confirmé par le client ou un rôle autorisé."
-      },
+        "description": "Le dépôt chez le client a eu lieu (action SIGNALER_DEPOT), mais la quantité acceptée n'est pas encore confirmée. Aucun effet financier."
+      }
+    },
+    "resultatsTitre": "Résultats de la livraison (indépendants les uns des autres)",
+    "resultats": {
       "accepte": {
         "label": "Accepté",
-        "description": "Quantité confirmée par le client ou un rôle autorisé — seule base facturable."
+        "description": "Quantité confirmée par le client ou un rôle autorisé — seule base facturable. Saisie séparément du retour ; accepté + retourné ne peut jamais dépasser le déposé."
       },
       "retourne": {
         "label": "Retourné",
-        "description": "Quantité reprise, non acceptée — reste visible, jamais facturée."
+        "description": "Quantité reprise, non acceptée — reste visible, jamais facturée. Saisie séparément de l'accepté ; accepté + retourné ne peut jamais dépasser le déposé."
       },
       "manquant": {
         "label": "Manquant",
-        "description": "Écart constaté (bon absent ou non retourné) — reste visible, jamais facturé."
-      },
-      "facturable": {
-        "label": "Facturable",
-        "description": "Seule la quantité acceptée devient une commande facturable, une fois le contrat serveur (C4) disponible."
+        "description": "Écart calculé par le serveur : chargé − déposé. Reste visible, jamais facturé, jamais saisi côté client."
       }
+    },
+    "consequenceLegende": "Conséquence de l'acceptation",
+    "facturable": {
+      "label": "Facturable",
+      "description": "La quantité facturable correspond à la quantité acceptée, sans plafonnement par la prévision — une seule commande créée par acceptation (contrat C4, PR #12, pas encore fusionnée dans cette base)."
     }
   },
   "production": {
