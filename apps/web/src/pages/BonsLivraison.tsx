@@ -25,6 +25,12 @@ import {
   cleLibelleStatutCycle,
   varianteBadgeStatutCycle,
 } from "@/components/previsions/cycleLivraisonLogique";
+import { DialogActionCycle } from "@/components/previsions/DialogActionCycle";
+import {
+  actionProductionSuivante,
+  cleBoutonAction,
+  type ActionProductionCycleLivraison,
+} from "@/components/previsions/transitionsCycleLivraison";
 
 // Date par défaut calculée dans le fuseau Africa/Kinshasa (F4 round 2, revue
 // Codex) — voir lib/dateKinshasa.ts pour la raison (toISOString() calcule en
@@ -67,20 +73,34 @@ function EcartProduit({ prevu, livre, schemaChargee, t }: { prevu: number; livre
 
 /**
  * Résumé du cycle C4 réel pour ce client à cette date (I4, après fusion et
- * rebase sur C4) — statut, quantités accepté/retourné/manquant et
- * facturable, directement depuis `CycleLivraisonDTO` (contrat C4 §4-5).
- * Aucun recalcul côté client : les quantités accepté/retourné/manquant ne
- * s'affichent que lorsque le serveur les fournit (`totaux.accepte !== null`,
- * c'est-à-dire après l'acceptation) — jamais un zéro par défaut avant coup.
+ * rebase sur C4 ; bouton d'action ajouté en F5A/vague 3) — statut,
+ * quantités accepté/retourné/manquant, facturable, et — si `editable` et
+ * qu'une action Production reste disponible pour ce statut (contrat C4
+ * §7) — le bouton qui ouvre le dialogue de transition. Aucun recalcul côté
+ * client : les quantités accepté/retourné/manquant ne s'affichent que
+ * lorsque le serveur les fournit (`totaux.accepte !== null`, c'est-à-dire
+ * après l'acceptation).
+ *
+ * Dette technique vague 2 (`?? 0` sur retourné/manquant, corrigée ici
+ * puisque ce fichier est retouché en F5A) : le contrat C4 garantit que ces
+ * deux champs sont toujours des nombres après acceptation, mais un repli
+ * `0` masquerait silencieusement une incohérence serveur si elle survenait.
+ * Un tiret distinct affiche l'absence de valeur SANS se confondre avec un
+ * zéro légitime.
  */
 function ResumeCycle({
   cycle,
   t,
+  editable,
+  onAgir,
 }: {
   cycle: CycleLivraisonDTO;
   t: (k: string, o?: Record<string, unknown>) => string;
+  editable: boolean;
+  onAgir: (cycle: CycleLivraisonDTO, action: ActionProductionCycleLivraison) => void;
 }) {
   const idBase = useId();
+  const action = actionProductionSuivante(cycle.statut);
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
       <BadgeDecrit
@@ -92,13 +112,23 @@ function ResumeCycle({
       {cycle.totaux.accepte !== null && (
         <span className="text-muted-foreground">
           {t("previsions.resultats.accepte.label")} {cycle.totaux.accepte} · {t("previsions.resultats.retourne.label")}{" "}
-          {cycle.totaux.retourne ?? 0} · {t("previsions.resultats.manquant.label")} {cycle.totaux.manquant ?? 0}
+          {cycle.totaux.retourne ?? "—"} · {t("previsions.resultats.manquant.label")}{" "}
+          {cycle.totaux.manquant ?? "—"}
         </span>
       )}
       {cycle.estFacturable && cycle.commande && (
         <Badge variant="gold">
           {t("previsions.facturable.label")} {cycle.commande.quantiteBacs}
         </Badge>
+      )}
+      {/* Masqué (pas seulement désactivé) si non autorisé ou si aucune
+          action n'est disponible pour ce statut — le serveur reste
+          l'autorité finale : masquer ce bouton n'est qu'une aide visuelle,
+          la permission est revérifiée par l'API à chaque transition. */}
+      {editable && action && (
+        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => onAgir(cycle, action)}>
+          {t(cleBoutonAction(action))}
+        </Button>
       )}
     </div>
   );
@@ -176,6 +206,13 @@ export function BonsLivraisonPage() {
 
   const [editions, setEditions] = useState<Record<string, string>>({});
   const [erreur, setErreur] = useState<string | null>(null);
+
+  // Dialogue d'action Production du cycle C4 (F5A, vague 3) — un seul à la
+  // fois, ouvert depuis la ligne du client concerné via `ResumeCycle`.
+  const [dialogAction, setDialogAction] = useState<{
+    cycle: CycleLivraisonDTO;
+    action: ActionProductionCycleLivraison;
+  } | null>(null);
 
   useEffect(() => {
     setEditions({});
@@ -375,7 +412,14 @@ export function BonsLivraisonPage() {
                             <TableRow key={c.clientId}>
                               <TableCell className="font-medium">
                                 <div className="whitespace-nowrap">{c.clientNom}</div>
-                                {cycle && <ResumeCycle cycle={cycle} t={t} />}
+                                {cycle && (
+                                  <ResumeCycle
+                                    cycle={cycle}
+                                    t={t}
+                                    editable={editable}
+                                    onAgir={(c, action) => setDialogAction({ cycle: c, action })}
+                                  />
+                                )}
                               </TableCell>
                               {c.lignes.map((l) => {
                                 const livreProduit = nombre(
@@ -493,7 +537,14 @@ export function BonsLivraisonPage() {
                               )}
                             </span>
                           </CarteLigneTitre>
-                          {cycle && <ResumeCycle cycle={cycle} t={t} />}
+                          {cycle && (
+                            <ResumeCycle
+                              cycle={cycle}
+                              t={t}
+                              editable={editable}
+                              onAgir={(c, action) => setDialogAction({ cycle: c, action })}
+                            />
+                          )}
                           {c.lignes.map((l) => {
                             const livreProduit = nombre(valeurChamp(editions, c.clientId, l.produitId, String(l.quantite || "")));
                             const prevuProduit = prevuParClientProduit.get(`${c.clientId}:${l.produitId}`) ?? 0;
@@ -595,6 +646,15 @@ export function BonsLivraisonPage() {
           )}
         </CardContent>
       </Card>
+
+      {dialogAction && (
+        <DialogActionCycle
+          cycle={dialogAction.cycle}
+          action={dialogAction.action}
+          open
+          onOpenChange={(ouvert) => !ouvert && setDialogAction(null)}
+        />
+      )}
     </div>
   );
 }

@@ -424,6 +424,7 @@
     "clientCreateError": "Kuunda kumeshindikana",
     "createClient": "Unda mteja",
     "manageClients": "Simamia wateja",
+    "confirmAcceptances": "Thibitisha ukubaliwa",
     "backToCommandes": "Rudi kwenye maagizo",
     "clientsCardTitle": "Wateja",
     "clientsCardDesc": "Orodha ya wateja waliosajiliwa — jina, simu, aina na eneo la kuachia bidhaa.",
@@ -594,7 +595,82 @@
     "facturable": {
       "label": "Inayolipiwa",
       "description": "Kiasi kinacholipiwa ni sawa na kiasi kilichokubaliwa, bila kikomo cha utabiri — agizo moja tu kwa kila kukubaliwa."
+    },
+    "actions": {
+      "RETENIR_PRODUCTION": {
+        "label": "Hifadhi kwa uzalishaji",
+        "description": "Inathibitisha kiasi kilichohifadhiwa kwa uzalishaji kutoka kwa utabiri uliotangazwa.",
+        "bouton": "Hifadhi kwa uzalishaji"
+      },
+      "CONFIRMER_PREPARATION": {
+        "label": "Thibitisha maandalizi",
+        "description": "Inathibitisha kiasi kilichoandaliwa kwa usafirishaji, tayari kukabidhiwa kwa Ghala.",
+        "bouton": "Thibitisha maandalizi"
+      },
+      "CONFIRMER_REMISE_MAGASIN": {
+        "label": "Thibitisha ukabidhi kwa Ghala",
+        "description": "Inathibitisha kiasi kilichokabidhiwa kutoka Uzalishaji kwenda Ghala. Hatua hii inathibitisha ukabidhi wa ndani tu, si upokeaji wa mteja.",
+        "bouton": "Thibitisha ukabidhi Ghala"
+      },
+      "CONFIRMER_CHARGEMENT": {
+        "label": "Thibitisha upakiaji",
+        "description": "Inathibitisha kiasi kilichokabidhiwa kwa dereva kwa ajili ya safari na kutaja jina la dereva — hakithibitishi kuwa mteja amepokea.",
+        "bouton": "Thibitisha upakiaji"
+      },
+      "CONFIRMER_DEPART": {
+        "label": "Thibitisha kuondoka",
+        "description": "Inathibitisha kuwa dereva anaondoka na usafirishaji. Hakuna kiasi kinachoingizwa katika hatua hii.",
+        "bouton": "Thibitisha kuondoka"
+      },
+      "SIGNALER_DEPOT": {
+        "label": "Ripoti kuwekwa kwa mteja",
+        "description": "Inaripoti kuwa usafirishaji umewekwa kwa mteja. Kiasi kilichokubaliwa bado kinasubiri kuthibitishwa kando — hakuna athari ya kifedha katika hatua hii.",
+        "bouton": "Ripoti kuwekwa"
+      }
+    },
+    "actionsDialog": {
+      "aucunEffetFinancier": "Kitendo hiki hakina athari ya kifedha — ni uthibitisho wa makubaliano tu, unaofanywa kutoka moduli ya Maagizo, ndio unaoweza kufanya kiasi kiwe cha kulipiwa.",
+      "quantitesTitre": "Kiasi kwa kila bidhaa",
+      "chauffeur": "Jina la dereva",
+      "chauffeurAide": "Inahitajika kuthibitisha upakiaji — inatambulisha nani anachukua jukumu la usafirishaji.",
+      "observations": "Maelezo (si lazima)",
+      "versionObsolete": "Mzunguko huu ulibadilishwa wakati huohuo na mtu mwingine. Data imepakiwa upya — angalia hali ya sasa kabla ya kujaribu tena.",
+      "erreurGenerique": "Hitilafu imetokea wakati wa kuthibitisha kitendo hiki. Jaribu tena baada ya muda mfupi.",
+      "succes": {
+        "RETENIR_PRODUCTION": "Kiasi kimehifadhiwa kwa uzalishaji.",
+        "CONFIRMER_PREPARATION": "Maandalizi yamethibitishwa.",
+        "CONFIRMER_REMISE_MAGASIN": "Ukabidhi kwa Ghala umethibitishwa.",
+        "CONFIRMER_CHARGEMENT": "Upakiaji umethibitishwa.",
+        "CONFIRMER_DEPART": "Kuondoka kumethibitishwa.",
+        "SIGNALER_DEPOT": "Kuwekwa kwa mteja kumeripotiwa."
+      }
     }
+  },
+  "acceptations": {
+    "title": "Uthibitisho wa makubaliano",
+    "subtitle": "Inathibitisha kiasi kilichokubaliwa na kilichorudishwa kwa kila usafirishaji unaosubiri — uthibitisho huu pekee ndio unaoweza kuunda agizo la kulipiwa.",
+    "backToOrders": "Rudi kwenye maagizo",
+    "descWrite": "Ingiza kiasi kilichokubaliwa na kilichorudishwa kando kwa kila bidhaa iliyowekwa, kisha uthibitishe.",
+    "descRead": "Kusoma tu — kuthibitisha makubaliano kunahitaji ruhusa ya kuandika kwenye Maagizo.",
+    "loading": "Inapakia usafirishaji unaosubiri…",
+    "empty": "Hakuna usafirishaji unaosubiri uthibitisho kwa tarehe hii.",
+    "colClient": "Mteja",
+    "colDeposited": "Kilichowekwa",
+    "confirmButton": "Thibitisha ukubaliwa",
+    "dialogTitle": "Thibitisha makubaliano — {{client}}",
+    "dialogDesc": "Ingiza kiasi kilichokubaliwa na kiasi kilichorudishwa kando kwa kila bidhaa iliyowekwa. Kiasi kinachokosekana, kikiwepo, kinahesabiwa na seva — hakiingizwi hapa kamwe.",
+    "financialEffectWarning": "Uthibitisho huu unaweza kuunda agizo la kulipiwa: ni kiasi KILICHOKUBALIWA tu kinachokuwa cha kulipiwa, si kilichorudishwa kamwe. Agizo moja tu linaundwa kwa kila kukubaliwa.",
+    "deposited": "Kilichowekwa: {{n}}",
+    "accepted": "Kimekubaliwa",
+    "returned": "Kimerudishwa",
+    "sumExceedsDeposited": "Kilichokubaliwa + kilichorudishwa kinazidi kiasi kilichowekwa ({{deposited}}).",
+    "bonRetourne": "Hati halisi ya usafirishaji imerudishwa",
+    "bonRetourneAlready": "Hati halisi tayari imerudishwa na kurekodiwa.",
+    "observations": "Maelezo (si lazima)",
+    "versionObsolete": "Mzunguko huu ulibadilishwa wakati huohuo na mtu mwingine. Data imepakiwa upya — angalia hali ya sasa kabla ya kujaribu tena.",
+    "errorGeneric": "Hitilafu imetokea wakati wa kuthibitisha makubaliano haya. Jaribu tena baada ya muda mfupi.",
+    "successWithOrder": "Makubaliano yamethibitishwa — agizo namba {{numero}} limeundwa kwa kreti {{bacs}} za kulipiwa.",
+    "successWithoutOrder": "Makubaliano yamethibitishwa — hakuna kiasi kilichokubaliwa, hakuna agizo lililoundwa."
   },
   "production": {
     "title": "Uzalishaji",

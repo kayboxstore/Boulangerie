@@ -423,6 +423,7 @@
     "clientCreateError": "Creation failed",
     "createClient": "Create client",
     "manageClients": "Manage clients",
+    "confirmAcceptances": "Confirm an acceptance",
     "backToCommandes": "Back to orders",
     "clientsCardTitle": "Clients",
     "clientsCardDesc": "List of registered clients — name, phone, quality and delivery zone.",
@@ -593,7 +594,82 @@
     "facturable": {
       "label": "Billable",
       "description": "The billable quantity equals the accepted quantity, with no cap from the forecast — a single order is created per acceptance."
+    },
+    "actions": {
+      "RETENIR_PRODUCTION": {
+        "label": "Reserve for production",
+        "description": "Confirms the quantity reserved for production from the announced forecast.",
+        "bouton": "Reserve for production"
+      },
+      "CONFIRMER_PREPARATION": {
+        "label": "Confirm preparation",
+        "description": "Confirms the quantity prepared for delivery, ready to be handed to the Store.",
+        "bouton": "Confirm preparation"
+      },
+      "CONFIRMER_REMISE_MAGASIN": {
+        "label": "Confirm handover to the Store",
+        "description": "Confirms the quantity handed over from Production to the Store. This transition proves the internal handover, not the customer's receipt.",
+        "bouton": "Confirm handover to Store"
+      },
+      "CONFIRMER_CHARGEMENT": {
+        "label": "Confirm loading",
+        "description": "Confirms the quantity handed to the driver for the round and identifies the driver — does not prove the customer's receipt.",
+        "bouton": "Confirm loading"
+      },
+      "CONFIRMER_DEPART": {
+        "label": "Confirm departure",
+        "description": "Confirms that the driver is leaving on the round with the delivery. No quantity is entered at this step.",
+        "bouton": "Confirm departure"
+      },
+      "SIGNALER_DEPOT": {
+        "label": "Report drop-off at customer",
+        "description": "Reports that the delivery was dropped off at the customer. The accepted quantity is still to be confirmed separately — no financial effect at this step.",
+        "bouton": "Report drop-off"
+      }
+    },
+    "actionsDialog": {
+      "aucunEffetFinancier": "This action has no financial effect — only the acceptance confirmation, made from the Orders module, can make a quantity billable.",
+      "quantitesTitre": "Quantities by product",
+      "chauffeur": "Driver name",
+      "chauffeurAide": "Required to confirm loading — identifies who is taking charge of the delivery.",
+      "observations": "Notes (optional)",
+      "versionObsolete": "This cycle was changed in the meantime by someone else. The data has been reloaded — check the current state before trying again.",
+      "erreurGenerique": "Something went wrong while confirming this action. Try again in a moment.",
+      "succes": {
+        "RETENIR_PRODUCTION": "Quantity reserved for production.",
+        "CONFIRMER_PREPARATION": "Preparation confirmed.",
+        "CONFIRMER_REMISE_MAGASIN": "Handover to the Store confirmed.",
+        "CONFIRMER_CHARGEMENT": "Loading confirmed.",
+        "CONFIRMER_DEPART": "Departure confirmed.",
+        "SIGNALER_DEPOT": "Drop-off at customer reported."
+      }
     }
+  },
+  "acceptations": {
+    "title": "Acceptance confirmation",
+    "subtitle": "Confirms the accepted and returned quantity for each pending delivery — only this confirmation can create a billable order.",
+    "backToOrders": "Back to orders",
+    "descWrite": "Enter the accepted and returned quantity separately for each dropped-off product, then confirm.",
+    "descRead": "Read-only — confirming acceptance requires write access on Orders.",
+    "loading": "Loading pending deliveries…",
+    "empty": "No delivery awaiting confirmation for this date.",
+    "colClient": "Client",
+    "colDeposited": "Dropped off",
+    "confirmButton": "Confirm acceptance",
+    "dialogTitle": "Confirm acceptance — {{client}}",
+    "dialogDesc": "Enter the accepted quantity and the returned quantity separately for each dropped-off product. Any missing quantity is calculated by the server — it is never entered here.",
+    "financialEffectWarning": "This confirmation can create a billable order: only the ACCEPTED quantity becomes billable, never the returned quantity. A single order is created per acceptance.",
+    "deposited": "Dropped off: {{n}}",
+    "accepted": "Accepted",
+    "returned": "Returned",
+    "sumExceedsDeposited": "Accepted + returned exceeds the dropped-off quantity ({{deposited}}).",
+    "bonRetourne": "The physical delivery note has been returned",
+    "bonRetourneAlready": "Physical note already returned and recorded.",
+    "observations": "Notes (optional)",
+    "versionObsolete": "This cycle was changed in the meantime by someone else. The data has been reloaded — check the current state before trying again.",
+    "errorGeneric": "Something went wrong while confirming this acceptance. Try again in a moment.",
+    "successWithOrder": "Acceptance confirmed — order #{{numero}} created for {{bacs}} billable crates.",
+    "successWithoutOrder": "Acceptance confirmed — no quantity accepted, no order created."
   },
   "production": {
     "title": "Production",

@@ -423,6 +423,7 @@
     "clientCreateError": "Création impossible",
     "createClient": "Créer le client",
     "manageClients": "Gérer les clients",
+    "confirmAcceptances": "Confirmer une acceptation",
     "backToCommandes": "Retour aux commandes",
     "clientsCardTitle": "Clients",
     "clientsCardDesc": "Liste des clients enregistrés — nom, téléphone, qualité et zone de dépôt.",
@@ -593,7 +594,82 @@
     "facturable": {
       "label": "Facturable",
       "description": "La quantité facturable correspond à la quantité acceptée, sans plafonnement par la prévision — une seule commande est créée par acceptation."
+    },
+    "actions": {
+      "RETENIR_PRODUCTION": {
+        "label": "Retenir pour la production",
+        "description": "Confirme la quantité retenue pour la production à partir de la prévision annoncée.",
+        "bouton": "Retenir pour la production"
+      },
+      "CONFIRMER_PREPARATION": {
+        "label": "Confirmer la préparation",
+        "description": "Confirme la quantité préparée pour la livraison, prête à être remise au Magasin.",
+        "bouton": "Confirmer la préparation"
+      },
+      "CONFIRMER_REMISE_MAGASIN": {
+        "label": "Confirmer la remise au Magasin",
+        "description": "Confirme la quantité remise de la Production au Magasin. Cette transition prouve la remise interne, pas la réception du client.",
+        "bouton": "Confirmer la remise au Magasin"
+      },
+      "CONFIRMER_CHARGEMENT": {
+        "label": "Confirmer le chargement",
+        "description": "Confirme la quantité remise au chauffeur pour la tournée et identifie le chauffeur — ne prouve pas la réception du client.",
+        "bouton": "Confirmer le chargement"
+      },
+      "CONFIRMER_DEPART": {
+        "label": "Confirmer le départ",
+        "description": "Confirme que le chauffeur part en tournée avec la livraison. Aucune quantité n'est saisie à cette étape.",
+        "bouton": "Confirmer le départ"
+      },
+      "SIGNALER_DEPOT": {
+        "label": "Signaler le dépôt chez le client",
+        "description": "Signale que la livraison a été déposée chez le client. La quantité acceptée reste à confirmer séparément — aucun effet financier à cette étape.",
+        "bouton": "Signaler le dépôt"
+      }
+    },
+    "actionsDialog": {
+      "aucunEffetFinancier": "Cette action n'a aucun effet financier — seule la confirmation d'acceptation, faite depuis le module Commandes, peut rendre une quantité facturable.",
+      "quantitesTitre": "Quantités par produit",
+      "chauffeur": "Nom du chauffeur",
+      "chauffeurAide": "Obligatoire pour confirmer le chargement — identifie qui prend la livraison en charge.",
+      "observations": "Observations (optionnel)",
+      "versionObsolete": "Ce cycle a été modifié entre-temps par quelqu'un d'autre. Les données ont été rechargées — vérifiez l'état actuel avant de recommencer.",
+      "erreurGenerique": "Une erreur est survenue en confirmant cette action. Réessayez dans un instant.",
+      "succes": {
+        "RETENIR_PRODUCTION": "Quantité retenue pour la production.",
+        "CONFIRMER_PREPARATION": "Préparation confirmée.",
+        "CONFIRMER_REMISE_MAGASIN": "Remise au Magasin confirmée.",
+        "CONFIRMER_CHARGEMENT": "Chargement confirmé.",
+        "CONFIRMER_DEPART": "Départ confirmé.",
+        "SIGNALER_DEPOT": "Dépôt chez le client signalé."
+      }
     }
+  },
+  "acceptations": {
+    "title": "Confirmation des acceptations",
+    "subtitle": "Confirme la quantité acceptée et retournée pour chaque livraison en attente — seule cette confirmation peut créer une commande facturable.",
+    "backToOrders": "Retour aux commandes",
+    "descWrite": "Saisissez séparément l'accepté et le retourné pour chaque produit déposé, puis confirmez.",
+    "descRead": "Lecture seule — la confirmation d'acceptation requiert l'écriture sur Commandes.",
+    "loading": "Chargement des livraisons en attente…",
+    "empty": "Aucune livraison en attente de confirmation pour cette date.",
+    "colClient": "Client",
+    "colDeposited": "Déposé",
+    "confirmButton": "Confirmer l'acceptation",
+    "dialogTitle": "Confirmer l'acceptation — {{client}}",
+    "dialogDesc": "Saisissez séparément la quantité acceptée et la quantité retournée pour chaque produit déposé. Le manquant, s'il y en a un, est calculé par le serveur — il n'est jamais saisi ici.",
+    "financialEffectWarning": "Cette confirmation peut créer une commande facturable : seule la quantité ACCEPTÉE devient facturable, jamais la quantité retournée. Une seule commande est créée par acceptation.",
+    "deposited": "Déposé : {{n}}",
+    "accepted": "Acceptée",
+    "returned": "Retournée",
+    "sumExceedsDeposited": "Accepté + retourné dépasse la quantité déposée ({{deposited}}).",
+    "bonRetourne": "Le bon de livraison physique a été retourné",
+    "bonRetourneAlready": "Bon physique déjà retourné et enregistré.",
+    "observations": "Observations (optionnel)",
+    "versionObsolete": "Ce cycle a été modifié entre-temps par quelqu'un d'autre. Les données ont été rechargées — vérifiez l'état actuel avant de recommencer.",
+    "errorGeneric": "Une erreur est survenue en confirmant cette acceptation. Réessayez dans un instant.",
+    "successWithOrder": "Acceptation confirmée — commande n°{{numero}} créée pour {{bacs}} bacs facturables.",
+    "successWithoutOrder": "Acceptation confirmée — aucune quantité acceptée, aucune commande créée."
   },
   "production": {
     "title": "Production",
