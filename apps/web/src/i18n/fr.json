@@ -423,6 +423,7 @@
     "clientCreateError": "Création impossible",
     "createClient": "Créer le client",
     "manageClients": "Gérer les clients",
+    "confirmAcceptances": "Confirmer une acceptation",
     "backToCommandes": "Retour aux commandes",
     "clientsCardTitle": "Clients",
     "clientsCardDesc": "Liste des clients enregistrés — nom, téléphone, qualité et zone de dépôt.",
@@ -643,6 +644,32 @@
         "SIGNALER_DEPOT": "Dépôt chez le client signalé."
       }
     }
+  },
+  "acceptations": {
+    "title": "Confirmation des acceptations",
+    "subtitle": "Confirme la quantité acceptée et retournée pour chaque livraison en attente — seule cette confirmation peut créer une commande facturable.",
+    "backToOrders": "Retour aux commandes",
+    "descWrite": "Saisissez séparément l'accepté et le retourné pour chaque produit déposé, puis confirmez.",
+    "descRead": "Lecture seule — la confirmation d'acceptation requiert l'écriture sur Commandes.",
+    "loading": "Chargement des livraisons en attente…",
+    "empty": "Aucune livraison en attente de confirmation pour cette date.",
+    "colClient": "Client",
+    "colDeposited": "Déposé",
+    "confirmButton": "Confirmer l'acceptation",
+    "dialogTitle": "Confirmer l'acceptation — {{client}}",
+    "dialogDesc": "Saisissez séparément la quantité acceptée et la quantité retournée pour chaque produit déposé. Le manquant, s'il y en a un, est calculé par le serveur — il n'est jamais saisi ici.",
+    "financialEffectWarning": "Cette confirmation peut créer une commande facturable : seule la quantité ACCEPTÉE devient facturable, jamais la quantité retournée. Une seule commande est créée par acceptation.",
+    "deposited": "Déposé : {{n}}",
+    "accepted": "Acceptée",
+    "returned": "Retournée",
+    "sumExceedsDeposited": "Accepté + retourné dépasse la quantité déposée ({{deposited}}).",
+    "bonRetourne": "Le bon de livraison physique a été retourné",
+    "bonRetourneAlready": "Bon physique déjà retourné et enregistré.",
+    "observations": "Observations (optionnel)",
+    "versionObsolete": "Ce cycle a été modifié entre-temps par quelqu'un d'autre. Les données ont été rechargées — vérifiez l'état actuel avant de recommencer.",
+    "errorGeneric": "Une erreur est survenue en confirmant cette acceptation. Réessayez dans un instant.",
+    "successWithOrder": "Acceptation confirmée — commande n°{{numero}} créée pour {{bacs}} bacs facturables.",
+    "successWithoutOrder": "Acceptation confirmée — aucune quantité acceptée, aucune commande créée."
   },
   "production": {
     "title": "Production",

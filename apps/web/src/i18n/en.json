@@ -423,6 +423,7 @@
     "clientCreateError": "Creation failed",
     "createClient": "Create client",
     "manageClients": "Manage clients",
+    "confirmAcceptances": "Confirm an acceptance",
     "backToCommandes": "Back to orders",
     "clientsCardTitle": "Clients",
     "clientsCardDesc": "List of registered clients — name, phone, quality and delivery zone.",
@@ -643,6 +644,32 @@
         "SIGNALER_DEPOT": "Drop-off at customer reported."
       }
     }
+  },
+  "acceptations": {
+    "title": "Acceptance confirmation",
+    "subtitle": "Confirms the accepted and returned quantity for each pending delivery — only this confirmation can create a billable order.",
+    "backToOrders": "Back to orders",
+    "descWrite": "Enter the accepted and returned quantity separately for each dropped-off product, then confirm.",
+    "descRead": "Read-only — confirming acceptance requires write access on Orders.",
+    "loading": "Loading pending deliveries…",
+    "empty": "No delivery awaiting confirmation for this date.",
+    "colClient": "Client",
+    "colDeposited": "Dropped off",
+    "confirmButton": "Confirm acceptance",
+    "dialogTitle": "Confirm acceptance — {{client}}",
+    "dialogDesc": "Enter the accepted quantity and the returned quantity separately for each dropped-off product. Any missing quantity is calculated by the server — it is never entered here.",
+    "financialEffectWarning": "This confirmation can create a billable order: only the ACCEPTED quantity becomes billable, never the returned quantity. A single order is created per acceptance.",
+    "deposited": "Dropped off: {{n}}",
+    "accepted": "Accepted",
+    "returned": "Returned",
+    "sumExceedsDeposited": "Accepted + returned exceeds the dropped-off quantity ({{deposited}}).",
+    "bonRetourne": "The physical delivery note has been returned",
+    "bonRetourneAlready": "Physical note already returned and recorded.",
+    "observations": "Notes (optional)",
+    "versionObsolete": "This cycle was changed in the meantime by someone else. The data has been reloaded — check the current state before trying again.",
+    "errorGeneric": "Something went wrong while confirming this acceptance. Try again in a moment.",
+    "successWithOrder": "Acceptance confirmed — order #{{numero}} created for {{bacs}} billable crates.",
+    "successWithoutOrder": "Acceptance confirmed — no quantity accepted, no order created."
   },
   "production": {
     "title": "Production",
