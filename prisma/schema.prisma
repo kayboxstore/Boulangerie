@@ -66,6 +66,16 @@ enum TypeAnomalieCycle {
   AUTRE
 }
 
+enum StatutProduction {
+  OUVERTE
+  CLOTUREE
+}
+
+enum VerdictQualite {
+  CONFORME
+  NON_CONFORME
+}
+
 enum TypeMouvementStock {
   ENTREE
   SORTIE
@@ -154,6 +164,8 @@ model Utilisateur {
   reglementsEnregistres       PaiementCommande[]
   mouvementsStock             MouvementStock[]
   productions                 Production[]
+  productionsCloturees        Production[]                      @relation("ProductionsCloturees")
+  controlesQualiteEffectues   ControleQualite[]                 @relation("ControlesQualiteEffectues")
   planningsCrees              PlanningProduction[]
   schemasCommandeCrees        SchemaCommande[]
   bonsLivraisonCrees          BonLivraison[]
@@ -685,36 +697,98 @@ model MotifDon {
   createdAt DateTime        @default(now())
 }
 
+// Motif d'une perte de bacs à la production (section 3.3 f) — même logique que
+// MotifDon : liste fixe mais extensible, initialisée en seed.
+model MotifPerte {
+  id        String            @id @default(cuid())
+  nom       String            @unique
+  pertes    ProductionPerte[]
+  createdAt DateTime          @default(now())
+}
+
+// Répartition des bacs foutus (Production.bacsFoutus) par motif — contrepartie
+// de ProductionDon pour les pertes. La clôture d'une Production exige que la
+// somme des lignes égale exactement bacsFoutus (contrairement aux dons,
+// purement informatifs, ici l'exhaustivité est exigée avant clôture).
+model ProductionPerte {
+  id           String     @id @default(cuid())
+  productionId String
+  production   Production @relation(fields: [productionId], references: [id], onDelete: Cascade)
+  motifPerteId String
+  motifPerte   MotifPerte @relation(fields: [motifPerteId], references: [id])
+  nombreBacs   Int
+
+  @@unique([productionId, motifPerteId])
+}
+
+// Motif de non-conformité relevé au contrôle qualité (section 3.3 f) — liste
+// fixe mais extensible, initialisée en seed.
+model MotifNonConformite {
+  id        String            @id @default(cuid())
+  nom       String            @unique
+  controles ControleQualite[]
+  createdAt DateTime          @default(now())
+}
+
+// Contrôle qualité formel d'une Production (section 3.3 f) — un seul contrôle
+// par Production. Un motif est exigé quand le verdict est NON_CONFORME (validé
+// côté schéma partagé), facultatif sinon.
+model ControleQualite {
+  id            String              @id @default(cuid())
+  productionId  String              @unique
+  production    Production          @relation(fields: [productionId], references: [id], onDelete: Cascade)
+  verdict       VerdictQualite
+  motifId       String?
+  motif         MotifNonConformite? @relation(fields: [motifId], references: [id])
+  observations  String?
+  controleParId String?
+  controlePar   Utilisateur?        @relation("ControlesQualiteEffectues", fields: [controleParId], references: [id], onDelete: SetNull)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
 // Production enregistrée (section 3.3 b + c). Les 4 quantités d'ingrédients
 // utilisés décrémentent AUTOMATIQUEMENT le stock via des MouvementStock SORTIE
 // créés dans la même transaction (référence = cette production).
 //
 // Réconciliation : bacsProduits peut différer de la somme des destinations —
 // l'écart est signalé à l'utilisateur mais n'empêche jamais l'enregistrement.
+//
+// Clôture (section 3.3 f) : une Production naît OUVERTE (modifiable sur ses
+// seules pertes/contrôle qualité) puis se CLOTURE explicitement — verrou
+// définitif. La clôture exige un contrôle qualité enregistré et, si
+// bacsFoutus > 0, des lignes ProductionPerte dont la somme égale bacsFoutus.
 model Production {
-  id                     String           @id @default(cuid())
-  numero                 Int              @unique @default(autoincrement())
-  date                   DateTime         @default(now())
+  id                     String            @id @default(cuid())
+  numero                 Int               @unique @default(autoincrement())
+  date                   DateTime          @default(now())
   // Bacs produits et leur destination
   bacsProduits           Int
-  bacsLivresDepositaires Int              @default(0)
-  bacsLivresMamans       Int              @default(0)
-  bacsVendusVC           Int              @default(0)
-  bacsRestants           Int              @default(0)
-  bacsFoutus             Int              @default(0)
+  bacsLivresDepositaires Int               @default(0)
+  bacsLivresMamans       Int               @default(0)
+  bacsVendusVC           Int               @default(0)
+  bacsRestants           Int               @default(0)
+  bacsFoutus             Int               @default(0)
   dons                   ProductionDon[]
+  pertes                 ProductionPerte[]
+  controleQualite        ControleQualite?
   // Ingrédients réellement utilisés (déclenchent la décrémentation du stock)
-  sacsUtilises           Decimal          @default(0) @db.Decimal(12, 3)
-  paquetsLevureUtilises  Decimal          @default(0) @db.Decimal(12, 3)
-  kgSelUtilises          Decimal          @default(0) @db.Decimal(12, 3)
-  quantiteHuileUtilisee  Decimal          @default(0) @db.Decimal(12, 3)
-  kgFarineAbimes         Decimal?         @db.Decimal(12, 3)
+  sacsUtilises           Decimal           @default(0) @db.Decimal(12, 3)
+  paquetsLevureUtilises  Decimal           @default(0) @db.Decimal(12, 3)
+  kgSelUtilises          Decimal           @default(0) @db.Decimal(12, 3)
+  quantiteHuileUtilisee  Decimal           @default(0) @db.Decimal(12, 3)
+  kgFarineAbimes         Decimal?          @db.Decimal(12, 3)
   observations           String?
   enregistreParId        String?
-  enregistrePar          Utilisateur?     @relation(fields: [enregistreParId], references: [id], onDelete: SetNull)
+  enregistrePar          Utilisateur?      @relation(fields: [enregistreParId], references: [id], onDelete: SetNull)
   mouvements             MouvementStock[]
+  statut                 StatutProduction  @default(OUVERTE)
+  clotureeLe             DateTime?
+  clotureeParId          String?
+  clotureePar            Utilisateur?      @relation("ProductionsCloturees", fields: [clotureeParId], references: [id], onDelete: SetNull)
 
   @@index([date])
+  @@index([statut])
 }
 
 // Répartition des bacs donnés par motif (section 3.3 b).

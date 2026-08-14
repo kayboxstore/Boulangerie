@@ -1,17 +1,33 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ClipboardList, Factory, Save, Scale, Trash2, TriangleAlert, Truck, Users } from "lucide-react";
+import {
+  CalendarDays,
+  ClipboardList,
+  Factory,
+  Lock,
+  Save,
+  Scale,
+  ShieldCheck,
+  Trash2,
+  TriangleAlert,
+  Truck,
+  Users,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
+  pertesJustifiees,
   totalDestinationsBacs,
   type EcartsProductionDTO,
   type MotifDonDTO,
+  type MotifNonConformiteDTO,
+  type MotifPerteDTO,
   type PlanningProductionDTO,
   type ProduitDTO,
   type ProductionDTO,
   type SchemaCommandeClientDTO,
   type SchemaCommandeJourDTO,
+  type VerdictQualite,
   type ZoneDepositaireDTO,
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
@@ -27,6 +43,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/select";
+import { AutoTextarea } from "@/components/ui/auto-textarea";
 import {
   Dialog,
   DialogContent,
@@ -97,11 +115,21 @@ export function ProductionPage() {
     queryKey: ["motifs-don"],
     queryFn: () => api<{ motifs: MotifDonDTO[] }>("/api/production/motifs-don"),
   });
+  const { data: motifsPerteData } = useQuery({
+    queryKey: ["motifs-perte"],
+    queryFn: () => api<{ motifs: MotifPerteDTO[] }>("/api/production/motifs-perte"),
+  });
+  const { data: motifsNonConformiteData } = useQuery({
+    queryKey: ["motifs-non-conformite"],
+    queryFn: () => api<{ motifs: MotifNonConformiteDTO[] }>("/api/production/motifs-non-conformite"),
+  });
 
   const produits = useMemo(() => (produitsData?.produits ?? []).filter((p) => p.actif), [produitsData]);
   const plannings = planningsData?.plannings ?? [];
   const productions = productionsData?.productions ?? [];
   const motifs = motifsData?.motifs ?? [];
+  const motifsPerte = motifsPerteData?.motifs ?? [];
+  const motifsNonConformite = motifsNonConformiteData?.motifs ?? [];
 
   // --- d) Schéma de commande --------------------------------------------------
   const [schemaDate, setSchemaDate] = useState(demain());
@@ -324,6 +352,81 @@ export function ProductionPage() {
     queryKey: ["ecarts", dateEcarts],
     queryFn: () => api<EcartsProductionDTO>(`/api/production/ecarts?date=${dateEcarts}`),
   });
+
+  // --- f) Contrôle qualité, pertes et clôture --------------------------------
+  const [productionQualiteId, setProductionQualiteId] = useState<string | null>(null);
+  const productionQualite = productions.find((p) => p.id === productionQualiteId) ?? null;
+  const [qPertes, setQPertes] = useState<Record<string, string>>({});
+  const [qVerdict, setQVerdict] = useState<VerdictQualite>("CONFORME");
+  const [qMotifId, setQMotifId] = useState("");
+  const [qObs, setQObs] = useState("");
+  const [erreurQualite, setErreurQualite] = useState<string | null>(null);
+
+  function ouvrirQualite(p: ProductionDTO) {
+    setProductionQualiteId(p.id);
+    setQPertes(Object.fromEntries(p.pertes.map((l) => [l.motifPerteId, String(l.nombreBacs)])));
+    setQVerdict(p.controleQualite?.verdict ?? "CONFORME");
+    setQMotifId(p.controleQualite?.motifId ?? "");
+    setQObs(p.controleQualite?.observations ?? "");
+    setErreurQualite(null);
+  }
+
+  const totalPertesSaisi = useMemo(
+    () => motifsPerte.reduce((s, m) => s + nombre(qPertes[m.id] ?? ""), 0),
+    [motifsPerte, qPertes],
+  );
+
+  const enregistrerPertes = useMutation({
+    mutationFn: () =>
+      api<{ production: ProductionDTO }>(`/api/production/productions/${productionQualiteId}/pertes`, {
+        method: "PUT",
+        body: JSON.stringify({
+          pertes: motifsPerte
+            .filter((m) => nombre(qPertes[m.id] ?? "") > 0)
+            .map((m) => ({ motifPerteId: m.id, nombreBacs: nombre(qPertes[m.id]) })),
+        }),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["productions"] }),
+    onError: (e) => setErreurQualite(e instanceof Error ? e.message : t("production.saveError")),
+  });
+
+  const enregistrerControleQualite = useMutation({
+    mutationFn: () =>
+      api<{ production: ProductionDTO }>(`/api/production/productions/${productionQualiteId}/controle-qualite`, {
+        method: "PUT",
+        body: JSON.stringify({
+          verdict: qVerdict,
+          motifId: qVerdict === "NON_CONFORME" ? qMotifId || undefined : undefined,
+          observations: qObs.trim() || undefined,
+        }),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["productions"] }),
+    onError: (e) => setErreurQualite(e instanceof Error ? e.message : t("production.saveError")),
+  });
+
+  const cloturerProduction = useMutation({
+    mutationFn: () => api<{ production: ProductionDTO }>(`/api/production/productions/${productionQualiteId}/cloturer`, { method: "POST" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["productions"] });
+      setProductionQualiteId(null);
+    },
+    onError: (e) => setErreurQualite(e instanceof Error ? e.message : t("production.closeError")),
+  });
+
+  async function enregistrerQualiteEtPertes() {
+    setErreurQualite(null);
+    try {
+      if ((productionQualite?.bacsFoutus ?? 0) > 0) await enregistrerPertes.mutateAsync();
+      await enregistrerControleQualite.mutateAsync();
+    } catch {
+      // Le message d'erreur est déjà affiché par le onError de chaque mutation.
+    }
+  }
+
+  // Reflète l'état ENREGISTRÉ (pas le brouillon du formulaire) : la clôture
+  // côté serveur vérifie exactement les mêmes deux conditions.
+  const peutCloturer =
+    !!productionQualite && !!productionQualite.controleQualite && pertesJustifiees(productionQualite);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -750,6 +853,8 @@ export function ProductionPage() {
                 <TableHead>{t("production.colDestinations")}</TableHead>
                 <TableHead>{t("production.colConsumed")}</TableHead>
                 <TableHead>{t("production.colRecordedBy")}</TableHead>
+                <TableHead>{t("production.colStatus")}</TableHead>
+                <TableHead className="text-right">{t("common.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -794,11 +899,26 @@ export function ProductionPage() {
                       : p.consommations.map((c) => `${c.quantite} ${c.unite} ${c.matiereNom}`).join(", ")}
                   </TableCell>
                   <TableCell className="text-sm">{p.enregistrePar?.nom ?? "—"}</TableCell>
+                  <TableCell>
+                    {p.statut === "CLOTUREE" ? (
+                      <Badge variant="gold">
+                        <Lock className="mr-1 h-3 w-3" />
+                        {t("production.statusClosed")}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">{t("production.statusOpen")}</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirQualite(p)} aria-label={t("production.ariaQuality")}>
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
               {productions.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     {t("production.noProduction")}
                   </TableCell>
                 </TableRow>
@@ -822,6 +942,19 @@ export function ProductionPage() {
                 </CarteLigneTitre>
                 <CarteLigneChamp label={t("common.date")} value={new Date(p.date).toLocaleDateString()} />
                 <CarteLigneChamp label={t("production.colRecordedBy")} value={p.enregistrePar?.nom ?? "—"} />
+                <CarteLigneChamp
+                  label={t("production.colStatus")}
+                  value={
+                    p.statut === "CLOTUREE" ? (
+                      <Badge variant="gold">
+                        <Lock className="mr-1 h-3 w-3" />
+                        {t("production.statusClosed")}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">{t("production.statusOpen")}</Badge>
+                    )
+                  }
+                />
                 <div className="mt-1 space-y-0.5 border-t pt-1.5 text-xs text-muted-foreground">
                   <p>
                     {t("production.destinationsSummary", {
@@ -842,6 +975,11 @@ export function ProductionPage() {
                       : p.consommations.map((c) => `${c.quantite} ${c.unite} ${c.matiereNom}`).join(", ")}
                   </p>
                 </div>
+                <CarteLigneActions>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirQualite(p)} aria-label={t("production.ariaQuality")}>
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                  </Button>
+                </CarteLigneActions>
               </CarteLigne>
             ))}
             {productions.length === 0 && (
@@ -1007,6 +1145,144 @@ export function ProductionPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- Dialog contrôle qualité, pertes et clôture (section 3.3 f) --- */}
+      <Dialog open={!!productionQualiteId} onOpenChange={(o) => !o && setProductionQualiteId(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          {productionQualite && (
+            <div className="space-y-4">
+              <DialogHeader>
+                <DialogTitle>{t("production.qualityDialogTitle", { numero: productionQualite.numero })}</DialogTitle>
+                <DialogDescription>{t("production.qualityDialogDesc")}</DialogDescription>
+              </DialogHeader>
+
+              {productionQualite.statut === "CLOTUREE" && (
+                <p className="flex items-center gap-2 rounded-md border border-or/50 bg-or/10 px-3 py-2 text-sm text-marine dark:text-creme">
+                  <Lock className="h-4 w-4 shrink-0 text-terracotta dark:text-or" />
+                  {t("production.closedBy", {
+                    nom: productionQualite.clotureePar?.nom ?? "—",
+                    date: productionQualite.clotureeLe ? new Date(productionQualite.clotureeLe).toLocaleString() : "—",
+                  })}
+                </p>
+              )}
+
+              {productionQualite.bacsFoutus > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">
+                    {t("production.lossesTitle", { bacsFoutus: productionQualite.bacsFoutus })}
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {motifsPerte.map((m) => (
+                      <ChampNombre
+                        key={m.id}
+                        id={`perte-${m.id}`}
+                        label={m.nom}
+                        valeur={qPertes[m.id] ?? ""}
+                        onChange={(v) =>
+                          productionQualite.statut === "OUVERTE" && setQPertes((prev) => ({ ...prev, [m.id]: v }))
+                        }
+                      />
+                    ))}
+                  </div>
+                  <p
+                    className={
+                      totalPertesSaisi === productionQualite.bacsFoutus
+                        ? "text-xs text-muted-foreground"
+                        : "text-xs font-medium text-terracotta dark:text-or"
+                    }
+                  >
+                    {t("production.lossesTotal", { total: totalPertesSaisi, bacsFoutus: productionQualite.bacsFoutus })}
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">{t("production.qualityControlTitle")}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="q-verdict">{t("production.verdict")}</Label>
+                    <NativeSelect
+                      id="q-verdict"
+                      value={qVerdict}
+                      disabled={productionQualite.statut === "CLOTUREE"}
+                      onChange={(e) => setQVerdict(e.target.value as VerdictQualite)}
+                    >
+                      <option value="CONFORME">{t("production.verdictConforme")}</option>
+                      <option value="NON_CONFORME">{t("production.verdictNonConforme")}</option>
+                    </NativeSelect>
+                  </div>
+                  {qVerdict === "NON_CONFORME" && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="q-motif">{t("production.nonConformityReason")}</Label>
+                      <NativeSelect
+                        id="q-motif"
+                        value={qMotifId}
+                        disabled={productionQualite.statut === "CLOTUREE"}
+                        onChange={(e) => setQMotifId(e.target.value)}
+                        required
+                      >
+                        <option value="">{t("production.selectReason")}</option>
+                        {motifsNonConformite.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.nom}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="q-obs">{t("production.observations")}</Label>
+                  <AutoTextarea id="q-obs" value={qObs} disabled={productionQualite.statut === "CLOTUREE"} onChange={(e) => setQObs(e.target.value)} />
+                </div>
+                {productionQualite.controleQualite && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("production.controlledBy", {
+                      nom: productionQualite.controleQualite.controlePar?.nom ?? "—",
+                      date: new Date(productionQualite.controleQualite.controleLe).toLocaleString(),
+                    })}
+                  </p>
+                )}
+              </div>
+
+              {erreurQualite && (
+                <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
+                  {erreurQualite}
+                </p>
+              )}
+
+              <DialogFooter className="flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={() => setProductionQualiteId(null)}>
+                  {t("common.close")}
+                </Button>
+                {editable && productionQualite.statut === "OUVERTE" && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={enregistrerQualiteEtPertes}
+                      disabled={enregistrerPertes.isPending || enregistrerControleQualite.isPending}
+                    >
+                      <Save className="h-4 w-4" />
+                      {t("common.save")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="cta"
+                      onClick={() => cloturerProduction.mutate()}
+                      disabled={!peutCloturer || cloturerProduction.isPending}
+                      title={peutCloturer ? undefined : t("production.closeDisabledHint")}
+                    >
+                      <Lock className="h-4 w-4" />
+                      {t("production.closeProduction")}
+                    </Button>
+                  </>
+                )}
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
