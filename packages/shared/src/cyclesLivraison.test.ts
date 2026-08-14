@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACTIONS_CYCLE_LIVRAISON,
   STATUTS_CYCLE_LIVRAISON,
+  TYPES_EVENEMENT_CYCLE_LIVRAISON,
   TYPES_ANOMALIE_CYCLE,
   anomalieCycleCreateSchema,
   transitionCycleLivraisonSchema,
@@ -55,5 +56,15 @@ describe("contrat partagé C4", () => {
       type: "BON_NON_RETOURNE",
       description: "Bon toujours chez le client",
     }).success).toBe(true);
+  });
+
+  it("publie les événements C4 dans le sous-module dédié", () => {
+    expect(TYPES_EVENEMENT_CYCLE_LIVRAISON).toEqual([
+      "PREVISION_TRANSMISE",
+      "LIVRAISON_EN_ATTENTE_CONFIRMATION",
+      "ANOMALIE_LIVRAISON",
+      "ACCEPTATION_CONVERTIE",
+      "BON_NON_RETOURNE",
+    ]);
   });
 });

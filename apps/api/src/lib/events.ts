@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { Module, PrioriteNotification, TypeEvenement } from "@lomoto/shared";
+import type { TypeEvenementCycleLivraison } from "@lomoto/shared/cycles-livraison";
 
 /**
  * Bus d'événements interne (note technique, section 7 de la spec) : les modules
@@ -7,7 +8,7 @@ import type { Module, PrioriteNotification, TypeEvenement } from "@lomoto/shared
  * et se charge de la persistance + diffusion temps réel.
  */
 export interface EvenementMetier {
-  type: TypeEvenement;
+  type: TypeEvenement | TypeEvenementCycleLivraison;
   module: Module;
   /**
    * Auteur humain de l'action. `null` = événement SYSTÈME (ex. alerte de dette

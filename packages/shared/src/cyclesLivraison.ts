@@ -36,6 +36,16 @@ export const TYPES_ANOMALIE_CYCLE = [
 ] as const;
 export type TypeAnomalieCycle = (typeof TYPES_ANOMALIE_CYCLE)[number];
 
+export const TYPES_EVENEMENT_CYCLE_LIVRAISON = [
+  "PREVISION_TRANSMISE",
+  "LIVRAISON_EN_ATTENTE_CONFIRMATION",
+  "ANOMALIE_LIVRAISON",
+  "ACCEPTATION_CONVERTIE",
+  "BON_NON_RETOURNE",
+] as const;
+export type TypeEvenementCycleLivraison =
+  (typeof TYPES_EVENEMENT_CYCLE_LIVRAISON)[number];
+
 const nbBacs = z
   .number()
   .finite("Le nombre doit être fini")
