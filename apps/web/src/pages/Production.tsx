@@ -16,6 +16,8 @@ import {
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { dateISOKinshasa, dateISOKinshasaLendemain } from "@/lib/dateKinshasa";
+import { formaterDateFr } from "@/components/ui/dateHeureFr";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { ZonesDepositaireCard } from "@/components/ZonesDepositaireCard";
 import { Button } from "@/components/ui/button";
@@ -34,12 +36,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const jourISO = (d: Date) => d.toISOString().slice(0, 10);
-const demain = () => {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return jourISO(d);
-};
+// Dates par défaut calculées dans le fuseau Africa/Kinshasa (F4 round 2,
+// revue Codex) : `toISOString()`/`Date.setDate()` calculent en UTC ou dans le
+// fuseau du navigateur, ce qui peut basculer la journée plusieurs heures
+// trop tôt/tard selon d'où l'écran est ouvert — voir lib/dateKinshasa.ts.
+const jourISO = dateISOKinshasa;
+const demain = () => dateISOKinshasaLendemain(new Date());
 const nombre = (v: string) => (v.trim() === "" ? 0 : Number(v));
 
 const cleLigne = (clientId: string, produitId: string) => `${clientId}:${produitId}`;
@@ -376,8 +378,17 @@ export function ProductionPage() {
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5 text-or" />
               {t("schemaCommande.title")}
+              {/* F4 round 1 : vocabulaire clarifié — ce Schéma EST le point
+                  d'entrée de la prévision (annoncée en J pour une livraison
+                  en J+1, voir schemaDate ci-dessous), sans que le mot
+                  « commande » ne laisse croire à un engagement financier. */}
+              <Badge variant="gold">{t("schemaCommande.previsionBadge")}</Badge>
             </CardTitle>
             <CardDescription>{t("schemaCommande.desc")}</CardDescription>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("schemaCommande.previsionRule")} ·{" "}
+              {t("schemaCommande.todayReference", { date: formaterDateFr(dateISOKinshasa(new Date())) })}
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="date-schema">{t("production.forDate")}</Label>

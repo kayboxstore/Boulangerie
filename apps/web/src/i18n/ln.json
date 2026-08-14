@@ -494,7 +494,10 @@
     "noMamans": "Maman moko te akomami.",
     "totalGeneral": "Motango nyonso : {{total}} bac",
     "saveAndPlan": "Kobomba mpe kokana",
-    "saveError": "Kobomba ekoki te"
+    "saveError": "Kobomba ekoki te",
+    "previsionBadge": "Prévision (J+1)",
+    "previsionRule": "Prévision moko ebimisaka mbongo te mpe niongo te — kaka eyano ya klient endimami nde ekofutisa.",
+    "todayReference": "Lelo (J) : {{date}}"
   },
   "bonsLivraison": {
     "title": "Ba bon ya kotinda biloko",
@@ -511,9 +514,87 @@
     "totalGeneral": "Motango nyonso : {{total}} bac",
     "totalEmptyCrates": "Bacs pamba {{total}} ezongisami",
     "gapTooltip": "Esengami (Schéma de commande) : {{commande}} — Epesami : {{livre}}",
+    "gapProductTooltip": "Esengami : {{prevu}} — Ekomami : {{livre}}",
+    "cycleLegendTitle": "Kotinda oyo ezali wapi ?",
+    "cycleConnectedNote": "Statut, endimami, ezongisami, ezangi mpe ekofutisa oyo emonani mpo na Dépositaire moko na moko ewuti na cycle ya kotinda ya solo, soki ezali.",
+    "loading": "Kozela ba bon ya kotinda biloko…",
+    "schemaLoadError": "Kozwa Fiche ya komande ya mokolo oyo ekoki te — bokeseni na produit na produit ezali nanu te na ntango oyo.",
+    "cycleLoadError": "Kozwa cycle ya kotinda ya mokolo oyo ekoki te — statut na basuki ezali komonana te na ntango oyo.",
     "print": "Kobimisa na papier",
     "printError": "Kobimisa na papier ekoki te",
     "saveError": "Kobomba ekoki te"
+  },
+  "previsions": {
+    "chronologieLegende": "Ntango ya cycle prévision → kotinda biloko",
+    "chronologie": {
+      "PREVISION": {
+        "label": "Prévision",
+        "description": "Motango oyo klient alobi na J mpo na kotinda na J+1 (Chargé des commandes) — ebimisaka mbongo te mpe niongo te."
+      },
+      "RETENUE_PRODUCTION": {
+        "label": "Eponami mpo na bosali",
+        "description": "Motango eponami mpo na bosali, ekoki kokesana na motango oyo elobamaki (Bosali)."
+      },
+      "PREPAREE": {
+        "label": "Elambami",
+        "description": "Motango elambami mpo na kotinda, epesami nanu te na Magasin (statut C4 PREPAREE)."
+      },
+      "REMISE_MAGASIN": {
+        "label": "Epesami na Magasin",
+        "description": "Motango epesami kowuta na Bosali kino na Magasin (statut C4 REMISE_MAGASIN). Transition oyo endimisaka kaka bopesi ya kati, endimisaka te ete klient azwi yango."
+      },
+      "CHARGEE": {
+        "label": "Etiami",
+        "description": "Motango epesami na chauffeur mpo na mobembo (Magasin) — endimisaka te ete klient azwi yango."
+      },
+      "EN_TOURNEE": {
+        "label": "Na mobembo",
+        "description": "Chauffeur azali komema kotinda (statut C4 EN_TOURNEE) — ata réception moko endimami nanu te."
+      },
+      "EN_ATTENTE_CONFIRMATION": {
+        "label": "Ezali kozela endimi",
+        "description": "Epesami epai ya klient (action SIGNALER_DEPOT), kasi motango endimami nanu te. Ebimisaka mbongo te."
+      }
+    },
+    "statutsFinauxTitre": "Statut ya suka ya cycle (kaka moko kati ya minei ekoki kosalema)",
+    "statutsFinaux": {
+      "PARTIELLEMENT_ACCEPTEE": {
+        "label": "Endimami na ndambo",
+        "description": "Statut ya suka soki motango ya cycle mobimba oyo endimami eleki zéro kasi ezali moke koleka motango mobimba oyo epesami. Motango endimami, ezongisami mpe ezangi etikali komonana ekesani, moko na moko."
+      },
+      "ACCEPTEE": {
+        "label": "Endimami mobimba",
+        "description": "Statut ya suka soki motango mobimba oyo epesami endimami."
+      },
+      "RETOUR_TOTAL": {
+        "label": "Ezongisami mobimba",
+        "description": "Statut ya suka soki ata motango moko endimami te — motango oyo endimami ezali zéro, komande ezali kosalema te (contrat C4 §7)."
+      },
+      "ANNULEE": {
+        "label": "Elongolami",
+        "description": "Statut ya suka soki cycle elongolami liboso ya endimi."
+      }
+    },
+    "resultatsTitre": "Bosuki ya kotinda (motango ekesani, emonani esika moko)",
+    "resultats": {
+      "accepte": {
+        "label": "Endimami",
+        "description": "Motango endimami na klient to na moto oyo azali na ndingisa — kaka yango ekoki kofutisama. Ekomami na ndenge mosusu na ezongisami ; endimami + ezongisami ekoki koleka te motango epesami."
+      },
+      "retourne": {
+        "label": "Ezongisami",
+        "description": "Motango ezongisami, endimami te — etikali komonana, ekofutisa te. Ekomami na ndenge mosusu na endimami ; endimami + ezongisami ekoki koleka te motango epesami."
+      },
+      "manquant": {
+        "label": "Ezangi",
+        "description": "Bokeseni oyo serveur asali motángo : etiami mi na epesami. Etikali komonana, ekofutisa te, ekomami na klient te."
+      }
+    },
+    "consequenceLegende": "Suite ya endimi",
+    "facturable": {
+      "label": "Ekofutisa",
+      "description": "Motango oyo ekofutisa ezali motango endimami, kozanga ndelo ya esengami — komande moko kaka mpo na endimi moko."
+    }
   },
   "production": {
     "title": "Bosali",

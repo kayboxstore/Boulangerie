@@ -494,7 +494,10 @@
     "noMamans": "Hakuna Mama aliyesajiliwa.",
     "totalGeneral": "Jumla kuu: {{total}} beseni",
     "saveAndPlan": "Hifadhi na panga",
-    "saveError": "Imeshindwa kuhifadhi"
+    "saveError": "Imeshindwa kuhifadhi",
+    "previsionBadge": "Utabiri (J+1)",
+    "previsionRule": "Utabiri hauathiri fedha wala deni — ni uthibitisho wa mteja tu unaokuwa wa kulipiwa.",
+    "todayReference": "Leo (J): {{date}}"
   },
   "bonsLivraison": {
     "title": "Hati za usafirishaji",
@@ -511,9 +514,87 @@
     "totalGeneral": "Jumla kuu: {{total}} beseni",
     "totalEmptyCrates": "Beseni tupu {{total}} zimerudishwa",
     "gapTooltip": "Iliyoagizwa (Fomu ya agizo) : {{commande}} — Iliyotolewa : {{livre}}",
+    "gapProductTooltip": "Ilivyotabiriwa: {{prevu}} — Ilivyoingizwa: {{livre}}",
+    "cycleLegendTitle": "Usafirishaji huu upo wapi?",
+    "cycleConnectedNote": "Hali, kilichokubaliwa, kilichorudishwa, kinachokosekana na kinacholipiwa vinavyoonyeshwa kwa kila Dépositaire vinatoka kwenye mzunguko halisi wa usafirishaji, mara vinapokuwepo.",
+    "loading": "Inapakia hati za usafirishaji…",
+    "schemaLoadError": "Imeshindwa kupakia Fomu ya agizo ya tarehe hii — tofauti kwa kila bidhaa hazipatikani kwa sasa.",
+    "cycleLoadError": "Imeshindwa kupakia mzunguko wa usafirishaji wa tarehe hii — hali na matokeo ya kina hayapatikani kwa sasa.",
     "print": "Chapisha",
     "printError": "Imeshindwa kuchapisha",
     "saveError": "Imeshindwa kuhifadhi"
+  },
+  "previsions": {
+    "chronologieLegende": "Mpangilio wa muda wa mzunguko wa utabiri → usafirishaji",
+    "chronologie": {
+      "PREVISION": {
+        "label": "Utabiri",
+        "description": "Kiasi alichotangaza mteja siku ya J kwa ajili ya usafirishaji siku ya J+1 (Msimamizi wa maagizo) — hakiathiri fedha wala deni."
+      },
+      "RETENUE_PRODUCTION": {
+        "label": "Kimehifadhiwa kwa uzalishaji",
+        "description": "Kiasi kilichohifadhiwa kwa uzalishaji, kinaweza kutofautiana na kiasi kilichotangazwa (Uzalishaji)."
+      },
+      "PREPAREE": {
+        "label": "Kimeandaliwa",
+        "description": "Kiasi kilichoandaliwa kwa ajili ya usafirishaji, bado hakijakabidhiwa kwa Ghala (hali ya C4 PREPAREE)."
+      },
+      "REMISE_MAGASIN": {
+        "label": "Kimekabidhiwa Ghala",
+        "description": "Kiasi kilichokabidhiwa kutoka Uzalishaji kwenda Ghala (hali ya C4 REMISE_MAGASIN). Hatua hii inathibitisha ukabidhi wa ndani tu, si upokeaji wa mteja."
+      },
+      "CHARGEE": {
+        "label": "Kimepakiwa",
+        "description": "Kiasi kilichokabidhiwa kwa dereva kwa ajili ya safari (Ghala) — hakithibitishi kuwa mteja amepokea."
+      },
+      "EN_TOURNEE": {
+        "label": "Njiani",
+        "description": "Dereva anasafirisha kiasi hicho (hali ya C4 EN_TOURNEE) — bado hakuna upokeaji uliothibitishwa."
+      },
+      "EN_ATTENTE_CONFIRMATION": {
+        "label": "Inasubiri uthibitisho",
+        "description": "Kiasi kimewekwa kwa mteja (kitendo SIGNALER_DEPOT), lakini kiasi kilichokubaliwa bado hakijathibitishwa. Hakuna athari ya kifedha."
+      }
+    },
+    "statutsFinauxTitre": "Hali ya mwisho ya mzunguko (moja tu kati ya nne inatumika)",
+    "statutsFinaux": {
+      "PARTIELLEMENT_ACCEPTEE": {
+        "label": "Imekubaliwa kwa sehemu",
+        "description": "Hali ya mwisho wakati jumla ya kilichokubaliwa ya mzunguko ni zaidi ya sifuri lakini pungufu ya jumla ya kilichowekwa. Kiasi kilichokubaliwa, kilichorudishwa na kinachokosekana vinaendelea kuonyeshwa kando kando."
+      },
+      "ACCEPTEE": {
+        "label": "Imekubaliwa kikamilifu",
+        "description": "Hali ya mwisho wakati kiasi chote kilichowekwa kinakubaliwa."
+      },
+      "RETOUR_TOTAL": {
+        "label": "Kimerudishwa kikamilifu",
+        "description": "Hali ya mwisho wakati hakuna kiasi kinachokubaliwa — jumla ya kilichokubaliwa ni sifuri, hakuna agizo linaloundwa (mkataba C4 §7)."
+      },
+      "ANNULEE": {
+        "label": "Imeghairiwa",
+        "description": "Hali ya mwisho wakati mzunguko unaghairiwa kabla ya uthibitisho."
+      }
+    },
+    "resultatsTitre": "Matokeo ya usafirishaji (kiasi tofauti, vinavyoonyeshwa sambamba)",
+    "resultats": {
+      "accepte": {
+        "label": "Imekubaliwa",
+        "description": "Kiasi kilichothibitishwa na mteja au mtu mwenye ruhusa — ndicho msingi pekee wa kulipiwa. Kinaingizwa tofauti na kilichorudishwa ; jumla ya kilichokubaliwa na kilichorudishwa haiwezi kuzidi kilichowekwa."
+      },
+      "retourne": {
+        "label": "Imerudishwa",
+        "description": "Kiasi kilichorudishwa, hakikubaliwa — kinabaki kuonekana, hakilipiwi kamwe. Kinaingizwa tofauti na kilichokubaliwa ; jumla haiwezi kuzidi kilichowekwa."
+      },
+      "manquant": {
+        "label": "Inayokosekana",
+        "description": "Tofauti inayohesabiwa na seva: kilichopakiwa toa kilichowekwa. Inabaki kuonekana, halipiwi kamwe, wala haiingizwi na mteja."
+      }
+    },
+    "consequenceLegende": "Matokeo ya kukubaliwa",
+    "facturable": {
+      "label": "Inayolipiwa",
+      "description": "Kiasi kinacholipiwa ni sawa na kiasi kilichokubaliwa, bila kikomo cha utabiri — agizo moja tu kwa kila kukubaliwa."
+    }
   },
   "production": {
     "title": "Uzalishaji",

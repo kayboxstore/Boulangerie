@@ -493,7 +493,10 @@
     "noMamans": "No Maman registered.",
     "totalGeneral": "Grand total: {{total}} crate(s)",
     "saveAndPlan": "Save and plan",
-    "saveError": "Could not save"
+    "saveError": "Could not save",
+    "previsionBadge": "Forecast (D+1)",
+    "previsionRule": "A forecast affects neither the cash register nor the debt — only a confirmed client acceptance becomes billable.",
+    "todayReference": "Today (D): {{date}}"
   },
   "bonsLivraison": {
     "title": "Delivery notes",
@@ -510,9 +513,87 @@
     "totalGeneral": "Grand total: {{total}} crate(s)",
     "totalEmptyCrates": "{{total}} empty crate(s) collected",
     "gapTooltip": "Ordered (Order form): {{commande}} — Delivered: {{livre}}",
+    "gapProductTooltip": "Forecast: {{prevu}} — Entered: {{livre}}",
+    "cycleLegendTitle": "Where is this delivery in the cycle?",
+    "cycleConnectedNote": "The status, accepted, returned, missing and billable quantities shown for each Dépositaire come from the real delivery cycle, as soon as they exist.",
+    "loading": "Loading delivery notes…",
+    "schemaLoadError": "Could not load this date's Order sheet — per-product gaps are unavailable for now.",
+    "cycleLoadError": "Could not load the delivery cycle for this date — the status and detailed results are not available right now.",
     "print": "Print",
     "printError": "Could not print",
     "saveError": "Could not save"
+  },
+  "previsions": {
+    "chronologieLegende": "Forecast → delivery cycle timeline",
+    "chronologie": {
+      "PREVISION": {
+        "label": "Forecast",
+        "description": "Quantity announced by the client on D for a delivery on D+1 (Order clerk) — creates no sale and no debt."
+      },
+      "RETENUE_PRODUCTION": {
+        "label": "Held for production",
+        "description": "Quantity held for production, possibly different from the announced quantity (Production)."
+      },
+      "PREPAREE": {
+        "label": "Prepared",
+        "description": "Quantity prepared for delivery, not yet handed to the Store (C4 status PREPAREE)."
+      },
+      "REMISE_MAGASIN": {
+        "label": "Handed to Store",
+        "description": "Quantity handed from Production to the Store (C4 status REMISE_MAGASIN). This transition proves the internal handoff, not that the client received it."
+      },
+      "CHARGEE": {
+        "label": "Loaded",
+        "description": "Quantity handed to the driver for the round (Store) — does not prove the client received it."
+      },
+      "EN_TOURNEE": {
+        "label": "On the road",
+        "description": "The driver is transporting the delivery (C4 status EN_TOURNEE) — no receipt is confirmed yet."
+      },
+      "EN_ATTENTE_CONFIRMATION": {
+        "label": "Awaiting confirmation",
+        "description": "The drop-off at the client happened (SIGNALER_DEPOT action), but the accepted quantity is not yet confirmed. No financial effect."
+      }
+    },
+    "statutsFinauxTitre": "Final cycle status (exactly one of the four applies)",
+    "statutsFinaux": {
+      "PARTIELLEMENT_ACCEPTEE": {
+        "label": "Partially accepted",
+        "description": "Final status when the cycle's total accepted quantity is greater than zero but lower than the total dropped-off quantity. The accepted, returned and missing quantities remain displayed separately."
+      },
+      "ACCEPTEE": {
+        "label": "Fully accepted",
+        "description": "Final status when the entire dropped-off quantity is accepted."
+      },
+      "RETOUR_TOTAL": {
+        "label": "Fully returned",
+        "description": "Final status when nothing is accepted — the accepted total is zero, no order is created (C4 contract §7)."
+      },
+      "ANNULEE": {
+        "label": "Cancelled",
+        "description": "Final status when the cycle is cancelled before confirmation."
+      }
+    },
+    "resultatsTitre": "Delivery results (distinct quantities, shown in parallel)",
+    "resultats": {
+      "accepte": {
+        "label": "Accepted",
+        "description": "Quantity confirmed by the client or an authorized role — the only billable basis. Entered separately from returns; accepted + returned can never exceed the dropped-off quantity."
+      },
+      "retourne": {
+        "label": "Returned",
+        "description": "Quantity taken back, not accepted — stays visible, never billed. Entered separately from accepted; accepted + returned can never exceed the dropped-off quantity."
+      },
+      "manquant": {
+        "label": "Missing",
+        "description": "Gap computed by the server: loaded minus dropped off. Stays visible, never billed, never entered by the client."
+      }
+    },
+    "consequenceLegende": "Consequence of acceptance",
+    "facturable": {
+      "label": "Billable",
+      "description": "The billable quantity equals the accepted quantity, with no cap from the forecast — a single order is created per acceptance."
+    }
   },
   "production": {
     "title": "Production",
