@@ -5,7 +5,7 @@ Travaille dans le dépôt `kayboxstore/Boulangerie`.
 ## Base et branche
 
 - Base obligatoire : `agent/integration-wave-2@b8f583b4d9563fbfa526f7ff9189ad85a2580ed0`
-- Crée : `claude/previsions-ui-f4`
+- Branche déjà créée : `claude/previsions-ui-f4` — vérifie qu’elle pointe initialement sur le SHA de base, puis travaille dessus
 - Ouvre une PR **en brouillon** vers `agent/integration-wave-2`
 - Ne fusionne rien.
 
