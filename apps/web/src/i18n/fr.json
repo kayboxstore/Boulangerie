@@ -535,11 +535,11 @@
       },
       "PREPAREE": {
         "label": "Préparée",
-        "description": "Quantité réellement produite par la Production, pas encore remise au Magasin."
+        "description": "Quantité préparée pour la livraison, pas encore remise au Magasin (statut C4 PREPAREE)."
       },
       "REMISE_MAGASIN": {
         "label": "Remise au Magasin",
-        "description": "Remise de la Production au Magasin, confirmée par les deux (statut C4 REMISE_MAGASIN) — ne prouve pas la réception du client."
+        "description": "Quantité remise de la Production au Magasin (statut C4 REMISE_MAGASIN). Cette transition prouve la remise interne, pas la réception du client."
       },
       "CHARGEE": {
         "label": "Chargée",
@@ -554,7 +554,26 @@
         "description": "Le dépôt chez le client a eu lieu (action SIGNALER_DEPOT), mais la quantité acceptée n'est pas encore confirmée. Aucun effet financier."
       }
     },
-    "resultatsTitre": "Résultats de la livraison (indépendants les uns des autres)",
+    "statutsFinauxTitre": "Statut final du cycle (un seul des quatre s'applique)",
+    "statutsFinaux": {
+      "PARTIELLEMENT_ACCEPTEE": {
+        "label": "Partiellement acceptée",
+        "description": "Statut final lorsque seule une partie de la quantité déposée est acceptée — résume les quantités accepté/retourné/manquant de cette ligne, sans les remplacer."
+      },
+      "ACCEPTEE": {
+        "label": "Acceptée intégralement",
+        "description": "Statut final lorsque la totalité de la quantité déposée est acceptée."
+      },
+      "RETOUR_TOTAL": {
+        "label": "Retour total",
+        "description": "Statut final lorsqu'aucune quantité n'est acceptée — le total accepté vaut zéro, aucune commande n'est créée (contrat C4 §7)."
+      },
+      "ANNULEE": {
+        "label": "Annulée",
+        "description": "Statut final lorsque le cycle est annulé avant confirmation."
+      }
+    },
+    "resultatsTitre": "Résultats de la livraison (quantités distinctes, présentées en parallèle)",
     "resultats": {
       "accepte": {
         "label": "Accepté",

@@ -536,11 +536,11 @@
       },
       "PREPAREE": {
         "label": "Kimeandaliwa",
-        "description": "Kiasi kilichozalishwa na Uzalishaji, bado hakijakabidhiwa kwa Ghala."
+        "description": "Kiasi kilichoandaliwa kwa ajili ya usafirishaji, bado hakijakabidhiwa kwa Ghala (hali ya C4 PREPAREE)."
       },
       "REMISE_MAGASIN": {
         "label": "Kimekabidhiwa Ghala",
-        "description": "Ukabidhi kutoka Uzalishaji kwenda Ghala, uliothibitishwa na pande zote mbili (hali ya C4 REMISE_MAGASIN) — hakithibitishi kuwa mteja amepokea."
+        "description": "Kiasi kilichokabidhiwa kutoka Uzalishaji kwenda Ghala (hali ya C4 REMISE_MAGASIN). Hatua hii inathibitisha ukabidhi wa ndani tu, si upokeaji wa mteja."
       },
       "CHARGEE": {
         "label": "Kimepakiwa",
@@ -555,7 +555,26 @@
         "description": "Kiasi kimewekwa kwa mteja (kitendo SIGNALER_DEPOT), lakini kiasi kilichokubaliwa bado hakijathibitishwa. Hakuna athari ya kifedha."
       }
     },
-    "resultatsTitre": "Matokeo ya usafirishaji (kila moja ni huru dhidi ya mengine)",
+    "statutsFinauxTitre": "Hali ya mwisho ya mzunguko (moja tu kati ya nne inatumika)",
+    "statutsFinaux": {
+      "PARTIELLEMENT_ACCEPTEE": {
+        "label": "Imekubaliwa kwa sehemu",
+        "description": "Hali ya mwisho wakati sehemu tu ya kiasi kilichowekwa inakubaliwa — inafupisha kiasi cha mstari huu kilichokubaliwa/kilichorudishwa/kinachokosekana, bila kuvibadilisha."
+      },
+      "ACCEPTEE": {
+        "label": "Imekubaliwa kikamilifu",
+        "description": "Hali ya mwisho wakati kiasi chote kilichowekwa kinakubaliwa."
+      },
+      "RETOUR_TOTAL": {
+        "label": "Kimerudishwa kikamilifu",
+        "description": "Hali ya mwisho wakati hakuna kiasi kinachokubaliwa — jumla ya kilichokubaliwa ni sifuri, hakuna agizo linaloundwa (mkataba C4 §7)."
+      },
+      "ANNULEE": {
+        "label": "Imeghairiwa",
+        "description": "Hali ya mwisho wakati mzunguko unaghairiwa kabla ya uthibitisho."
+      }
+    },
+    "resultatsTitre": "Matokeo ya usafirishaji (kiasi tofauti, vinavyoonyeshwa sambamba)",
     "resultats": {
       "accepte": {
         "label": "Imekubaliwa",

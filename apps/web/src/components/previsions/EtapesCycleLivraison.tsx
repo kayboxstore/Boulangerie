@@ -5,44 +5,55 @@ import { Badge } from "@/components/ui/badge";
 import {
   RESULTATS_CYCLE_LIVRAISON,
   STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON,
+  STATUTS_FINAUX_CYCLE_LIVRAISON,
   type ResultatCycleLivraison,
-  type StatutChronologieCycleLivraison,
+  type StatutCycleLivraison,
+  type StatutFinalCycleLivraison,
 } from "./cycleLivraisonLogique";
 
 /**
  * Légende visuelle du cycle « prévision J → livraison J+1 » (F4 round 1,
- * corrigée round 2, restructurée round 3 suite à la revue Codex).
- * Purement présentationnel : aucun appel réseau, aucune donnée réelle par
- * commande — le contrat C4 existe (PR #12, branche
+ * corrigée round 2, restructurée round 3, complétée round 4 suite à la
+ * revue Codex). Purement présentationnel : aucun appel réseau, aucune
+ * donnée réelle par commande — le contrat C4 existe (PR #12, branche
  * `codex/previsions-commandes-c4`) mais n'est pas encore fusionné dans la
  * base de F4 ; cette légende sert à préparer le vocabulaire de l'écran en
  * restant déjà alignée sur les noms exacts du contrat, prête pour le rebase.
  *
- * Round 3 — structure en TROIS blocs, jamais mélangés :
+ * Structure en QUATRE blocs, jamais mélangés :
  * 1. `chronologie` : liste ORDONNÉE des sept statuts C4 séquentiels, de
  *    `PREVISION` à `EN_ATTENTE_CONFIRMATION` (flèches entre étapes
  *    consécutives). S'arrête là : le dépôt chez le client est l'action qui
  *    fait passer `EN_TOURNEE` → `EN_ATTENTE_CONFIRMATION`, il n'existe aucun
  *    statut serveur « déposé ».
- * 2. `résultats` : groupe PARALLÈLE (accepté, retourné, manquant) — trois
- *    quantités indépendantes du contrat C4, JAMAIS reliées entre elles par
- *    une flèche (ni accepté→retourné, ni retourné→manquant).
- * 3. `conséquence` : la SEULE relation directionnelle du groupe final,
+ * 2. `statuts finaux` (round 4) : groupe NON chronologique et mutuellement
+ *    exclusif (`PARTIELLEMENT_ACCEPTEE`, `ACCEPTEE`, `RETOUR_TOTAL`,
+ *    `ANNULEE`) — un cycle se termine dans un seul de ces statuts, jamais
+ *    une suite des quatre ; aucune flèche entre eux ; jamais confondu avec
+ *    le groupe de résultats (quantités) ci-dessous.
+ * 3. `résultats` : groupe PARALLÈLE (accepté, retourné, manquant) — trois
+ *    quantités DISTINCTES de la livraison, présentées en parallèle (pas
+ *    indépendantes : bornées par des règles exactes, voir
+ *    `cycleLivraisonLogique.ts`), JAMAIS reliées entre elles par une flèche.
+ * 4. `conséquence` : la SEULE relation directionnelle du groupe final,
  *    accepté → facturable — présentée séparément du groupe de résultats.
  *
- * `statutActif`, optionnel, marque un statut de la CHRONOLOGIE avec
- * `aria-current="step"` — réservé à un écran qui connaît RÉELLEMENT le
- * statut en cours pour une ligne donnée à partir d'une donnée serveur
- * (après rebase sur C4). Ne jamais le renseigner avec une valeur
- * fixe/devinée : afficher un statut actif sans donnée serveur laisserait
- * croire à un suivi qui n'existe pas encore.
+ * `statutActif`, optionnel, accepte l'un des ONZE statuts C4 (chronologie OU
+ * final) et marque le badge correspondant avec `aria-current="step"` —
+ * réservé à un écran qui connaît RÉELLEMENT le statut en cours pour une
+ * ligne donnée à partir d'une donnée serveur (après rebase sur C4, en lui
+ * passant directement `CycleLivraisonDTO.statut`). Ne jamais le renseigner
+ * avec une valeur fixe/devinée : afficher un statut actif sans donnée
+ * serveur laisserait croire à un suivi qui n'existe pas encore.
  */
 export interface EtapesCycleLivraisonProps {
-  statutActif?: StatutChronologieCycleLivraison;
+  statutActif?: StatutCycleLivraison;
   className?: string;
 }
 
-const VARIANTE_PAR_STATUT: Record<StatutChronologieCycleLivraison, "secondary" | "gold" | "destructive" | "outline"> = {
+type VarianteBadge = "secondary" | "gold" | "destructive" | "outline";
+
+const VARIANTE_PAR_STATUT: Record<(typeof STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON)[number], VarianteBadge> = {
   PREVISION: "outline",
   RETENUE_PRODUCTION: "outline",
   PREPAREE: "outline",
@@ -50,6 +61,13 @@ const VARIANTE_PAR_STATUT: Record<StatutChronologieCycleLivraison, "secondary" |
   CHARGEE: "secondary",
   EN_TOURNEE: "secondary",
   EN_ATTENTE_CONFIRMATION: "gold",
+};
+
+const VARIANTE_PAR_STATUT_FINAL: Record<StatutFinalCycleLivraison, VarianteBadge> = {
+  PARTIELLEMENT_ACCEPTEE: "gold",
+  ACCEPTEE: "secondary",
+  RETOUR_TOTAL: "destructive",
+  ANNULEE: "outline",
 };
 
 const VARIANTE_PAR_RESULTAT: Record<ResultatCycleLivraison, "secondary" | "destructive"> = {
@@ -67,7 +85,7 @@ function BadgeDecrit({
   description,
 }: {
   id: string;
-  variante: "secondary" | "gold" | "destructive" | "outline";
+  variante: VarianteBadge;
   actif?: boolean;
   texte: string;
   description: string;
@@ -114,6 +132,28 @@ export function EtapesCycleLivraison({ statutActif, className }: EtapesCycleLivr
           </li>
         ))}
       </ol>
+
+      <div>
+        <p id={`${idBase}-finaux-titre`} className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("previsions.statutsFinauxTitre")}
+        </p>
+        {/* Groupe NON chronologique et mutuellement exclusif (round 4) : un
+            cycle se termine dans UN seul de ces statuts, jamais reliés entre
+            eux par une flèche, jamais confondus avec les quantités ci-dessous. */}
+        <ul aria-labelledby={`${idBase}-finaux-titre`} className="flex flex-wrap items-center gap-1.5">
+          {STATUTS_FINAUX_CYCLE_LIVRAISON.map((statut) => (
+            <li key={statut}>
+              <BadgeDecrit
+                id={`${idBase}-final-${statut}`}
+                variante={VARIANTE_PAR_STATUT_FINAL[statut]}
+                actif={statut === statutActif}
+                texte={t(`previsions.statutsFinaux.${statut}.label`)}
+                description={t(`previsions.statutsFinaux.${statut}.description`)}
+              />
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <div>
         <p id={`${idBase}-resultats-titre`} className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

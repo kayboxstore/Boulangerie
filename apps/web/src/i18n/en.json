@@ -535,11 +535,11 @@
       },
       "PREPAREE": {
         "label": "Prepared",
-        "description": "Quantity actually produced by Production, not yet handed to the Store."
+        "description": "Quantity prepared for delivery, not yet handed to the Store (C4 status PREPAREE)."
       },
       "REMISE_MAGASIN": {
         "label": "Handed to Store",
-        "description": "Handoff from Production to the Store, confirmed by both (C4 status REMISE_MAGASIN) — does not prove the client received it."
+        "description": "Quantity handed from Production to the Store (C4 status REMISE_MAGASIN). This transition proves the internal handoff, not that the client received it."
       },
       "CHARGEE": {
         "label": "Loaded",
@@ -554,7 +554,26 @@
         "description": "The drop-off at the client happened (SIGNALER_DEPOT action), but the accepted quantity is not yet confirmed. No financial effect."
       }
     },
-    "resultatsTitre": "Delivery results (independent of one another)",
+    "statutsFinauxTitre": "Final cycle status (exactly one of the four applies)",
+    "statutsFinaux": {
+      "PARTIELLEMENT_ACCEPTEE": {
+        "label": "Partially accepted",
+        "description": "Final status when only part of the dropped-off quantity is accepted — summarizes this line's accepted/returned/missing quantities, without replacing them."
+      },
+      "ACCEPTEE": {
+        "label": "Fully accepted",
+        "description": "Final status when the entire dropped-off quantity is accepted."
+      },
+      "RETOUR_TOTAL": {
+        "label": "Fully returned",
+        "description": "Final status when nothing is accepted — the accepted total is zero, no order is created (C4 contract §7)."
+      },
+      "ANNULEE": {
+        "label": "Cancelled",
+        "description": "Final status when the cycle is cancelled before confirmation."
+      }
+    },
+    "resultatsTitre": "Delivery results (distinct quantities, shown in parallel)",
     "resultats": {
       "accepte": {
         "label": "Accepted",

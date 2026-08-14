@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   RESULTATS_CYCLE_LIVRAISON,
   STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON,
+  STATUTS_CYCLE_LIVRAISON,
+  STATUTS_FINAUX_CYCLE_LIVRAISON,
   calculerEcartQuantite,
   calculerQuantiteFacturableIndicative,
   calculerQuantiteManquanteIndicative,
@@ -45,7 +47,47 @@ describe("STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON — round 3 (statuts C4 exacts)", 
   });
 });
 
-describe("RESULTATS_CYCLE_LIVRAISON — groupe parallèle, non chronologique (round 3)", () => {
+describe("STATUTS_FINAUX_CYCLE_LIVRAISON — groupe non chronologique, mutuellement exclusif (round 4)", () => {
+  it("contient exactement les quatre statuts finaux C4, dans l'ordre du contrat", () => {
+    expect(STATUTS_FINAUX_CYCLE_LIVRAISON).toEqual(["PARTIELLEMENT_ACCEPTEE", "ACCEPTEE", "RETOUR_TOTAL", "ANNULEE"]);
+  });
+
+  it("n'est pas un sous-ensemble de la chronologie (deux groupes bien distincts, jamais de flèche entre eux)", () => {
+    for (const statutFinal of STATUTS_FINAUX_CYCLE_LIVRAISON) {
+      expect(STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON as readonly string[]).not.toContain(statutFinal);
+    }
+  });
+
+  it("n'est confondu ni avec RESULTATS_CYCLE_LIVRAISON (quantités) ni l'inverse — deux concepts distincts", () => {
+    for (const statutFinal of STATUTS_FINAUX_CYCLE_LIVRAISON) {
+      expect(RESULTATS_CYCLE_LIVRAISON as readonly string[]).not.toContain(statutFinal);
+    }
+    for (const resultat of RESULTATS_CYCLE_LIVRAISON) {
+      expect(STATUTS_FINAUX_CYCLE_LIVRAISON as readonly string[]).not.toContain(resultat);
+    }
+  });
+});
+
+describe("STATUTS_CYCLE_LIVRAISON — les onze statuts C4 exacts (round 4)", () => {
+  it("concatène exactement les sept statuts de chronologie puis les quatre statuts finaux, dans l'ordre du contrat", () => {
+    expect(STATUTS_CYCLE_LIVRAISON).toEqual([
+      "PREVISION",
+      "RETENUE_PRODUCTION",
+      "PREPAREE",
+      "REMISE_MAGASIN",
+      "CHARGEE",
+      "EN_TOURNEE",
+      "EN_ATTENTE_CONFIRMATION",
+      "PARTIELLEMENT_ACCEPTEE",
+      "ACCEPTEE",
+      "RETOUR_TOTAL",
+      "ANNULEE",
+    ]);
+    expect(STATUTS_CYCLE_LIVRAISON).toHaveLength(11);
+  });
+});
+
+describe("RESULTATS_CYCLE_LIVRAISON — quantités distinctes présentées en parallèle, non chronologiques (round 3, formulation corrigée round 4)", () => {
   it("contient exactement accepté, retourné, manquant", () => {
     expect(RESULTATS_CYCLE_LIVRAISON).toEqual(["accepte", "retourne", "manquant"]);
   });
@@ -54,6 +96,15 @@ describe("RESULTATS_CYCLE_LIVRAISON — groupe parallèle, non chronologique (ro
     for (const resultat of RESULTATS_CYCLE_LIVRAISON) {
       expect(STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON as readonly string[]).not.toContain(resultat);
     }
+  });
+
+  it("respecte les règles exactes du contrat plutôt qu'une indépendance totale (round 4) : accepté+retourné borné par le déposé, manquant calculé serveur", () => {
+    // accepté + retourné <= déposé (respecteLimiteAccepteRetourne) et
+    // manquant = chargé - déposé (calculerQuantiteManquanteIndicative) sont
+    // testés en détail plus bas — ce test vérifie seulement que ces deux
+    // fonctions existent et documentent une RELATION, pas une indépendance.
+    expect(typeof respecteLimiteAccepteRetourne).toBe("function");
+    expect(typeof calculerQuantiteManquanteIndicative).toBe("function");
   });
 });
 

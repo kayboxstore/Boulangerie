@@ -536,11 +536,11 @@
       },
       "PREPAREE": {
         "label": "Elambami",
-        "description": "Motango oyo esalemi mpenza na Bosali, epesami nanu te na Magasin."
+        "description": "Motango elambami mpo na kotinda, epesami nanu te na Magasin (statut C4 PREPAREE)."
       },
       "REMISE_MAGASIN": {
         "label": "Epesami na Magasin",
-        "description": "Bopesi kowuta na Bosali kino na Magasin, endimami na bango mibale (statut C4 REMISE_MAGASIN) — endimisaka te ete klient azwi yango."
+        "description": "Motango epesami kowuta na Bosali kino na Magasin (statut C4 REMISE_MAGASIN). Transition oyo endimisaka kaka bopesi ya kati, endimisaka te ete klient azwi yango."
       },
       "CHARGEE": {
         "label": "Etiami",
@@ -555,7 +555,26 @@
         "description": "Epesami epai ya klient (action SIGNALER_DEPOT), kasi motango endimami nanu te. Ebimisaka mbongo te."
       }
     },
-    "resultatsTitre": "Bosuki ya kotinda (moko na moko ekesani na mosusu)",
+    "statutsFinauxTitre": "Statut ya suka ya cycle (kaka moko kati ya minei ekoki kosalema)",
+    "statutsFinaux": {
+      "PARTIELLEMENT_ACCEPTEE": {
+        "label": "Endimami na ndambo",
+        "description": "Statut ya suka soki kaka ndambo ya motango epesami endimami — ezongisaka na mokuse motango endimami/ezongisami/ezangi ya molongo oyo, kasi ezali kobongola yango te."
+      },
+      "ACCEPTEE": {
+        "label": "Endimami mobimba",
+        "description": "Statut ya suka soki motango mobimba oyo epesami endimami."
+      },
+      "RETOUR_TOTAL": {
+        "label": "Ezongisami mobimba",
+        "description": "Statut ya suka soki ata motango moko endimami te — motango oyo endimami ezali zéro, komande ezali kosalema te (contrat C4 §7)."
+      },
+      "ANNULEE": {
+        "label": "Elongolami",
+        "description": "Statut ya suka soki cycle elongolami liboso ya endimi."
+      }
+    },
+    "resultatsTitre": "Bosuki ya kotinda (motango ekesani, emonani esika moko)",
     "resultats": {
       "accepte": {
         "label": "Endimami",
