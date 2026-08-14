@@ -33,6 +33,39 @@ enum PrioriteNotification {
   HAUTE
 }
 
+enum StatutCycleLivraison {
+  PREVISION
+  RETENUE_PRODUCTION
+  PREPAREE
+  REMISE_MAGASIN
+  CHARGEE
+  EN_TOURNEE
+  EN_ATTENTE_CONFIRMATION
+  PARTIELLEMENT_ACCEPTEE
+  ACCEPTEE
+  RETOUR_TOTAL
+  ANNULEE
+}
+
+enum ActionCycleLivraison {
+  RETENIR_PRODUCTION
+  CONFIRMER_PREPARATION
+  CONFIRMER_REMISE_MAGASIN
+  CONFIRMER_CHARGEMENT
+  CONFIRMER_DEPART
+  SIGNALER_DEPOT
+  CONFIRMER_ACCEPTATION
+}
+
+enum TypeAnomalieCycle {
+  BON_NON_RETOURNE
+  ECART_QUANTITE
+  PRODUIT_ENDOMMAGE
+  RETOUR_QUALITE
+  CASH_TRANSPORTE_NON_RECU
+  AUTRE
+}
+
 enum TypeMouvementStock {
   ENTREE
   SORTIE
@@ -92,18 +125,18 @@ model RolePermission {
 }
 
 model Utilisateur {
-  id                          String                @id @default(cuid())
+  id                          String                            @id @default(cuid())
   nom                         String
-  email                       String                @unique
+  email                       String                            @unique
   motDePasseHash              String
-  motDePasseDoitChanger        Boolean               @default(false)
+  motDePasseDoitChanger       Boolean                           @default(false)
   roleId                      String
-  role                        Role                  @relation(fields: [roleId], references: [id])
-  actif                       Boolean               @default(true)
+  role                        Role                              @relation(fields: [roleId], references: [id])
+  actif                       Boolean                           @default(true)
   // Compte Administrateur principal (max 3 comptes admin : 1 principal + 2
   // secondaires). Unicité du principal garantie par un index partiel en SQL
   // (voir migration) ; le workflow d'approbation complet arrive en Phase 10.
-  estAdminPrincipal           Boolean               @default(false)
+  estAdminPrincipal           Boolean                           @default(false)
   // Session unique (section 3.7) : identifiant régénéré à chaque connexion
   // réussie et embarqué dans le JWT (claim `sid`). Une requête ou un socket
   // portant un `sid` différent de celui-ci est refusé — la connexion la plus
@@ -113,10 +146,10 @@ model Utilisateur {
   // langue par défaut de la boutique (ParametreBoutique). Choisie par l'employé
   // dans « Mon profil ».
   languePreferee              String?
-  createdAt                   DateTime              @default(now())
-  updatedAt                   DateTime              @updatedAt
-  notifications               Notification[]        @relation("NotificationsRecues")
-  notificationsEmises         Notification[]        @relation("NotificationsEmises")
+  createdAt                   DateTime                          @default(now())
+  updatedAt                   DateTime                          @updatedAt
+  notifications               Notification[]                    @relation("NotificationsRecues")
+  notificationsEmises         Notification[]                    @relation("NotificationsEmises")
   commandesCreees             CommandeClient[]
   reglementsEnregistres       PaiementCommande[]
   mouvementsStock             MouvementStock[]
@@ -124,33 +157,37 @@ model Utilisateur {
   planningsCrees              PlanningProduction[]
   schemasCommandeCrees        SchemaCommande[]
   bonsLivraisonCrees          BonLivraison[]
-  commandesFournisseurCreees  CommandeFournisseur[] @relation("CommandesFournisseurCreees")
-  commandesFournisseurRecues  CommandeFournisseur[] @relation("CommandesFournisseurRecues")
+  transitionsCycleLivraison   TransitionCycleLivraison[]
+  cyclesBonRetourne           CycleLivraison[]                  @relation("CyclesBonRetournePar")
+  anomaliesCycleSignalees     AnomalieCycleLivraison[]          @relation("AnomaliesCycleSignalees")
+  anomaliesCycleResolues      AnomalieCycleLivraison[]          @relation("AnomaliesCycleResolues")
+  commandesFournisseurCreees  CommandeFournisseur[]             @relation("CommandesFournisseurCreees")
+  commandesFournisseurRecues  CommandeFournisseur[]             @relation("CommandesFournisseurRecues")
   ficheTravailleur            Travailleur?
-  pointagesEnregistres        Pointage[]            @relation("PointagesEnregistres")
-  absencesDecidees            Absence[]             @relation("AbsencesDecidees")
-  absencesDeclarees           Absence[]             @relation("AbsencesDeclarees")
-  sanctionsEnregistrees       Sanction[]            @relation("SanctionsEnregistrees")
-  bulletinsGeneres            BulletinPaie[]        @relation("BulletinsGeneres")
-  demandesEmises              DemandeApprobation[]  @relation("DemandesEmises")
-  demandesDecidees            DemandeApprobation[]  @relation("DemandesDecidees")
-  delegationsRecues           DelegationRole[]      @relation("DelegationsRecues")
-  delegationsCreees           DelegationRole[]      @relation("DelegationsCreees")
-  auditsEffectues             AuditLog[]            @relation("AuditsEffectues")
-  sauvegardesDeclenchees      SauvegardeBase[]      @relation("SauvegardesDeclenchees")
-  tauxDefinis                 TauxDuJour[]          @relation("TauxDefinis")
-  depensesEnregistrees        DepenseCaisse[]       @relation("DepensesEnregistrees")
-  produitsArchives            Produit[]             @relation("ProduitsArchives")
+  pointagesEnregistres        Pointage[]                        @relation("PointagesEnregistres")
+  absencesDecidees            Absence[]                         @relation("AbsencesDecidees")
+  absencesDeclarees           Absence[]                         @relation("AbsencesDeclarees")
+  sanctionsEnregistrees       Sanction[]                        @relation("SanctionsEnregistrees")
+  bulletinsGeneres            BulletinPaie[]                    @relation("BulletinsGeneres")
+  demandesEmises              DemandeApprobation[]              @relation("DemandesEmises")
+  demandesDecidees            DemandeApprobation[]              @relation("DemandesDecidees")
+  delegationsRecues           DelegationRole[]                  @relation("DelegationsRecues")
+  delegationsCreees           DelegationRole[]                  @relation("DelegationsCreees")
+  auditsEffectues             AuditLog[]                        @relation("AuditsEffectues")
+  sauvegardesDeclenchees      SauvegardeBase[]                  @relation("SauvegardesDeclenchees")
+  tauxDefinis                 TauxDuJour[]                      @relation("TauxDefinis")
+  depensesEnregistrees        DepenseCaisse[]                   @relation("DepensesEnregistrees")
+  produitsArchives            Produit[]                         @relation("ProduitsArchives")
   operationsIdempotentes      OperationIdempotente[]
-  sessionsCaisseOuvertes      SessionCaisse[]       @relation("SessionsCaisseOuvertes")
-  sessionsCaisseFermees       SessionCaisse[]       @relation("SessionsCaisseFermees")
-  remisesCaisseRecues         RemiseCaisse[]        @relation("RemisesCaisseRecues")
-  remisesCaisseEnregistrees   RemiseCaisse[]        @relation("RemisesCaisseEnregistrees")
-  jetonsReinitialisation       JetonReinitialisationMotDePasse[]
-  affichagesAnniversaire       AffichageAnniversaire[]
-  conversationsSupport        ConversationSupport[] @relation("ConversationsUtilisateur")
-  conversationsSupportFermees ConversationSupport[] @relation("ConversationsSupportFermeesPar")
-  messagesSupportEnvoyes      MessageSupport[]      @relation("MessagesSupportEnvoyes")
+  sessionsCaisseOuvertes      SessionCaisse[]                   @relation("SessionsCaisseOuvertes")
+  sessionsCaisseFermees       SessionCaisse[]                   @relation("SessionsCaisseFermees")
+  remisesCaisseRecues         RemiseCaisse[]                    @relation("RemisesCaisseRecues")
+  remisesCaisseEnregistrees   RemiseCaisse[]                    @relation("RemisesCaisseEnregistrees")
+  jetonsReinitialisation      JetonReinitialisationMotDePasse[]
+  affichagesAnniversaire      AffichageAnniversaire[]
+  conversationsSupport        ConversationSupport[]             @relation("ConversationsUtilisateur")
+  conversationsSupportFermees ConversationSupport[]             @relation("ConversationsSupportFermeesPar")
+  messagesSupportEnvoyes      MessageSupport[]                  @relation("MessagesSupportEnvoyes")
 }
 
 // Jeton de récupération : seul le SHA-256 est stocké, jamais le secret envoyé.
@@ -274,13 +311,21 @@ model CommandeClient {
   creeParId            String
   creePar              Utilisateur        @relation(fields: [creeParId], references: [id])
   dateCreation         DateTime           @default(now())
+  // Jour métier de la vente. Nul pour les commandes historiques créées avant
+  // C4 ; les nouvelles commandes manuelles utilisent le jour de Kinshasa et
+  // une conversion C4 conserve la date de livraison, même si elle est validée
+  // ultérieurement.
+  dateOperationnelle   DateTime?          @db.Date
+  cycleLivraison       CycleLivraison?
   // Alerte « dette non payée » (3.4) : horodatage de l'envoi, pour ne jamais
   // notifier deux fois la même commande. Nul = alerte pas encore envoyée.
   alerteDetteEnvoyeeLe DateTime?
   reglements           PaiementCommande[]
 
+  @@unique([clientId, dateOperationnelle])
   @@index([clientId])
   @@index([dateCreation])
+  @@index([dateOperationnelle])
   @@index([alerteDetteEnvoyeeLe])
 }
 
@@ -310,11 +355,12 @@ model Produit {
   actif           Boolean                @default(true)
   archiveLe       DateTime?
   archiveParId    String?
-  archivePar      Utilisateur?            @relation("ProduitsArchives", fields: [archiveParId], references: [id], onDelete: SetNull)
+  archivePar      Utilisateur?           @relation("ProduitsArchives", fields: [archiveParId], references: [id], onDelete: SetNull)
   recette         Recette?
   lignesPlanning  PlanningLigneProduit[]
   lignesSchema    SchemaCommandeLigne[]
   lignesLivraison BonLivraisonLigne[]
+  lignesCycle     CycleLivraisonLigne[]
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 
@@ -490,6 +536,7 @@ model SchemaCommande {
   clientId  String
   client    Client                @relation(fields: [clientId], references: [id])
   lignes    SchemaCommandeLigne[]
+  cycle     CycleLivraison?
   creeParId String?
   creePar   Utilisateur?          @relation(fields: [creeParId], references: [id], onDelete: SetNull)
   createdAt DateTime              @default(now())
@@ -548,6 +595,85 @@ model BonLivraisonLigne {
   quantite       Int
 
   @@unique([bonLivraisonId, produitId])
+}
+
+// C4 enveloppe le SchemaCommande existant : le cycle ne duplique jamais la
+// prévision, il lui apporte seulement l'identifiant stable, les quantités aval
+// et le journal append-only des transitions.
+model CycleLivraison {
+  id               String                     @id @default(cuid())
+  schemaCommandeId String                     @unique
+  schemaCommande   SchemaCommande             @relation(fields: [schemaCommandeId], references: [id], onDelete: Cascade)
+  statut           StatutCycleLivraison       @default(PREVISION)
+  version          Int                        @default(1)
+  livrePar         String?
+  bonRetourne      Boolean                    @default(false)
+  bonRetourneLe    DateTime?
+  bonRetourneParId String?
+  bonRetournePar   Utilisateur?               @relation("CyclesBonRetournePar", fields: [bonRetourneParId], references: [id], onDelete: SetNull)
+  commandeId       String?                    @unique
+  commande         CommandeClient?            @relation(fields: [commandeId], references: [id], onDelete: Restrict)
+  lignes           CycleLivraisonLigne[]
+  transitions      TransitionCycleLivraison[]
+  anomalies        AnomalieCycleLivraison[]
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  @@index([statut])
+  @@index([bonRetourne, statut])
+}
+
+model CycleLivraisonLigne {
+  id                        String         @id @default(cuid())
+  cycleId                   String
+  cycle                     CycleLivraison @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  produitId                 String
+  produit                   Produit        @relation(fields: [produitId], references: [id])
+  quantiteRetenueProduction Int?
+  quantitePreparee          Int?
+  quantiteRemiseMagasin     Int?
+  quantiteChargee           Int?
+  quantiteDeposee           Int?
+  quantiteAcceptee          Int?
+  quantiteRetournee         Int?
+  quantiteManquante         Int?
+
+  @@unique([cycleId, produitId])
+  @@index([produitId])
+}
+
+model TransitionCycleLivraison {
+  id            String               @id @default(cuid())
+  cycleId       String
+  cycle         CycleLivraison       @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  action        ActionCycleLivraison
+  versionAvant  Int
+  versionApres  Int
+  utilisateurId String?
+  utilisateur   Utilisateur?         @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
+  observations  String?
+  donnees       Json
+  createdAt     DateTime             @default(now())
+
+  @@index([cycleId, createdAt])
+}
+
+model AnomalieCycleLivraison {
+  id                    String            @id @default(cuid())
+  cycleId               String
+  cycle                 CycleLivraison    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  type                  TypeAnomalieCycle
+  description           String
+  signaleeParId         String?
+  signaleePar           Utilisateur?      @relation("AnomaliesCycleSignalees", fields: [signaleeParId], references: [id], onDelete: SetNull)
+  signaleeLe            DateTime          @default(now())
+  resolueParId          String?
+  resoluePar            Utilisateur?      @relation("AnomaliesCycleResolues", fields: [resolueParId], references: [id], onDelete: SetNull)
+  resolueLe             DateTime?
+  commentaireResolution String?
+
+  @@index([cycleId, resolueLe])
+  @@index([type, resolueLe])
 }
 
 // Motif d'un don de bacs (section 3.3 b) — liste fixe mais extensible,
@@ -614,7 +740,7 @@ model Travailleur {
   telephone              String?
   poste                  String
   dateEmbauche           DateTime       @db.Date
-  dateNaissance           DateTime?      @db.Date
+  dateNaissance          DateTime?      @db.Date
   utilisateurId          String?        @unique
   utilisateur            Utilisateur?   @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
   pointages              Pointage[]
@@ -904,22 +1030,22 @@ enum StatutSessionCaisse {
 // recalculer ni dupliquer ses lignes. Les soldes de fermeture restent des
 // photographies vérifiables au moment de la clôture.
 model SessionCaisse {
-  id                       String              @id @default(cuid())
-  date                     DateTime            @unique @db.Date
-  statut                   StatutSessionCaisse @default(OUVERTE)
-  soldeOuverture           Int
-  soldeTheoriqueFermeture  Int?
-  soldeCompteFermeture     Int?
-  ecartFermeture           Int?
-  ouverteParId             String?
-  ouvertePar               Utilisateur?        @relation("SessionsCaisseOuvertes", fields: [ouverteParId], references: [id], onDelete: SetNull)
-  fermeeParId              String?
-  fermeePar                Utilisateur?        @relation("SessionsCaisseFermees", fields: [fermeeParId], references: [id], onDelete: SetNull)
-  ouverteLe                DateTime            @default(now())
-  fermeeLe                 DateTime?
-  remises                  RemiseCaisse[]
-  createdAt                DateTime            @default(now())
-  updatedAt                DateTime            @updatedAt
+  id                      String              @id @default(cuid())
+  date                    DateTime            @unique @db.Date
+  statut                  StatutSessionCaisse @default(OUVERTE)
+  soldeOuverture          Int
+  soldeTheoriqueFermeture Int?
+  soldeCompteFermeture    Int?
+  ecartFermeture          Int?
+  ouverteParId            String?
+  ouvertePar              Utilisateur?        @relation("SessionsCaisseOuvertes", fields: [ouverteParId], references: [id], onDelete: SetNull)
+  fermeeParId             String?
+  fermeePar               Utilisateur?        @relation("SessionsCaisseFermees", fields: [fermeeParId], references: [id], onDelete: SetNull)
+  ouverteLe               DateTime            @default(now())
+  fermeeLe                DateTime?
+  remises                 RemiseCaisse[]
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
 
   @@index([statut, date])
 }
@@ -927,19 +1053,19 @@ model SessionCaisse {
 // Remise contradictoire d'espèces rattachée à la session du jour. Le remettant
 // peut ne pas avoir de compte applicatif ; son nom reste donc figé en texte.
 model RemiseCaisse {
-  id                String         @id @default(cuid())
-  sessionCaisseId   String
-  sessionCaisse     SessionCaisse  @relation(fields: [sessionCaisseId], references: [id], onDelete: Restrict)
-  montant           Int
-  remisParNom       String
-  recuParId         String?
-  recuPar           Utilisateur?   @relation("RemisesCaisseRecues", fields: [recuParId], references: [id], onDelete: SetNull)
-  enregistreParId   String?
-  enregistrePar     Utilisateur?   @relation("RemisesCaisseEnregistrees", fields: [enregistreParId], references: [id], onDelete: SetNull)
-  reference         String?        @unique
-  observation       String?
-  dateRemise        DateTime       @default(now())
-  createdAt         DateTime       @default(now())
+  id              String        @id @default(cuid())
+  sessionCaisseId String
+  sessionCaisse   SessionCaisse @relation(fields: [sessionCaisseId], references: [id], onDelete: Restrict)
+  montant         Int
+  remisParNom     String
+  recuParId       String?
+  recuPar         Utilisateur?  @relation("RemisesCaisseRecues", fields: [recuParId], references: [id], onDelete: SetNull)
+  enregistreParId String?
+  enregistrePar   Utilisateur?  @relation("RemisesCaisseEnregistrees", fields: [enregistreParId], references: [id], onDelete: SetNull)
+  reference       String?       @unique
+  observation     String?
+  dateRemise      DateTime      @default(now())
+  createdAt       DateTime      @default(now())
 
   @@index([sessionCaisseId, dateRemise])
 }

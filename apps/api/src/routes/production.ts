@@ -1,7 +1,8 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { Prisma } from "@prisma/client";
 import {
   bonLivraisonJourSchema,
+  aAcces,
   formatQuantite,
   NOMS_PRODUITS_SCHEMA_COMMANDE,
   planningCreateSchema,
@@ -24,6 +25,10 @@ import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
 import { construirePdfBonsLivraison, nomFichierPdf } from "../services/pdf.js";
 import { appliquerMouvement, emettreAlerteSeuil, ErreurStock } from "../services/stocks.js";
+import {
+  ErreurCycleLivraison,
+  synchroniserPrevisionsCycles,
+} from "../services/cyclesLivraison.js";
 
 export const productionRouter = Router();
 
@@ -31,6 +36,14 @@ productionRouter.use(requireAuth);
 
 const lecture = requirePermission("PRODUCTION", "LECTURE");
 const ecriture = requirePermission("PRODUCTION", "ECRITURE");
+const ecriturePrevision = (req: Request, res: Response, next: NextFunction) => {
+  const permissions = req.utilisateur?.role.permissions ?? [];
+  if (aAcces(permissions, "COMMANDES", "ECRITURE") || aAcces(permissions, "PRODUCTION", "ECRITURE")) return next();
+  return res.status(403).json({
+    code: "ACTION_NON_AUTORISEE",
+    erreur: "Écriture Commandes ou Production requise pour transmettre une prévision",
+  });
+};
 
 const dec = (d: Prisma.Decimal | null) => (d === null ? null : d.toNumber());
 const jour = (d: Date) => d.toISOString().slice(0, 10);
@@ -217,7 +230,7 @@ productionRouter.get("/schema-commande", lecture, async (req, res, next) => {
   }
 });
 
-productionRouter.put("/schema-commande", ecriture, async (req, res, next) => {
+productionRouter.put("/schema-commande", ecriturePrevision, async (req, res, next) => {
   try {
     const parsed = schemaCommandeJourSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -246,16 +259,11 @@ productionRouter.put("/schema-commande", ecriture, async (req, res, next) => {
     const dateObj = new Date(date);
 
     await prisma.$transaction(async (tx) => {
-      // Remplace intégralement le Schéma de cette date : plus simple et plus
-      // sûr qu'un diff ligne à ligne (même idiome que le Planning ci-dessus).
-      await tx.schemaCommande.deleteMany({ where: { date: dateObj } });
-      for (const c of clients) {
-        const lignesUtiles = c.lignes.filter((l) => l.quantite > 0);
-        if (lignesUtiles.length === 0) continue;
-        await tx.schemaCommande.create({
-          data: { date: dateObj, clientId: c.clientId, creeParId: req.utilisateur!.id, lignes: { create: lignesUtiles } },
-        });
-      }
+      // C4 conserve l'identifiant de chaque cycle : les prévisions encore
+      // neuves sont mises à jour en place, tandis qu'une étape aval verrouille
+      // la suppression et la modification. Le Planning reste dans cette même
+      // transaction, donc aucun des deux côtés ne peut diverger.
+      await synchroniserPrevisionsCycles(tx, dateObj, clients, req.utilisateur!.id);
 
       // Alimentation automatique du Planning de production : le nombre de
       // bacs et le détail par produit deviennent ceux du Schéma. Un Planning
@@ -291,10 +299,32 @@ productionRouter.put("/schema-commande", ecriture, async (req, res, next) => {
           },
         });
       }
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
-    res.json(await chargerSchemaCommandeJour(date));
+    const schema = await chargerSchemaCommandeJour(date);
+    busEvenements.emettreEvenement({
+      type: "PREVISION_TRANSMISE",
+      module: "PRODUCTION",
+      emetteurId: req.utilisateur!.id,
+      evenementRef: date,
+      message: `Prévision transmise pour le ${date} — ${schema.totalGeneral} bac(s)`,
+      donnees: { date, nombreClients: schema.clients.length, totalGeneral: schema.totalGeneral },
+    });
+    res.json(schema);
   } catch (e) {
+    if (e instanceof ErreurCycleLivraison) {
+      return res.status(e.statutHttp).json({
+        code: e.code,
+        erreur: e.message,
+        ...(e.versionCourante === undefined ? {} : { versionCourante: e.versionCourante }),
+      });
+    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034") {
+      return res.status(409).json({
+        code: "PREVISION_VERROUILLEE",
+        erreur: "La prévision a été modifiée simultanément. Rechargez les données avant de réessayer.",
+      });
+    }
     next(e);
   }
 });

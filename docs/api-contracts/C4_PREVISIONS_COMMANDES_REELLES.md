@@ -379,6 +379,21 @@ Corps :
 
 Résoudre une anomalie requiert une action dédiée, un commentaire et la permission d’écriture du module propriétaire. L’historique n’est jamais supprimé.
 
+### Résoudre une anomalie
+
+`POST /api/production/cycles-livraison/:id/anomalies/:anomalieId/resoudre`
+
+Permission `COMMANDES:ECRITURE` ou `PRODUCTION:ECRITURE`.
+
+```json
+{
+  "version": 9,
+  "commentaire": "Bon physique retourné et vérifié"
+}
+```
+
+La résolution horodate et attribue la décision, conserve l'anomalie dans l'historique et incrémente la version du cycle. L'action dédiée `bon-retourne` résout automatiquement une éventuelle anomalie ouverte `BON_NON_RETOURNE` avec le commentaire serveur correspondant.
+
 ## 9. Erreurs
 
 | HTTP | Code | Sens |

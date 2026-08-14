@@ -39,6 +39,7 @@ type CommandeAvecRelations = Prisma.CommandeClientGetPayload<{
       include: { enregistrePar: { select: { id: true; nom: true } } };
       orderBy: { date: "asc" };
     };
+    cycleLivraison: { select: { id: true } };
   };
 }>;
 
@@ -46,11 +47,13 @@ type ResultatCommandeEcriture =
   | { type: "creee"; commande: CommandeAvecRelations }
   | { type: "miseAJour"; commande: CommandeAvecRelations; strategie: StrategieDoublon }
   | { type: "conflit"; existante: CommandeAvecRelations }
+  | { type: "cycleImmuable"; existante: CommandeAvecRelations }
   | { type: "reglementsPresents"; existante: CommandeAvecRelations };
 
 interface CorpsCommandeEcriture {
   commande?: CommandeDTO;
   erreur?: string;
+  code?: string;
   conflit?: boolean;
   commandeExistante?: CommandeDTO;
   apercu?: {
@@ -99,6 +102,7 @@ const INCLUDE_RELATIONS = {
     include: { enregistrePar: { select: { id: true, nom: true } } },
     orderBy: { date: "asc" },
   },
+  cycleLivraison: { select: { id: true } },
 } as const;
 
 // Résumé du jour (section 3.4) — accessible en lecture à tous les rôles ayant
@@ -310,9 +314,16 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
         });
         if (!client) throw new ErreurClientInconnu();
 
+        const dateOperationnelle = dateSQLDepuisJourLomoto(jourLomoto());
         const [debut, fin] = bornesJourLomoto();
         const existante = await tx.commandeClient.findFirst({
-          where: { clientId: client.id, dateCreation: { gte: debut, lte: fin } },
+          where: {
+            clientId: client.id,
+            OR: [
+              { dateOperationnelle },
+              { dateOperationnelle: null, dateCreation: { gte: debut, lte: fin } },
+            ],
+          },
           include: INCLUDE_RELATIONS,
           orderBy: { numero: "asc" },
         });
@@ -336,6 +347,7 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
               avanceGeneree: calcul.avanceGeneree,
               nouvelleAvance: calcul.nouvelleAvance,
               creeParId: req.utilisateur!.id,
+              dateOperationnelle,
             },
             include: INCLUDE_RELATIONS,
           });
@@ -347,6 +359,10 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
         }
 
         if (!strategie) return { type: "conflit" as const, existante };
+        // Une commande issue d'une acceptation C4 est immuable : les paiements
+        // restent permis, mais l'ancien flux manuel ne peut ni l'additionner ni
+        // la remplacer et donc altérer la quantité acceptée.
+        if (existante.cycleLivraison) return { type: "cycleImmuable" as const, existante };
         if (strategie === "REMPLACER" && existante.reglements.length > 0) {
           return { type: "reglementsPresents" as const, existante };
         }
@@ -415,6 +431,15 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
             statutHttp: 409,
             corps: {
               erreur: `La commande n°${resultat.existante.numero} a déjà reçu ${resultat.existante.reglements.length} règlement(s) : elle ne peut pas être remplacée. Utilisez « Modifier ».`,
+            },
+          };
+        }
+        if (resultat.type === "cycleImmuable") {
+          return {
+            statutHttp: 409,
+            corps: {
+              code: "ACCEPTATION_DEJA_CONVERTIE",
+              erreur: `La commande n°${resultat.existante.numero} provient d'une acceptation de livraison et ne peut pas être modifiée manuellement.`,
             },
           };
         }
