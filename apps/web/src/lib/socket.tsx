@@ -109,7 +109,12 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     registreReste.current = creerProprieteUnique<symbol>();
     fraicheurHistorique.current.reinitialiser();
 
-    if (!utilisateur) {
+    // F3 : tant que le changement de mot de passe obligatoire est actif, le
+    // serveur refuse explicitement toute route métier et toute connexion
+    // Socket.io (403 MOT_DE_PASSE_A_CHANGER — voir middleware/auth.ts côté
+    // API) ; on ne tente donc même pas la connexion, plutôt que de la
+    // laisser échouer silencieusement à chaque tentative de reconnexion.
+    if (!utilisateur || utilisateur.motDePasseDoitChanger) {
       appliquerEtat({ notifications: [], resteNonLues: 0 });
       setStatut("deconnecte");
       return;
@@ -218,8 +223,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     // `appliquerEtat` est stable (useCallback à dépendances vides) ; `queryClient`
     // et `deconnexionForcee` le sont également dans ce projet (contexte React
     // stable) — dépendances inchangées par rapport à l'original pour ne pas
-    // risquer une reconnexion Socket.io à chaque rendu.
-  }, [utilisateur?.id]);
+    // risquer une reconnexion Socket.io à chaque rendu. `motDePasseDoitChanger`
+    // ajouté (F3) : la connexion doit démarrer dès que ce drapeau repasse à
+    // `false` (après `rafraichirIdentite()`), sans attendre un changement d'id.
+  }, [utilisateur?.id, utilisateur?.motDePasseDoitChanger]);
 
   // marquerLue et toutMarquerLu délèguent l'intégralité de la décision
   // (optimiste, propriété, restauration) aux orchestrateurs purs de

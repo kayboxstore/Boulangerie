@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { Layout } from "@/components/Layout";
 import { ChargementModule } from "@/components/ChargementModule";
 import { EcranDemarrage, splashDejaVu } from "@/components/EcranDemarrage";
+import { ConstellationLomoto } from "@/components/ConstellationLomoto";
 // La page de connexion reste dans le bundle principal : c'est l'écran d'entrée
 // (pré-authentification), la charger en lazy ajouterait un délai au tout premier
 // affichage. Tous les modules métier sont chargés à la demande via React.lazy —
@@ -25,6 +26,12 @@ const MotDePasseOubliePage = lazy(() =>
 );
 const NouveauMotDePassePage = lazy(() =>
   import("@/pages/NouveauMotDePasse").then((m) => ({ default: m.NouveauMotDePassePage })),
+);
+// Changement obligatoire du mot de passe temporaire (F3) : rarement affiché
+// (seulement juste après qu'un Admin a distribué un mot de passe temporaire),
+// lazy comme les autres écrans pré-app ci-dessus.
+const ChangementMotDePasseObligatoirePage = lazy(() =>
+  import("@/pages/ChangementMotDePasseObligatoire").then((m) => ({ default: m.ChangementMotDePasseObligatoirePage })),
 );
 
 // `.then(...)` : les pages exportent des composants nommés, pas un export default.
@@ -114,6 +121,24 @@ export default function App() {
     );
   }
 
+  // Changement obligatoire du mot de passe temporaire (F3, contrat C3) :
+  // remplace ENTIÈREMENT l'application authentifiée — pas de <Layout>, pas de
+  // <Routes> métier — quel que soit le chemin déjà présent dans l'URL. Une
+  // navigation directe vers une URL métier pendant cet état retombe donc
+  // systématiquement sur cet écran bloquant, jamais sur la page visée.
+  // Socket.io ne se connecte pas non plus tant que ce drapeau est actif (voir
+  // la garde symétrique dans `lib/socket.tsx`).
+  if (utilisateur.motDePasseDoitChanger) {
+    return (
+      <>
+        {splash}
+        <Suspense fallback={<ChargementModule plein />}>
+          <ChangementMotDePasseObligatoirePage />
+        </Suspense>
+      </>
+    );
+  }
+
   return (
     <>
       {splash}
@@ -125,8 +150,15 @@ export default function App() {
 /** Arbre de routes de l'utilisateur authentifié. */
 function AppAuthentifiee() {
   return (
-    <Routes>
-      <Route element={<Layout />}>
+    <>
+      {/* Constellation Lomoto (F3) : montée une seule fois par authentification
+          réussie (ce composant ne remonte pas à chaque navigation, seulement
+          quand on passe de non-authentifié/mot de passe obligatoire à
+          authentifié normal) — indépendante des routes, peut se superposer à
+          n'importe quel écran. */}
+      <ConstellationLomoto />
+      <Routes>
+        <Route element={<Layout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/produits" element={<ProduitsPage />} />
         <Route
@@ -249,8 +281,9 @@ function AppAuthentifiee() {
             </RequiertLecture>
           }
         />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }

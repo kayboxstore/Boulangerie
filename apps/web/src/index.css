@@ -234,6 +234,38 @@
 }
 
 /* ---------------------------------------------------------------------------
+   Constellation Lomoto (F3, ConstellationLomoto.tsx) — célébration
+   d'anniversaire après authentification. Purement décorative : le contenu
+   (noms, bouton de fermeture) reste identique et pleinement utilisable avec
+   ou sans ces classes. Comme pour `.lomoto-authshell-*` ci-dessus, le
+   composant n'applique déjà pas ces classes si `prefers-reduced-motion`
+   demande une réduction (voir `usePrefersReducedMotion`) ; ce bloc média
+   reste une seconde barrière pour le cas où la préférence n'aurait pas
+   encore pu être lue.
+   --------------------------------------------------------------------------- */
+
+@keyframes lomoto-constellation-etoiles {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
+}
+
+.lomoto-constellation-content { animation: lomoto-monte 0.5s ease-out both; }
+.lomoto-constellation-etoiles {
+  background-image: radial-gradient(circle, #DA9F4E 1px, transparent 1.5px);
+  background-size: 28px 28px;
+  animation: lomoto-constellation-etoiles 3.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lomoto-constellation-content {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .lomoto-constellation-etoiles { animation: none; opacity: 0.5; }
+}
+
+/* ---------------------------------------------------------------------------
    Toast Premium (FeedbackProvider.tsx, audit UX-17) — barre de durée. Animée
    en CSS pur comme le reste des animations de cette feuille de style ;
    `prefers-reduced-motion` est géré directement au niveau du composant via

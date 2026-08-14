@@ -347,7 +347,9 @@ export function Layout() {
             enroulé, etc.) élargit ce conteneur flex au lieu de défiler dans
             son propre cadre — c'était la cause du débordement horizontal de
             toute la page sur mobile, pas un problème propre à chaque écran. */}
-        <main className="min-w-0 flex-1 p-4 md:p-8">
+        {/* id ciblé par ConstellationLomoto (F3) pour rendre le focus à un
+            emplacement logique après la fermeture de la célébration. */}
+        <main id="contenu-principal" className="min-w-0 flex-1 p-4 md:p-8">
           {/* Chaque module est chargé à la demande (React.lazy) ; la navigation
               reste affichée, seul le contenu montre le fallback de marque. */}
           <Suspense fallback={<ChargementModule />}>

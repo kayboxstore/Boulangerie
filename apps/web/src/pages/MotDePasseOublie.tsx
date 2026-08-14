@@ -1,48 +1,63 @@
 import { useState, type FormEvent } from "react";
-import { Info, Mail } from "lucide-react";
+import { CheckCircle2, Mail } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { api, ApiError } from "@/lib/api";
 
 const RE_EMAIL_SIMPLE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * Page visuelle "Mot de passe oublié" (F2, tâche 7). AUCUN appel réseau :
- * les endpoints de récupération (jetons hachés, anti-énumération, limitation
- * de fréquence) appartiennent à Codex C3, pas encore fusionné. Cette page se
- * limite à son interface et à sa validation LOCALE — une soumission valide
- * n'affiche jamais un message laissant croire qu'un e-mail a été envoyé ;
- * elle affiche explicitement que l'intégration serveur est en attente
- * (tâche 9-10). `docs/coordination/PLAN_COORDINATION_CODEX_CLAUDE_LOMOTO.md`
- * §7 : « La PR F2 peut rester en brouillon tant que les API d'authentification
- * nécessaires ne sont pas fusionnées. » Une seule annonce accessible (revue
- * Codex round 2) : le message persistant ci-dessous, jamais un toast en plus
- * — un toast disparaît de lui-même, alors que cette information ne doit
- * jamais s'effacer automatiquement.
+ * Page "Mot de passe oublié" (F3) — connectée à `POST
+ * /api/auth/mot-de-passe-oublie` (contrat C3,
+ * `docs/api-contracts/C3_SERVICES_PREMIUM.md`).
+ *
+ * Anti-énumération PRÉSERVÉE côté client : le serveur répond `202` avec un
+ * message IDENTIQUE que l'adresse existe, soit inactive, en temporisation ou
+ * que l'envoi échoue — cette page affiche donc TOUJOURS le même message de
+ * succès générique sur `202`, sans jamais tenter de distinguer les cas.
+ * Une seule annonce accessible : le message persistant ci-dessous, jamais un
+ * toast en plus (même règle que la double annonce de la revue Codex F2
+ * round 2, désormais appliquée aux vraies réponses serveur).
  */
 export function MotDePasseOubliePage() {
   const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
-  const [enAttenteIntegration, setEnAttenteIntegration] = useState(false);
+  const [envoye, setEnvoye] = useState(false);
+  const [enCours, setEnCours] = useState(false);
 
-  function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (enCours) return; // empêche une double soumission (double-clic, Entrée répétée)
+
     if (!RE_EMAIL_SIMPLE.test(email.trim())) {
       setErreur(t("auth.resetRequest.emailInvalid"));
-      setEnAttenteIntegration(false);
+      setEnvoye(false);
       return;
     }
     setErreur(null);
-    // Volontairement AUCUN appel à api(...) ici : pas de faux jeton, pas de
-    // faux succès, pas de message "e-mail envoyé" — voir la note d'en-tête.
-    // Volontairement AUCUN toast en plus du message persistant ci-dessous :
-    // les deux partagent le même texte, un toast ferait doublon (annonce
-    // répétée aux lecteurs d'écran) — voir la note d'en-tête.
-    setEnAttenteIntegration(true);
+    setEnCours(true);
+    try {
+      // Réponse `202` toujours identique (anti-énumération, cf. note d'en-tête) :
+      // le corps n'est volontairement jamais lu ni affiché, seul le succès HTTP compte.
+      await api("/api/auth/mot-de-passe-oublie", {
+        method: "POST",
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      setEnvoye(true);
+    } catch (err) {
+      // 400 (format rejeté côté serveur), 429 (limitation de fréquence) ou panne
+      // réseau : le message vient déjà de `ApiError`/`api()`, en français, jamais
+      // affiché tel quel pour du texte technique brut (voir lib/api.ts).
+      setErreur(err instanceof ApiError ? err.message : t("auth.resetRequest.genericError"));
+      setEnvoye(false);
+    } finally {
+      setEnCours(false);
+    }
   }
 
   return (
@@ -66,9 +81,11 @@ export function MotDePasseOubliePage() {
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
-                    setEnAttenteIntegration(false);
+                    setErreur(null);
+                    setEnvoye(false);
                   }}
                   required
+                  disabled={enCours}
                   className="h-11 pl-9"
                   aria-describedby={erreur ? "email-recuperation-erreur" : undefined}
                 />
@@ -80,16 +97,17 @@ export function MotDePasseOubliePage() {
               )}
             </div>
 
-            <Button type="submit" variant="cta" size="lg" className="w-full text-base">
+            <Button type="submit" variant="cta" size="lg" loading={enCours} className="w-full text-base">
               {t("auth.resetRequest.submit")}
             </Button>
 
-            {/* Jamais un message de succès : l'intégration serveur (Codex C3)
-                n'existe pas encore — voir la note d'en-tête du fichier. */}
-            {enAttenteIntegration && (
-              <p role="status" className="flex items-start gap-2 rounded-md bg-or/10 px-3 py-2 text-sm font-medium text-marine dark:text-or">
-                <Info aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
-                {t("auth.pendingServerIntegration")}
+            {/* Message persistant (jamais un toast en plus, voir note d'en-tête) :
+                cette confirmation reste lisible tant que l'utilisateur ne quitte
+                pas la page, elle ne doit jamais s'effacer automatiquement. */}
+            {envoye && (
+              <p role="status" className="flex items-start gap-2 rounded-md bg-succes/10 px-3 py-2 text-sm font-medium text-succes">
+                <CheckCircle2 aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+                {t("auth.resetRequest.success")}
               </p>
             )}
           </form>
