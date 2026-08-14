@@ -594,6 +594,55 @@
     "facturable": {
       "label": "Ekofutisa",
       "description": "Motango oyo ekofutisa ezali motango endimami, kozanga ndelo ya esengami — komande moko kaka mpo na endimi moko."
+    },
+    "actions": {
+      "RETENIR_PRODUCTION": {
+        "label": "Kopona mpo na bosali",
+        "description": "Endimisi motango oyo eponami mpo na bosali, kowuta na oyo elobamaki liboso.",
+        "bouton": "Kopona mpo na bosali"
+      },
+      "CONFIRMER_PREPARATION": {
+        "label": "Kondima elambami",
+        "description": "Endimisi motango elambami mpo na kotinda, esili kozala pene ya kopesama na Magasin.",
+        "bouton": "Kondima elambami"
+      },
+      "CONFIRMER_REMISE_MAGASIN": {
+        "label": "Kondima epesami na Magasin",
+        "description": "Endimisi motango epesami kowuta na Bosali kino na Magasin. Transition oyo endimisaka kaka bopesi ya kati, klient azwi yango nanu te.",
+        "bouton": "Kondima epesami na Magasin"
+      },
+      "CONFIRMER_CHARGEMENT": {
+        "label": "Kondima etiami",
+        "description": "Endimisi motango epesami na chauffeur mpo na mobembo mpe elobi nkombo ya chauffeur — endimisaka te ete klient azwi yango.",
+        "bouton": "Kondima etiami"
+      },
+      "CONFIRMER_DEPART": {
+        "label": "Kondima kokende",
+        "description": "Endimisi ete chauffeur akei na mobembo elongo na kotinda. Ata motango moko ekomamaka te na etape oyo.",
+        "bouton": "Kondima kokende"
+      },
+      "SIGNALER_DEPOT": {
+        "label": "Koyebisa epesami epai ya klient",
+        "description": "Eyebisi ete kotinda epesami epai ya klient. Motango endimami esengeli kondimama na esika mosusu — ebimisaka mbongo te na etape oyo.",
+        "bouton": "Koyebisa epesami"
+      }
+    },
+    "actionsDialog": {
+      "aucunEffetFinancier": "Action oyo ebimisaka mbongo te — kaka kondima ya endimami, oyo esalemaka na module Commandes, ekoki kokomisa motango facturable.",
+      "quantitesTitre": "Motango na produit moko na moko",
+      "chauffeur": "Nkombo ya chauffeur",
+      "chauffeurAide": "Esengeli mpo na kondima etiami — eyebisi soki nani azwi mokumba ya kotinda.",
+      "observations": "Maloba ya kobakisa (esengeli te)",
+      "versionObsolete": "Cycle oyo ebongwanaki na ntango kaka moko na moto mosusu. Ba données ezongisami — talá ezalela ya sika liboso ya kobanda lisusu.",
+      "erreurGenerique": "Mabe moko esalemaki na kondima ya action oyo. Meka lisusu na moke.",
+      "succes": {
+        "RETENIR_PRODUCTION": "Motango eponami mpo na bosali.",
+        "CONFIRMER_PREPARATION": "Elambami endimami.",
+        "CONFIRMER_REMISE_MAGASIN": "Epesami na Magasin endimami.",
+        "CONFIRMER_CHARGEMENT": "Etiami endimami.",
+        "CONFIRMER_DEPART": "Kokende endimami.",
+        "SIGNALER_DEPOT": "Epesami epai ya klient eyebisami."
+      }
     }
   },
   "production": {

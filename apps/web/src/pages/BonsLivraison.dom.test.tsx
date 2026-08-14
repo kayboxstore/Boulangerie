@@ -16,14 +16,17 @@ vi.mock("@/lib/api", () => ({
   getToken: () => "jeton-test",
 }));
 
+const peutEcrireMock = vi.fn((_module: string) => true);
 vi.mock("@/lib/auth", () => ({
-  useAuth: () => ({ peutEcrire: () => true }),
+  useAuth: () => ({ peutEcrire: (module: string) => peutEcrireMock(module) }),
 }));
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   apiMock.mockReset();
+  peutEcrireMock.mockReset();
+  peutEcrireMock.mockReturnValue(true);
 });
 
 const PRODUIT_A = { produitId: "p1", produitNom: "Carré 1.500 Fc" };
@@ -301,5 +304,86 @@ describe("BonsLivraisonPage — DOM (F4 round 1)", () => {
     expect(resultats).toHaveLength(2);
     const facturables = await screen.findAllByText((contenu) => contenu.includes("Facturable") && contenu.includes("5"));
     expect(facturables).toHaveLength(2);
+  });
+
+  it("distingue une valeur manquante d'un vrai zéro sur retourné/manquant (dette technique vague 2, corrigée en F5A)", async () => {
+    routerApi({
+      cyclesLivraison: () => ({
+        date: "2026-08-14",
+        cycles: [
+          cycleFixture({
+            statut: "ACCEPTEE",
+            totaux: { prevu: 10, retenuProduction: 10, prepare: 10, remisMagasin: 10, charge: 10, depose: 10, accepte: 10, retourne: null, manquant: null },
+            estFacturable: true,
+            commande: { id: "commande-1", numero: 43, quantiteBacs: 10 },
+          }),
+        ],
+        totaux: { prevu: 10, charge: 10, accepte: 10, facturable: 10 },
+      }),
+    });
+    rendre();
+
+    await screen.findByRole("table");
+    const resultats = await screen.findAllByText((contenu) => contenu.includes("Accepté 10") && contenu.includes("Retourné —") && contenu.includes("Manquant —"));
+    expect(resultats).toHaveLength(2);
+    // Un vrai zéro ne doit jamais s'afficher pour une valeur que le serveur n'a pas fournie.
+    expect(screen.queryByText(/Retourné 0/)).toBeNull();
+    expect(screen.queryByText(/Manquant 0/)).toBeNull();
+  });
+
+  it("propose le bouton d'action Production suivante quand éditable et disponible pour ce statut (F5A)", async () => {
+    routerApi({
+      cyclesLivraison: () => ({
+        date: "2026-08-14",
+        cycles: [cycleFixture({ statut: "PREVISION", version: 1, totaux: { prevu: 10, retenuProduction: null, prepare: null, remisMagasin: null, charge: null, depose: null, accepte: null, retourne: null, manquant: null } })],
+        totaux: { prevu: 10, charge: 0, accepte: 0, facturable: 0 },
+      }),
+    });
+    rendre();
+
+    await screen.findByRole("table");
+    const boutons = await screen.findAllByRole("button", { name: "Retenir pour la production" });
+    expect(boutons).toHaveLength(2); // tableau desktop + carte mobile
+  });
+
+  it("n'affiche aucun bouton d'action quand aucune action Production n'est disponible pour ce statut (ex. en attente de confirmation)", async () => {
+    routerApi({ cyclesLivraison: () => ({ date: "2026-08-14", cycles: [cycleFixture()], totaux: { prevu: 10, charge: 10, accepte: 0, facturable: 0 } }) });
+    rendre();
+
+    await screen.findByRole("table");
+    expect(screen.queryByRole("button", { name: "Signaler le dépôt" })).toBeNull();
+  });
+
+  it("masque le bouton d'action quand l'utilisateur n'a pas la permission Production en écriture, même si une action est disponible (F5A)", async () => {
+    peutEcrireMock.mockReturnValue(false);
+    routerApi({
+      cyclesLivraison: () => ({
+        date: "2026-08-14",
+        cycles: [cycleFixture({ statut: "PREVISION", version: 1, totaux: { prevu: 10, retenuProduction: null, prepare: null, remisMagasin: null, charge: null, depose: null, accepte: null, retourne: null, manquant: null } })],
+        totaux: { prevu: 10, charge: 0, accepte: 0, facturable: 0 },
+      }),
+    });
+    rendre();
+
+    await screen.findByRole("table");
+    expect(screen.queryByRole("button", { name: "Retenir pour la production" })).toBeNull();
+  });
+
+  it("le clic sur le bouton d'action ouvre le dialogue de la bonne action pour le bon client (F5A)", async () => {
+    routerApi({
+      cyclesLivraison: () => ({
+        date: "2026-08-14",
+        cycles: [cycleFixture({ statut: "PREVISION", version: 1, totaux: { prevu: 10, retenuProduction: null, prepare: null, remisMagasin: null, charge: null, depose: null, accepte: null, retourne: null, manquant: null } })],
+        totaux: { prevu: 10, charge: 0, accepte: 0, facturable: 0 },
+      }),
+    });
+    rendre();
+
+    await screen.findByRole("table");
+    const [bouton] = await screen.findAllByRole("button", { name: "Retenir pour la production" });
+    fireEvent.click(bouton);
+
+    expect(await screen.findByRole("heading", { name: "Retenir pour la production" })).toBeTruthy();
+    expect(screen.getByText(/prévision annoncée/)).toBeTruthy();
   });
 });

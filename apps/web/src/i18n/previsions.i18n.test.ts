@@ -7,6 +7,12 @@ import {
   STATUTS_CHRONOLOGIE_CYCLE_LIVRAISON,
   STATUTS_FINAUX_CYCLE_LIVRAISON,
 } from "../components/previsions/cycleLivraisonLogique";
+import { ACTIONS_CYCLE_LIVRAISON } from "@lomoto/shared/cycles-livraison";
+
+// Les six actions Production F5A — CONFIRMER_ACCEPTATION appartient à F5B
+// (module Commandes) et n'a jamais de clé previsions.actions.* : un rôle
+// Production ne doit jamais se voir proposer l'acceptation financière.
+const ACTIONS_PRODUCTION_F5A = ACTIONS_CYCLE_LIVRAISON.filter((a) => a !== "CONFIRMER_ACCEPTATION");
 
 /**
  * Vérifie directement le contenu réel des quatre dictionnaires i18n pour la
@@ -81,6 +87,31 @@ describe("i18n prévisions — couverture réelle des quatre dictionnaires (F4 r
         const texteBonsLivraison = JSON.stringify(DICTIONNAIRES[langue].bonsLivraison);
         expect(texteComplet(previsions)).not.toMatch(REFERENCE_INTERNE_INTERDITE);
         expect(texteBonsLivraison).not.toMatch(REFERENCE_INTERNE_INTERDITE);
+      });
+
+      it("expose les six actions Production F5A avec label/description/bouton non vides, jamais CONFIRMER_ACCEPTATION", () => {
+        expect(Object.keys(previsions.actions)).toEqual([...ACTIONS_PRODUCTION_F5A]);
+        for (const action of ACTIONS_PRODUCTION_F5A) {
+          expect(previsions.actions[action].label).toBeTruthy();
+          expect(previsions.actions[action].description).toBeTruthy();
+          expect(previsions.actions[action].bouton).toBeTruthy();
+        }
+        expect(previsions.actions.CONFIRMER_ACCEPTATION).toBeUndefined();
+      });
+
+      it("le dialogue d'action (previsions.actionsDialog) a tous ses textes non vides, y compris un message de succès par action F5A", () => {
+        const dialog = previsions.actionsDialog;
+        expect(dialog.aucunEffetFinancier).toBeTruthy();
+        expect(dialog.quantitesTitre).toBeTruthy();
+        expect(dialog.chauffeur).toBeTruthy();
+        expect(dialog.chauffeurAide).toBeTruthy();
+        expect(dialog.observations).toBeTruthy();
+        expect(dialog.versionObsolete).toBeTruthy();
+        expect(dialog.erreurGenerique).toBeTruthy();
+        expect(Object.keys(dialog.succes)).toEqual([...ACTIONS_PRODUCTION_F5A]);
+        for (const action of ACTIONS_PRODUCTION_F5A) {
+          expect(dialog.succes[action]).toBeTruthy();
+        }
       });
 
       it("PARTIELLEMENT_ACCEPTEE n'est jamais présentée comme un statut de ligne produit", () => {
