@@ -1100,5 +1100,104 @@
     "escaladeError": "Ombi limeshindikana.",
     "statusIA": "AI",
     "iaHandlingBanner": "AI inamjibu mtumiaji huyu kwa sasa — kutuma ujumbe kutachukua nafasi yake."
+  },
+  "premium": {
+    "passwordField": {
+      "afficher": "Onyesha nenosiri",
+      "masquer": "Ficha nenosiri",
+      "robustesse": {
+        "tresFaible": "Dhaifu sana",
+        "faible": "Dhaifu",
+        "moyen": "Wastani",
+        "bon": "Nzuri",
+        "fort": "Imara"
+      }
+    },
+    "autoTextarea": {
+      "compteur": "Herufi {{longueur}} / {{limite}}"
+    },
+    "dateHeurePicker": {
+      "date": "Tarehe",
+      "heure": "Saa"
+    },
+    "pagination": {
+      "navigation": "Kurasa",
+      "resume": "{{debut}}–{{fin}} kati ya {{total}}",
+      "precedente": "Ukurasa uliopita",
+      "suivante": "Ukurasa unaofuata",
+      "aller": "Nenda kwenye ukurasa wa {{page}}",
+      "pageSur": "Ukurasa wa {{page}} kati ya {{totalPages}}",
+      "parPage": "Kwa kila ukurasa"
+    },
+    "etats": {
+      "videTitre": "Hakuna kitu cha kuonyesha",
+      "horsLigneTitre": "Nje ya mtandao",
+      "horsLigneDescription": "Kagua muunganisho wako wa intaneti kisha jaribu tena.",
+      "reessayer": "Jaribu tena",
+      "erreurTitre": "Hitilafu imetokea"
+    },
+    "table": {
+      "rechercherPlaceholder": "Tafuta…",
+      "selectionnerLigne": "Chagua safu hii"
+    },
+    "socket": {
+      "echecMarquerLue": "Imeshindikana kuweka arifa hii kama imesomwa. Jaribu tena.",
+      "echecToutMarquerLu": "Imeshindikana kuweka arifa zote kama zimesomwa. Jaribu tena."
+    }
+  },
+  "auth": {
+    "lamp": {
+      "turnOn": "Washa taa",
+      "turnOff": "Zima taa"
+    },
+    "forgotPasswordLink": "Umesahau nenosiri?",
+    "backToLogin": "Rudi kwenye kuingia",
+    "resetRequest": {
+      "title": "Nenosiri limesahaulika",
+      "subtitle": "Weka anwani yako ya barua pepe ya kazi ili kuanza kurejesha akaunti.",
+      "emailLabel": "Anwani ya barua pepe",
+      "emailInvalid": "Weka anwani sahihi ya barua pepe.",
+      "submit": "Tuma ombi",
+      "success": "Kama anwani hii inalingana na akaunti hai, kiungo cha kuweka upya kimetumwa. Angalia sanduku lako la barua pepe.",
+      "genericError": "Hitilafu imetokea. Jaribu tena baada ya muda mfupi."
+    },
+    "resetPassword": {
+      "title": "Nenosiri jipya",
+      "subtitle": "Chagua nenosiri jipya kwa akaunti yako.",
+      "newPasswordLabel": "Nenosiri jipya",
+      "confirmPasswordLabel": "Thibitisha nenosiri",
+      "submit": "Hifadhi nenosiri jipya",
+      "passwordTooShort": "Nenosiri lazima liwe na herufi 8 au zaidi.",
+      "passwordMismatch": "Manenosiri mawili hayafanani.",
+      "verifying": "Inathibitisha kiungo cha kuweka upya…",
+      "invalidTitle": "Kiungo si sahihi au kimeisha muda",
+      "invalidBody": "Kiungo hiki hakiwezi kutumika tena — huenda kimeshatumika au kimeisha muda. Unaweza kuomba kiungo kipya.",
+      "requestNewLink": "Omba kiungo kipya",
+      "successTitle": "Nenosiri limesasishwa",
+      "success": "Nenosiri lako limebadilishwa. Sasa unaweza kuingia kwa nenosiri lako jipya.",
+      "goToLogin": "Nenda kuingia",
+      "genericError": "Hitilafu imetokea. Jaribu tena baada ya muda mfupi."
+    },
+    "mandatoryChange": {
+      "title": "Nenosiri la muda",
+      "subtitle": "Kwa usalama wa akaunti yako, chagua nenosiri jipya kabla ya kuendelea.",
+      "currentPasswordLabel": "Nenosiri la muda la sasa",
+      "newPasswordLabel": "Nenosiri jipya",
+      "confirmPasswordLabel": "Thibitisha nenosiri jipya",
+      "submit": "Badilisha nenosiri",
+      "passwordTooShort": "Nenosiri jipya lazima liwe na herufi 8 au zaidi.",
+      "passwordMismatch": "Manenosiri mawili hayafanani.",
+      "success": "Nenosiri limebadilishwa kwa mafanikio.",
+      "genericError": "Hitilafu imetokea. Jaribu tena baada ya muda mfupi.",
+      "reconnectRequired": "Nenosiri lako limebadilishwa kwa mafanikio, lakini hatukuweza kuthibitisha kikao chako. Tafadhali ingia tena kwa nenosiri lako jipya."
+    },
+    "anniversaires": {
+      "title": "Constellation Lomoto",
+      "body": "Sherehe ya leo : {{noms}} 🎂",
+      "and": "na"
+    },
+    "clock": {
+      "ariaLabel": "Saa za sasa Kinshasa : saa {{heures}}, dakika {{minutes}}, sekunde {{secondes}}"
+    }
   }
 }

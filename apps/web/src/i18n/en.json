@@ -1099,5 +1099,104 @@
     "escaladeError": "The request failed.",
     "statusIA": "AI",
     "iaHandlingBanner": "The AI is currently answering this user — sending a message takes over."
+  },
+  "premium": {
+    "passwordField": {
+      "afficher": "Show password",
+      "masquer": "Hide password",
+      "robustesse": {
+        "tresFaible": "Very weak",
+        "faible": "Weak",
+        "moyen": "Fair",
+        "bon": "Good",
+        "fort": "Strong"
+      }
+    },
+    "autoTextarea": {
+      "compteur": "{{longueur}} / {{limite}} characters"
+    },
+    "dateHeurePicker": {
+      "date": "Date",
+      "heure": "Time"
+    },
+    "pagination": {
+      "navigation": "Pagination",
+      "resume": "{{debut}}–{{fin}} of {{total}}",
+      "precedente": "Previous page",
+      "suivante": "Next page",
+      "aller": "Go to page {{page}}",
+      "pageSur": "Page {{page}} of {{totalPages}}",
+      "parPage": "Per page"
+    },
+    "etats": {
+      "videTitre": "Nothing to show",
+      "horsLigneTitre": "No connection",
+      "horsLigneDescription": "Check your internet connection and try again.",
+      "reessayer": "Retry",
+      "erreurTitre": "Something went wrong"
+    },
+    "table": {
+      "rechercherPlaceholder": "Search…",
+      "selectionnerLigne": "Select this row"
+    },
+    "socket": {
+      "echecMarquerLue": "Could not mark this notification as read. Please try again.",
+      "echecToutMarquerLu": "Could not mark all notifications as read. Please try again."
+    }
+  },
+  "auth": {
+    "lamp": {
+      "turnOn": "Turn on the lamp",
+      "turnOff": "Turn off the lamp"
+    },
+    "forgotPasswordLink": "Forgot your password?",
+    "backToLogin": "Back to sign in",
+    "resetRequest": {
+      "title": "Forgot password",
+      "subtitle": "Enter your work email address to start account recovery.",
+      "emailLabel": "Email address",
+      "emailInvalid": "Enter a valid email address.",
+      "submit": "Send request",
+      "success": "If this address matches an active account, a reset link has just been sent. Check your inbox.",
+      "genericError": "Something went wrong. Please try again in a moment."
+    },
+    "resetPassword": {
+      "title": "New password",
+      "subtitle": "Choose a new password for your account.",
+      "newPasswordLabel": "New password",
+      "confirmPasswordLabel": "Confirm password",
+      "submit": "Save new password",
+      "passwordTooShort": "Password must be at least 8 characters long.",
+      "passwordMismatch": "The two passwords do not match.",
+      "verifying": "Verifying the reset link…",
+      "invalidTitle": "Invalid or expired link",
+      "invalidBody": "This reset link can no longer be used — it may have already been used or expired. You can request a new one.",
+      "requestNewLink": "Request a new link",
+      "successTitle": "Password updated",
+      "success": "Your password has been changed. You can now sign in with your new password.",
+      "goToLogin": "Go to sign in",
+      "genericError": "Something went wrong. Please try again in a moment."
+    },
+    "mandatoryChange": {
+      "title": "Temporary password",
+      "subtitle": "For your account's security, choose a new password before continuing.",
+      "currentPasswordLabel": "Current temporary password",
+      "newPasswordLabel": "New password",
+      "confirmPasswordLabel": "Confirm new password",
+      "submit": "Change password",
+      "passwordTooShort": "The new password must be at least 8 characters long.",
+      "passwordMismatch": "The two passwords do not match.",
+      "success": "Password changed successfully.",
+      "genericError": "Something went wrong. Please try again in a moment.",
+      "reconnectRequired": "Your password was changed successfully, but we couldn't confirm your session. Please sign in again with your new password."
+    },
+    "anniversaires": {
+      "title": "Constellation Lomoto",
+      "body": "Birthday today: {{noms}} 🎂",
+      "and": "and"
+    },
+    "clock": {
+      "ariaLabel": "Current time in Kinshasa: {{heures}} hours {{minutes}} minutes {{secondes}} seconds"
+    }
   }
 }

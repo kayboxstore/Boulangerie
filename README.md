@@ -1,8 +1,10 @@
 # Boulangerie Lomoto — Gestion commerciale
 
-Application web de gestion pour la Boulangerie Lomoto : caisse, stocks, production, commandes clients, fournisseurs et pilotage en temps réel. Spécification complète : [docs/spec.md](docs/spec.md).
+Application web de gestion pour la Boulangerie Lomoto : caisse, stocks, production, commandes clients, fournisseurs et pilotage en temps réel. Spécification complète : [docs/spec-boulangerie.md](docs/spec-boulangerie.md).
 
-**Phase actuelle : 4 — Caisse** (vente au comptoir, pain exonéré de TVA, moyens de paiement espèces/mobile money/carte, clôture journalière, alerte transaction inhabituelle au-dessus du seuil configuré).
+**Phase actuelle : vague Premium 1 intégrée** — sécurité HTTP et CI, archivage et idempotence, fuseau `Africa/Kinshasa`, récupération sécurisée du mot de passe, changement obligatoire, profils et anniversaires, enveloppe Premium responsive et « Constellation Lomoto ».
+
+La branche d’intégration validée est `agent/integration-wave-1` au commit `abbab5cfe1939f139cd0a100a40c8d4217591828`.
 
 ## Structure du monorepo
 
@@ -47,16 +49,13 @@ npm run dev
 ## Tests
 
 ```bash
+npm ci
+npm audit
 npm test
+npm run build
 ```
 
-Tests unitaires (Vitest) sur les chemins critiques du package partagé
-(`packages/shared/src/index.test.ts`) : calcul d'une commande (avance,
-dette, trop-perçu — section 3.4), dépense farine (section 3.1) et matrice de
-permissions (`aAcces`). Ne couvre pas les routes API ni le frontend — les
-parcours complets restent vérifiés manuellement (voir historique des
-commits pour les vérifications E2E Playwright réalisées à chaque
-fonctionnalité).
+La suite automatisée couvre les règles partagées, les routes API critiques, l’authentification, les permissions, l’idempotence, les frontières de journée Kinshasa et les composants React/DOM. Dernière validation de la vague : **359 tests sur 359**, audit sans vulnérabilité, migrations PostgreSQL, génération Prisma et compilation API/web réussis.
 
 ## Comptes de démonstration
 

@@ -1099,5 +1099,104 @@
     "escaladeError": "La demande a échoué.",
     "statusIA": "IA",
     "iaHandlingBanner": "L'IA répond actuellement à cet utilisateur — envoyer un message prend le relai."
+  },
+  "premium": {
+    "passwordField": {
+      "afficher": "Afficher le mot de passe",
+      "masquer": "Masquer le mot de passe",
+      "robustesse": {
+        "tresFaible": "Très faible",
+        "faible": "Faible",
+        "moyen": "Moyen",
+        "bon": "Bon",
+        "fort": "Fort"
+      }
+    },
+    "autoTextarea": {
+      "compteur": "{{longueur}} / {{limite}} caractères"
+    },
+    "dateHeurePicker": {
+      "date": "Date",
+      "heure": "Heure"
+    },
+    "pagination": {
+      "navigation": "Pagination",
+      "resume": "{{debut}}–{{fin}} sur {{total}}",
+      "precedente": "Page précédente",
+      "suivante": "Page suivante",
+      "aller": "Aller à la page {{page}}",
+      "pageSur": "Page {{page}} sur {{totalPages}}",
+      "parPage": "Par page"
+    },
+    "etats": {
+      "videTitre": "Aucun élément à afficher",
+      "horsLigneTitre": "Aucune connexion",
+      "horsLigneDescription": "Vérifiez votre connexion internet et réessayez.",
+      "reessayer": "Réessayer",
+      "erreurTitre": "Une erreur est survenue"
+    },
+    "table": {
+      "rechercherPlaceholder": "Rechercher…",
+      "selectionnerLigne": "Sélectionner cette ligne"
+    },
+    "socket": {
+      "echecMarquerLue": "Impossible de marquer cette notification comme lue. Réessayez.",
+      "echecToutMarquerLu": "Impossible de marquer toutes les notifications comme lues. Réessayez."
+    }
+  },
+  "auth": {
+    "lamp": {
+      "turnOn": "Allumer la lampe",
+      "turnOff": "Éteindre la lampe"
+    },
+    "forgotPasswordLink": "Mot de passe oublié ?",
+    "backToLogin": "Retour à la connexion",
+    "resetRequest": {
+      "title": "Mot de passe oublié",
+      "subtitle": "Indiquez votre adresse e-mail professionnelle pour amorcer la récupération.",
+      "emailLabel": "Adresse e-mail",
+      "emailInvalid": "Saisissez une adresse e-mail valide.",
+      "submit": "Envoyer la demande",
+      "success": "Si cette adresse correspond à un compte actif, un lien de réinitialisation vient d'être envoyé. Vérifiez votre boîte de réception.",
+      "genericError": "Une erreur est survenue. Réessayez dans un instant."
+    },
+    "resetPassword": {
+      "title": "Nouveau mot de passe",
+      "subtitle": "Choisissez un nouveau mot de passe pour votre compte.",
+      "newPasswordLabel": "Nouveau mot de passe",
+      "confirmPasswordLabel": "Confirmer le mot de passe",
+      "submit": "Enregistrer le nouveau mot de passe",
+      "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères.",
+      "passwordMismatch": "Les deux mots de passe ne correspondent pas.",
+      "verifying": "Vérification du lien de réinitialisation…",
+      "invalidTitle": "Lien invalide ou expiré",
+      "invalidBody": "Ce lien de réinitialisation n'est plus utilisable — il a peut-être déjà servi ou a expiré. Vous pouvez en demander un nouveau.",
+      "requestNewLink": "Demander un nouveau lien",
+      "successTitle": "Mot de passe mis à jour",
+      "success": "Votre mot de passe a bien été changé. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
+      "goToLogin": "Aller à la connexion",
+      "genericError": "Une erreur est survenue. Réessayez dans un instant."
+    },
+    "mandatoryChange": {
+      "title": "Mot de passe temporaire",
+      "subtitle": "Pour la sécurité de votre compte, choisissez un nouveau mot de passe avant de continuer.",
+      "currentPasswordLabel": "Mot de passe temporaire actuel",
+      "newPasswordLabel": "Nouveau mot de passe",
+      "confirmPasswordLabel": "Confirmer le nouveau mot de passe",
+      "submit": "Changer le mot de passe",
+      "passwordTooShort": "Le nouveau mot de passe doit contenir au moins 8 caractères.",
+      "passwordMismatch": "Les deux mots de passe ne correspondent pas.",
+      "success": "Mot de passe changé avec succès.",
+      "genericError": "Une erreur est survenue. Réessayez dans un instant.",
+      "reconnectRequired": "Votre mot de passe a bien été changé, mais nous n'avons pas pu confirmer votre session. Veuillez vous reconnecter avec votre nouveau mot de passe."
+    },
+    "anniversaires": {
+      "title": "Constellation Lomoto",
+      "body": "Anniversaire du jour : {{noms}} 🎂",
+      "and": "et"
+    },
+    "clock": {
+      "ariaLabel": "Heure actuelle à Kinshasa : {{heures}} h {{minutes}} min {{secondes}} s"
+    }
   }
 }

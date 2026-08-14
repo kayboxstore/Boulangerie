@@ -4,6 +4,7 @@ import { CODE_SESSION_REMPLACEE, LANGUES, MESSAGE_SESSION_REMPLACEE, MODULES } f
 import { aAcces } from "@lomoto/shared";
 import { verifyToken } from "../lib/jwt.js";
 import { prisma } from "../lib/prisma.js";
+import { dateSQLDepuisJourLomoto, jourLomoto } from "../lib/temps.js";
 import { contexteRequete } from "../lib/contexteRequete.js";
 import { logger } from "../lib/logger.js";
 import { estHorsPerimetreAdmin, notifierInterventionAdmin } from "../services/interventionsAdmin.js";
@@ -49,7 +50,7 @@ export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | n
     for (const module of MODULES) niveaux.set(module, "ECRITURE");
   }
 
-  const aujourdhui = new Date(new Date().toISOString().slice(0, 10)); // minuit UTC
+  const aujourdhui = dateSQLDepuisJourLomoto(jourLomoto());
   const delegations = await prisma.delegationRole.findMany({
     where: { utilisateurId: u.id, dateDebut: { lte: aujourdhui }, dateFin: { gte: aujourdhui } },
     select: { module: true },
@@ -65,6 +66,7 @@ export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | n
     nom: u.nom,
     email: u.email,
     estAdminPrincipal: u.estAdminPrincipal,
+    motDePasseDoitChanger: u.motDePasseDoitChanger,
     role: {
       id: u.role.id,
       nom: u.role.nom,
@@ -73,6 +75,14 @@ export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | n
     },
     languePreferee,
   };
+}
+
+export function cheminAutoriseAvecMotDePasseTemporaire(methode: string, originalUrl: string): boolean {
+  const chemin = originalUrl.split("?")[0];
+  return (
+    (methode === "GET" && chemin === "/api/auth/me") ||
+    (methode === "POST" && chemin === "/api/auth/mot-de-passe")
+  );
 }
 
 /** Exige un JWT valide ; attache l'utilisateur (rôle + permissions) à la requête. */
@@ -90,13 +100,22 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     // (plutôt que de surcharger chargerUtilisateur, appelé aussi hors HTTP).
     const session = await prisma.utilisateur.findUnique({
       where: { id: payload.sub },
-      select: { sessionActuelleId: true },
+      select: { sessionActuelleId: true, motDePasseDoitChanger: true },
     });
     if (!session) {
       return res.status(401).json({ erreur: "Compte introuvable ou désactivé" });
     }
     if (!payload.sid || payload.sid !== session.sessionActuelleId) {
       return res.status(401).json({ code: CODE_SESSION_REMPLACEE, erreur: MESSAGE_SESSION_REMPLACEE });
+    }
+
+    if (session.motDePasseDoitChanger) {
+      if (!cheminAutoriseAvecMotDePasseTemporaire(req.method, req.originalUrl)) {
+        return res.status(403).json({
+          code: "MOT_DE_PASSE_A_CHANGER",
+          erreur: "Vous devez remplacer votre mot de passe temporaire avant de continuer.",
+        });
+      }
     }
 
     const utilisateur = await chargerUtilisateur(payload.sub);

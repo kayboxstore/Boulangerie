@@ -61,6 +61,7 @@ const EXECUTEURS: Record<TypeActionCritique, Executeur> = {
           email: email as string,
           roleId: roleId as string,
           motDePasseHash: motDePasseHash as string,
+          motDePasseDoitChanger: true,
         },
       });
       // Identifiant de connexion issu de Travailleurs (section 3.7) : la fiche
