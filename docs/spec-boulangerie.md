@@ -95,7 +95,7 @@ défaut) :
 | Poste | Origine | Calcul |
 |---|---|---|
 | **Entrées** | AUTOMATIQUE | Argent reçu **à la création** des commandes du jour (module Commandes) |
-| **Dettes payées** | AUTOMATIQUE | Somme des règlements (`PaiementCommande`) datés du jour — **total + liste détaillée** (client, montant) |
+| **Dettes payées** | AUTOMATIQUE | Somme des règlements **CONFIRME** (`PaiementCommande`, voir point 4) datés du jour — **total + liste détaillée** (client, montant) |
 | **Dépenses** | SAISIES | Liste libre : motif (texte) + montant ; total = somme des lignes |
 | **Solde** | AUTOMATIQUE | `(Entrées + Dettes payées) − Dépenses` |
 
@@ -104,14 +104,18 @@ rouge vif** (couleur d'alerte volontairement hors palette de marque), partout o�
 il apparaît — registre de Caisse et tableau de bord — pour qu'il saute aux yeux.
 
 **Pas de double comptage (point d'attention)** : le montant reçu porté par une
-commande **inclut ses règlements ultérieurs**. Un règlement encaissé le jour même
-de la commande apparaîtrait donc dans les deux postes. La règle retenue rend les
-deux ensembles **disjoints par construction** :
+commande **inclut ses règlements CONFIRME ultérieurs**. Un règlement confirmé le
+jour même de la commande apparaîtrait donc dans les deux postes. La règle
+retenue rend les deux ensembles **disjoints par construction** :
 
 - **Entrées** = pour chaque commande créée ce jour, `montant reçu − somme de ses
-  règlements` — soit uniquement l'argent encaissé **au moment de la création** ;
-- **Dettes payées** = **tous** les règlements datés de ce jour, y compris ceux
-  portant sur une commande créée le même jour.
+  règlements CONFIRME` — soit uniquement l'argent encaissé **au moment de la
+  création** ;
+- **Dettes payées** = **tous** les règlements **CONFIRME** datés de ce jour, y
+  compris ceux portant sur une commande créée le même jour. Un règlement encore
+  DECLARE (point 4) n'entre dans aucun des deux postes tant qu'il n'est pas
+  confirmé par la Caisse — sinon le théorique de clôture (point 5) compterait de
+  l'argent jamais vérifié.
 
 Chaque franc n'est ainsi compté qu'une seule fois, et chaque poste porte bien le
 sens de son libellé. *(Décision validée.)*
@@ -130,22 +134,69 @@ ligne compte dans le total des dépenses et dans le solde **comme les autres**.
 La case est **désactivée**, avec l'explication du blocage, tant que :
 - aucun **taux du jour** n'est défini, ou
 - **aucune production n'est enregistrée** ce jour-là — plutôt qu'un calcul sur une
-  valeur absente ou un zéro trompeur.
+  valeur absente ou un zéro trompeur, ou
+- la **session de caisse** de cette date est déjà **clôturée** (point 5).
 
-**4. Permissions — inchangées** : Caissier(ère) en écriture, DG en **lecture
+**4. Règlement déclaré / confirmé** *(Lot 6 — correction de l'écart P0-07 :
+« argent transporté confondu avec règlement officiel »)* — un règlement
+(`PaiementCommande`) naît **DECLARE** : le Chargé des commandes déclare, depuis
+le module Commandes, l'argent qu'il dit avoir reçu (`POST
+/commandes/:id/reglements`), mais **la dette du client n'est pas réduite** à ce
+stade. Seule sa **confirmation** par la Caisse — rattachement à une remise
+contradictoire (point 5) après comptage — fait passer le règlement à
+**CONFIRME** et applique alors, et alors seulement, l'effet sur `montantRecu`,
+`dette`, avance générée et nouvelle avance (même calcul qu'à l'enregistrement,
+`calculerCommande`). Un client peut donc avoir des montants « déclarés, en
+attente de confirmation » visibles sur sa commande sans que sa dette officielle
+ait bougé. *(Le montant reçu saisi à la création d'une commande reste, lui,
+immédiat — hors périmètre de cette distinction, signalé comme extension
+possible d'une vague ultérieure.)*
+
+**5. Session de caisse, remise contradictoire et clôture** *(Lot 6 — correction
+de l'écart P0-02 : la Caisse dispose désormais d'une clôture réelle, nominative
+et non falsifiable)* :
+
+- **Session nominative** — une session par date (`SessionCaisse`), ouverte par
+  le Caissier avec un solde d'ouverture. On ne peut pas ouvrir la session d'une
+  date tant qu'une session **antérieure** reste ouverte : discipline
+  chronologique, aucune inclusion implicite d'un autre jour.
+- **Remise contradictoire** — transfert d'espèces documenté avec émetteur
+  (`remisParNom`, texte libre — peut ne pas avoir de compte applicatif),
+  receveur (le Caissier connecté) et référence/observation facultatives
+  (`RemiseCaisse`). Purement documentaire : n'affecte ni le registre ni la
+  dette, sauf lorsqu'elle **confirme des règlements déclarés** (point 4) — dans
+  ce cas précis, son montant est la somme des règlements sélectionnés.
+- **Clôture** — le Caissier saisit le solde **compté** ; le solde
+  **théorique** (`soldeOuverture + solde du registre`) est calculé **côté
+  serveur**, jamais fourni par le client. L'écart (`compté − théorique`) est
+  affiché ; s'il est **non nul**, un **motif est obligatoire** pour clôturer.
+  Une fois **FERMEE**, la session verrouille définitivement le registre de sa
+  date : plus aucune écriture (taux, dépense) n'y est permise.
+- **Correction post-clôture (droit spécial)** — réservée à l'**Administrateur
+  Principal** : peut corriger le solde compté et l'écart d'une session déjà
+  clôturée, avec motif obligatoire. Chaque correction est tracée intégralement
+  au Journal d'audit (avant/après) ; la session affiche la dernière correction
+  (auteur, date, motif).
+
+**6. Permissions — inchangées** : Caissier(ère) en écriture, DG en **lecture
 seule** (désormais sans aucune exception), autres rôles selon la matrice
 existante. Le Caissier conserve sa lecture sur Commandes, Commissions et
-Production.
+Production. La correction post-clôture (point 5) ajoute une garde
+supplémentaire : réservée à l'Admin Principal, même si son rôle a déjà
+l'écriture Caisse.
 
-**5. Notifications temps réel** : mêmes circuit et principe que le reste de
+**7. Notifications temps réel** : mêmes circuit et principe que le reste de
 l'application, sur les écritures réelles du registre (taux du jour défini,
-dépense ajoutée ou supprimée). Le registre étant un **calcul par date** et non un
-objet que l'on fige, il n'y a **pas d'action de clôture** — l'ancienne table
-`ClotureCaisse` est laissée orpheline, comme `Vente`.
+dépense ajoutée ou supprimée) et sur les nouvelles écritures du Lot 6
+(ouverture/clôture de session, remise enregistrée, règlement confirmé) ; la
+correction post-clôture est notifiée en priorité haute à l'ensemble des Admins,
+comme une demande d'approbation.
 
-**6. Journal d'audit (3.17)** : les modifications et suppressions sur
-`DepenseCaisse` et `TauxDuJour` sont tracées **automatiquement** par l'extension
-Prisma déjà en place — rien de spécifique à ajouter.
+**8. Journal d'audit (3.17)** : les modifications et suppressions sur
+`DepenseCaisse`, `TauxDuJour`, `SessionCaisse` et `RemiseCaisse` sont tracées
+**automatiquement** par l'extension Prisma déjà en place — rien de spécifique à
+ajouter. La confirmation d'un règlement (`PaiementCommande.statut` DECLARE →
+CONFIRME) est un `update`, donc également tracée sans code dédié.
 
 ### 3.2 Stocks & matières premières
 Suivi des quantités (farine, beurre, sucre, etc.), mouvements de stock (entrée/sortie), seuils d'alerte, historique.
@@ -680,12 +731,14 @@ CommandeFournisseur (id, fournisseurId, statut, date)
 LigneCommandeFournisseur (commandeId, matierePremiereId, quantité, prixUnitaire)
 Client (id, nom, téléphone, typeClientId, avanceDisponible, pointsFidélité)   # avanceDisponible = solde reporté d'une commande à l'autre
 CommandeClient (id, numero, clientId, quantitéBacs, montantBrut, avanceUtilisee, montantAPercevoir, montantRecu, dette, avanceGeneree, statut, dateRetrait, créePar)
-PaiementCommande (id, commandeClientId, montant, date, enregistrePar)   # règlements successifs d'une dette
+PaiementCommande (id, commandeClientId, montant, date, enregistrePar, statut, remiseCaisse?, confirmeLe?, confirmePar?)   # statut: declare | confirme (3.1 pt 4) — seule la confirmation réduit la dette
 Vente (…)          # ORPHELINE — vente au comptoir retirée (refonte 3.1)
 LigneVente (…)     # ORPHELINE — idem
 ClotureCaisse (…)  # ORPHELINE — pas de clôture dans le registre journalier
 TauxDuJour (id, date, valeur, definiPar)                                  # une valeur par date (3.1)
 DepenseCaisse (id, date, motif, montant, origine, tauxApplique?, sacsUtilises?, enregistrePar)   # origine: MANUELLE | FARINE
+SessionCaisse (id, date, statut, soldeOuverture, soldeTheoriqueFermeture?, soldeCompteFermeture?, ecartFermeture?, motifEcart?, ouvertePar?, fermeePar?, derniereCorrection*?)   # statut: ouverte | fermee — une par date (3.1 pt 5)
+RemiseCaisse (id, sessionCaisseId, montant, remisParNom, recuPar?, enregistreParId?, reference?, observation?, dateRemise)   # remise contradictoire, confirme éventuellement des PaiementCommande (3.1 pt 5)
 Travailleur (id, nom, téléphone, poste, dateEmbauche, utilisateurId, departementId, groupeId, salaireMensuel, joursTravaillesParMois)   # utilisateurId/departementId/groupeId/salaireMensuel/joursTravaillesParMois nullables en base (fiches existantes), obligatoires côté schéma applicatif pour toute NOUVELLE fiche
 Departement (id, nom, chefTravailleurId)   # chefTravailleurId nullable — simple référence, aucune permission (3.18)
 Groupe (id, departementId, nom)            # subdivision d'un Département

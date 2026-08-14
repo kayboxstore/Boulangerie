@@ -7,6 +7,7 @@ import {
   dateISOSchema,
   formatFc,
   reglementCreateSchema,
+  sommeDeclarationsEnAttente,
   type AlerteDetteDTO,
   type CommandeDTO,
   type LivraisonsDuJourDTO,
@@ -36,7 +37,10 @@ type CommandeAvecRelations = Prisma.CommandeClientGetPayload<{
     client: { select: { id: true; nom: true; typeClient: { select: { nom: true } } } };
     creePar: { select: { id: true; nom: true } };
     reglements: {
-      include: { enregistrePar: { select: { id: true; nom: true } } };
+      include: {
+        enregistrePar: { select: { id: true; nom: true } };
+        confirmePar: { select: { id: true; nom: true } };
+      };
       orderBy: { date: "asc" };
     };
     cycleLivraison: { select: { id: true } };
@@ -92,14 +96,21 @@ const versCommandeDTO = (c: CommandeAvecRelations): CommandeDTO => ({
     montant: r.montant,
     date: r.date.toISOString(),
     enregistrePar: r.enregistrePar ? { id: r.enregistrePar.id, nom: r.enregistrePar.nom } : null,
+    statut: r.statut,
+    confirmeLe: r.confirmeLe ? r.confirmeLe.toISOString() : null,
+    confirmePar: r.confirmePar ? { id: r.confirmePar.id, nom: r.confirmePar.nom } : null,
   })),
+  montantDeclareEnAttente: sommeDeclarationsEnAttente(c.reglements),
 });
 
 const INCLUDE_RELATIONS = {
   client: { select: { id: true, nom: true, typeClient: { select: { nom: true } } } },
   creePar: { select: { id: true, nom: true } },
   reglements: {
-    include: { enregistrePar: { select: { id: true, nom: true } } },
+    include: {
+      enregistrePar: { select: { id: true, nom: true } },
+      confirmePar: { select: { id: true, nom: true } },
+    },
     orderBy: { date: "asc" },
   },
   cycleLivraison: { select: { id: true } },
@@ -500,9 +511,13 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
   }
 });
 
-// Règlement d'une dette (section 3.4) : le montant s'ajoute au montant reçu,
-// puis dette / avance générée / nouvelle avance sont recalculées avec la même
-// fonction que pour une commande. Le trop-versé devient une avance du client.
+// Déclaration d'un règlement (section 3.4, Lot 6 — correction P0-07) : le
+// Chargé des commandes déclare l'argent qu'il dit avoir reçu, mais la dette
+// n'est PAS réduite ici — seule sa confirmation par la Caisse
+// (POST /api/caisse/sessions/:id/confirmer-reglements, comptage
+// contradictoire) applique l'effet sur montantRecu/dette/avance. La garde
+// compare au restant dû APRÈS déclarations déjà en attente, pour ne jamais
+// permettre de déclarer plus que ce qui reste réellement à percevoir.
 commandesRouter.post("/:id/reglements", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
   try {
     const parsed = reglementCreateSchema.safeParse(req.body);
@@ -521,18 +536,11 @@ commandesRouter.post("/:id/reglements", requirePermission("COMMANDES", "ECRITURE
       async (tx) => {
         const commande = await tx.commandeClient.findUnique({
           where: { id: req.params.id },
-          include: { client: true },
+          include: { reglements: { select: { statut: true, montant: true } } },
         });
         if (!commande) return { type: "introuvable" as const };
-        if (commande.dette <= 0) return { type: "sansDette" as const };
-
-        const calcul = calculerCommande({
-          quantiteBacs: commande.quantiteBacs,
-          prixParBac: commande.montantBrut / commande.quantiteBacs,
-          avanceExistante: commande.avanceUtilisee,
-          montantRecu: commande.montantRecu + montant,
-        });
-        const deltaAvance = calcul.avanceGeneree - commande.avanceGeneree;
+        const detteRestante = commande.dette - sommeDeclarationsEnAttente(commande.reglements);
+        if (montant > detteRestante) return { type: "sansDette" as const };
 
         await tx.paiementCommande.create({
           data: {
@@ -541,19 +549,9 @@ commandesRouter.post("/:id/reglements", requirePermission("COMMANDES", "ECRITURE
             enregistreParId: req.utilisateur!.id,
           },
         });
-        const maj = await tx.commandeClient.update({
+        const maj = await tx.commandeClient.findUniqueOrThrow({
           where: { id: commande.id },
-          data: {
-            montantRecu: commande.montantRecu + montant,
-            dette: calcul.dette,
-            avanceGeneree: calcul.avanceGeneree,
-            nouvelleAvance: commande.nouvelleAvance + deltaAvance,
-          },
           include: INCLUDE_RELATIONS,
-        });
-        await tx.client.update({
-          where: { id: commande.clientId },
-          data: { avanceDisponible: commande.client.avanceDisponible + deltaAvance },
         });
         return { type: "reglee" as const, commande: maj };
       },
@@ -562,7 +560,7 @@ commandesRouter.post("/:id/reglements", requirePermission("COMMANDES", "ECRITURE
           return { statutHttp: 404, corps: { erreur: "Commande introuvable" } };
         }
         if (resultat.type === "sansDette") {
-          return { statutHttp: 409, corps: { erreur: "Cette commande n'a pas de dette à régler" } };
+          return { statutHttp: 409, corps: { erreur: "Ce montant dépasse la dette restant à déclarer sur cette commande" } };
         }
         return { statutHttp: 201, corps: { commande: versCommandeDTO(resultat.commande) } };
       },
@@ -576,10 +574,7 @@ commandesRouter.post("/:id/reglements", requirePermission("COMMANDES", "ECRITURE
         module: "COMMANDES",
         emetteurId: req.utilisateur!.id,
         evenementRef: dto.id,
-        message:
-          `Règlement de ${formatFc(montant)} sur la commande n°${dto.numero} — ${dto.client.nom}` +
-          (dto.dette > 0 ? ` — dette restante ${formatFc(dto.dette)}` : " — dette soldée") +
-          (dto.avanceGeneree > 0 ? ` — avance générée ${formatFc(dto.avanceGeneree)}` : ""),
+        message: `Règlement de ${formatFc(montant)} déclaré sur la commande n°${dto.numero} — ${dto.client.nom} — en attente de confirmation par la Caisse`,
         donnees: { commandeId: dto.id, numero: dto.numero, montant },
       });
     }

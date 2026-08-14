@@ -162,6 +162,7 @@ model Utilisateur {
   notificationsEmises         Notification[]                    @relation("NotificationsEmises")
   commandesCreees             CommandeClient[]
   reglementsEnregistres       PaiementCommande[]
+  reglementsConfirmes         PaiementCommande[]                @relation("ReglementsConfirmes")
   mouvementsStock             MouvementStock[]
   productions                 Production[]
   productionsCloturees        Production[]                      @relation("ProductionsCloturees")
@@ -193,6 +194,7 @@ model Utilisateur {
   operationsIdempotentes      OperationIdempotente[]
   sessionsCaisseOuvertes      SessionCaisse[]                   @relation("SessionsCaisseOuvertes")
   sessionsCaisseFermees       SessionCaisse[]                   @relation("SessionsCaisseFermees")
+  sessionsCaisseCorrigees     SessionCaisse[]                   @relation("SessionsCaisseCorrigees")
   remisesCaisseRecues         RemiseCaisse[]                    @relation("RemisesCaisseRecues")
   remisesCaisseEnregistrees   RemiseCaisse[]                    @relation("RemisesCaisseEnregistrees")
   jetonsReinitialisation      JetonReinitialisationMotDePasse[]
@@ -341,19 +343,38 @@ model CommandeClient {
   @@index([alerteDetteEnvoyeeLe])
 }
 
+// Un règlement naît DECLARE (section 3.1/3.4, Lot 6 — P0-07) : l'argent que le
+// Chargé des commandes dit avoir reçu, mais qui n'a pas encore été compté par
+// la Caisse. Seule la confirmation (rattachement à une RemiseCaisse, voir
+// POST /caisse/sessions/:id/confirmer-reglements) fait passer le statut à
+// CONFIRME et applique alors — seulement alors — l'effet sur la dette.
+enum StatutPaiement {
+  DECLARE
+  CONFIRME
+}
+
 // Règlement ultérieur d'une dette de commande (section 3.4) : le montant
 // s'ajoute au montant reçu de la commande, dette/avance recalculées avec la
-// même logique qu'à l'enregistrement. Journal conservé (montant, date, auteur).
+// même logique qu'à l'enregistrement — mais seulement à la CONFIRMATION
+// (statut CONFIRME), jamais à la déclaration. Journal conservé (montant,
+// date, auteur, puis confirmation).
 model PaiementCommande {
-  id               String         @id @default(cuid())
+  id               String          @id @default(cuid())
   commandeClientId String
-  commandeClient   CommandeClient @relation(fields: [commandeClientId], references: [id], onDelete: Cascade)
+  commandeClient   CommandeClient  @relation(fields: [commandeClientId], references: [id], onDelete: Cascade)
   montant          Int
-  date             DateTime       @default(now())
+  date             DateTime        @default(now())
   enregistreParId  String
-  enregistrePar    Utilisateur    @relation(fields: [enregistreParId], references: [id])
+  enregistrePar    Utilisateur     @relation(fields: [enregistreParId], references: [id])
+  statut           StatutPaiement  @default(DECLARE)
+  remiseCaisseId   String?
+  remiseCaisse     RemiseCaisse?   @relation(fields: [remiseCaisseId], references: [id], onDelete: SetNull)
+  confirmeLe       DateTime?
+  confirmeParId    String?
+  confirmePar      Utilisateur?    @relation("ReglementsConfirmes", fields: [confirmeParId], references: [id], onDelete: SetNull)
 
   @@index([commandeClientId])
+  @@index([statut])
 }
 
 // Catalogue produits. Montants en Fc. Le pain est exonéré de TVA (tauxTaxe = 0) ;
@@ -1100,9 +1121,16 @@ enum StatutSessionCaisse {
   FERMEE
 }
 
-// Préparation C2 : une session enveloppe le registre journalier existant sans
-// recalculer ni dupliquer ses lignes. Les soldes de fermeture restent des
-// photographies vérifiables au moment de la clôture.
+// Session de caisse nominative (section 3.1, Lot 6). Une session par date —
+// enveloppe le registre journalier existant sans recalculer ni dupliquer ses
+// lignes. Les soldes de fermeture restent des photographies vérifiables au
+// moment de la clôture. Une fois FERMEE, plus aucune écriture n'est permise
+// sur le registre de cette date (taux, dépenses) : c'est ce qui rend
+// soldeTheoriqueFermeture stable pour une éventuelle correction ultérieure.
+// motifEcart est exigé quand ecartFermeture ≠ 0 (contrainte SQL, migration).
+// derniereCorrection* : la correction post-clôture (droit spécial Admin
+// Principal) écrase soldeCompteFermeture/ecartFermeture — l'historique complet
+// des corrections successives reste consultable via AuditLog (module CAISSE).
 model SessionCaisse {
   id                      String              @id @default(cuid())
   date                    DateTime            @unique @db.Date
@@ -1111,12 +1139,17 @@ model SessionCaisse {
   soldeTheoriqueFermeture Int?
   soldeCompteFermeture    Int?
   ecartFermeture          Int?
+  motifEcart              String?
   ouverteParId            String?
   ouvertePar              Utilisateur?        @relation("SessionsCaisseOuvertes", fields: [ouverteParId], references: [id], onDelete: SetNull)
   fermeeParId             String?
   fermeePar               Utilisateur?        @relation("SessionsCaisseFermees", fields: [fermeeParId], references: [id], onDelete: SetNull)
   ouverteLe               DateTime            @default(now())
   fermeeLe                DateTime?
+  derniereCorrectionLe    DateTime?
+  derniereCorrectionParId String?
+  derniereCorrectionPar   Utilisateur?        @relation("SessionsCaisseCorrigees", fields: [derniereCorrectionParId], references: [id], onDelete: SetNull)
+  motifCorrection         String?
   remises                 RemiseCaisse[]
   createdAt               DateTime            @default(now())
   updatedAt               DateTime            @updatedAt
@@ -1126,20 +1159,24 @@ model SessionCaisse {
 
 // Remise contradictoire d'espèces rattachée à la session du jour. Le remettant
 // peut ne pas avoir de compte applicatif ; son nom reste donc figé en texte.
+// Depuis le Lot 6 (P0-07), une remise peut aussi confirmer un ou plusieurs
+// règlements DECLARE (reglementsConfirmes) : c'est ce rattachement, et lui
+// seul, qui fait passer un règlement à CONFIRME et réduit la dette du client.
 model RemiseCaisse {
-  id              String        @id @default(cuid())
-  sessionCaisseId String
-  sessionCaisse   SessionCaisse @relation(fields: [sessionCaisseId], references: [id], onDelete: Restrict)
-  montant         Int
-  remisParNom     String
-  recuParId       String?
-  recuPar         Utilisateur?  @relation("RemisesCaisseRecues", fields: [recuParId], references: [id], onDelete: SetNull)
-  enregistreParId String?
-  enregistrePar   Utilisateur?  @relation("RemisesCaisseEnregistrees", fields: [enregistreParId], references: [id], onDelete: SetNull)
-  reference       String?       @unique
-  observation     String?
-  dateRemise      DateTime      @default(now())
-  createdAt       DateTime      @default(now())
+  id                  String             @id @default(cuid())
+  sessionCaisseId     String
+  sessionCaisse       SessionCaisse      @relation(fields: [sessionCaisseId], references: [id], onDelete: Restrict)
+  montant             Int
+  remisParNom         String
+  recuParId           String?
+  recuPar             Utilisateur?       @relation("RemisesCaisseRecues", fields: [recuParId], references: [id], onDelete: SetNull)
+  enregistreParId     String?
+  enregistrePar       Utilisateur?       @relation("RemisesCaisseEnregistrees", fields: [enregistreParId], references: [id], onDelete: SetNull)
+  reference           String?            @unique
+  observation         String?
+  dateRemise          DateTime           @default(now())
+  createdAt           DateTime           @default(now())
+  reglementsConfirmes PaiementCommande[]
 
   @@index([sessionCaisseId, dateRemise])
 }
