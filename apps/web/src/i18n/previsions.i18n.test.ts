@@ -31,6 +31,12 @@ const FORMULATIONS_INTERDITES: Record<string, RegExp[]> = {
   sw: [/huru dhidi ya mengine/i, /pande zote mbili/i, /kilichozalishwa na Uzalishaji/i, /mstari huu/i],
 };
 
+// Référence interne (numéro de PR GitHub, nom de branche) qui n'a aucun sens
+// pour un utilisateur final et devient fausse dès la fusion de la PR — ne
+// doit jamais apparaître dans un texte visible ou lu par un lecteur d'écran
+// (round 5, revue indépendante). Commun aux quatre langues.
+const REFERENCE_INTERNE_INTERDITE = /PR ?#\d+|codex\/previsions-commandes/i;
+
 function texteComplet(previsions: Record<string, unknown>): string {
   return JSON.stringify(previsions);
 }
@@ -65,6 +71,16 @@ describe("i18n prévisions — couverture réelle des quatre dictionnaires (F4 r
         for (const motif of FORMULATIONS_INTERDITES[langue]) {
           expect(texte).not.toMatch(motif);
         }
+      });
+
+      it("n'expose aucune référence interne (numéro de PR, nom de branche) dans un texte utilisateur", () => {
+        // apps/web/src/i18n/{fr,en,ln,sw}.json — round 5, revue indépendante :
+        // « (PR #12) » figurait dans previsions.facturable.description et
+        // bonsLivraison.cyclePendingNote, visible en tooltip et lu au clavier
+        // (aria-describedby) — jargon dev, faux dès la fusion de la PR.
+        const texteBonsLivraison = JSON.stringify(DICTIONNAIRES[langue].bonsLivraison);
+        expect(texteComplet(previsions)).not.toMatch(REFERENCE_INTERNE_INTERDITE);
+        expect(texteBonsLivraison).not.toMatch(REFERENCE_INTERNE_INTERDITE);
       });
 
       it("PARTIELLEMENT_ACCEPTEE n'est jamais présentée comme un statut de ligne produit", () => {

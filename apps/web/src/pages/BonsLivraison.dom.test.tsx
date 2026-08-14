@@ -174,7 +174,7 @@ describe("BonsLivraisonPage — DOM (F4 round 1)", () => {
     expect(screen.getAllByText("Dépôt Alpha")).toHaveLength(2);
   });
 
-  it("affiche la légende du cycle sans aucun statut actif (round 2 : aucune donnée serveur ne le justifie), avec le rappel que cet écran n'est pas encore raccordé au contrat C4 (round 3)", async () => {
+  it("affiche la légende du cycle sans aucun statut actif (round 2 : aucune donnée serveur ne le justifie), avec le rappel que cet écran n'est pas encore raccordé au suivi détaillé (round 3, texte neutralisé round 5)", async () => {
     routerApi({});
     rendre();
 
@@ -182,7 +182,10 @@ describe("BonsLivraisonPage — DOM (F4 round 1)", () => {
     const chronologie = screen.getByRole("list", { name: "Chronologie du cycle prévision → livraison" });
     expect(chronologie).toBeTruthy();
     expect(document.querySelector('[aria-current="step"]')).toBeNull();
-    expect(screen.getByText(/existent dans le contrat C4 \(PR #12\)/)).toBeTruthy();
+    expect(screen.getByText(/s'afficheront ici dès que cet écran sera raccordé/)).toBeTruthy();
+    // round 5, revue indépendante : aucune référence interne (numéro de PR)
+    // ne doit fuiter dans un texte utilisateur.
+    expect(screen.queryByText(/PR #12/)).toBeNull();
   });
 
   it("surface visiblement l'échec de chargement du Schéma de commande (round 2, revue Codex)", async () => {

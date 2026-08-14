@@ -515,7 +515,7 @@
     "gapTooltip": "Ordered (Order form): {{commande}} — Delivered: {{livre}}",
     "gapProductTooltip": "Forecast: {{prevu}} — Entered: {{livre}}",
     "cycleLegendTitle": "Where is this delivery in the cycle?",
-    "cyclePendingNote": "This total reflects the quantity reported as dropped off, not yet a client acceptance. The Accepted, Returned, Missing and Billable results exist in the C4 contract (PR #12), not yet merged into this base — this screen isn't wired to it yet.",
+    "cyclePendingNote": "This total reflects the quantity reported as dropped off, not yet a client acceptance. The Accepted, Returned, Missing and Billable results will appear here once this screen is wired to the detailed delivery cycle tracking.",
     "loading": "Loading delivery notes…",
     "schemaLoadError": "Could not load this date's Order sheet — per-product gaps are unavailable for now.",
     "print": "Print",
@@ -591,7 +591,7 @@
     "consequenceLegende": "Consequence of acceptance",
     "facturable": {
       "label": "Billable",
-      "description": "The billable quantity equals the accepted quantity, with no cap from the forecast — a single order is created per acceptance (C4 contract, PR #12, not yet merged into this base)."
+      "description": "The billable quantity equals the accepted quantity, with no cap from the forecast — a single order is created per acceptance."
     }
   },
   "production": {

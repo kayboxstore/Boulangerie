@@ -516,7 +516,7 @@
     "gapTooltip": "Iliyoagizwa (Fomu ya agizo) : {{commande}} — Iliyotolewa : {{livre}}",
     "gapProductTooltip": "Ilivyotabiriwa: {{prevu}} — Ilivyoingizwa: {{livre}}",
     "cycleLegendTitle": "Usafirishaji huu upo wapi?",
-    "cyclePendingNote": "Jumla hii inalingana na kiasi kilichoripotiwa kuwekwa, si bado kukubaliwa na mteja. Matokeo Imekubaliwa, Imerudishwa, Inayokosekana na Inayolipiwa yapo katika mkataba C4 (PR #12), bado haujaunganishwa katika msingi huu — skrini hii bado haijaunganishwa nayo.",
+    "cyclePendingNote": "Jumla hii inalingana na kiasi kilichoripotiwa kuwekwa, si bado kukubaliwa na mteja. Matokeo Imekubaliwa, Imerudishwa, Inayokosekana na Inayolipiwa yataonekana hapa mara skrini hii itakapounganishwa na ufuatiliaji wa kina wa mzunguko wa usafirishaji.",
     "loading": "Inapakia hati za usafirishaji…",
     "schemaLoadError": "Imeshindwa kupakia Fomu ya agizo ya tarehe hii — tofauti kwa kila bidhaa hazipatikani kwa sasa.",
     "print": "Chapisha",
@@ -592,7 +592,7 @@
     "consequenceLegende": "Matokeo ya kukubaliwa",
     "facturable": {
       "label": "Inayolipiwa",
-      "description": "Kiasi kinacholipiwa ni sawa na kiasi kilichokubaliwa, bila kikomo cha utabiri — agizo moja tu kwa kila kukubaliwa (mkataba C4, PR #12, bado haujaunganishwa katika msingi huu)."
+      "description": "Kiasi kinacholipiwa ni sawa na kiasi kilichokubaliwa, bila kikomo cha utabiri — agizo moja tu kwa kila kukubaliwa."
     }
   },
   "production": {

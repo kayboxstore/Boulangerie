@@ -515,7 +515,7 @@
     "gapTooltip": "Commandé (Schéma de commande) : {{commande}} — Livré : {{livre}}",
     "gapProductTooltip": "Prévu : {{prevu}} — Saisi : {{livre}}",
     "cycleLegendTitle": "Où en est cette livraison ?",
-    "cyclePendingNote": "Ce total correspond à la quantité signalée comme déposée, pas encore à une acceptation client. Les résultats Accepté, Retourné, Manquant et Facturable existent dans le contrat C4 (PR #12), pas encore fusionnée dans cette base — cet écran n'y est pas encore raccordé.",
+    "cyclePendingNote": "Ce total correspond à la quantité signalée comme déposée, pas encore à une acceptation client. Les résultats Accepté, Retourné, Manquant et Facturable s'afficheront ici dès que cet écran sera raccordé au suivi détaillé du cycle de livraison.",
     "loading": "Chargement des bons de livraison…",
     "schemaLoadError": "Impossible de charger le Schéma de commande de cette date — les écarts par produit ne sont pas disponibles pour le moment.",
     "print": "Imprimer",
@@ -591,7 +591,7 @@
     "consequenceLegende": "Conséquence de l'acceptation",
     "facturable": {
       "label": "Facturable",
-      "description": "La quantité facturable correspond à la quantité acceptée, sans plafonnement par la prévision — une seule commande créée par acceptation (contrat C4, PR #12, pas encore fusionnée dans cette base)."
+      "description": "La quantité facturable correspond à la quantité acceptée, sans plafonnement par la prévision — une seule commande est créée par acceptation."
     }
   },
   "production": {

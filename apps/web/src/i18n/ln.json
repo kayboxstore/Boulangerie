@@ -516,7 +516,7 @@
     "gapTooltip": "Esengami (Schéma de commande) : {{commande}} — Epesami : {{livre}}",
     "gapProductTooltip": "Esengami : {{prevu}} — Ekomami : {{livre}}",
     "cycleLegendTitle": "Kotinda oyo ezali wapi ?",
-    "cyclePendingNote": "Motango oyo ezali kaka oyo elobami ete epesami, endimami na klient nanu te. Bosuki Endimami, Ezongisami, Ezangi mpe Ekofutisa ezali na contrat C4 (PR #12), esangani nanu te na base oyo — écran oyo ekangani nanu te na yango.",
+    "cyclePendingNote": "Motango oyo ezali kaka oyo elobami ete epesami, endimami na klient nanu te. Bosuki Endimami, Ezongisami, Ezangi mpe Ekofutisa ekomonana awa tango écran oyo ekokangana na bolandi ya cycle ya kotinda.",
     "loading": "Kozela ba bon ya kotinda biloko…",
     "schemaLoadError": "Kozwa Fiche ya komande ya mokolo oyo ekoki te — bokeseni na produit na produit ezali nanu te na ntango oyo.",
     "print": "Kobimisa na papier",
@@ -592,7 +592,7 @@
     "consequenceLegende": "Suite ya endimi",
     "facturable": {
       "label": "Ekofutisa",
-      "description": "Motango oyo ekofutisa ezali motango endimami, kozanga ndelo ya esengami — komande moko kaka mpo na endimi moko (contrat C4, PR #12, esangani nanu te na base oyo)."
+      "description": "Motango oyo ekofutisa ezali motango endimami, kozanga ndelo ya esengami — komande moko kaka mpo na endimi moko."
     }
   },
   "production": {
