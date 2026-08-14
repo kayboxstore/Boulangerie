@@ -493,7 +493,10 @@
     "noMamans": "Aucune Maman enregistrée.",
     "totalGeneral": "Total général : {{total}} bac(s)",
     "saveAndPlan": "Enregistrer et planifier",
-    "saveError": "Enregistrement impossible"
+    "saveError": "Enregistrement impossible",
+    "previsionBadge": "Prévision (J+1)",
+    "previsionRule": "Une prévision n'affecte ni la caisse ni la dette — seule une acceptation confirmée par le client sera facturable.",
+    "todayReference": "Aujourd'hui (J) : {{date}}"
   },
   "bonsLivraison": {
     "title": "Bons de livraison",
@@ -510,9 +513,87 @@
     "totalGeneral": "Total général : {{total}} bac(s)",
     "totalEmptyCrates": "{{total}} bac(s) vide(s) repris",
     "gapTooltip": "Commandé (Schéma de commande) : {{commande}} — Livré : {{livre}}",
+    "gapProductTooltip": "Prévu : {{prevu}} — Saisi : {{livre}}",
+    "cycleLegendTitle": "Où en est cette livraison ?",
+    "cycleConnectedNote": "Le statut, l'accepté, le retourné, le manquant et le facturable affichés pour chaque Dépositaire proviennent du cycle de livraison réel, dès qu'ils existent.",
+    "loading": "Chargement des bons de livraison…",
+    "schemaLoadError": "Impossible de charger le Schéma de commande de cette date — les écarts par produit ne sont pas disponibles pour le moment.",
+    "cycleLoadError": "Impossible de charger le cycle de livraison de cette date — le statut et les résultats détaillés ne sont pas disponibles pour le moment.",
     "print": "Imprimer",
     "printError": "Impression impossible",
     "saveError": "Enregistrement impossible"
+  },
+  "previsions": {
+    "chronologieLegende": "Chronologie du cycle prévision → livraison",
+    "chronologie": {
+      "PREVISION": {
+        "label": "Prévision",
+        "description": "Quantité annoncée par le client en J pour une livraison en J+1 (Chargé des commandes) — ne crée ni vente ni dette."
+      },
+      "RETENUE_PRODUCTION": {
+        "label": "Retenue Production",
+        "description": "Quantité retenue pour la production, éventuellement différente de la quantité annoncée (Production)."
+      },
+      "PREPAREE": {
+        "label": "Préparée",
+        "description": "Quantité préparée pour la livraison, pas encore remise au Magasin (statut C4 PREPAREE)."
+      },
+      "REMISE_MAGASIN": {
+        "label": "Remise au Magasin",
+        "description": "Quantité remise de la Production au Magasin (statut C4 REMISE_MAGASIN). Cette transition prouve la remise interne, pas la réception du client."
+      },
+      "CHARGEE": {
+        "label": "Chargée",
+        "description": "Quantité remise au chauffeur pour la tournée (Magasin) — ne prouve pas la réception du client."
+      },
+      "EN_TOURNEE": {
+        "label": "En tournée",
+        "description": "Le chauffeur transporte la livraison (statut C4 EN_TOURNEE) — aucune réception n'est encore confirmée."
+      },
+      "EN_ATTENTE_CONFIRMATION": {
+        "label": "En attente de confirmation",
+        "description": "Le dépôt chez le client a eu lieu (action SIGNALER_DEPOT), mais la quantité acceptée n'est pas encore confirmée. Aucun effet financier."
+      }
+    },
+    "statutsFinauxTitre": "Statut final du cycle (un seul des quatre s'applique)",
+    "statutsFinaux": {
+      "PARTIELLEMENT_ACCEPTEE": {
+        "label": "Partiellement acceptée",
+        "description": "Statut final lorsque le total accepté du cycle est supérieur à zéro mais inférieur au total déposé. Les quantités acceptée, retournée et manquante restent affichées séparément."
+      },
+      "ACCEPTEE": {
+        "label": "Acceptée intégralement",
+        "description": "Statut final lorsque la totalité de la quantité déposée est acceptée."
+      },
+      "RETOUR_TOTAL": {
+        "label": "Retour total",
+        "description": "Statut final lorsqu'aucune quantité n'est acceptée — le total accepté vaut zéro, aucune commande n'est créée (contrat C4 §7)."
+      },
+      "ANNULEE": {
+        "label": "Annulée",
+        "description": "Statut final lorsque le cycle est annulé avant confirmation."
+      }
+    },
+    "resultatsTitre": "Résultats de la livraison (quantités distinctes, présentées en parallèle)",
+    "resultats": {
+      "accepte": {
+        "label": "Accepté",
+        "description": "Quantité confirmée par le client ou un rôle autorisé — seule base facturable. Saisie séparément du retour ; accepté + retourné ne peut jamais dépasser le déposé."
+      },
+      "retourne": {
+        "label": "Retourné",
+        "description": "Quantité reprise, non acceptée — reste visible, jamais facturée. Saisie séparément de l'accepté ; accepté + retourné ne peut jamais dépasser le déposé."
+      },
+      "manquant": {
+        "label": "Manquant",
+        "description": "Écart calculé par le serveur : chargé − déposé. Reste visible, jamais facturé, jamais saisi côté client."
+      }
+    },
+    "consequenceLegende": "Conséquence de l'acceptation",
+    "facturable": {
+      "label": "Facturable",
+      "description": "La quantité facturable correspond à la quantité acceptée, sans plafonnement par la prévision — une seule commande est créée par acceptation."
+    }
   },
   "production": {
     "title": "Production",

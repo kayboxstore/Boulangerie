@@ -19,6 +19,7 @@ import { commissionsRouter } from "./routes/commissions.js";
 import { caisseRouter } from "./routes/caisse.js";
 import { stocksRouter } from "./routes/stocks.js";
 import { productionRouter } from "./routes/production.js";
+import { cyclesLivraisonRouter } from "./routes/cycles-livraison.js";
 import { fournisseursRouter } from "./routes/fournisseurs.js";
 import { equipeRouter } from "./routes/equipe.js";
 import { travailleursRouter } from "./routes/travailleurs.js";
@@ -139,6 +140,7 @@ export function createApp() {
   app.use("/api/caisse", caisseRouter);
   app.use("/api/stocks", stocksRouter);
   app.use("/api/production", productionRouter);
+  app.use("/api/production", cyclesLivraisonRouter);
   app.use("/api/fournisseurs", fournisseursRouter);
   app.use("/api/equipe", equipeRouter);
   app.use("/api/travailleurs", travailleursRouter);
