@@ -160,20 +160,20 @@ rapportsRouter.get("/commandes", requirePermission("COMMANDES", "LECTURE"), asyn
 
 // --- Widget Commissions -----------------------------------------------------
 
+// Commission figée au taux en vigueur à l'enregistrement (Lot 7 pt 6) : lire
+// CommandeClient.commission, jamais recalculer avec le taux courant du
+// TypeClient — voir le même commentaire dans commissions.ts.
 rapportsRouter.get("/commissions", requirePermission("COMMISSIONS", "LECTURE"), async (_req, res, next) => {
   try {
     const commandes = await prisma.commandeClient.findMany({
       where: {
         dateCreation: { gte: ilYAJours(29) },
-        client: { typeClient: { commissionParBac: { gt: 0 } } },
+        commission: { gt: 0 },
       },
-      include: { client: { select: { typeClient: { select: { commissionParBac: true } } } } },
+      select: { commission: true },
     });
     const dto: RapportCommissionsDTO = {
-      totalCommissions30Jours: commandes.reduce(
-        (s, c) => s + c.quantiteBacs * c.client.typeClient.commissionParBac,
-        0,
-      ),
+      totalCommissions30Jours: commandes.reduce((s, c) => s + c.commission, 0),
       nbCommandesACommission30Jours: commandes.length,
     };
     res.json(dto);

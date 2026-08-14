@@ -326,6 +326,15 @@ export function calculerCommande(params: {
 }
 
 /**
+ * Commission figée au taux en vigueur au moment de l'enregistrement (section
+ * 3.11, Lot 7 pt 6) — même principe que montantBrut : jamais recalculée
+ * rétroactivement si TypeClient.commissionParBac change ensuite.
+ */
+export function calculerCommission(params: { quantiteBacs: number; commissionParBac: number }): number {
+  return params.quantiteBacs * params.commissionParBac;
+}
+
+/**
  * Avance dont disposait le client AVANT la commande visée (section 3.4).
  * Nécessaire pour recalculer une commande mise à jour sans compter deux fois
  * son propre effet sur le solde : on inverse ce que la commande a appliqué.

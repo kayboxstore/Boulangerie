@@ -316,6 +316,11 @@ model CommandeClient {
   client               Client             @relation(fields: [clientId], references: [id])
   quantiteBacs         Int
   montantBrut          Int
+  // Commission figée au taux en vigueur au moment de l'enregistrement (comme
+  // montantBrut) — voir calculerCommission (section 3.11, Lot 7 pt 6). Ne
+  // change jamais rétroactivement si TypeClient.commissionParBac est modifié
+  // ensuite, ni si le client change de Qualité.
+  commission           Int
   avanceUtilisee       Int
   montantAPercevoir    Int
   montantRecu          Int
