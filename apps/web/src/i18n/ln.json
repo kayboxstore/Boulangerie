@@ -518,6 +518,7 @@
     "cycleLegendTitle": "Kotinda oyo ezali wapi ?",
     "cyclePendingNote": "Motango oyo ezali na etape « Epesami ». Ba étape Endimami, Ezongisami, Ezangi mpe Ekofutisa ekomonana soki contrat serveur (C4) esili kobima.",
     "loading": "Kozela ba bon ya kotinda biloko…",
+    "schemaLoadError": "Kozwa Fiche ya komande ya mokolo oyo ekoki te — bokeseni na produit na produit ezali nanu te na ntango oyo.",
     "print": "Kobimisa na papier",
     "printError": "Kobimisa na papier ekoki te",
     "saveError": "Kobomba ekoki te"
@@ -535,7 +536,11 @@
       },
       "prepare": {
         "label": "Elambami",
-        "description": "Motango oyo esalemi mpenza, ekomi pene ya kopesama na Magasin (Bosali)."
+        "description": "Motango oyo esalemi mpenza na Bosali, epesami nanu te na Magasin."
+      },
+      "remisMagasin": {
+        "label": "Epesami na Magasin",
+        "description": "Bopesi kowuta na Bosali kino na Magasin, endimami na bango mibale — étape ya liboso kati na mibale oyo contrat C4 elandaka."
       },
       "charge": {
         "label": "Etiami",

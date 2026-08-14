@@ -518,6 +518,7 @@
     "cycleLegendTitle": "Usafirishaji huu upo wapi?",
     "cyclePendingNote": "Jumla hii inalingana na hatua « Imewekwa ». Hatua za Imekubaliwa, Imerudishwa, Inayokosekana na Inayolipiwa zitapatikana mkataba wa seva ujao (C4) utakapotolewa.",
     "loading": "Inapakia hati za usafirishaji…",
+    "schemaLoadError": "Imeshindwa kupakia Fomu ya agizo ya tarehe hii — tofauti kwa kila bidhaa hazipatikani kwa sasa.",
     "print": "Chapisha",
     "printError": "Imeshindwa kuchapisha",
     "saveError": "Imeshindwa kuhifadhi"
@@ -535,7 +536,11 @@
       },
       "prepare": {
         "label": "Kimeandaliwa",
-        "description": "Kiasi kilichozalishwa kwa uhalisia, tayari kukabidhiwa kwa Ghala (Uzalishaji)."
+        "description": "Kiasi kilichozalishwa na Uzalishaji, bado hakijakabidhiwa kwa Ghala."
+      },
+      "remisMagasin": {
+        "label": "Kimekabidhiwa Ghala",
+        "description": "Ukabidhi kutoka Uzalishaji kwenda Ghala, uliothibitishwa na pande zote mbili — hatua ya kwanza kati ya ukabidhi mbili unaofuatiliwa na mkataba C4."
       },
       "charge": {
         "label": "Kimepakiwa",

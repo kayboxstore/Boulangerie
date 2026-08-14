@@ -6,11 +6,12 @@ import {
 } from "./cycleLivraisonLogique";
 
 describe("ETAPES_CYCLE_LIVRAISON", () => {
-  it("contient exactement les dix étapes attendues, dans l'ordre métier", () => {
+  it("contient exactement les onze étapes attendues, dans l'ordre métier (remisMagasin inclus, round 2)", () => {
     expect(ETAPES_CYCLE_LIVRAISON).toEqual([
       "prevu",
       "retenuProduction",
       "prepare",
+      "remisMagasin",
       "charge",
       "depose",
       "enAttenteConfirmation",
@@ -20,35 +21,35 @@ describe("ETAPES_CYCLE_LIVRAISON", () => {
       "facturable",
     ]);
   });
-});
 
-describe("calculerQuantiteFacturableIndicative — min(prévue, acceptée), jamais négatif", () => {
-  it("exemple obligatoire : prévision 50, acceptation 40 → 40 facturables", () => {
-    expect(calculerQuantiteFacturableIndicative({ quantitePrevue: 50, quantiteAcceptee: 40 })).toBe(40);
-  });
-
-  it("acceptation intégrale : la quantité facturable égale la quantité prévue", () => {
-    expect(calculerQuantiteFacturableIndicative({ quantitePrevue: 30, quantiteAcceptee: 30 })).toBe(30);
-  });
-
-  it("acceptation supérieure à la prévision : plafonnée à la prévision", () => {
-    expect(calculerQuantiteFacturableIndicative({ quantitePrevue: 20, quantiteAcceptee: 25 })).toBe(20);
-  });
-
-  it("aucune acceptation : rien n'est facturable", () => {
-    expect(calculerQuantiteFacturableIndicative({ quantitePrevue: 50, quantiteAcceptee: 0 })).toBe(0);
-  });
-
-  it("aucune prévision mais une acceptation saisie : rien n'est facturable (plafonné par la prévision)", () => {
-    expect(calculerQuantiteFacturableIndicative({ quantitePrevue: 0, quantiteAcceptee: 10 })).toBe(0);
-  });
-
-  it("valeurs négatives défensives : jamais de facturable négatif", () => {
-    expect(calculerQuantiteFacturableIndicative({ quantitePrevue: -5, quantiteAcceptee: -5 })).toBe(0);
+  it("remisMagasin (remise Production → Magasin) est bien distincte de charge (remise Magasin → Chauffeur)", () => {
+    const indexRemis = ETAPES_CYCLE_LIVRAISON.indexOf("remisMagasin");
+    const indexCharge = ETAPES_CYCLE_LIVRAISON.indexOf("charge");
+    expect(indexRemis).toBeGreaterThanOrEqual(0);
+    expect(indexCharge).toBeGreaterThan(indexRemis);
   });
 });
 
-describe("calculerEcartQuantite — constatée − prévue", () => {
+describe("calculerQuantiteFacturableIndicative — suit l'accepté, jamais plafonné par la prévision (round 2)", () => {
+  it("exemple obligatoire : acceptation 40 (prévision 50) → 40 facturables", () => {
+    expect(calculerQuantiteFacturableIndicative({ quantiteAcceptee: 40 })).toBe(40);
+  });
+
+  it("acceptation supérieure à la prévision : le facturable suit l'accepté, sans être plafonné (non-linéarité round 2)", () => {
+    // Prévision 50, mais 60 réellement acceptés le jour même : les 60 restent facturables.
+    expect(calculerQuantiteFacturableIndicative({ quantiteAcceptee: 60 })).toBe(60);
+  });
+
+  it("aucune acceptation : rien n'est facturable, quelle que soit la prévision", () => {
+    expect(calculerQuantiteFacturableIndicative({ quantiteAcceptee: 0 })).toBe(0);
+  });
+
+  it("valeur négative défensive : jamais de facturable négatif", () => {
+    expect(calculerQuantiteFacturableIndicative({ quantiteAcceptee: -5 })).toBe(0);
+  });
+});
+
+describe("calculerEcartQuantite — constatée − prévue (comparaison Schéma / Bon de livraison uniquement)", () => {
   it("livraison inférieure à la prévision : écart négatif", () => {
     expect(calculerEcartQuantite({ quantitePrevue: 10, quantiteConstatee: 6 })).toBe(-4);
   });

@@ -517,6 +517,7 @@
     "cycleLegendTitle": "Where is this delivery in the cycle?",
     "cyclePendingNote": "This total reflects the \"Dropped off\" step. The Accepted, Returned, Missing and Billable steps will be available once the next server contract (C4) ships.",
     "loading": "Loading delivery notes…",
+    "schemaLoadError": "Could not load this date's Order sheet — per-product gaps are unavailable for now.",
     "print": "Print",
     "printError": "Could not print",
     "saveError": "Could not save"
@@ -534,7 +535,11 @@
       },
       "prepare": {
         "label": "Prepared",
-        "description": "Quantity actually produced, ready to be handed to the Store (Production)."
+        "description": "Quantity actually produced by Production, not yet handed to the Store."
+      },
+      "remisMagasin": {
+        "label": "Handed to Store",
+        "description": "Handoff from Production to the Store, confirmed by both — the first of the two handoffs the C4 contract tracks."
       },
       "charge": {
         "label": "Loaded",

@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import type { BonLivraisonClientDTO, BonLivraisonJourDTO, SchemaCommandeJourDTO, ZoneDepositaireDTO } from "@lomoto/shared";
 import { api, getToken } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { dateISOKinshasa } from "@/lib/dateKinshasa";
 import { cn } from "@/lib/utils";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +20,10 @@ import { Label } from "@/components/ui/label";
 import { EtapesCycleLivraison } from "@/components/previsions/EtapesCycleLivraison";
 import { calculerEcartQuantite } from "@/components/previsions/cycleLivraisonLogique";
 
-const jourISO = (d: Date) => d.toISOString().slice(0, 10);
+// Date par défaut calculée dans le fuseau Africa/Kinshasa (F4 round 2, revue
+// Codex) — voir lib/dateKinshasa.ts pour la raison (toISOString() calcule en
+// UTC, ce qui peut basculer la journée trop tôt/tard selon le fuseau local).
+const jourISO = dateISOKinshasa;
 const nombre = (v: string) => (v.trim() === "" ? 0 : Number(v));
 
 const cleChamp = (clientId: string, champ: string) => `${clientId}:${champ}`;
@@ -92,7 +96,7 @@ export function BonsLivraisonPage() {
   // (`c.totalCommande`). Saisie du Bon de livraison volontairement
   // indépendante malgré cette lecture : rien n'est jamais pré-rempli à partir
   // du Schéma ici.
-  const { data: schemaData } = useQuery({
+  const { data: schemaData, isError: erreurSchemaQuery } = useQuery({
     queryKey: ["schema-commande", date],
     queryFn: () => api<SchemaCommandeJourDTO>(`/api/production/schema-commande?date=${date}`),
   });
@@ -237,13 +241,22 @@ export function BonsLivraisonPage() {
         <CardContent className="space-y-4">
           {/* Légende du cycle (F4 round 1) : rappelle que la quantité saisie ici
               correspond à l'étape « Déposé », pas encore à une acceptation
-              client — les étapes suivantes attendent le contrat serveur C4. */}
+              client — les étapes suivantes attendent le contrat serveur C4.
+              Round 2 (revue Codex) : AUCUNE étape n'est marquée active ici —
+              cet écran ne connaît pas réellement l'étape en cours pour une
+              ligne donnée (aucune donnée serveur ne l'indique aujourd'hui),
+              donc `etapeActive` n'est jamais renseigné avec une valeur devinée. */}
           <div className="rounded-lg border border-dashed p-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("bonsLivraison.cycleLegendTitle")}
             </p>
-            <EtapesCycleLivraison etapeActive="depose" className="mb-2" />
+            <EtapesCycleLivraison className="mb-2" />
             <p className="text-xs text-muted-foreground">{t("bonsLivraison.cyclePendingNote")}</p>
+            {erreurSchemaQuery && (
+              <p role="alert" className="mt-2 text-xs font-medium text-terracotta">
+                {t("bonsLivraison.schemaLoadError")}
+              </p>
+            )}
           </div>
 
           {chargementJour ? (

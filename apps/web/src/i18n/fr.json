@@ -517,6 +517,7 @@
     "cycleLegendTitle": "Où en est cette livraison ?",
     "cyclePendingNote": "Ce total correspond à l'étape « Déposé ». Les étapes Accepté, Retourné, Manquant et Facturable seront disponibles avec le prochain contrat serveur (C4).",
     "loading": "Chargement des bons de livraison…",
+    "schemaLoadError": "Impossible de charger le Schéma de commande de cette date — les écarts par produit ne sont pas disponibles pour le moment.",
     "print": "Imprimer",
     "printError": "Impression impossible",
     "saveError": "Enregistrement impossible"
@@ -534,7 +535,11 @@
       },
       "prepare": {
         "label": "Préparé",
-        "description": "Quantité réellement produite, prête à être remise au Magasin (Production)."
+        "description": "Quantité réellement produite par la Production, pas encore remise au Magasin."
+      },
+      "remisMagasin": {
+        "label": "Remis au Magasin",
+        "description": "Remise de la Production au Magasin, confirmée par les deux — trace la première des deux remises attendues par le contrat C4."
       },
       "charge": {
         "label": "Chargé",
