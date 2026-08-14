@@ -559,7 +559,7 @@
     "statutsFinaux": {
       "PARTIELLEMENT_ACCEPTEE": {
         "label": "Imekubaliwa kwa sehemu",
-        "description": "Hali ya mwisho wakati sehemu tu ya kiasi kilichowekwa inakubaliwa — inafupisha kiasi cha mstari huu kilichokubaliwa/kilichorudishwa/kinachokosekana, bila kuvibadilisha."
+        "description": "Hali ya mwisho wakati jumla ya kilichokubaliwa ya mzunguko ni zaidi ya sifuri lakini pungufu ya jumla ya kilichowekwa. Kiasi kilichokubaliwa, kilichorudishwa na kinachokosekana vinaendelea kuonyeshwa kando kando."
       },
       "ACCEPTEE": {
         "label": "Imekubaliwa kikamilifu",

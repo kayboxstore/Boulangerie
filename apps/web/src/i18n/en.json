@@ -558,7 +558,7 @@
     "statutsFinaux": {
       "PARTIELLEMENT_ACCEPTEE": {
         "label": "Partially accepted",
-        "description": "Final status when only part of the dropped-off quantity is accepted — summarizes this line's accepted/returned/missing quantities, without replacing them."
+        "description": "Final status when the cycle's total accepted quantity is greater than zero but lower than the total dropped-off quantity. The accepted, returned and missing quantities remain displayed separately."
       },
       "ACCEPTEE": {
         "label": "Fully accepted",

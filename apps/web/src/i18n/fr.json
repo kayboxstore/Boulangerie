@@ -558,7 +558,7 @@
     "statutsFinaux": {
       "PARTIELLEMENT_ACCEPTEE": {
         "label": "Partiellement acceptée",
-        "description": "Statut final lorsque seule une partie de la quantité déposée est acceptée — résume les quantités accepté/retourné/manquant de cette ligne, sans les remplacer."
+        "description": "Statut final lorsque le total accepté du cycle est supérieur à zéro mais inférieur au total déposé. Les quantités acceptée, retournée et manquante restent affichées séparément."
       },
       "ACCEPTEE": {
         "label": "Acceptée intégralement",

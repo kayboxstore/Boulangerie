@@ -559,7 +559,7 @@
     "statutsFinaux": {
       "PARTIELLEMENT_ACCEPTEE": {
         "label": "Endimami na ndambo",
-        "description": "Statut ya suka soki kaka ndambo ya motango epesami endimami — ezongisaka na mokuse motango endimami/ezongisami/ezangi ya molongo oyo, kasi ezali kobongola yango te."
+        "description": "Statut ya suka soki motango ya cycle mobimba oyo endimami eleki zéro kasi ezali moke koleka motango mobimba oyo epesami. Motango endimami, ezongisami mpe ezangi etikali komonana ekesani, moko na moko."
       },
       "ACCEPTEE": {
         "label": "Endimami mobimba",
