@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import {
   calculerCommande,
   formatFc,
+  sommeDeclarationsEnAttente,
   type ClientDTO,
   type AlerteDetteDTO,
   type CommandeDTO,
@@ -203,16 +204,12 @@ export function CommandesPage() {
   const [montantReglement, setMontantReglement] = useState("");
   const [erreurReglement, setErreurReglement] = useState<string | null>(null);
 
-  const apercuReglement = useMemo(() => {
-    const montant = Number(montantReglement);
-    if (!commandeARegler || !Number.isInteger(montant) || montant < 1) return null;
-    return calculerCommande({
-      quantiteBacs: commandeARegler.quantiteBacs,
-      prixParBac: commandeARegler.montantBrut / commandeARegler.quantiteBacs,
-      avanceExistante: commandeARegler.avanceUtilisee,
-      montantRecu: commandeARegler.montantRecu + montant,
-    });
-  }, [commandeARegler, montantReglement]);
+  // Le montant déclaré n'a AUCUN effet immédiat sur la dette (Lot 6, P0-07) :
+  // seule la confirmation par la Caisse (comptage contradictoire) la réduit.
+  // Le reste à déclarer tient donc compte des déclarations déjà en attente.
+  const detteRestanteADeclarer = commandeARegler
+    ? commandeARegler.dette - sommeDeclarationsEnAttente(commandeARegler.reglements)
+    : 0;
 
   const enregistrerReglement = useMutation({
     mutationFn: () =>
@@ -483,6 +480,11 @@ export function CommandesPage() {
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
+                      {c.montantDeclareEnAttente > 0 && (
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {t("commandes.pendingConfirmation", { montant: formatFc(c.montantDeclareEnAttente) })}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       {c.avanceGeneree > 0 ? (
@@ -548,6 +550,12 @@ export function CommandesPage() {
                   <CarteLigneChamp label={t("commandes.colReceived")} value={formatFc(c.montantRecu)} />
                   {c.dette > 0 && (
                     <CarteLigneChamp label={t("commandes.colDebt")} value={<Badge variant="destructive">{formatFc(c.dette)}</Badge>} />
+                  )}
+                  {c.montantDeclareEnAttente > 0 && (
+                    <CarteLigneChamp
+                      label={t("commandes.colPending")}
+                      value={<span className="text-xs text-muted-foreground">{formatFc(c.montantDeclareEnAttente)}</span>}
+                    />
                   )}
                   {c.avanceGeneree > 0 && (
                     <CarteLigneChamp label={t("commandes.colAdvanceGen")} value={<Badge variant="gold">+ {formatFc(c.avanceGeneree)}</Badge>} />
@@ -781,6 +789,11 @@ export function CommandesPage() {
                 <span className="font-bold text-terracotta">{formatFc(commandeARegler.dette)}</span>
               </div>
 
+              <p className="flex items-start gap-2 rounded-md border border-or/50 bg-or/10 px-3 py-2 text-xs text-marine dark:text-creme">
+                <HandCoins className="mt-0.5 h-3.5 w-3.5 shrink-0 text-terracotta dark:text-or" />
+                {t("commandes.settleDeclareHint")}
+              </p>
+
               <div className="space-y-2">
                 <Label htmlFor="reglement-montant">{t("commandes.settleAmount")}</Label>
                 <Input
@@ -790,36 +803,29 @@ export function CommandesPage() {
                   step={1}
                   value={montantReglement}
                   onChange={(e) => setMontantReglement(e.target.value)}
-                  placeholder={String(commandeARegler.dette)}
+                  placeholder={String(detteRestanteADeclarer)}
                   autoFocus
                   required
                 />
+                {detteRestanteADeclarer !== commandeARegler.dette && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("commandes.remainingToDeclare", { montant: formatFc(detteRestanteADeclarer) })}
+                  </p>
+                )}
               </div>
-
-              {apercuReglement && (
-                <div className="rounded-lg border border-or/40 bg-or/5 p-3 text-sm">
-                  <div className="flex justify-between">
-                    <span>{t("commandes.newDebt")}</span>
-                    <span className={apercuReglement.dette > 0 ? "font-medium text-terracotta" : "font-medium"}>
-                      {apercuReglement.dette > 0 ? formatFc(apercuReglement.dette) : t("commandes.settled")}
-                    </span>
-                  </div>
-                  {apercuReglement.avanceGeneree > 0 && (
-                    <div className="flex justify-between font-medium text-or">
-                      <span>{t("commandes.advanceForClient")}</span>
-                      <span>+ {formatFc(apercuReglement.avanceGeneree)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {commandeARegler.reglements.length > 0 && (
                 <div className="space-y-1 text-xs text-muted-foreground">
                   <p className="font-medium text-foreground">{t("commandes.previousSettlements")}</p>
                   {commandeARegler.reglements.map((r) => (
-                    <p key={r.id}>
-                      {formatDate(r.date)} — {formatFc(r.montant)}
-                      {r.enregistrePar ? ` ${t("commandes.settledBy", { nom: r.enregistrePar.nom })}` : ""}
+                    <p key={r.id} className="flex items-center gap-1.5">
+                      <span>
+                        {formatDate(r.date)} — {formatFc(r.montant)}
+                        {r.enregistrePar ? ` ${t("commandes.settledBy", { nom: r.enregistrePar.nom })}` : ""}
+                      </span>
+                      <Badge variant={r.statut === "CONFIRME" ? "gold" : "secondary"} className="shrink-0">
+                        {t(r.statut === "CONFIRME" ? "commandes.reglementConfirme" : "commandes.reglementDeclare")}
+                      </Badge>
                     </p>
                   ))}
                 </div>

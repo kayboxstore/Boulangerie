@@ -45,6 +45,11 @@ const MODELE_MODULE: Record<string, string> = {
   // orphelines depuis la refonte : plus rien ne les écrit, rien à auditer.
   TauxDuJour: "CAISSE",
   DepenseCaisse: "CAISSE",
+  // Sessions de caisse et remises contradictoires (Lot 6) — la correction
+  // post-clôture (droit spécial Admin Principal) est un `update` sur
+  // SessionCaisse : capturée automatiquement ici, sans code dédié.
+  SessionCaisse: "CAISSE",
+  RemiseCaisse: "CAISSE",
   // Stocks
   MatierePremiere: "STOCKS",
   MouvementStock: "STOCKS",

@@ -3,8 +3,11 @@ import {
   aAcces,
   calculerCommande,
   calculerDepenseFarine,
+  confirmerReglementsSchema,
   controleQualiteSchema,
   pertesJustifiees,
+  sessionCaisseCorrectionSchema,
+  sommeDeclarationsEnAttente,
   type PermissionDTO,
 } from "./index.js";
 
@@ -121,5 +124,51 @@ describe("controleQualiteSchema (section 3.3 f)", () => {
 
   it("NON_CONFORME avec motif est valide", () => {
     expect(controleQualiteSchema.safeParse({ verdict: "NON_CONFORME", motifId: "m1" }).success).toBe(true);
+  });
+});
+
+describe("sommeDeclarationsEnAttente (section 3.1 pt 4 — Lot 6, P0-07)", () => {
+  it("ignore les règlements déjà confirmés", () => {
+    const total = sommeDeclarationsEnAttente([
+      { statut: "DECLARE", montant: 1000 },
+      { statut: "CONFIRME", montant: 5000 },
+    ]);
+    expect(total).toBe(1000);
+  });
+
+  it("additionne plusieurs déclarations en attente", () => {
+    const total = sommeDeclarationsEnAttente([
+      { statut: "DECLARE", montant: 1000 },
+      { statut: "DECLARE", montant: 2000 },
+    ]);
+    expect(total).toBe(3000);
+  });
+
+  it("liste vide -> 0", () => {
+    expect(sommeDeclarationsEnAttente([])).toBe(0);
+  });
+});
+
+describe("sessionCaisseCorrectionSchema (section 3.1 pt 5 — droit spécial Admin Principal)", () => {
+  it("exige toujours un motif, même sans écart apparent", () => {
+    expect(sessionCaisseCorrectionSchema.safeParse({ soldeCompteFermeture: 10000 }).success).toBe(false);
+  });
+
+  it("valide avec motif", () => {
+    expect(
+      sessionCaisseCorrectionSchema.safeParse({ soldeCompteFermeture: 10000, motif: "Erreur de comptage" }).success,
+    ).toBe(true);
+  });
+});
+
+describe("confirmerReglementsSchema (section 3.1 pt 4)", () => {
+  it("refuse une sélection vide", () => {
+    expect(confirmerReglementsSchema.safeParse({ paiementCommandeIds: [], remisParNom: "Jean" }).success).toBe(false);
+  });
+
+  it("valide avec au moins un règlement sélectionné", () => {
+    expect(
+      confirmerReglementsSchema.safeParse({ paiementCommandeIds: ["p1"], remisParNom: "Jean" }).success,
+    ).toBe(true);
   });
 });

@@ -198,6 +198,18 @@ export const TYPES_EVENEMENT = [
   // Clôture d'une Production (section 3.3 f) : verrou définitif après contrôle
   // qualité et justification des pertes.
   "PRODUCTION_CLOTUREE",
+  // Session de caisse (section 3.1, Lot 6) : ouverture/clôture — notifie
+  // Caissier(ère) et DG (lecture), comme REGISTRE_CAISSE.
+  "SESSION_CAISSE_OUVERTE",
+  "SESSION_CAISSE_CLOTUREE",
+  // Correction d'une session déjà clôturée (droit spécial Admin Principal) —
+  // priorité HAUTE, notifie les Admins comme DEMANDE_APPROBATION.
+  "SESSION_CAISSE_CORRIGEE",
+  // Remise contradictoire d'espèces à la Caisse (section 3.1, Lot 6).
+  "REMISE_CAISSE_ENREGISTREE",
+  // Confirmation d'un règlement DECLARE par la Caisse (P0-07) : seul cet
+  // événement correspond à une baisse effective de la dette du client.
+  "REGLEMENT_CONFIRME",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -375,11 +387,28 @@ export interface ClientDTO {
   zoneDepositaireNom: string | null;
 }
 
+// Un règlement DECLARE n'a pas encore d'effet sur la dette ; seul CONFIRME
+// (rattaché à une RemiseCaisse comptée par la Caisse) la réduit — section 3.1,
+// Lot 6, correction P0-07.
+export const STATUTS_PAIEMENT = ["DECLARE", "CONFIRME"] as const;
+export type StatutPaiement = (typeof STATUTS_PAIEMENT)[number];
+
 export interface ReglementDTO {
   id: string;
   montant: number;
   date: string;
   enregistrePar: { id: string; nom: string } | null;
+  statut: StatutPaiement;
+  confirmeLe: string | null;
+  confirmePar: { id: string; nom: string } | null;
+}
+
+/** Somme des règlements DECLARE (pas encore confirmés) d'une commande — la
+ * dette persistée ne bouge pas tant qu'ils ne sont pas confirmés par la
+ * Caisse ; fonction partagée pour que le front affiche le même chiffre que
+ * la garde serveur (POST /commandes/:id/reglements). */
+export function sommeDeclarationsEnAttente(reglements: { statut: StatutPaiement; montant: number }[]): number {
+  return reglements.filter((r) => r.statut === "DECLARE").reduce((s, r) => s + r.montant, 0);
 }
 
 export interface CommandeDTO {
@@ -398,6 +427,8 @@ export interface CommandeDTO {
   nouvelleAvance: number;
   creePar: { id: string; nom: string } | null;
   reglements: ReglementDTO[];
+  /** Somme des règlements DECLARE de cette commande — voir sommeDeclarationsEnAttente. */
+  montantDeclareEnAttente: number;
 }
 
 /**
@@ -589,8 +620,10 @@ export interface RegistreCaisseDTO {
 
 
 
-// Préparation C2 — session et remise de caisse. Ces contrats enveloppent le
-// registre journalier actuel sans modifier son calcul.
+// Session de caisse, remise contradictoire et clôture (section 3.1, Lot 6).
+// Une session par date ; ces contrats enveloppent le registre journalier
+// existant sans modifier son calcul (construireRegistre reste la source de
+// vérité, le théorique de clôture s'appuie dessus côté serveur).
 export const STATUTS_SESSION_CAISSE = ["OUVERTE", "FERMEE"] as const;
 export type StatutSessionCaisse = (typeof STATUTS_SESSION_CAISSE)[number];
 
@@ -600,11 +633,25 @@ export const sessionCaisseOuvertureSchema = z.object({
 });
 export type SessionCaisseOuvertureInput = z.infer<typeof sessionCaisseOuvertureSchema>;
 
+// soldeTheoriqueFermeture n'est PAS saisi ici : il est calculé côté serveur
+// (soldeOuverture + registre du jour), jamais fourni par le client — sinon la
+// clôture perdrait toute valeur de contrôle. Le motif d'écart est validé dans
+// la route (dépend du calcul serveur), le schéma ne fait que valider la forme.
 export const sessionCaisseFermetureSchema = z.object({
-  soldeTheoriqueFermeture: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0),
   soldeCompteFermeture: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0),
+  motif: z.string().trim().min(1).max(500).optional(),
 });
 export type SessionCaisseFermetureInput = z.infer<typeof sessionCaisseFermetureSchema>;
+
+// Correction post-clôture (droit spécial Admin Principal, section 3.1 point 9).
+// Le motif est toujours requis ici (contrairement à la clôture, où il ne l'est
+// que s'il y a écart) : corriger un chiffre déjà officiel exige toujours une
+// justification.
+export const sessionCaisseCorrectionSchema = z.object({
+  soldeCompteFermeture: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0),
+  motif: z.string().trim().min(1, "Le motif est requis pour corriger une session clôturée").max(500),
+});
+export type SessionCaisseCorrectionInput = z.infer<typeof sessionCaisseCorrectionSchema>;
 
 export const remiseCaisseCreateSchema = z.object({
   montant: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").positive("Le montant doit être positif"),
@@ -614,6 +661,18 @@ export const remiseCaisseCreateSchema = z.object({
 });
 export type RemiseCaisseCreateInput = z.infer<typeof remiseCaisseCreateSchema>;
 
+// Confirmation d'un ou plusieurs règlements DECLARE (P0-07) : la Caisse reçoit
+// physiquement l'argent (remisParNom) et confirme les règlements que cette
+// remise couvre — c'est CETTE action, et elle seule, qui réduit la dette des
+// commandes concernées.
+export const confirmerReglementsSchema = z.object({
+  paiementCommandeIds: z.array(z.string().min(1)).min(1, "Sélectionnez au moins un règlement à confirmer").max(200),
+  remisParNom: z.string().trim().min(1, "Le remettant est requis").max(120),
+  reference: z.string().trim().min(1).max(120).optional(),
+  observation: z.string().trim().max(500).optional(),
+});
+export type ConfirmerReglementsInput = z.infer<typeof confirmerReglementsSchema>;
+
 export interface SessionCaisseDTO {
   id: string;
   date: string;
@@ -622,8 +681,14 @@ export interface SessionCaisseDTO {
   soldeTheoriqueFermeture: number | null;
   soldeCompteFermeture: number | null;
   ecartFermeture: number | null;
+  motifEcart: string | null;
+  ouvertePar: { id: string; nom: string } | null;
   ouverteLe: string;
+  fermeePar: { id: string; nom: string } | null;
   fermeeLe: string | null;
+  derniereCorrectionLe: string | null;
+  derniereCorrectionPar: { id: string; nom: string } | null;
+  motifCorrection: string | null;
 }
 
 export interface RemiseCaisseDTO {
@@ -635,6 +700,19 @@ export interface RemiseCaisseDTO {
   reference: string | null;
   observation: string | null;
   dateRemise: string;
+}
+
+// Ligne de la liste « règlements déclarés en attente de confirmation »
+// (GET /api/caisse/reglements-declares) — vue Caisse, indépendante de la
+// fiche client/commande.
+export interface ReglementDeclareDTO {
+  id: string;
+  commandeId: string;
+  commandeNumero: number;
+  clientNom: string;
+  montant: number;
+  date: string;
+  enregistrePar: { id: string; nom: string } | null;
 }
 
 // ---------------------------------------------------------------------------
