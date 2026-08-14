@@ -60,6 +60,10 @@ const MODELE_MODULE: Record<string, string> = {
   // Bon de livraison (3.3 e)
   BonLivraison: "PRODUCTION",
   BonLivraisonLigne: "PRODUCTION",
+  CycleLivraison: "PRODUCTION",
+  CycleLivraisonLigne: "PRODUCTION",
+  TransitionCycleLivraison: "PRODUCTION",
+  AnomalieCycleLivraison: "PRODUCTION",
   // Fournisseurs & achats
   Fournisseur: "FOURNISSEURS",
   CommandeFournisseur: "FOURNISSEURS",
