@@ -493,7 +493,10 @@
     "noMamans": "No Maman registered.",
     "totalGeneral": "Grand total: {{total}} crate(s)",
     "saveAndPlan": "Save and plan",
-    "saveError": "Could not save"
+    "saveError": "Could not save",
+    "previsionBadge": "Forecast (D+1)",
+    "previsionRule": "A forecast affects neither the cash register nor the debt — only a confirmed client acceptance becomes billable.",
+    "todayReference": "Today (D): {{date}}"
   },
   "bonsLivraison": {
     "title": "Delivery notes",
@@ -510,9 +513,58 @@
     "totalGeneral": "Grand total: {{total}} crate(s)",
     "totalEmptyCrates": "{{total}} empty crate(s) collected",
     "gapTooltip": "Ordered (Order form): {{commande}} — Delivered: {{livre}}",
+    "gapProductTooltip": "Forecast: {{prevu}} — Entered: {{livre}}",
+    "cycleLegendTitle": "Where is this delivery in the cycle?",
+    "cyclePendingNote": "This total reflects the \"Dropped off\" step. The Accepted, Returned, Missing and Billable steps will be available once the next server contract (C4) ships.",
+    "loading": "Loading delivery notes…",
     "print": "Print",
     "printError": "Could not print",
     "saveError": "Could not save"
+  },
+  "previsions": {
+    "etapesLegende": "Forecast → delivery cycle steps",
+    "etapes": {
+      "prevu": {
+        "label": "Forecast",
+        "description": "Quantity announced by the client on D for a delivery on D+1 (Order clerk) — creates no sale and no debt."
+      },
+      "retenuProduction": {
+        "label": "Held for production",
+        "description": "Quantity held for production, possibly different from the announced quantity (Production)."
+      },
+      "prepare": {
+        "label": "Prepared",
+        "description": "Quantity actually produced, ready to be handed to the Store (Production)."
+      },
+      "charge": {
+        "label": "Loaded",
+        "description": "Quantity handed to the driver for the round (Store) — does not prove the client received it."
+      },
+      "depose": {
+        "label": "Dropped off",
+        "description": "Quantity dropped off at the client by the driver — cash carried is not yet collected."
+      },
+      "enAttenteConfirmation": {
+        "label": "Awaiting confirmation",
+        "description": "Drop-off done, but not yet confirmed by the client or an authorized role."
+      },
+      "accepte": {
+        "label": "Accepted",
+        "description": "Quantity confirmed by the client or an authorized role — the only billable basis."
+      },
+      "retourne": {
+        "label": "Returned",
+        "description": "Quantity taken back, not accepted — stays visible, never billed."
+      },
+      "manquant": {
+        "label": "Missing",
+        "description": "Gap noticed (missing or unreturned slip) — stays visible, never billed."
+      },
+      "facturable": {
+        "label": "Billable",
+        "description": "Only the accepted quantity becomes a billable order, once the server contract (C4) is available."
+      }
+    }
   },
   "production": {
     "title": "Production",

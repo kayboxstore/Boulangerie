@@ -494,7 +494,10 @@
     "noMamans": "Hakuna Mama aliyesajiliwa.",
     "totalGeneral": "Jumla kuu: {{total}} beseni",
     "saveAndPlan": "Hifadhi na panga",
-    "saveError": "Imeshindwa kuhifadhi"
+    "saveError": "Imeshindwa kuhifadhi",
+    "previsionBadge": "Utabiri (J+1)",
+    "previsionRule": "Utabiri hauathiri fedha wala deni — ni uthibitisho wa mteja tu unaokuwa wa kulipiwa.",
+    "todayReference": "Leo (J): {{date}}"
   },
   "bonsLivraison": {
     "title": "Hati za usafirishaji",
@@ -511,9 +514,58 @@
     "totalGeneral": "Jumla kuu: {{total}} beseni",
     "totalEmptyCrates": "Beseni tupu {{total}} zimerudishwa",
     "gapTooltip": "Iliyoagizwa (Fomu ya agizo) : {{commande}} — Iliyotolewa : {{livre}}",
+    "gapProductTooltip": "Ilivyotabiriwa: {{prevu}} — Ilivyoingizwa: {{livre}}",
+    "cycleLegendTitle": "Usafirishaji huu upo wapi?",
+    "cyclePendingNote": "Jumla hii inalingana na hatua « Imewekwa ». Hatua za Imekubaliwa, Imerudishwa, Inayokosekana na Inayolipiwa zitapatikana mkataba wa seva ujao (C4) utakapotolewa.",
+    "loading": "Inapakia hati za usafirishaji…",
     "print": "Chapisha",
     "printError": "Imeshindwa kuchapisha",
     "saveError": "Imeshindwa kuhifadhi"
+  },
+  "previsions": {
+    "etapesLegende": "Hatua za mzunguko wa utabiri → usafirishaji",
+    "etapes": {
+      "prevu": {
+        "label": "Utabiri",
+        "description": "Kiasi alichotangaza mteja siku ya J kwa ajili ya usafirishaji siku ya J+1 (Msimamizi wa maagizo) — hakiathiri fedha wala deni."
+      },
+      "retenuProduction": {
+        "label": "Kimehifadhiwa kwa uzalishaji",
+        "description": "Kiasi kilichohifadhiwa kwa uzalishaji, kinaweza kutofautiana na kiasi kilichotangazwa (Uzalishaji)."
+      },
+      "prepare": {
+        "label": "Kimeandaliwa",
+        "description": "Kiasi kilichozalishwa kwa uhalisia, tayari kukabidhiwa kwa Ghala (Uzalishaji)."
+      },
+      "charge": {
+        "label": "Kimepakiwa",
+        "description": "Kiasi kilichokabidhiwa kwa dereva kwa ajili ya safari (Ghala) — hakithibitishi kuwa mteja amepokea."
+      },
+      "depose": {
+        "label": "Kimewekwa",
+        "description": "Kiasi kilichowekwa kwa mteja na dereva — fedha iliyobebwa bado haijapokelewa rasmi."
+      },
+      "enAttenteConfirmation": {
+        "label": "Inasubiri uthibitisho",
+        "description": "Kimewekwa, lakini bado hakijathibitishwa na mteja au mtu mwenye ruhusa."
+      },
+      "accepte": {
+        "label": "Imekubaliwa",
+        "description": "Kiasi kilichothibitishwa na mteja au mtu mwenye ruhusa — ndicho msingi pekee wa kulipiwa."
+      },
+      "retourne": {
+        "label": "Imerudishwa",
+        "description": "Kiasi kilichorudishwa, hakikubaliwa — kinabaki kuonekana, hakilipiwi kamwe."
+      },
+      "manquant": {
+        "label": "Inayokosekana",
+        "description": "Tofauti iliyobainika (hati haipo au haijarudishwa) — inabaki kuonekana, halipiwi kamwe."
+      },
+      "facturable": {
+        "label": "Inayolipiwa",
+        "description": "Ni kiasi kilichokubaliwa tu kinachokuwa agizo la kulipiwa, mkataba wa seva (C4) utakapopatikana."
+      }
+    }
   },
   "production": {
     "title": "Uzalishaji",

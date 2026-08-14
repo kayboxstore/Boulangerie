@@ -376,8 +376,16 @@ export function ProductionPage() {
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5 text-or" />
               {t("schemaCommande.title")}
+              {/* F4 round 1 : vocabulaire clarifié — ce Schéma EST le point
+                  d'entrée de la prévision (annoncée en J pour une livraison
+                  en J+1, voir schemaDate ci-dessous), sans que le mot
+                  « commande » ne laisse croire à un engagement financier. */}
+              <Badge variant="gold">{t("schemaCommande.previsionBadge")}</Badge>
             </CardTitle>
             <CardDescription>{t("schemaCommande.desc")}</CardDescription>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("schemaCommande.previsionRule")} · {t("schemaCommande.todayReference", { date: new Date().toLocaleDateString() })}
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="date-schema">{t("production.forDate")}</Label>

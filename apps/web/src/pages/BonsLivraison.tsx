@@ -3,16 +3,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Printer, Save, Truck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import type { BonLivraisonClientDTO, BonLivraisonJourDTO, ZoneDepositaireDTO } from "@lomoto/shared";
+import type { BonLivraisonClientDTO, BonLivraisonJourDTO, SchemaCommandeJourDTO, ZoneDepositaireDTO } from "@lomoto/shared";
 import { api, getToken } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CarteLigne, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
+import { EtatChargement, EtatErreur, EtatVide } from "@/components/ui/etats";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { EtapesCycleLivraison } from "@/components/previsions/EtapesCycleLivraison";
+import { calculerEcartQuantite } from "@/components/previsions/cycleLivraisonLogique";
 
 const jourISO = (d: Date) => d.toISOString().slice(0, 10);
 const nombre = (v: string) => (v.trim() === "" ? 0 : Number(v));
@@ -23,6 +28,31 @@ const cleChamp = (clientId: string, champ: string) => `${clientId}:${champ}`;
 function valeurChamp(editions: Record<string, string>, clientId: string, champ: string, valeurServeur: string): string {
   const cle = cleChamp(clientId, champ);
   return cle in editions ? editions[cle] : valeurServeur;
+}
+
+/**
+ * Écart par produit (F4 round 1) : rend l'écart lisible client PAR client ET
+ * PAR produit, en plus du total déjà fourni par le serveur. `prevu` vient du
+ * Schéma de commande de la même date (lecture seule, aucun auto-remplissage).
+ * N'affiche rien tant que le Schéma n'est pas chargé, pour ne jamais laisser
+ * croire à un écart nul par défaut de données.
+ */
+function EcartProduit({ prevu, livre, schemaChargee, t }: { prevu: number; livre: number; schemaChargee: boolean; t: (k: string, o?: Record<string, unknown>) => string }) {
+  if (!schemaChargee) return null;
+  const ecart = calculerEcartQuantite({ quantitePrevue: prevu, quantiteConstatee: livre });
+  if (ecart === 0) return null;
+  return (
+    <span
+      className={cn(
+        "ml-1 inline-block text-[10px] font-semibold",
+        ecart > 0 ? "text-or dark:text-or" : "text-terracotta",
+      )}
+      title={t("bonsLivraison.gapProductTooltip", { prevu, livre })}
+      aria-label={t("bonsLivraison.gapProductTooltip", { prevu, livre })}
+    >
+      {ecart > 0 ? `+${ecart}` : ecart}
+    </span>
+  );
 }
 
 /**
@@ -40,7 +70,13 @@ export function BonsLivraisonPage() {
   const editable = peutEcrire("PRODUCTION");
 
   const [date, setDate] = useState(jourISO(new Date()));
-  const { data: jourData } = useQuery({
+  const {
+    data: jourData,
+    isLoading: chargementJour,
+    isError: erreurJourQuery,
+    error: erreurJourDetail,
+    refetch: rechargerJour,
+  } = useQuery({
     queryKey: ["bons-livraison", date],
     queryFn: () => api<BonLivraisonJourDTO>(`/api/production/bons-livraison?date=${date}`),
   });
@@ -49,6 +85,26 @@ export function BonsLivraisonPage() {
     queryFn: () => api<{ zones: ZoneDepositaireDTO[] }>("/api/zones-depositaires"),
   });
   const zones = zonesData?.zones ?? [];
+
+  // Réutilise le Schéma de commande (même endpoint que Production.tsx, F4
+  // round 1 — aucune route inventée) pour rendre l'écart lisible PAR CLIENT
+  // ET PAR PRODUIT, en plus de l'écart total déjà fourni par le serveur
+  // (`c.totalCommande`). Saisie du Bon de livraison volontairement
+  // indépendante malgré cette lecture : rien n'est jamais pré-rempli à partir
+  // du Schéma ici.
+  const { data: schemaData } = useQuery({
+    queryKey: ["schema-commande", date],
+    queryFn: () => api<SchemaCommandeJourDTO>(`/api/production/schema-commande?date=${date}`),
+  });
+  const prevuParClientProduit = useMemo(() => {
+    const carte = new Map<string, number>();
+    for (const c of schemaData?.clients ?? []) {
+      for (const l of c.lignes) {
+        carte.set(`${c.clientId}:${l.produitId}`, l.quantite);
+      }
+    }
+    return carte;
+  }, [schemaData]);
 
   const [editions, setEditions] = useState<Record<string, string>>({});
   const [erreur, setErreur] = useState<string | null>(null);
@@ -179,12 +235,30 @@ export function BonsLivraisonPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {produitsLivraison.length === 0 ? (
-            <p className="py-6 text-center text-muted-foreground">{t("bonsLivraison.noProducts")}</p>
+          {/* Légende du cycle (F4 round 1) : rappelle que la quantité saisie ici
+              correspond à l'étape « Déposé », pas encore à une acceptation
+              client — les étapes suivantes attendent le contrat serveur C4. */}
+          <div className="rounded-lg border border-dashed p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("bonsLivraison.cycleLegendTitle")}
+            </p>
+            <EtapesCycleLivraison etapeActive="depose" className="mb-2" />
+            <p className="text-xs text-muted-foreground">{t("bonsLivraison.cyclePendingNote")}</p>
+          </div>
+
+          {chargementJour ? (
+            <EtatChargement message={t("bonsLivraison.loading")} />
+          ) : erreurJourQuery ? (
+            <EtatErreur
+              message={erreurJourDetail instanceof Error ? erreurJourDetail.message : undefined}
+              onReessayer={() => rechargerJour()}
+            />
+          ) : produitsLivraison.length === 0 ? (
+            <EtatVide description={t("bonsLivraison.noProducts")} />
           ) : (
             <>
               <div className="overflow-x-auto">
-                <Table>
+                <Table className="hidden md:table">
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t("bonsLivraison.colDepositaire")}</TableHead>
@@ -218,23 +292,35 @@ export function BonsLivraisonPage() {
                           return (
                             <TableRow key={c.clientId}>
                               <TableCell className="whitespace-nowrap font-medium">{c.clientNom}</TableCell>
-                              {c.lignes.map((l) => (
-                                <TableCell key={l.produitId} className="text-right">
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    disabled={!editable}
-                                    value={valeurChamp(editions, c.clientId, l.produitId, String(l.quantite || ""))}
-                                    onChange={(e) =>
-                                      setEditions((prev) => ({
-                                        ...prev,
-                                        [cleChamp(c.clientId, l.produitId)]: e.target.value,
-                                      }))
-                                    }
-                                    className="ml-auto w-16 text-right"
-                                  />
-                                </TableCell>
-                              ))}
+                              {c.lignes.map((l) => {
+                                const livreProduit = nombre(
+                                  valeurChamp(editions, c.clientId, l.produitId, String(l.quantite || "")),
+                                );
+                                const prevuProduit = prevuParClientProduit.get(`${c.clientId}:${l.produitId}`) ?? 0;
+                                return (
+                                  <TableCell key={l.produitId} className="text-right">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      disabled={!editable}
+                                      value={valeurChamp(editions, c.clientId, l.produitId, String(l.quantite || ""))}
+                                      onChange={(e) =>
+                                        setEditions((prev) => ({
+                                          ...prev,
+                                          [cleChamp(c.clientId, l.produitId)]: e.target.value,
+                                        }))
+                                      }
+                                      className="ml-auto w-16 text-right"
+                                    />
+                                    <EcartProduit
+                                      prevu={prevuProduit}
+                                      livre={livreProduit}
+                                      schemaChargee={schemaData !== undefined}
+                                      t={t}
+                                    />
+                                  </TableCell>
+                                );
+                              })}
                               <TableCell className="text-right font-semibold">
                                 {total}
                                 {total !== c.totalCommande && (
@@ -292,6 +378,117 @@ export function BonsLivraisonPage() {
                     )}
                   </TableBody>
                 </Table>
+              </div>
+
+              {/* Vue mobile (F4 round 1) : ce sous-module en manquait, à la
+                  différence des autres écrans de Production/Commandes. */}
+              <div className="space-y-4 md:hidden">
+                {groupesZones.map((groupe) => (
+                  <div key={groupe.id} className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{groupe.nom}</p>
+                    {groupe.clients.map((c) => {
+                      const total = c.lignes.reduce(
+                        (s, l) => s + nombre(valeurChamp(editions, c.clientId, l.produitId, String(l.quantite || ""))),
+                        0,
+                      );
+                      return (
+                        <CarteLigne key={c.clientId}>
+                          <CarteLigneTitre>
+                            <span>{c.clientNom}</span>
+                            <span className="flex items-center gap-1 font-semibold">
+                              {t("bonsLivraison.colTotal")} : {total}
+                              {total !== c.totalCommande && (
+                                <Badge
+                                  className="border-transparent bg-terracotta text-creme"
+                                  title={t("bonsLivraison.gapTooltip", { commande: c.totalCommande, livre: total })}
+                                >
+                                  {total - c.totalCommande > 0 ? `+${total - c.totalCommande}` : total - c.totalCommande}
+                                </Badge>
+                              )}
+                            </span>
+                          </CarteLigneTitre>
+                          {c.lignes.map((l) => {
+                            const livreProduit = nombre(valeurChamp(editions, c.clientId, l.produitId, String(l.quantite || "")));
+                            const prevuProduit = prevuParClientProduit.get(`${c.clientId}:${l.produitId}`) ?? 0;
+                            return (
+                              <CarteLigneChamp
+                                key={l.produitId}
+                                label={l.produitNom}
+                                value={
+                                  <span className="inline-flex items-center">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      disabled={!editable}
+                                      value={valeurChamp(editions, c.clientId, l.produitId, String(l.quantite || ""))}
+                                      onChange={(e) =>
+                                        setEditions((prev) => ({
+                                          ...prev,
+                                          [cleChamp(c.clientId, l.produitId)]: e.target.value,
+                                        }))
+                                      }
+                                      className="w-16 text-right"
+                                    />
+                                    <EcartProduit
+                                      prevu={prevuProduit}
+                                      livre={livreProduit}
+                                      schemaChargee={schemaData !== undefined}
+                                      t={t}
+                                    />
+                                  </span>
+                                }
+                              />
+                            );
+                          })}
+                          <CarteLigneChamp
+                            label={t("bonsLivraison.colEmptyCrates")}
+                            value={
+                              <Input
+                                type="number"
+                                min={0}
+                                disabled={!editable}
+                                value={valeurChamp(editions, c.clientId, "bacsVides", String(c.bacsVides || ""))}
+                                onChange={(e) =>
+                                  setEditions((prev) => ({ ...prev, [cleChamp(c.clientId, "bacsVides")]: e.target.value }))
+                                }
+                                className="w-16 text-right"
+                              />
+                            }
+                          />
+                          <CarteLigneChamp
+                            label={t("bonsLivraison.colDeliveredBy")}
+                            value={
+                              <Input
+                                disabled={!editable}
+                                value={valeurChamp(editions, c.clientId, "livrePar", c.livrePar ?? "")}
+                                onChange={(e) =>
+                                  setEditions((prev) => ({ ...prev, [cleChamp(c.clientId, "livrePar")]: e.target.value }))
+                                }
+                                className="w-32"
+                              />
+                            }
+                          />
+                          <CarteLigneChamp
+                            label={t("bonsLivraison.colObs")}
+                            value={
+                              <Input
+                                disabled={!editable}
+                                value={valeurChamp(editions, c.clientId, "observations", c.observations ?? "")}
+                                onChange={(e) =>
+                                  setEditions((prev) => ({ ...prev, [cleChamp(c.clientId, "observations")]: e.target.value }))
+                                }
+                                className="w-40"
+                              />
+                            }
+                          />
+                        </CarteLigne>
+                      );
+                    })}
+                  </div>
+                ))}
+                {groupesZones.length === 0 && (
+                  <p className="py-6 text-center text-sm text-muted-foreground">{t("bonsLivraison.noDepositaires")}</p>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-4 border-t pt-4 text-sm">

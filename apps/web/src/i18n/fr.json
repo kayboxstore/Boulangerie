@@ -493,7 +493,10 @@
     "noMamans": "Aucune Maman enregistrée.",
     "totalGeneral": "Total général : {{total}} bac(s)",
     "saveAndPlan": "Enregistrer et planifier",
-    "saveError": "Enregistrement impossible"
+    "saveError": "Enregistrement impossible",
+    "previsionBadge": "Prévision (J+1)",
+    "previsionRule": "Une prévision n'affecte ni la caisse ni la dette — seule une acceptation confirmée par le client sera facturable.",
+    "todayReference": "Aujourd'hui (J) : {{date}}"
   },
   "bonsLivraison": {
     "title": "Bons de livraison",
@@ -510,9 +513,58 @@
     "totalGeneral": "Total général : {{total}} bac(s)",
     "totalEmptyCrates": "{{total}} bac(s) vide(s) repris",
     "gapTooltip": "Commandé (Schéma de commande) : {{commande}} — Livré : {{livre}}",
+    "gapProductTooltip": "Prévu : {{prevu}} — Saisi : {{livre}}",
+    "cycleLegendTitle": "Où en est cette livraison ?",
+    "cyclePendingNote": "Ce total correspond à l'étape « Déposé ». Les étapes Accepté, Retourné, Manquant et Facturable seront disponibles avec le prochain contrat serveur (C4).",
+    "loading": "Chargement des bons de livraison…",
     "print": "Imprimer",
     "printError": "Impression impossible",
     "saveError": "Enregistrement impossible"
+  },
+  "previsions": {
+    "etapesLegende": "Étapes du cycle prévision → livraison",
+    "etapes": {
+      "prevu": {
+        "label": "Prévu",
+        "description": "Quantité annoncée par le client en J pour une livraison en J+1 (Chargé des commandes) — ne crée ni vente ni dette."
+      },
+      "retenuProduction": {
+        "label": "Retenu production",
+        "description": "Quantité retenue pour la production, éventuellement différente de la quantité annoncée (Production)."
+      },
+      "prepare": {
+        "label": "Préparé",
+        "description": "Quantité réellement produite, prête à être remise au Magasin (Production)."
+      },
+      "charge": {
+        "label": "Chargé",
+        "description": "Quantité remise au chauffeur pour la tournée (Magasin) — ne prouve pas la réception du client."
+      },
+      "depose": {
+        "label": "Déposé",
+        "description": "Quantité déposée chez le client par le chauffeur — le cash transporté n'est pas encore encaissé."
+      },
+      "enAttenteConfirmation": {
+        "label": "En attente de confirmation",
+        "description": "Dépôt effectué, mais pas encore confirmé par le client ou un rôle autorisé."
+      },
+      "accepte": {
+        "label": "Accepté",
+        "description": "Quantité confirmée par le client ou un rôle autorisé — seule base facturable."
+      },
+      "retourne": {
+        "label": "Retourné",
+        "description": "Quantité reprise, non acceptée — reste visible, jamais facturée."
+      },
+      "manquant": {
+        "label": "Manquant",
+        "description": "Écart constaté (bon absent ou non retourné) — reste visible, jamais facturé."
+      },
+      "facturable": {
+        "label": "Facturable",
+        "description": "Seule la quantité acceptée devient une commande facturable, une fois le contrat serveur (C4) disponible."
+      }
+    }
   },
   "production": {
     "title": "Production",
