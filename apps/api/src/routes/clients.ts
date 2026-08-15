@@ -10,6 +10,7 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { traiterActionCritique } from "../services/actionsCritiques.js";
+import { bornesJourLomoto, jourLomoto } from "../lib/temps.js";
 
 export const clientsRouter = Router();
 export const typeClientsRouter = Router();
@@ -17,15 +18,32 @@ export const typeClientsRouter = Router();
 clientsRouter.use(requireAuth);
 typeClientsRouter.use(requireAuth);
 
-const versClientDTO = (c: {
-  id: string;
-  nom: string;
-  telephone: string | null;
-  avanceDisponible: number;
-  typeClient: { id: string; nom: string; prixParBac: number; commissionParBac: number };
-  zoneDepositaireId: string | null;
-  zoneDepositaire: { nom: string } | null;
-}): ClientDTO => ({
+// Suivi commercial (section 3.5, Lot 7 pt 5) : nombre de jours écoulés
+// depuis la dernière commande, en jours Lomoto (comme joursDepuis pour
+// l'alerte dette, commandes.ts) — pas un simple écart de millisecondes.
+function joursDepuisDerniereCommande(derniereCommandeLe: Date | null): number | null {
+  if (!derniereCommandeLe) return null;
+  const [debutAujourdhui] = bornesJourLomoto();
+  return Math.max(
+    0,
+    Math.floor(
+      (debutAujourdhui.getTime() - bornesJourLomoto(jourLomoto(derniereCommandeLe))[0].getTime()) / 86_400_000,
+    ),
+  );
+}
+
+const versClientDTO = (
+  c: {
+    id: string;
+    nom: string;
+    telephone: string | null;
+    avanceDisponible: number;
+    typeClient: { id: string; nom: string; prixParBac: number; commissionParBac: number };
+    zoneDepositaireId: string | null;
+    zoneDepositaire: { nom: string } | null;
+  },
+  derniereCommandeLe: Date | null = null,
+): ClientDTO => ({
   id: c.id,
   nom: c.nom,
   telephone: c.telephone,
@@ -38,6 +56,8 @@ const versClientDTO = (c: {
   },
   zoneDepositaireId: c.zoneDepositaireId,
   zoneDepositaireNom: c.zoneDepositaire?.nom ?? null,
+  derniereCommandeLe: derniereCommandeLe?.toISOString() ?? null,
+  joursDepuisDerniereCommande: joursDepuisDerniereCommande(derniereCommandeLe),
 });
 
 const INCLUDE_CLIENT = { typeClient: true, zoneDepositaire: { select: { nom: true } } } as const;
@@ -133,11 +153,12 @@ typeClientsRouter.delete("/:id", ecritureParametres, async (req, res, next) => {
 
 clientsRouter.get("/", requirePermission("COMMANDES", "LECTURE"), async (_req, res, next) => {
   try {
-    const clients = await prisma.client.findMany({
-      include: INCLUDE_CLIENT,
-      orderBy: { nom: "asc" },
-    });
-    res.json({ clients: clients.map(versClientDTO) });
+    const [clients, dernieresCommandes] = await Promise.all([
+      prisma.client.findMany({ include: INCLUDE_CLIENT, orderBy: { nom: "asc" } }),
+      prisma.commandeClient.groupBy({ by: ["clientId"], _max: { dateCreation: true } }),
+    ]);
+    const derniereParClientId = new Map(dernieresCommandes.map((d) => [d.clientId, d._max.dateCreation]));
+    res.json({ clients: clients.map((c) => versClientDTO(c, derniereParClientId.get(c.id) ?? null)) });
   } catch (e) {
     next(e);
   }

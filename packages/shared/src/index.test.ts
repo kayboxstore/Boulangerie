@@ -6,6 +6,7 @@ import {
   calculerDepenseFarine,
   confirmerReglementsSchema,
   controleQualiteSchema,
+  estClientInactif,
   pertesJustifiees,
   sessionCaisseCorrectionSchema,
   sommeDeclarationsEnAttente,
@@ -68,6 +69,24 @@ describe("calculerCommission (section 3.11 — Lot 7 pt 6, figée à l'enregistr
 
   it("taux nul (Dépositaire/Vente cash) -> commission nulle", () => {
     expect(calculerCommission({ quantiteBacs: 20, commissionParBac: 0 })).toBe(0);
+  });
+});
+
+describe("estClientInactif (section 3.5 — Lot 7 pt 5, suivi commercial)", () => {
+  it("jamais commandé (null) -> inactif quel que soit le seuil", () => {
+    expect(estClientInactif(null, 30)).toBe(true);
+  });
+
+  it("dernière commande sous le seuil -> actif", () => {
+    expect(estClientInactif(15, 30)).toBe(false);
+  });
+
+  it("dernière commande exactement au seuil -> inactif (borne incluse)", () => {
+    expect(estClientInactif(30, 30)).toBe(true);
+  });
+
+  it("dernière commande au-delà du seuil -> inactif", () => {
+    expect(estClientInactif(45, 30)).toBe(true);
   });
 });
 

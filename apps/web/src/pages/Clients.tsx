@@ -4,7 +4,7 @@ import { ArrowLeft, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { DialogNouvelleZone } from "@/components/DialogNouvelleZone";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { formatFc, type ClientDTO, type TypeClientDTO, type ZoneDepositaireDTO } from "@lomoto/shared";
+import { estClientInactif, formatFc, type ClientDTO, type TypeClientDTO, type ZoneDepositaireDTO } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/components/FeedbackProvider";
@@ -24,6 +24,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+// Suivi commercial (section 3.5, Lot 7 pt 5) : un client sans commande depuis
+// ce nombre de jours (ou n'en ayant jamais passé) est signalé « inactif ».
+const SEUIL_INACTIF_JOURS = 30;
 
 /**
  * Sous-module de Commandes (3.4) : la fiche client (nom, téléphone, qualité,
@@ -51,12 +55,17 @@ export function ClientsPage() {
   });
 
   const [recherche, setRecherche] = useState("");
+  const [seulementInactifs, setSeulementInactifs] = useState(false);
   const clientsFiltres = useMemo(() => {
     const tous = clientsData?.clients ?? [];
     const terme = recherche.trim().toLowerCase();
-    if (!terme) return tous;
-    return tous.filter((c) => c.nom.toLowerCase().includes(terme));
-  }, [clientsData, recherche]);
+    let liste = terme ? tous.filter((c) => c.nom.toLowerCase().includes(terme)) : tous;
+    if (seulementInactifs) {
+      liste = liste.filter((c) => estClientInactif(c.joursDepuisDerniereCommande, SEUIL_INACTIF_JOURS));
+    }
+    return liste;
+  }, [clientsData, recherche, seulementInactifs]);
+  const filtreActif = recherche.trim().length > 0 || seulementInactifs;
 
   const [dialogClient, setDialogClient] = useState(false);
   const [clientEnEdition, setClientEnEdition] = useState<ClientDTO | null>(null);
@@ -169,14 +178,25 @@ export function ClientsPage() {
 
       <Card>
         <CardHeader>
-          <div className="w-full max-w-sm space-y-1.5">
-            <Label htmlFor="client-recherche">{t("commandes.searchClient")}</Label>
-            <Input
-              id="client-recherche"
-              value={recherche}
-              onChange={(e) => setRecherche(e.target.value)}
-              placeholder={t("commandes.searchClientPlaceholder")}
-            />
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="w-full max-w-sm space-y-1.5">
+              <Label htmlFor="client-recherche">{t("commandes.searchClient")}</Label>
+              <Input
+                id="client-recherche"
+                value={recherche}
+                onChange={(e) => setRecherche(e.target.value)}
+                placeholder={t("commandes.searchClientPlaceholder")}
+              />
+            </div>
+            <label className="flex items-center gap-2 pb-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[var(--or)]"
+                checked={seulementInactifs}
+                onChange={(e) => setSeulementInactifs(e.target.checked)}
+              />
+              {t("commandes.filterInactiveClients", { jours: SEUIL_INACTIF_JOURS })}
+            </label>
           </div>
         </CardHeader>
         <CardContent>
@@ -187,6 +207,7 @@ export function ClientsPage() {
                 <TableHead>{t("commandes.colPhone")}</TableHead>
                 <TableHead>{t("commandes.colQuality")}</TableHead>
                 <TableHead>{t("commandes.colZone")}</TableHead>
+                <TableHead>{t("commandes.colLastOrder")}</TableHead>
                 <TableHead className="text-right">{t("commandes.colAdvance")}</TableHead>
                 {editable && <TableHead className="w-24 text-right">{t("common.actions")}</TableHead>}
               </TableRow>
@@ -200,6 +221,17 @@ export function ClientsPage() {
                     <Badge variant="secondary">{c.typeClient.nom}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{c.zoneDepositaireNom ?? "—"}</TableCell>
+                  <TableCell>
+                    {estClientInactif(c.joursDepuisDerniereCommande, SEUIL_INACTIF_JOURS) ? (
+                      <Badge variant="destructive">
+                        {c.derniereCommandeLe
+                          ? t("commandes.inactiveSince", { count: c.joursDepuisDerniereCommande })
+                          : t("commandes.neverOrdered")}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">{new Date(c.derniereCommandeLe!).toLocaleDateString()}</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     {c.avanceDisponible > 0 ? (
                       <Badge variant="gold">{formatFc(c.avanceDisponible)}</Badge>
@@ -235,8 +267,8 @@ export function ClientsPage() {
               ))}
               {clientsFiltres.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={editable ? 6 : 5} className="py-8 text-center text-muted-foreground">
-                    {recherche ? t("commandes.noClientsFiltered") : t("commandes.noClients")}
+                  <TableCell colSpan={editable ? 7 : 6} className="py-8 text-center text-muted-foreground">
+                    {filtreActif ? t("commandes.noClientsFiltered") : t("commandes.noClients")}
                   </TableCell>
                 </TableRow>
               )}
@@ -252,6 +284,20 @@ export function ClientsPage() {
                 </CarteLigneTitre>
                 <CarteLigneChamp label={t("commandes.colPhone")} value={c.telephone ?? "—"} />
                 {c.zoneDepositaireNom && <CarteLigneChamp label={t("commandes.colZone")} value={c.zoneDepositaireNom} />}
+                <CarteLigneChamp
+                  label={t("commandes.colLastOrder")}
+                  value={
+                    estClientInactif(c.joursDepuisDerniereCommande, SEUIL_INACTIF_JOURS) ? (
+                      <Badge variant="destructive">
+                        {c.derniereCommandeLe
+                          ? t("commandes.inactiveSince", { count: c.joursDepuisDerniereCommande })
+                          : t("commandes.neverOrdered")}
+                      </Badge>
+                    ) : (
+                      new Date(c.derniereCommandeLe!).toLocaleDateString()
+                    )
+                  }
+                />
                 {c.avanceDisponible > 0 && (
                   <CarteLigneChamp label={t("commandes.colAdvance")} value={<Badge variant="gold">{formatFc(c.avanceDisponible)}</Badge>} />
                 )}
@@ -276,7 +322,7 @@ export function ClientsPage() {
             ))}
             {clientsFiltres.length === 0 && (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                {recherche ? t("commandes.noClientsFiltered") : t("commandes.noClients")}
+                {filtreActif ? t("commandes.noClientsFiltered") : t("commandes.noClients")}
               </p>
             )}
           </div>
