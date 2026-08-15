@@ -176,10 +176,12 @@ commandesRouter.get("/livraisons-du-jour", requirePermission("COMMANDES", "LECTU
 });
 
 /**
- * Alerte « dette non payée » (section 3.4) — vérification PARESSEUSE, sans
- * tâche planifiée : elle tourne au chargement de l'app pour les rôles ayant
- * accès à Commandes, sur le même principe que l'expiration des délégations
- * (évaluée à la date plutôt que par un cron).
+ * Alerte « dette non payée » (section 3.4) — vérification PARESSEUSE : elle
+ * tourne au chargement de l'app pour les rôles ayant accès à Commandes, sur
+ * le même principe que l'expiration des délégations (évaluée à la date
+ * plutôt que par un cron). Exportée pour être aussi rejouée par le balayage
+ * périodique (`services/planificateurAlertes.ts`, Lot 7 pt 2) — un filet de
+ * sécurité pour les commandes en dette qu'aucun écran n'a rouvertes.
  *
  * Sont concernées les commandes créées AVANT aujourd'hui dont la dette reste
  * ouverte. La notification part une seule fois par commande : `updateMany`
@@ -190,7 +192,7 @@ commandesRouter.get("/livraisons-du-jour", requirePermission("COMMANDES", "LECTU
  * les rôles ayant lecture sur Commandes — Chargé des commandes, Caissier(ère)
  * et DG.
  */
-async function verifierAlertesDette(): Promise<void> {
+export async function verifierAlertesDette(): Promise<void> {
   const [debutAujourdhui] = bornesJourLomoto();
 
   const enRetard = await prisma.commandeClient.findMany({
