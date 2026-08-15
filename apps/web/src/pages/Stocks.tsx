@@ -19,6 +19,8 @@ import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select";
+import { BarreExport } from "@/components/BarreExport";
+import type { SectionCSV } from "@/lib/csv";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +56,23 @@ export function StocksPage() {
 
   const matieres = matieresData?.matieres ?? [];
   const sousSeuil = matieres.filter((m) => m.sousSeuil);
+
+  /** Sections du document exporté (impression, PDF, email). */
+  function construireSections(): SectionCSV[] {
+    return [
+      {
+        titre: t("stocks.matieresTitle"),
+        entetes: [t("stocks.colMatiere"), t("stocks.colUnit"), t("stocks.colInStock"), t("stocks.colThreshold"), t("stocks.colState")],
+        lignes: matieres.map((m) => [
+          m.nom,
+          m.unite,
+          formatQuantite(m.quantiteStock, m.unite),
+          formatQuantite(m.seuilAlerte, m.unite),
+          m.sousSeuil ? t("stocks.belowThreshold") : t("stocks.ok"),
+        ]),
+      },
+    ];
+  }
 
   const rafraichir = () => {
     queryClient.invalidateQueries({ queryKey: ["matieres"] });
@@ -146,22 +165,29 @@ export function StocksPage() {
           <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("stocks.title")}</h1>
           <p className="mt-1 text-muted-foreground">{t("stocks.subtitle")}</p>
         </div>
-        {editable && (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => ouvrirMouvement("ENTREE")} disabled={matieres.length === 0}>
-              <ArrowDownToLine className="h-4 w-4" />
-              {t("mouvement.ENTREE")}
-            </Button>
-            <Button variant="outline" onClick={() => ouvrirMouvement("SORTIE")} disabled={matieres.length === 0}>
-              <ArrowUpFromLine className="h-4 w-4" />
-              {t("mouvement.SORTIE")}
-            </Button>
-            <Button variant="cta" onClick={() => ouvrirMatiere(null)}>
-              <Plus className="h-4 w-4" />
-              {t("stocks.matiere")}
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <BarreExport
+            titre={t("stocks.title")}
+            modules={["STOCKS"]}
+            construireSections={construireSections}
+          />
+          {editable && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => ouvrirMouvement("ENTREE")} disabled={matieres.length === 0}>
+                <ArrowDownToLine className="h-4 w-4" />
+                {t("mouvement.ENTREE")}
+              </Button>
+              <Button variant="outline" onClick={() => ouvrirMouvement("SORTIE")} disabled={matieres.length === 0}>
+                <ArrowUpFromLine className="h-4 w-4" />
+                {t("mouvement.SORTIE")}
+              </Button>
+              <Button variant="cta" onClick={() => ouvrirMatiere(null)}>
+                <Plus className="h-4 w-4" />
+                {t("stocks.matiere")}
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       {sousSeuil.length > 0 && (

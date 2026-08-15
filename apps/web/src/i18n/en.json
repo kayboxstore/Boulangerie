@@ -342,6 +342,7 @@
     "expensesDesc": "Entered by the Cashier, plus the calculated flour expense.",
     "addExpense": "Add an expense",
     "colReason": "Reason",
+    "colItem": "Item",
     "colRecordedBy": "Recorded by",
     "noExpense": "No expenses on this date.",
     "autoBadge": "auto",
