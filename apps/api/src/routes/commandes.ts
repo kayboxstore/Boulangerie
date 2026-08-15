@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import {
   avanceAvantCommande,
   calculerCommande,
+  calculerCommission,
   commandeCreateSchema,
   dateISOSchema,
   formatFc,
@@ -351,6 +352,7 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
               clientId: client.id,
               quantiteBacs,
               montantBrut: calcul.montantBrut,
+              commission: calculerCommission({ quantiteBacs, commissionParBac: client.typeClient.commissionParBac }),
               avanceUtilisee: calcul.avanceUtilisee,
               montantAPercevoir: calcul.montantAPercevoir,
               montantRecu,
@@ -403,6 +405,10 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
           data: {
             quantiteBacs: totaux.quantiteBacs,
             montantBrut: calcul.montantBrut,
+            commission: calculerCommission({
+              quantiteBacs: totaux.quantiteBacs,
+              commissionParBac: client.typeClient.commissionParBac,
+            }),
             avanceUtilisee: calcul.avanceUtilisee,
             montantAPercevoir: calcul.montantAPercevoir,
             montantRecu: totaux.montantRecu,

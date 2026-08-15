@@ -384,6 +384,12 @@ circuit de notification temps réel à l'enregistrement d'une production.
 - **Vente cash (VC)** : prix par bac 4.350 Fc, pas de commission (**confirmé — 0 Fc**)
 - **Mamans** : prix par bac 6.000 Fc, commission de 1.650 Fc/bac (27,5 %)
 
+Le prix par bac **et** la commission par bac sont tous deux **figés au moment
+de l'enregistrement de la commande** (champ 6 ci-dessous, et 3.11) : modifier
+ensuite le taux d'une Qualité dans les Paramètres n'affecte que les commandes
+**futures** — jamais l'historique déjà enregistré, même si le client change
+ensuite de Qualité (Lot 7 pt 6).
+
 Un client de qualité **Dépositaire** peut en outre être rattaché à une **zone
 de dépôt** (`zoneDepositaireId`, optionnel) — champ géré ici, mais consommé
 côté Production pour grouper l'affichage du Schéma de commande (3.3 d).
@@ -558,7 +564,7 @@ Quand un événement clé est enregistré (nouvelle commande client, règlement 
 *L'**alerte transaction inhabituelle** (seuil configurable, notification dédiée au DG) est **retirée** avec la refonte de la Caisse (3.1) : plus de seuil en Paramètres, plus de notification de ce type.*
 
 ### 3.11 Commissions
-Vue dédiée aux commandes de type **Maman** (les seules à générer une commission). Calcul **automatique** — aucune saisie manuelle. Visible en lecture seule par le Caissier(ère), le Chargé des commandes et le DG.
+Vue dédiée aux commandes dont la commission a été générée (les « Mamans », les seules à en générer une). Calcul **automatique** — aucune saisie manuelle. Visible en lecture seule par le Caissier(ère), le Chargé des commandes et le DG.
 
 **Champs :**
 | # | Champ | Calcul |
@@ -568,7 +574,7 @@ Vue dédiée aux commandes de type **Maman** (les seules à générer une commis
 | 3 | Nom du client | — |
 | 4 | Nombre de bacs reçus | — |
 | 5 | Montant total payé | Si Dette de la commande = 0 → `bacs × prix unitaire` (brut, considéré payé à 100% même si une partie vient de l'avance) ; sinon → `Montant reçu` (le montant partiel effectivement remis) |
-| 6 | Commission disponible | `bacs × 1.650 Fc` |
+| 6 | Commission disponible | `bacs × taux de commission en vigueur à l'enregistrement de la commande` (1.650 Fc/bac aujourd'hui pour les Mamans) — **figée** sur la commande elle-même (Lot 7 pt 6) : un changement ultérieur du taux dans les Paramètres, ou un changement de Qualité du client, ne modifie jamais la commission déjà affichée ici |
 
 **Filtres & affichage :** tri/filtre par date, bouton "Tout afficher".
 
@@ -730,7 +736,7 @@ Fournisseur (id, nom, contact)
 CommandeFournisseur (id, fournisseurId, statut, date)
 LigneCommandeFournisseur (commandeId, matierePremiereId, quantité, prixUnitaire)
 Client (id, nom, téléphone, typeClientId, avanceDisponible, pointsFidélité)   # avanceDisponible = solde reporté d'une commande à l'autre
-CommandeClient (id, numero, clientId, quantitéBacs, montantBrut, avanceUtilisee, montantAPercevoir, montantRecu, dette, avanceGeneree, statut, dateRetrait, créePar)
+CommandeClient (id, numero, clientId, quantitéBacs, montantBrut, commission, avanceUtilisee, montantAPercevoir, montantRecu, dette, avanceGeneree, statut, dateRetrait, créePar)   # commission figée au taux TypeClient.commissionParBac en vigueur à l'enregistrement (3.11, Lot 7 pt 6) — jamais recalculée après coup
 PaiementCommande (id, commandeClientId, montant, date, enregistrePar, statut, remiseCaisse?, confirmeLe?, confirmePar?)   # statut: declare | confirme (3.1 pt 4) — seule la confirmation réduit la dette
 Vente (…)          # ORPHELINE — vente au comptoir retirée (refonte 3.1)
 LigneVente (…)     # ORPHELINE — idem

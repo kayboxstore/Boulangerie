@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import {
   aAcces,
   calculerCommande,
+  calculerCommission,
 } from "@lomoto/shared";
 import {
   anomalieCycleCreateSchema,
@@ -331,6 +332,10 @@ export async function appliquerTransition(
           clientId: client.id,
           quantiteBacs: totalAccepte,
           montantBrut: calcul.montantBrut,
+          commission: calculerCommission({
+            quantiteBacs: totalAccepte,
+            commissionParBac: client.typeClient.commissionParBac,
+          }),
           avanceUtilisee: calcul.avanceUtilisee,
           montantAPercevoir: calcul.montantAPercevoir,
           montantRecu: 0,

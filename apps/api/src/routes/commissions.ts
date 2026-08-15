@@ -10,7 +10,11 @@ export const commissionsRouter = Router();
 commissionsRouter.use(requireAuth);
 
 // Module Commissions (section 3.11) : vue dérivée des commandes dont la
-// qualité du client génère une commission (> 0 Fc/bac — les « Mamans »).
+// commission a été générée (> 0 Fc/bac — les « Mamans »). La commission est
+// figée sur CommandeClient au taux en vigueur au moment de l'enregistrement
+// (Lot 7 pt 6) : filtrer/afficher cette valeur, jamais le taux courant du
+// TypeClient, pour ne pas réécrire rétroactivement l'historique si le taux
+// change ensuite ou si le client est reclassé dans une autre Qualité.
 // Lecture seule : Caissier(ère) et DG via la matrice de permissions.
 commissionsRouter.get("/", requirePermission("COMMISSIONS", "LECTURE"), async (req, res, next) => {
   try {
@@ -32,11 +36,11 @@ commissionsRouter.get("/", requirePermission("COMMISSIONS", "LECTURE"), async (r
 
     const commandes = await prisma.commandeClient.findMany({
       where: {
-        client: { typeClient: { commissionParBac: { gt: 0 } } },
+        commission: { gt: 0 },
         ...(du || au ? { dateCreation } : {}),
       },
       include: {
-        client: { select: { nom: true, typeClient: { select: { commissionParBac: true } } } },
+        client: { select: { nom: true } },
       },
       orderBy: { numero: "desc" },
     });
@@ -48,7 +52,7 @@ commissionsRouter.get("/", requirePermission("COMMISSIONS", "LECTURE"), async (r
       clientNom: c.client.nom,
       quantiteBacs: c.quantiteBacs,
       montantTotalPaye: montantTotalPaye(c),
-      commission: c.quantiteBacs * c.client.typeClient.commissionParBac,
+      commission: c.commission,
     }));
 
     res.json({

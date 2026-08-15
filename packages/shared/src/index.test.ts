@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aAcces,
   calculerCommande,
+  calculerCommission,
   calculerDepenseFarine,
   confirmerReglementsSchema,
   controleQualiteSchema,
@@ -57,6 +58,16 @@ describe("calculerCommande (section 3.4)", () => {
     expect(r.dette).toBe(0);
     expect(r.avanceGeneree).toBe(650);
     expect(r.nouvelleAvance).toBe(650);
+  });
+});
+
+describe("calculerCommission (section 3.11 — Lot 7 pt 6, figée à l'enregistrement)", () => {
+  it("multiplie la quantité de bacs par le taux au moment de l'enregistrement", () => {
+    expect(calculerCommission({ quantiteBacs: 10, commissionParBac: 1650 })).toBe(16500);
+  });
+
+  it("taux nul (Dépositaire/Vente cash) -> commission nulle", () => {
+    expect(calculerCommission({ quantiteBacs: 20, commissionParBac: 0 })).toBe(0);
   });
 });
 
