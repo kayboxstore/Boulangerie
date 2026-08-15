@@ -1059,6 +1059,7 @@
     "paramsComingSoon": "Mipangilio (inakuja)",
     "closureSummary": "Muhtasari wa kufunga siku — {{date}}",
     "closureSummaryDesc": "Muonekano wa muhtasari wa siku, pamoja na vidirisha vya wakati halisi.",
+    "closureSummaryDate": "Siku inayoangaliwa",
     "kpiDebts": "Madeni yaliyopo",
     "kpiStockAlerts": "Tahadhari za hisa zinazofanya kazi",
     "ordersClientDetail": "Maagizo {{count}} ya wateja",

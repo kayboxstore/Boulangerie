@@ -46,6 +46,9 @@ import { BarreExport } from "@/components/BarreExport";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { dateISOKinshasa } from "@/lib/dateKinshasa";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { IndicateurConnexion } from "@/components/IndicateurConnexion";
 import { cn } from "@/lib/utils";
@@ -147,6 +150,12 @@ export function DashboardPage() {
   // RAPPORTS : DG + les deux niveaux d'Admin depuis la refonte de la section 2.
   const litRapports = peutLire("RAPPORTS");
 
+  // Jour consulté pour le résumé de clôture — par défaut aujourd'hui, mais
+  // consultable pour un jour déjà passé (Lot 7 pt 1 : rapport quotidien, pas
+  // seulement celui du jour courant).
+  const aujourdhui = useMemo(() => dateISOKinshasa(new Date()), []);
+  const [dateCloture, setDateCloture] = useState(aujourdhui);
+
   const { data: caisse } = useQuery({
     queryKey: ["rapports", "caisse"],
     queryFn: () => api<RapportCaisseDTO>("/api/rapports/caisse"),
@@ -183,8 +192,8 @@ export function DashboardPage() {
     enabled: litTravailleurs,
   });
   const { data: cloture } = useQuery({
-    queryKey: ["rapports", "cloture"],
-    queryFn: () => api<ResumeClotureDTO>("/api/rapports/cloture-quotidienne"),
+    queryKey: ["rapports", "cloture", dateCloture],
+    queryFn: () => api<ResumeClotureDTO>(`/api/rapports/cloture-quotidienne?date=${dateCloture}`),
     enabled: litRapports,
   });
 
@@ -340,12 +349,28 @@ export function DashboardPage() {
       </div>
 
       {/* Résumé de clôture quotidien — DG et les deux niveaux d'Admin (3.8) */}
-      {cloture && (
+      {litRapports && (
         <Card className="border-or/40">
-          <CardHeader>
-            <TitreWidget icone={FileBarChart}>{t("dashboard.closureSummary", { date: formatDateCourte(cloture.date) })}</TitreWidget>
-            <CardDescription>{t("dashboard.closureSummaryDesc")}</CardDescription>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <TitreWidget icone={FileBarChart}>{t("dashboard.closureSummary", { date: cloture ? formatDateCourte(cloture.date) : "" })}</TitreWidget>
+              <CardDescription>{t("dashboard.closureSummaryDesc")}</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="dashboard-date-cloture" className="text-sm text-muted-foreground whitespace-nowrap">
+                {t("dashboard.closureSummaryDate")}
+              </Label>
+              <Input
+                id="dashboard-date-cloture"
+                type="date"
+                value={dateCloture}
+                max={aujourdhui}
+                onChange={(e) => setDateCloture(e.target.value || aujourdhui)}
+                className="w-auto"
+              />
+            </div>
           </CardHeader>
+          {cloture && (
           <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <CarteKPI titre={t("dashboard.kpiBalanceDay")} valeur={cloture.soldeJour} format={formatFc} accent alerteSiNegatif />
             <CarteKPI
@@ -357,6 +382,7 @@ export function DashboardPage() {
             <CarteKPI titre={t("dashboard.kpiDebts")} valeur={cloture.dettesEnCours.total} format={formatFc} detail={t("dashboard.debtsDetail", { count: cloture.dettesEnCours.nombre })} />
             <CarteKPI titre={t("dashboard.kpiStockAlerts")} valeur={cloture.alertesStock.length} detail={cloture.alertesStock.map((a) => a.nom).join(", ") || t("dashboard.none")} />
           </CardContent>
+          )}
         </Card>
       )}
 

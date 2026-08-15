@@ -1059,6 +1059,7 @@
     "paramsComingSoon": "Ebongiseli (ekoya)",
     "closureSummary": "Bokuse ya bokangi — {{date}}",
     "closureSummaryDesc": "Etaleli ya bokuse ya mokolo, elongo na ba-widget ya tango ya solo.",
+    "closureSummaryDate": "Mokolo oyo ozali kotala",
     "kpiDebts": "Banyongo ezali",
     "kpiStockAlerts": "Ba-alarme ya stɔki ezali",
     "ordersClientDetail": "bakomande ya bakiliya {{count}}",
