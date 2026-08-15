@@ -1058,6 +1058,7 @@
     "paramsComingSoon": "Paramètres (à venir)",
     "closureSummary": "Résumé de clôture — {{date}}",
     "closureSummaryDesc": "Vue de synthèse du jour, en plus des widgets temps réel.",
+    "closureSummaryDate": "Jour consulté",
     "kpiDebts": "Dettes en cours",
     "kpiStockAlerts": "Alertes stock actives",
     "ordersClientDetail": "{{count}} commande(s) client",

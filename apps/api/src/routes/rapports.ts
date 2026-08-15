@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
+import { dateISOSchema } from "@lomoto/shared";
 import type {
   RapportCaisseDTO,
   RapportCommandesDTO,
@@ -13,6 +14,7 @@ import type {
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { bornesJourLomoto, jourLomoto } from "../lib/temps.js";
 
 export const rapportsRouter = Router();
 
@@ -60,9 +62,14 @@ async function alertesStock() {
  * non-double-comptage que le registre : les entrées ne retiennent que l'argent
  * versé à la création des commandes, les règlements étant comptés à part.
  */
-async function registreSur(depuis: Date) {
+async function registreSur(depuis: Date, jusqua?: Date) {
+  const dateCreation: Prisma.DateTimeFilter = { gte: depuis };
+  if (jusqua) dateCreation.lte = jusqua;
+  const dateFiltre: Prisma.DateTimeFilter = { gte: depuis };
+  if (jusqua) dateFiltre.lte = jusqua;
+
   const commandes = await prisma.commandeClient.findMany({
-    where: { dateCreation: { gte: depuis } },
+    where: { dateCreation },
     select: { montantRecu: true, reglements: { select: { montant: true } } },
   });
   const entrees = commandes.reduce((somme, c) => {
@@ -71,11 +78,11 @@ async function registreSur(depuis: Date) {
   }, 0);
 
   const aggReglements = await prisma.paiementCommande.aggregate({
-    where: { date: { gte: depuis } },
+    where: { date: dateFiltre },
     _sum: { montant: true },
   });
   const aggDepenses = await prisma.depenseCaisse.aggregate({
-    where: { date: { gte: depuis } },
+    where: { date: dateFiltre },
     _sum: { montant: true },
   });
 
@@ -307,17 +314,28 @@ rapportsRouter.get("/travailleurs", requirePermission("TRAVAILLEURS", "LECTURE")
 // Réservé au DG via la matrice : seul son rôle a la lecture sur RAPPORTS
 // (les Admins n'ont aucune permission métier — leur équivalent est l'État
 // système, 3.15).
+//
+// ?date= optionnel (AAAA-MM-JJ, jour civil Africa/Kinshasa), sinon aujourd'hui
+// (Lot 7 pt 1) : permet au DG de consulter le résumé d'un jour déjà passé, pas
+// seulement celui du jour courant — même convention que /livraisons-du-jour.
 
-rapportsRouter.get("/cloture-quotidienne", requirePermission("RAPPORTS", "LECTURE"), async (_req, res, next) => {
+rapportsRouter.get("/cloture-quotidienne", requirePermission("RAPPORTS", "LECTURE"), async (req, res, next) => {
   try {
+    const { date } = req.query as Record<string, string | undefined>;
+    if (date && !dateISOSchema.safeParse(date).success) {
+      return res.status(400).json({ erreur: "Date invalide (AAAA-MM-JJ)" });
+    }
+    const dateStr = date ?? jourLomoto();
+    const [debut, fin] = bornesJourLomoto(dateStr);
+
     // Le résumé reflète désormais le registre de caisse (3.1), plus le CA issu
     // des ventes, qui n'existent plus.
-    const registre = await registreSur(debutJour());
+    const registre = await registreSur(debut, fin);
     const nbCommandesJour = await prisma.commandeClient.count({
-      where: { dateCreation: { gte: debutJour() } },
+      where: { dateCreation: { gte: debut, lte: fin } },
     });
     const dto: ResumeClotureDTO = {
-      date: new Date().toISOString().slice(0, 10),
+      date: dateStr,
       entreesJour: registre.entrees,
       dettesPayeesJour: registre.dettesPayees,
       depensesJour: registre.depenses,

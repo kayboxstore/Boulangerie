@@ -1058,6 +1058,7 @@
     "paramsComingSoon": "Settings (coming soon)",
     "closureSummary": "Closing summary — {{date}}",
     "closureSummaryDesc": "Summary view of the day, in addition to the real-time widgets.",
+    "closureSummaryDate": "Day viewed",
     "kpiDebts": "Debts outstanding",
     "kpiStockAlerts": "Active stock alerts",
     "ordersClientDetail": "{{count}} customer order(s)",
