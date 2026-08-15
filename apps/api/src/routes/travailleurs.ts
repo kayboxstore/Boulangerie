@@ -549,8 +549,12 @@ const debutAujourdhui = (): Date => {
  * Concernées : les absences déclarées avant aujourd'hui, encore EN_ATTENTE.
  * Événement SYSTÈME (aucun émetteur humain), restreint aux Admins (secondaire
  * + Principal) — pas le DG, qui a pourtant lecture sur Travailleurs.
+ *
+ * Exportée pour être aussi rejouée par le balayage périodique
+ * (`services/planificateurAlertes.ts`, Lot 7 pt 2) — un filet de sécurité
+ * pour les absences qu'aucun écran n'a rouvertes.
  */
-async function verifierAlertesAbsenceEnAttente(): Promise<void> {
+export async function verifierAlertesAbsenceEnAttente(): Promise<void> {
   const debut = debutAujourdhui();
 
   const enAttente = await prisma.absence.findMany({

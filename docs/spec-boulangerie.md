@@ -201,6 +201,27 @@ CONFIRME) est un `update`, donc également tracée sans code dédié.
 ### 3.2 Stocks & matières premières
 Suivi des quantités (farine, beurre, sucre, etc.), mouvements de stock (entrée/sortie), seuils d'alerte, historique.
 
+**Alerte seuil — couverture du cas « seuil relevé sans mouvement »** (Lot 7
+pt 2) : le franchissement du seuil est détecté en priorité au moment du
+mouvement de stock qui le provoque (entrée/sortie, y compris via la
+production, 3.3c). Mais relever manuellement le seuil d'alerte d'une matière
+(sans toucher au stock lui-même) peut aussi la faire passer sous le nouveau
+seuil, sans qu'aucun mouvement n'ait eu lieu — ce cas est désormais couvert
+par une vérification paresseuse, rejouée à l'ouverture de l'écran Stocks,
+juste après la modification du seuil, et par le même balayage périodique
+que les alertes dette/absence (toutes les 30 minutes par défaut,
+`ALERTES_CRON`). L'alerte ne part qu'une fois par passage sous le seuil
+(compare-and-set sur `alerteSeuilEnvoyeeLe`, remis à zéro dès que le stock
+repasse au-dessus) — même logique que l'alerte dette non payée (3.4).
+
+*Hors périmètre (Lot 7 pt 2)* : une « alerte de retard de tournée/livraison »
+a été envisagée dans l'audit initial du Lot 7, mais rien dans le modèle
+actuel ne porte de durée attendue pour une tournée (aucun champ, aucun
+Paramètre) — l'introduire supposerait d'inventer un nouveau seuil métier
+sans précédent existant à réutiliser, contrairement au seuil de stock ou à
+la dette non payée qui existaient déjà. Ce point reste ouvert, à trancher
+avec Augustin avant toute implémentation.
+
 ### 3.3 Production *(refonte — les fiches recettes sont retirées)*
 
 Les **fiches recettes** (ingrédients + quantités par produit) et la décrémentation
@@ -488,7 +509,7 @@ Caissier(ère) et DG en lecture) :
 - Nombre de commandes soldées (dette = 0) vs avec dette en cours
 - Total des dettes du jour
 
-**Alerte dette non payée** (nouveau, ponctuelle) : pour toute commande avec dette > 0, une alerte se déclenche une seule fois, le jour suivant sa création (ou à la première ouverture après ce jour si personne ne s'est connecté entre-temps) — jamais répétée pour la même commande une fois envoyée. Reçue par le Chargé des commandes et le Caissier(ère) (règle standard : tous les rôles ayant lecture sur Commandes), à la fois dans la cloche de notifications temps réel et affichée dans le module Commandes.
+**Alerte dette non payée** (nouveau, ponctuelle) : pour toute commande avec dette > 0, une alerte se déclenche une seule fois, le jour suivant sa création (ou à la première ouverture après ce jour si personne ne s'est connecté entre-temps) — jamais répétée pour la même commande une fois envoyée. Reçue par le Chargé des commandes et le Caissier(ère) (règle standard : tous les rôles ayant lecture sur Commandes), à la fois dans la cloche de notifications temps réel et affichée dans le module Commandes. *En plus du déclenchement à l'ouverture d'écran, un balayage périodique (toutes les 30 minutes par défaut, `ALERTES_CRON`) rejoue cette vérification côté serveur — filet de sécurité pour qu'une dette en retard ne reste jamais silencieuse simplement parce que personne n'a rouvert Commandes (Lot 7 pt 2).*
 
 **Règlement d'une dette (ajout suite retour d'expérience Phase 3)** : une commande avec Dette > 0 peut recevoir un ou plusieurs paiements ultérieurs. Chaque règlement :
 - Écriture réservée au **Chargé des commandes** (seul rôle en écriture sur Commandes)
@@ -633,7 +654,7 @@ Roster du personnel, plus large que les seuls comptes Utilisateur : couvre aussi
 - Pointage : horodatage réel d'entrée et de sortie (date + heure, pas juste une date) — gère nativement les équipes de nuit qui commencent un jour et finissent le lendemain
 - Absence : motif déclaré + décision distincte (justifiée / non justifiée / en attente), tranchée par l'Admin secondaire ou Principal — pas le chef de département (purement organisationnel)
 
-Rappel absence en attente (nouveau) : même mécanisme que l'alerte dette non payée (3.4) — une alerte ponctuelle, le jour suivant la déclaration d'une absence encore en_attente, jamais répétée une fois envoyée. Cloche + affichage dans le module, reçue par l'Admin secondaire et Principal.
+Rappel absence en attente (nouveau) : même mécanisme que l'alerte dette non payée (3.4) — une alerte ponctuelle, le jour suivant la déclaration d'une absence encore en_attente, jamais répétée une fois envoyée. Cloche + affichage dans le module, reçue par l'Admin secondaire et Principal. Comme pour la dette (3.4), le même balayage périodique la rejoue en filet de sécurité (Lot 7 pt 2).
 
 Filtres & affichage : par travailleur, par date, bouton "Tout afficher".
 DG : lecture seule, comme tous les modules métier.

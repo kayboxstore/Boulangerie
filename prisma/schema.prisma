@@ -419,6 +419,13 @@ model MatierePremiere {
   unite                     String // sac, paquet, kg, L…
   quantiteStock             Decimal                    @default(0) @db.Decimal(12, 3)
   seuilAlerte               Decimal                    @db.Decimal(12, 3)
+  // Compare-and-set de l'alerte seuil en cours (section 3.2/3.4, Lot 7 pt 2) :
+  // horodatage de la dernière alerte envoyée pour le passage sous le seuil
+  // ACTUEL, remis à null dès que le stock repasse au-dessus. Même mécanisme
+  // que CommandeClient.alerteDetteEnvoyeeLe / Absence.alerteEnvoyeeLe — permet
+  // à la vérification paresseuse de détecter aussi le cas où seuilAlerte est
+  // relevé sans mouvement de stock (aucun franchissement à détecter sinon).
+  alerteSeuilEnvoyeeLe      DateTime?
   mouvements                MouvementStock[]
   ingredients               IngredientRecette[]
   lignesCommandeFournisseur LigneCommandeFournisseur[]

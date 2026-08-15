@@ -13,7 +13,7 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
-import { appliquerMouvement, emettreAlerteSeuil, ErreurStock } from "../services/stocks.js";
+import { appliquerMouvement, emettreAlerteSeuil, ErreurStock, verifierAlertesSeuilStock } from "../services/stocks.js";
 
 export const stocksRouter = Router();
 
@@ -54,6 +54,8 @@ const versMouvementDTO = (m: MouvementAvecRelations): MouvementStockDTO => ({
 
 stocksRouter.get("/matieres", requirePermission("STOCKS", "LECTURE"), async (_req, res, next) => {
   try {
+    await verifierAlertesSeuilStock();
+
     const matieres = await prisma.matierePremiere.findMany({ orderBy: { nom: "asc" } });
     res.json({ matieres: matieres.map(versMatiereDTO) });
   } catch (e) {
@@ -108,6 +110,12 @@ stocksRouter.put("/matieres/:id", requirePermission("STOCKS", "ECRITURE"), async
       where: { id: existante.id },
       data: parsed.data,
     });
+
+    // Relever le seuil peut faire passer la matière sous le seuil sans aucun
+    // mouvement de stock : la vérification paresseuse rattrape ce cas ici,
+    // immédiatement, plutôt que d'attendre le prochain chargement de l'écran.
+    if (parsed.data.seuilAlerte !== undefined) await verifierAlertesSeuilStock();
+
     res.json({ matiere: versMatiereDTO(matiere) });
   } catch (e) {
     next(e);
