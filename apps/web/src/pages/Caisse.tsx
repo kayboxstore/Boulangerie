@@ -36,6 +36,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { ChargementModule } from "@/components/ChargementModule";
+import { BarreExport } from "@/components/BarreExport";
+import type { SectionCSV } from "@/lib/csv";
 import {
   Dialog,
   DialogContent,
@@ -319,6 +321,32 @@ export function CaissePage() {
   const blocage: BlocageFarine | null = registre.farine.blocage;
   const caseFarineDesactivee = !editableRegistre || (!registre.farine.active && blocage !== null);
 
+  /** Sections du document exporté (impression, PDF, email). */
+  const construireSectionsRegistre = (): SectionCSV[] => {
+    return [
+      {
+        titre: t("caisse.title"),
+        entetes: [t("caisse.colItem"), t("common.total")],
+        lignes: [
+          [t("caisse.entries"), formatFc(registre.entrees)],
+          [t("caisse.debtsPaid"), formatFc(registre.dettesPayees)],
+          [t("caisse.expenses"), formatFc(registre.totalDepenses)],
+          [t("caisse.balance"), formatFc(registre.solde)],
+        ],
+      },
+      {
+        titre: t("caisse.debtsPaidTitle"),
+        entetes: [t("caisse.colTime"), t("caisse.colClient"), t("caisse.colOrder"), t("common.total")],
+        lignes: registre.detailDettesPayees.map((d) => [formatHeure(d.date), d.clientNom, `n°${d.commandeNumero}`, formatFc(d.montant)]),
+      },
+      {
+        titre: t("caisse.expensesTitle"),
+        entetes: [t("caisse.colReason"), t("caisse.colRecordedBy"), t("common.total")],
+        lignes: registre.depenses.map((d) => [d.motif, d.enregistrePar?.nom ?? "—", formatFc(d.montant)]),
+      },
+    ];
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -326,9 +354,17 @@ export function CaissePage() {
           <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("caisse.title")}</h1>
           <p className="mt-1 text-muted-foreground">{t("caisse.subtitle")}</p>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="date-registre">{t("common.date")}</Label>
-          <Input id="date-registre" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="date-registre">{t("common.date")}</Label>
+            <Input id="date-registre" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          <BarreExport
+            titre={t("caisse.title")}
+            sousTitre={date}
+            modules={["CAISSE"]}
+            construireSections={construireSectionsRegistre}
+          />
         </div>
       </div>
 

@@ -342,6 +342,7 @@
     "expensesDesc": "Saisies par le Caissier, plus la dépense farine calculée.",
     "addExpense": "Ajouter une dépense",
     "colReason": "Motif",
+    "colItem": "Poste",
     "colRecordedBy": "Enregistré par",
     "noExpense": "Aucune dépense sur cette date.",
     "autoBadge": "auto",

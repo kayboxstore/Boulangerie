@@ -20,6 +20,8 @@ import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select";
+import { BarreExport } from "@/components/BarreExport";
+import type { SectionCSV } from "@/lib/csv";
 import {
   Dialog,
   DialogContent,
@@ -63,6 +65,17 @@ export function FournisseursPage() {
   const fournisseurs = fournisseursData?.fournisseurs ?? [];
   const commandes = commandesData?.commandes ?? [];
   const matieres = matieresData?.matieres ?? [];
+
+  /** Sections du document exporté (impression, PDF, email). */
+  function construireSections(): SectionCSV[] {
+    return [
+      {
+        titre: t("fournisseurs.suppliersTitle"),
+        entetes: [t("common.name"), t("fournisseurs.contact"), t("fournisseurs.colOrders")],
+        lignes: fournisseurs.map((f) => [f.nom, f.contact ?? "—", f.nombreCommandes]),
+      },
+    ];
+  }
   const enAttente = commandes.filter((c) => c.statut === "EN_ATTENTE");
 
   const rafraichir = () => {
@@ -171,18 +184,25 @@ export function FournisseursPage() {
           <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("fournisseurs.title")}</h1>
           <p className="mt-1 text-muted-foreground">{t("fournisseurs.subtitle")}</p>
         </div>
-        {editable && (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => ouvrirFournisseur(null)}>
-              <Truck className="h-4 w-4" />
-              {t("fournisseurs.supplier")}
-            </Button>
-            <Button variant="cta" onClick={ouvrirCommande} disabled={fournisseurs.length === 0 || matieres.length === 0}>
-              <Plus className="h-4 w-4" />
-              {t("fournisseurs.purchaseOrder")}
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <BarreExport
+            titre={t("fournisseurs.title")}
+            modules={["FOURNISSEURS"]}
+            construireSections={construireSections}
+          />
+          {editable && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => ouvrirFournisseur(null)}>
+                <Truck className="h-4 w-4" />
+                {t("fournisseurs.supplier")}
+              </Button>
+              <Button variant="cta" onClick={ouvrirCommande} disabled={fournisseurs.length === 0 || matieres.length === 0}>
+                <Plus className="h-4 w-4" />
+                {t("fournisseurs.purchaseOrder")}
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
