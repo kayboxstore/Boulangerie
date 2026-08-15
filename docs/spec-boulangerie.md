@@ -503,6 +503,8 @@ Caissier(ère) et DG en lecture) :
 ### 3.5 Clients & fidélité
 Fiche client, historique d'achats. **Programme de fidélité : conçu mais NON activé** (décision métier) — ni l'interface ni la logique de points/récompenses ne sont construites pour l'instant. Le champ `pointsFidélité` reste en base (placeholder), sans mécanisme associé.
 
+**Clients inactifs** (Lot 7 pt 5) : l'écran Clients affiche, pour chaque client, la date de sa commande la plus récente (ou « Jamais commandé »), et une case à cocher permet de ne lister que les clients sans commande depuis 30 jours ou plus. Simple lecture des commandes existantes, sans nouveau modèle de données ni concept de « prospect » (envisagé dans l'audit initial du Lot 7, explicitement écarté faute de besoin réel identifié).
+
 ### 3.6 Fournisseurs & achats
 Fiches fournisseurs, bons de commande, réception de marchandises (met à jour le stock).
 

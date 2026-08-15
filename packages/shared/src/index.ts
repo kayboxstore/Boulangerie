@@ -394,6 +394,20 @@ export interface ClientDTO {
   avanceDisponible: number;
   zoneDepositaireId: string | null;
   zoneDepositaireNom: string | null;
+  /** Date de la commande la plus récente de ce client, ou null s'il n'en a jamais passé (Lot 7 pt 5). */
+  derniereCommandeLe: string | null;
+  /** Nul si `derniereCommandeLe` est nul (jamais commandé) — sinon nombre de jours écoulés depuis. */
+  joursDepuisDerniereCommande: number | null;
+}
+
+/**
+ * Suivi commercial (section 3.5, Lot 7 pt 5) : un client est considéré
+ * inactif s'il n'a jamais commandé, ou si sa dernière commande date de plus
+ * de `seuilJours` jours — simple lecture des commandes existantes, aucun
+ * nouveau modèle (« prospect » explicitement écarté, hors besoin réel).
+ */
+export function estClientInactif(joursDepuisDerniereCommande: number | null, seuilJours: number): boolean {
+  return joursDepuisDerniereCommande === null || joursDepuisDerniereCommande >= seuilJours;
 }
 
 // Un règlement DECLARE n'a pas encore d'effet sur la dette ; seul CONFIRME
