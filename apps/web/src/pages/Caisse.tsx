@@ -25,6 +25,7 @@ import {
   type SessionCaisseDTO,
 } from "@lomoto/shared";
 import { api, ApiError } from "@/lib/api";
+import { useCleIdempotence } from "@/lib/idempotence";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { Button } from "@/components/ui/button";
@@ -153,12 +154,16 @@ export function CaissePage() {
   const [montant, setMontant] = useState("");
   const [erreurDepense, setErreurDepense] = useState<string | null>(null);
 
+  const cleIdempotenceDepense = useCleIdempotence();
   const ajouterDepense = useMutation({
-    mutationFn: () =>
-      api("/api/caisse/depenses", {
+    mutationFn: () => {
+      const empreinte = JSON.stringify({ date, motif: motif.trim(), montant: Number(montant) });
+      return api("/api/caisse/depenses", {
         method: "POST",
-        body: JSON.stringify({ date, motif: motif.trim(), montant: Number(montant) }),
-      }),
+        headers: { "Idempotency-Key": cleIdempotenceDepense(empreinte) },
+        body: empreinte,
+      });
+    },
     onSuccess: () => {
       setDialogDepense(false);
       rafraichir();
@@ -219,9 +224,16 @@ export function CaissePage() {
   const [soldeOuverture, setSoldeOuverture] = useState("");
   const [erreurOuverture, setErreurOuverture] = useState<string | null>(null);
 
+  const cleIdempotenceOuverture = useCleIdempotence();
   const ouvrirSession = useMutation({
-    mutationFn: () =>
-      api("/api/caisse/sessions", { method: "POST", body: JSON.stringify({ date, soldeOuverture: Number(soldeOuverture) }) }),
+    mutationFn: () => {
+      const empreinte = JSON.stringify({ date, soldeOuverture: Number(soldeOuverture) });
+      return api("/api/caisse/sessions", {
+        method: "POST",
+        headers: { "Idempotency-Key": cleIdempotenceOuverture(empreinte) },
+        body: empreinte,
+      });
+    },
     onSuccess: () => {
       setDialogOuverture(false);
       rafraichirSession();
@@ -275,17 +287,25 @@ export function CaissePage() {
   const [remiseObservation, setRemiseObservation] = useState("");
   const [erreurRemise, setErreurRemise] = useState<string | null>(null);
 
+  const cleIdempotenceRemise = useCleIdempotence();
   const ajouterRemise = useMutation({
-    mutationFn: () =>
-      api(`/api/caisse/sessions/${session!.id}/remises`, {
+    mutationFn: () => {
+      const corps = {
+        montant: Number(remiseMontant),
+        remisParNom: remiseParNom.trim(),
+        reference: remiseReference.trim() || undefined,
+        observation: remiseObservation.trim() || undefined,
+      };
+      // La session cible fait partie de l'empreinte (mais pas du corps envoyé,
+      // déjà portée par l'URL) : une même saisie sur une AUTRE session ne doit
+      // jamais réutiliser la clé d'une remise précédente.
+      const empreinte = JSON.stringify({ sessionId: session!.id, ...corps });
+      return api(`/api/caisse/sessions/${session!.id}/remises`, {
         method: "POST",
-        body: JSON.stringify({
-          montant: Number(remiseMontant),
-          remisParNom: remiseParNom.trim(),
-          reference: remiseReference.trim() || undefined,
-          observation: remiseObservation.trim() || undefined,
-        }),
-      }),
+        headers: { "Idempotency-Key": cleIdempotenceRemise(empreinte) },
+        body: JSON.stringify(corps),
+      });
+    },
     onSuccess: () => {
       setDialogRemise(false);
       rafraichirSession();
@@ -304,17 +324,22 @@ export function CaissePage() {
   const idsSelectionnes = Object.keys(selection).filter((id) => selection[id]);
   const totalSelectionne = declares.filter((r) => selection[r.id]).reduce((s, r) => s + r.montant, 0);
 
+  const cleIdempotenceConfirmation = useCleIdempotence();
   const confirmerReglements = useMutation({
-    mutationFn: () =>
-      api(`/api/caisse/sessions/${session!.id}/confirmer-reglements`, {
+    mutationFn: () => {
+      const corps = {
+        paiementCommandeIds: idsSelectionnes,
+        remisParNom: confirmParNom.trim(),
+        reference: confirmReference.trim() || undefined,
+        observation: confirmObservation.trim() || undefined,
+      };
+      const empreinte = JSON.stringify({ sessionId: session!.id, ...corps });
+      return api(`/api/caisse/sessions/${session!.id}/confirmer-reglements`, {
         method: "POST",
-        body: JSON.stringify({
-          paiementCommandeIds: idsSelectionnes,
-          remisParNom: confirmParNom.trim(),
-          reference: confirmReference.trim() || undefined,
-          observation: confirmObservation.trim() || undefined,
-        }),
-      }),
+        headers: { "Idempotency-Key": cleIdempotenceConfirmation(empreinte) },
+        body: JSON.stringify(corps),
+      });
+    },
     onSuccess: () => {
       setDialogConfirmation(false);
       setSelection({});

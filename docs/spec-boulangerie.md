@@ -387,7 +387,61 @@ observations.
   toujours l'indépendance volontaire décrite ci-dessus, juste une visibilité
   immédiate en cas d'écart.
 
-**f) Contrôle qualité, pertes motivées et clôture** *(Lot 4.5/4.6/4.8 du plan
+**f) Cycle de livraison** *(C4, documenté après coup — fonctionnalité livrée
+sans section dédiée jusqu'ici, écran `/production/acceptations-livraison`)* —
+enveloppe chaque ligne de Schéma de commande (d) d'un suivi du trajet réel du
+camion, du retrait en Production jusqu'à la confirmation de ce qui a
+effectivement été accepté chez le Dépositaire ou la Maman. `CycleLivraison`
+**duplique jamais** la prévision : il porte l'identifiant stable, les
+quantités de chaque étape aval et le journal append-only des transitions
+(`TransitionCycleLivraison`) — un `CycleLivraison` est créé automatiquement
+(statut initial `PREVISION`) dès qu'un Schéma de commande est enregistré pour
+un client à une date donnée, et mis à jour avec lui tant qu'il n'a pas encore
+démarré.
+
+- **Les 11 statuts, chemin nominal** :
+  `PREVISION` → *(Retenir pour la production)* → `RETENUE_PRODUCTION` →
+  *(Confirmer la préparation)* → `PREPAREE` → *(Confirmer la remise
+  magasin)* → `REMISE_MAGASIN` → *(Confirmer le chargement)* → `CHARGEE` →
+  *(Confirmer le départ du camion)* → `EN_TOURNEE` → *(Signaler le dépôt
+  chez le client)* → `EN_ATTENTE_CONFIRMATION` → *(Confirmer l'acceptation)*
+  → selon ce qui a été accepté : `ACCEPTEE` (tout accepté), `PARTIELLEMENT_ACCEPTEE`
+  (accepté partiel) ou `RETOUR_TOTAL` (rien accepté, aucune commande créée).
+  Chaque transition exige la version courante du cycle (verrou optimiste,
+  même idiome que les autres verrous OUVERTE→FERMEE du projet) — un cycle
+  modifié entre-temps renvoie `VERSION_OBSOLETE` (409) plutôt que d'écraser
+  silencieusement une étape. Le onzième statut, `ANNULEE`, existe dans le
+  modèle de données mais **n'est encore relié à aucune action** : à date,
+  aucun écran ni aucune route ne permet de l'atteindre — réservé à une
+  décision métier future (annulation en cours de trajet, par exemple).
+- **Conversion en commande réelle** : confirmer l'acceptation
+  (`CONFIRMER_ACCEPTATION`) est l'unique action qui, en cas d'acceptation au
+  moins partielle, crée automatiquement la `CommandeClient` du jour pour ce
+  client à partir des quantités **acceptées** (mêmes formules dette/avance
+  que 3.4) — c'est le pont entre le suivi logistique du cycle et le module
+  Commandes. Un retour total ne crée aucune commande. Cette action exige la
+  clé `Idempotency-Key` (comme les autres écritures financières, cf.
+  correction de l'audit du 19/08/2026 généralisant son envoi côté écran) et
+  l'écriture sur le module **Commandes** ; toutes les autres transitions
+  n'exigent que l'écriture sur **Production**.
+- **Anomalies** (`AnomalieCycleLivraison`) : signalées à tout moment du cycle
+  par quiconque a l'écriture Production ou Commandes, avec un type parmi une
+  liste fixe — bon non retourné, écart de quantité, produit endommagé, retour
+  qualité, **cash transporté non reçu** *(la seule catégorie financière : le
+  camion revient sans avoir reçu l'argent normalement collecté chez un
+  client)*, autre — une description libre et une résolution ultérieure
+  tracées (qui, quand, commentaire). `BON_NON_RETOURNE` peut aussi être créée
+  automatiquement par le serveur si le bon physique n'a toujours pas été
+  marqué retourné (`POST .../bon-retourne`) au moment de la confirmation
+  d'acceptation ; une notification priorité **HAUTE** part alors vers
+  Production, comme pour toute anomalie nouvellement signalée.
+- **Permissions** : lecture ouverte à Production **OU** Commandes (au moins
+  l'une des deux) ; écriture partagée entre les deux modules selon l'action
+  (voir ci-dessus), jamais réservée à un seul rôle — Responsable de
+  production et Chargé des commandes interviennent chacun à leur étape du
+  même cycle.
+
+**g) Contrôle qualité, pertes motivées et clôture** *(Lot 4.5/4.6/4.8 du plan
 d'attaque — bouton « Qualité » sur chaque ligne de la liste des productions
 enregistrées)* — une Production naît **OUVERTE** ; elle se **CLOTURE**
 explicitement une fois les deux conditions suivantes réunies, et devient alors

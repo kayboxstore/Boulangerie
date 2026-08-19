@@ -19,6 +19,7 @@ import {
   type ZoneDepositaireDTO,
 } from "@lomoto/shared";
 import { api, ApiError } from "@/lib/api";
+import { useCleIdempotence } from "@/lib/idempotence";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -150,17 +151,22 @@ export function CommandesPage() {
     queryClient.invalidateQueries({ queryKey: ["commissions"] });
   };
 
+  const cleIdempotenceCommande = useCleIdempotence();
   const creerCommande = useMutation({
-    mutationFn: (strategie?: StrategieDoublon) =>
-      api("/api/commandes", {
+    mutationFn: (strategie?: StrategieDoublon) => {
+      const corps = {
+        clientId,
+        quantiteBacs: Number(bacs),
+        montantRecu: Number(recu) || 0,
+        ...(strategie ? { strategie } : {}),
+      };
+      const empreinte = JSON.stringify(corps);
+      return api("/api/commandes", {
         method: "POST",
-        body: JSON.stringify({
-          clientId,
-          quantiteBacs: Number(bacs),
-          montantRecu: Number(recu) || 0,
-          ...(strategie ? { strategie } : {}),
-        }),
-      }),
+        headers: { "Idempotency-Key": cleIdempotenceCommande(empreinte) },
+        body: empreinte,
+      });
+    },
     onSuccess: () => {
       setDialogCommande(false);
       setConflit(null);
@@ -211,12 +217,16 @@ export function CommandesPage() {
     ? commandeARegler.dette - sommeDeclarationsEnAttente(commandeARegler.reglements)
     : 0;
 
+  const cleIdempotenceReglement = useCleIdempotence();
   const enregistrerReglement = useMutation({
-    mutationFn: () =>
-      api(`/api/commandes/${commandeARegler!.id}/reglements`, {
+    mutationFn: () => {
+      const empreinte = JSON.stringify({ commandeId: commandeARegler!.id, montant: Number(montantReglement) });
+      return api(`/api/commandes/${commandeARegler!.id}/reglements`, {
         method: "POST",
+        headers: { "Idempotency-Key": cleIdempotenceReglement(empreinte) },
         body: JSON.stringify({ montant: Number(montantReglement) }),
-      }),
+      });
+    },
     onSuccess: () => {
       setCommandeARegler(null);
       rafraichirCommandes();

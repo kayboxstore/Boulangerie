@@ -311,12 +311,12 @@ rapportsRouter.get("/travailleurs", requirePermission("TRAVAILLEURS", "LECTURE")
 });
 
 // --- Résumé de clôture quotidien (3.8) --------------------------------------
-// Réservé au DG via la matrice : seul son rôle a la lecture sur RAPPORTS
-// (les Admins n'ont aucune permission métier — leur équivalent est l'État
-// système, 3.15).
+// Lecture sur RAPPORTS (matrice section 2) : le DG (lecture partout sauf
+// Paramètres) et les deux niveaux d'Administrateur (lecture sur tout module
+// hors Paramètres/Équipe/Travailleurs, où ils ont l'écriture) y ont accès.
 //
 // ?date= optionnel (AAAA-MM-JJ, jour civil Africa/Kinshasa), sinon aujourd'hui
-// (Lot 7 pt 1) : permet au DG de consulter le résumé d'un jour déjà passé, pas
+// (Lot 7 pt 1) : permet de consulter le résumé d'un jour déjà passé, pas
 // seulement celui du jour courant — même convention que /livraisons-du-jour.
 
 rapportsRouter.get("/cloture-quotidienne", requirePermission("RAPPORTS", "LECTURE"), async (req, res, next) => {
