@@ -147,6 +147,27 @@ async function sessionFermeePourDate(date: string): Promise<boolean> {
   return session?.statut === "FERMEE";
 }
 
+/**
+ * Discipline chronologique (correction bug terrain, section 3.1) : oublier de
+ * clôturer la caisse un jour ne doit jamais permettre de continuer comme si
+ * de rien n'était le jour suivant. Reprend le principe déjà appliqué à
+ * l'ouverture d'une nouvelle session (« anterieureOuverte » plus bas) mais
+ * l'étend à TOUTE écriture du module — taux, dépenses, remise, confirmation
+ * de règlement — pas seulement à l'ouverture d'une session. Renvoie la date
+ * de la session bloquante, ou null si la voie est libre.
+ */
+async function sessionAnterieureOuverteAvant(date: string): Promise<string | null> {
+  const anterieure = await prisma.sessionCaisse.findFirst({
+    where: { statut: "OUVERTE", date: { lt: dateSQLDepuisJourLomoto(date) } },
+    orderBy: { date: "asc" },
+  });
+  return anterieure ? jourLomoto(anterieure.date) : null;
+}
+
+function erreurSessionAnterieure(date: string) {
+  return { erreur: `Clôturez d'abord la session de caisse du ${date} avant de continuer` };
+}
+
 /** Sacs de farine consommés en production sur la date donnée (source du calcul). */
 async function sacsUtilisesLe(date: string): Promise<number> {
   const [debut, fin] = bornesJourLomoto(date);
@@ -251,6 +272,17 @@ caisseRouter.get("/registre", lecture, async (req, res, next) => {
   }
 });
 
+// Session antérieure restée OUVERTE (correction bug terrain) : interrogée
+// indépendamment de la date consultée, pour avertir dès l'ouverture de
+// l'écran plutôt qu'à la première écriture refusée.
+caisseRouter.get("/session-bloquante", lecture, async (_req, res, next) => {
+  try {
+    res.json({ date: await sessionAnterieureOuverteAvant(jourLomoto()) });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // --- Taux du jour -----------------------------------------------------------
 
 // Une valeur par date : un second envoi sur la même date met à jour la valeur
@@ -265,6 +297,8 @@ caisseRouter.put("/taux", ecriture, async (req, res, next) => {
     if (await sessionFermeePourDate(date)) {
       return res.status(409).json({ erreur: "La session de caisse de cette date est clôturée : plus aucune écriture possible" });
     }
+    const anterieure = await sessionAnterieureOuverteAvant(date);
+    if (anterieure) return res.status(409).json(erreurSessionAnterieure(anterieure));
 
     const taux = await prisma.$transaction(async (tx) => {
       const existant = await tx.tauxDuJour.findUnique({ where: { date: dateSQLDepuisJourLomoto(date) } });
@@ -309,6 +343,8 @@ caisseRouter.post("/depenses", ecriture, async (req, res, next) => {
     if (await sessionFermeePourDate(date)) {
       return res.status(409).json({ erreur: "La session de caisse de cette date est clôturée : plus aucune écriture possible" });
     }
+    const anterieure = await sessionAnterieureOuverteAvant(date);
+    if (anterieure) return res.status(409).json(erreurSessionAnterieure(anterieure));
 
     const execution = await executerEcritureIdempotente(
       req,
@@ -357,6 +393,8 @@ caisseRouter.delete("/depenses/:id", ecriture, async (req, res, next) => {
     if (await sessionFermeePourDate(jourLomoto(depense.date))) {
       return res.status(409).json({ erreur: "La session de caisse de cette date est clôturée : plus aucune écriture possible" });
     }
+    const anterieure = await sessionAnterieureOuverteAvant(jourLomoto(depense.date));
+    if (anterieure) return res.status(409).json(erreurSessionAnterieure(anterieure));
 
     await prisma.depenseCaisse.delete({ where: { id: depense.id } });
     busEvenements.emettreEvenement({
@@ -388,6 +426,8 @@ caisseRouter.put("/depenses/farine", ecriture, async (req, res, next) => {
     if (await sessionFermeePourDate(date)) {
       return res.status(409).json({ erreur: "La session de caisse de cette date est clôturée : plus aucune écriture possible" });
     }
+    const anterieure = await sessionAnterieureOuverteAvant(date);
+    if (anterieure) return res.status(409).json(erreurSessionAnterieure(anterieure));
 
     const existante = await prisma.depenseCaisse.findFirst({
       where: { date: dateSQLDepuisJourLomoto(date), origine: "FARINE" },
@@ -561,6 +601,8 @@ caisseRouter.post("/sessions/:id/remises", ecriture, async (req, res, next) => {
   try {
     const { session, erreur } = await chargerSessionCaisseOuverte(req.params.id);
     if (erreur) return res.status(erreur.status).json({ erreur: erreur.message });
+    const anterieure = await sessionAnterieureOuverteAvant(jourLomoto(session!.date));
+    if (anterieure) return res.status(409).json(erreurSessionAnterieure(anterieure));
 
     const parsed = remiseCaisseCreateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -773,6 +815,12 @@ caisseRouter.post("/sessions/:id/confirmer-reglements", ecriture, async (req, re
     }
     const { paiementCommandeIds, remisParNom, reference, observation } = parsed.data;
     const ids = [...new Set(paiementCommandeIds)];
+
+    const sessionInfo = await prisma.sessionCaisse.findUnique({ where: { id: req.params.id }, select: { date: true } });
+    if (sessionInfo) {
+      const anterieure = await sessionAnterieureOuverteAvant(jourLomoto(sessionInfo.date));
+      if (anterieure) return res.status(409).json(erreurSessionAnterieure(anterieure));
+    }
 
     const execution = await executerEcritureIdempotente<ResultatConfirmation, CorpsConfirmation>(
       req,

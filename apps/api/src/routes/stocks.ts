@@ -26,6 +26,7 @@ const versMatiereDTO = (m: MatierePremiere): MatierePremiereDTO => ({
   quantiteStock: m.quantiteStock.toNumber(),
   seuilAlerte: m.seuilAlerte.toNumber(),
   sousSeuil: m.quantiteStock.toNumber() < m.seuilAlerte.toNumber(),
+  code: m.code,
 });
 
 type MouvementAvecRelations = Prisma.MouvementStockGetPayload<{
@@ -69,15 +70,24 @@ stocksRouter.post("/matieres", requirePermission("STOCKS", "ECRITURE"), async (r
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const { nom, unite, seuilAlerte, quantiteInitiale } = parsed.data;
+    const { nom, unite, seuilAlerte, quantiteInitiale, code } = parsed.data;
 
     const existante = await prisma.matierePremiere.findUnique({ where: { nom } });
     if (existante) return res.status(409).json({ erreur: "Une matière première porte déjà ce nom" });
 
+    if (code) {
+      const dejaRelie = await prisma.matierePremiere.findUnique({ where: { code } });
+      if (dejaRelie) {
+        return res.status(409).json({
+          erreur: `« ${dejaRelie.nom} » est déjà reliée à l'ingrédient ${code} — une seule matière peut porter ce lien`,
+        });
+      }
+    }
+
     // Le stock de départ passe par le journal (mouvement ENTREE « Stock
     // initial ») pour que l'historique explique toujours la quantité en stock.
     const matiere = await prisma.$transaction(async (tx) => {
-      const creee = await tx.matierePremiere.create({ data: { nom, unite, seuilAlerte } });
+      const creee = await tx.matierePremiere.create({ data: { nom, unite, seuilAlerte, code: code ?? null } });
       if (quantiteInitiale > 0) {
         const { matiere: maj } = await appliquerMouvement(tx, {
           matierePremiereId: creee.id,
@@ -105,6 +115,15 @@ stocksRouter.put("/matieres/:id", requirePermission("STOCKS", "ECRITURE"), async
     }
     const existante = await prisma.matierePremiere.findUnique({ where: { id: req.params.id } });
     if (!existante) return res.status(404).json({ erreur: "Matière première introuvable" });
+
+    if (parsed.data.code) {
+      const dejaRelie = await prisma.matierePremiere.findUnique({ where: { code: parsed.data.code } });
+      if (dejaRelie && dejaRelie.id !== existante.id) {
+        return res.status(409).json({
+          erreur: `« ${dejaRelie.nom} » est déjà reliée à l'ingrédient ${parsed.data.code} — une seule matière peut porter ce lien`,
+        });
+      }
+    }
 
     const matiere = await prisma.matierePremiere.update({
       where: { id: existante.id },
