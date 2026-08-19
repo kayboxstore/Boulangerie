@@ -120,7 +120,17 @@ export function CaissePage() {
   const rafraichir = () => {
     queryClient.invalidateQueries({ queryKey: ["registre"] });
     queryClient.invalidateQueries({ queryKey: ["rapport-caisse"] });
+    queryClient.invalidateQueries({ queryKey: ["session-bloquante"] });
   };
+
+  // Discipline chronologique (correction bug terrain) : interrogée
+  // indépendamment de la date consultée, pour avertir dès l'ouverture de
+  // l'écran — pas seulement quand une écriture est refusée par le serveur.
+  const { data: bloquanteData } = useQuery({
+    queryKey: ["session-bloquante"],
+    queryFn: () => api<{ date: string | null }>("/api/caisse/session-bloquante"),
+  });
+  const dateBloquante = bloquanteData?.date ?? null;
 
   // --- Taux du jour ---------------------------------------------------------
   const [dialogTaux, setDialogTaux] = useState(false);
@@ -367,6 +377,26 @@ export function CaissePage() {
           />
         </div>
       </div>
+
+      {dateBloquante && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-terracotta/40 bg-terracotta/10 px-4 py-3 text-sm"
+        >
+          <p className="flex items-start gap-3">
+            <Lock className="mt-0.5 h-4 w-4 shrink-0 text-terracotta" />
+            <span>
+              <span className="font-semibold text-terracotta">{t("caisse.blockingSessionTitle")}</span>{" "}
+              {t("caisse.blockingSessionDesc", { date: dateBloquante })}
+            </span>
+          </p>
+          {date !== dateBloquante && (
+            <Button variant="outline" size="sm" onClick={() => setDate(dateBloquante)}>
+              {t("caisse.blockingSessionAction")}
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Session de caisse (section 3.1, Lot 6) */}
       <Card>

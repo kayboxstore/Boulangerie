@@ -3,7 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Pencil, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
+  CODES_INGREDIENT,
+  CODE_INGREDIENT_LABELS,
   formatQuantite,
+  type CodeIngredient,
   type MatierePremiereDTO,
   type MouvementStockDTO,
   type TypeMouvementStock,
@@ -86,6 +89,7 @@ export function StocksPage() {
   const [unite, setUnite] = useState("kg");
   const [seuilAlerte, setSeuilAlerte] = useState("");
   const [quantiteInitiale, setQuantiteInitiale] = useState("");
+  const [codeIngredient, setCodeIngredient] = useState("");
   const [erreurMatiere, setErreurMatiere] = useState<string | null>(null);
 
   function ouvrirMatiere(m: MatierePremiereDTO | null) {
@@ -94,13 +98,19 @@ export function StocksPage() {
     setUnite(m?.unite ?? "kg");
     setSeuilAlerte(m ? String(m.seuilAlerte) : "");
     setQuantiteInitiale("");
+    setCodeIngredient(m?.code ?? "");
     setErreurMatiere(null);
     setDialogMatiere(true);
   }
 
   const sauverMatiere = useMutation({
     mutationFn: () => {
-      const commun = { nom: nom.trim(), unite: unite.trim(), seuilAlerte: Number(seuilAlerte) };
+      const commun = {
+        nom: nom.trim(),
+        unite: unite.trim(),
+        seuilAlerte: Number(seuilAlerte),
+        code: (codeIngredient || null) as CodeIngredient | null,
+      };
       return matiereEditee
         ? api(`/api/stocks/matieres/${matiereEditee.id}`, { method: "PUT", body: JSON.stringify(commun) })
         : api("/api/stocks/matieres", {
@@ -235,7 +245,14 @@ export function StocksPage() {
             <TableBody>
               {matieres.map((m) => (
                 <TableRow key={m.id} className={m.sousSeuil ? "bg-terracotta/5" : undefined}>
-                  <TableCell className="font-medium">{m.nom}</TableCell>
+                  <TableCell className="font-medium">
+                    {m.nom}
+                    {m.code && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        ({CODE_INGREDIENT_LABELS[m.code]})
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{m.unite}</TableCell>
                   <TableCell className="text-right font-semibold text-marine dark:text-or">
                     {formatQuantite(m.quantiteStock, m.unite)}
@@ -298,6 +315,7 @@ export function StocksPage() {
                 />
                 <CarteLigneChamp label={t("stocks.colThreshold")} value={formatQuantite(m.seuilAlerte, m.unite)} />
                 <CarteLigneChamp label={t("stocks.colUnit")} value={m.unite} />
+                {m.code && <CarteLigneChamp label={t("stocks.ingredientLink")} value={CODE_INGREDIENT_LABELS[m.code]} />}
                 {editable && (
                   <CarteLigneActions>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => ouvrirMatiere(m)} aria-label={t("stocks.ariaEdit", { nom: m.nom })}>
@@ -458,6 +476,18 @@ export function StocksPage() {
                   />
                 </div>
               )}
+              <div className="col-span-2 space-y-1.5">
+                <Label htmlFor="matiere-code">{t("stocks.ingredientLink")}</Label>
+                <NativeSelect id="matiere-code" value={codeIngredient} onChange={(e) => setCodeIngredient(e.target.value)}>
+                  <option value="">{t("stocks.ingredientLinkNone")}</option>
+                  {CODES_INGREDIENT.map((c) => (
+                    <option key={c} value={c}>
+                      {CODE_INGREDIENT_LABELS[c]}
+                    </option>
+                  ))}
+                </NativeSelect>
+                <p className="text-xs text-muted-foreground">{t("stocks.ingredientLinkDesc")}</p>
+              </div>
             </div>
             {erreurMatiere && (
               <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">

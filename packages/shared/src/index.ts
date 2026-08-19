@@ -755,12 +755,34 @@ const quantiteMatiere = z
   .number()
   .refine((q) => Number.isFinite(q) && Math.round(q * 1000) === q * 1000, "Au plus 3 décimales");
 
+/**
+ * Les 4 ingrédients suivis à la production (section 3.3). Le `code` relie la
+ * quantité saisie à la MatierePremiere correspondante, pour la décrémentation
+ * automatique du stock (pas de correspondance par nom, trop fragile).
+ */
+export const CODES_INGREDIENT = ["FARINE", "LEVURE", "SEL", "HUILE"] as const;
+export type CodeIngredient = (typeof CODES_INGREDIENT)[number];
+
+export const CODE_INGREDIENT_LABELS: Record<CodeIngredient, string> = {
+  FARINE: "Farine (sacs)",
+  LEVURE: "Levure (paquets)",
+  SEL: "Sel (kg)",
+  HUILE: "Huile",
+};
+
 export const matiereCreateSchema = z.object({
   nom: z.string().trim().min(1, "Le nom est requis").max(120),
   unite: z.string().trim().min(1, "L'unité est requise").max(20),
   seuilAlerte: quantiteMatiere.refine((q) => q >= 0, "Le seuil doit être positif"),
   // Stock de départ (optionnel) : enregistré comme mouvement ENTREE « Stock initial ».
   quantiteInitiale: quantiteMatiere.refine((q) => q >= 0, "La quantité doit être positive").default(0),
+  // Lien vers un ingrédient de production — pilote la décrémentation
+  // automatique du stock (voir CodeIngredient ci-dessus). Nul = matière hors
+  // de ce circuit (sucre, beurre…). Ce champ n'était exposé nulle part côté
+  // API avant correction : aucune matière créée ou renommée depuis l'écran
+  // Stocks ne pouvait donc jamais être reliée à Farine/Levure/Sel/Huile, d'où
+  // des sorties de production qui ne décrémentaient pas le bon stock.
+  code: z.enum(CODES_INGREDIENT).nullable().optional(),
 });
 export type MatiereCreateInput = z.infer<typeof matiereCreateSchema>;
 
@@ -783,6 +805,8 @@ export interface MatierePremiereDTO {
   seuilAlerte: number;
   /** true si le stock est strictement sous le seuil d'alerte. */
   sousSeuil: boolean;
+  /** Lien vers un ingrédient de production (section 3.3), null si hors circuit. */
+  code: CodeIngredient | null;
 }
 
 export interface MouvementStockDTO {
@@ -798,21 +822,6 @@ export interface MouvementStockDTO {
 // ---------------------------------------------------------------------------
 // Production (section 3.3 — refonte : plus de recettes)
 // ---------------------------------------------------------------------------
-
-/**
- * Les 4 ingrédients suivis à la production. Le `code` relie la quantité saisie
- * à la MatierePremiere correspondante, pour la décrémentation automatique du
- * stock (pas de correspondance par nom, trop fragile).
- */
-export const CODES_INGREDIENT = ["FARINE", "LEVURE", "SEL", "HUILE"] as const;
-export type CodeIngredient = (typeof CODES_INGREDIENT)[number];
-
-export const CODE_INGREDIENT_LABELS: Record<CodeIngredient, string> = {
-  FARINE: "Farine (sacs)",
-  LEVURE: "Levure (paquets)",
-  SEL: "Sel (kg)",
-  HUILE: "Huile",
-};
 
 const quantiteIngredient = z
   .number()

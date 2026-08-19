@@ -159,7 +159,17 @@ et non falsifiable)* :
 - **Session nominative** — une session par date (`SessionCaisse`), ouverte par
   le Caissier avec un solde d'ouverture. On ne peut pas ouvrir la session d'une
   date tant qu'une session **antérieure** reste ouverte : discipline
-  chronologique, aucune inclusion implicite d'un autre jour.
+  chronologique, aucune inclusion implicite d'un autre jour. *Correction bug
+  terrain* : cette discipline couvrait uniquement l'ouverture d'une nouvelle
+  session ; oublier de clôturer un jour laissait toutes les autres écritures du
+  module (taux, dépenses, case farine, remise, confirmation de règlement)
+  possibles le lendemain comme si de rien n'était. Elle s'applique désormais à
+  **toute écriture Caisse**, à l'exception de la clôture elle-même (l'unique
+  porte de sortie) et de la correction post-clôture (qui porte sur une session
+  déjà fermée). L'écran Caisse affiche en plus un bandeau d'avertissement dès
+  qu'une session antérieure reste ouverte — quelle que soit la date consultée
+  — plutôt que de laisser l'utilisateur découvrir le blocage à la première
+  écriture refusée.
 - **Remise contradictoire** — transfert d'espèces documenté avec émetteur
   (`remisParNom`, texte libre — peut ne pas avoir de compte applicatif),
   receveur (le Caissier connecté) et référence/observation facultatives
@@ -200,6 +210,19 @@ CONFIRME) est un `update`, donc également tracée sans code dédié.
 
 ### 3.2 Stocks & matières premières
 Suivi des quantités (farine, beurre, sucre, etc.), mouvements de stock (entrée/sortie), seuils d'alerte, historique.
+
+**Lien avec un ingrédient de production** (correction bug terrain) : le champ
+qui relie une matière première aux quantités saisies en Production (3.3c —
+Farine, Levure, Sel, Huile) n'était exposé nulle part côté API ni dans l'écran
+Stocks. Seule la matière portant exactement le nom utilisé par le script de
+seed (`Farine de blé`, `Levure boulangère`, `Sel`, `Huile`) recevait
+automatiquement ce lien ; une matière créée ou renommée depuis l'écran (ex.
+simplement « Farine ») restait invisible du mécanisme de décrémentation
+automatique, sans qu'aucune erreur ne le signale ailleurs qu'un avertissement
+discret au moment d'enregistrer la production. Le formulaire de la matière
+première expose désormais ce lien (« Aucun » ou l'un des quatre ingrédients),
+modifiable à tout moment par un rôle avec écriture sur Stocks — un seul lien
+par ingrédient, contrôlé côté serveur.
 
 **Alerte seuil — couverture du cas « seuil relevé sans mouvement »** (Lot 7
 pt 2) : le franchissement du seuil est détecté en priorité au moment du
