@@ -1237,8 +1237,10 @@ model AuditLog {
 
 // Sauvegardes de la base (section 3.15). Une sauvegarde AUTOMATIQUE est
 // déclenchée chaque jour par le planificateur (services/planificateurSauvegarde)
-// et envoyée vers Google Drive ; une MANUELLE est déclenchée par l'Admin
-// Principal et repart directement dans son navigateur, sans passer par Drive.
+// et écrite localement sur le disque du serveur (pas d'envoi vers un service
+// externe : un compte de service Google Drive a été essayé puis abandonné,
+// voir .env.example) ; une MANUELLE est déclenchée par l'Admin Principal et
+// repart aussi directement dans son navigateur en plus de la copie locale.
 enum TypeSauvegarde {
   AUTOMATIQUE
   MANUELLE

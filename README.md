@@ -2,9 +2,15 @@
 
 Application web de gestion pour la Boulangerie Lomoto : caisse, stocks, production, commandes clients, fournisseurs et pilotage en temps réel. Spécification complète : [docs/spec-boulangerie.md](docs/spec-boulangerie.md).
 
-**Phase actuelle : vague Premium 1 intégrée** — sécurité HTTP et CI, archivage et idempotence, fuseau `Africa/Kinshasa`, récupération sécurisée du mot de passe, changement obligatoire, profils et anniversaires, enveloppe Premium responsive et « Constellation Lomoto ».
+**Phase actuelle : Lots 0 à 7 intégrés**, plus deux corrections de bugs
+terrain (lien matière première ↔ ingrédient de production, discipline de
+clôture de caisse) et le plan d'action issu de l'audit complet du
+19/08/2026 — couvre désormais l'ensemble des modules de la spécification :
+Caisse, Stocks, Production (dont le cycle de livraison C4), Commandes,
+Clients, Fournisseurs, Équipe/Travailleurs, Commissions, Rapports,
+Paramètres, Notifications temps réel, Journal d'audit et Assistant.
 
-La branche d’intégration validée est `agent/integration-wave-1` au commit `abbab5cfe1939f139cd0a100a40c8d4217591828`.
+La branche d'intégration à jour est `main-a7fm5x`.
 
 ## Structure du monorepo
 
@@ -55,7 +61,7 @@ npm test
 npm run build
 ```
 
-La suite automatisée couvre les règles partagées, les routes API critiques, l’authentification, les permissions, l’idempotence, les frontières de journée Kinshasa et les composants React/DOM. Dernière validation de la vague : **359 tests sur 359**, audit sans vulnérabilité, migrations PostgreSQL, génération Prisma et compilation API/web réussis.
+La suite automatisée couvre les règles partagées, les routes API critiques, l’authentification, les permissions, l’idempotence, les frontières de journée Kinshasa et les composants React/DOM. Dernière validation : **552 tests sur 552**, audit sans vulnérabilité, migrations PostgreSQL, génération Prisma et compilation API/web réussis.
 
 ## Comptes de démonstration
 
@@ -71,7 +77,7 @@ Mot de passe commun : `Lomoto2026!`
 | Responsable de production | production@boulangerie-lomoto.com | Production | — |
 | Responsable Stock/Achats et Fournisseurs | achats@boulangerie-lomoto.com, stock@boulangerie-lomoto.com | Stocks, Fournisseurs | — |
 
-Le rôle Administrateur peut avoir jusqu'à 3 comptes (1 principal + 2 secondaires) — champ `Utilisateur.estAdminPrincipal`, unicité du principal garantie par index partiel ; le workflow d'approbation arrive en Phase 10.
+Le rôle Administrateur peut avoir jusqu'à 3 comptes (1 principal + 2 secondaires) — champ `Utilisateur.estAdminPrincipal`, unicité du principal garantie par index partiel ; le workflow d'approbation des 5 tâches critiques d'un Admin secondaire (section 2) est en place (`/api/approbations`, écran Approbations).
 
 ## Conventions
 

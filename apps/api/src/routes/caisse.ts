@@ -677,8 +677,14 @@ caisseRouter.post("/sessions/:id/cloturer", ecriture, async (req, res, next) => 
       });
     }
 
-    const fermee = await prisma.sessionCaisse.update({
-      where: { id: session!.id },
+    // Verrou optimiste : deux clôtures concurrentes (deux onglets, double
+    // soumission) liraient toutes deux OUVERTE avant qu'aucune n'écrive — un
+    // `update` inconditionnel laisserait la seconde écraser silencieusement
+    // le théorique/compté/écart de la première. `updateMany` avec `statut`
+    // dans le WHERE ne réussit que pour celle qui gagne la course ; l'autre
+    // reçoit un 409 explicite plutôt qu'un écrasement silencieux.
+    const { count } = await prisma.sessionCaisse.updateMany({
+      where: { id: session!.id, statut: "OUVERTE" },
       data: {
         statut: "FERMEE",
         soldeTheoriqueFermeture,
@@ -688,9 +694,12 @@ caisseRouter.post("/sessions/:id/cloturer", ecriture, async (req, res, next) => 
         fermeeLe: new Date(),
         fermeeParId: req.utilisateur!.id,
       },
-      include: INCLUDE_SESSION,
     });
+    if (count === 0) {
+      return res.status(409).json({ erreur: "Cette session vient d'être clôturée ailleurs — rechargez la page" });
+    }
 
+    const fermee = await prisma.sessionCaisse.findUniqueOrThrow({ where: { id: session!.id }, include: INCLUDE_SESSION });
     const dto = versSessionDTO(fermee);
     busEvenements.emettreEvenement({
       type: "SESSION_CAISSE_CLOTUREE",

@@ -1,14 +1,18 @@
 /**
- * Idempotence client pour les écritures sensibles (F5B, CONFIRMER_ACCEPTATION
- * — la seule action du cycle C4 qui exige l'en-tête `Idempotency-Key`, voir
- * contrat C4 §7 et `apps/api/src/lib/idempotence.ts`). Logique pure, sans
- * accès réseau ni composant : une nouvelle opération reçoit toujours une
- * clé neuve ; un rejeu STRICTEMENT identique (même empreinte) réutilise la
- * même clé ; une empreinte différente ne réutilise jamais l'ancienne clé —
- * le serveur rejetterait sinon avec `CLE_IDEMPOTENCE_REUTILISEE` (409), et
- * réutiliser une clé avec un corps différent romprait la garantie même
- * d'idempotence (deux opérations distinctes confondues sous un seul id).
+ * Idempotence client pour les écritures sensibles — d'abord réservée à
+ * CONFIRMER_ACCEPTATION (F5B, cycle C4, voir contrat C4 §7 et
+ * `apps/api/src/lib/idempotence.ts`), généralisée aux autres écritures
+ * financières qui utilisent déjà `executerEcritureIdempotente` côté serveur
+ * (création de commande, règlement, dépenses de caisse, ouverture de
+ * session, remise, confirmation de règlements — audit du 19/08/2026). Une
+ * nouvelle opération reçoit toujours une clé neuve ; un rejeu STRICTEMENT
+ * identique (même empreinte) réutilise la même clé ; une empreinte
+ * différente ne réutilise jamais l'ancienne clé — le serveur rejetterait
+ * sinon avec `CLE_IDEMPOTENCE_REUTILISEE` (409), et réutiliser une clé avec
+ * un corps différent romprait la garantie même d'idempotence (deux
+ * opérations distinctes confondues sous un seul id).
  */
+import { useRef } from "react";
 
 export interface EtatIdempotence {
   cle: string;
@@ -29,4 +33,20 @@ export function genererCleIdempotence(): string {
 export function resoudreCleIdempotence(precedent: EtatIdempotence | null, empreinte: string): EtatIdempotence {
   if (precedent && precedent.empreinte === empreinte) return precedent;
   return { cle: genererCleIdempotence(), empreinte };
+}
+
+/**
+ * Enveloppe React de `resoudreCleIdempotence` : porte la tentative précédente
+ * d'un composant sans dupliquer le `useRef`/`resoudreCleIdempotence` dans
+ * chaque mutation financière. Utilisation : appeler la fonction retournée
+ * avec l'empreinte JSON du corps juste avant l'appel réseau, et envoyer le
+ * résultat comme en-tête `Idempotency-Key`.
+ */
+export function useCleIdempotence(): (empreinte: string) => string {
+  const precedent = useRef<EtatIdempotence | null>(null);
+  return (empreinte: string) => {
+    const resolue = resoudreCleIdempotence(precedent.current, empreinte);
+    precedent.current = resolue;
+    return resolue.cle;
+  };
 }

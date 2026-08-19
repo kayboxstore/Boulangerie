@@ -16,16 +16,24 @@ import { ecrireSauvegardeLocale } from "./sauvegardeLocale.js";
  *    casser la décrémentation auto en Production —, recettes, types de
  *    clients, paramètres boutique). Départements & Groupes (3.18) sont eux
  *    aussi des données transactionnelles (organisation du personnel, pas de
- *    la config structurelle) : effacés avant Travailleur.
+ *    la config structurelle) : effacés avant Travailleur. Zones de dépôt
+ *    (3.3 d) restent en revanche, comme MotifDon : un pur référentiel
+ *    organisationnel (nom, ordre d'affichage), sans donnée chiffrée ni lien
+ *    obligatoire à un client précis une fois celui-ci effacé.
  *    (Vente/LigneVente/ClotureCaisse/Presence, orphelines depuis les refontes
  *    3.1/3.18, ont été supprimées du schéma — nettoyage confirmé vide avant
  *    suppression — donc plus rien à effacer ici pour elles.)
  * 3. L'ordre des suppressions est dicté par les contraintes de clé étrangère
  *    (enfants avant parents) — voir les migrations pour le détail exact des
- *    ON DELETE. `deleteMany`/`updateMany` ne passent PAS par l'extension
- *    d'audit (qui n'intercepte que `update`/`delete` unitaires) : pas de bruit
- *    inutile dans un AuditLog qui va de toute façon être vidé dans la même
- *    transaction.
+ *    ON DELETE. En particulier, `SchemaCommande.clientId`, `BonLivraison.clientId`
+ *    et `CycleLivraison.commandeId` sont en RESTRICT : Schémas de commande et
+ *    Bons de livraison doivent donc être effacés avant Client/CommandeClient
+ *    (supprimer un Schéma cascade son Cycle de livraison C4 et tout son
+ *    historique de transitions/anomalies) ; de même `RemiseCaisse.sessionCaisseId`
+ *    est en RESTRICT, donc les remises avant les sessions de caisse.
+ *    `deleteMany`/`updateMany` ne passent PAS par l'extension d'audit (qui
+ *    n'intercepte que `update`/`delete` unitaires) : pas de bruit inutile dans
+ *    un AuditLog qui va de toute façon être vidé dans la même transaction.
  */
 export class ErreurReinitialisation extends Error {
   constructor(
@@ -89,6 +97,11 @@ export async function reinitialiserBase(raison: string | undefined): Promise<{ s
     prisma.groupe.deleteMany(),
     prisma.departement.deleteMany(),
     prisma.travailleur.deleteMany(),
+    // Production — Schémas de commande et Bons de livraison (3.3 d/e), AVANT
+    // Commandes clients : cf. note ON DELETE RESTRICT ci-dessus. Supprimer un
+    // SchemaCommande cascade son CycleLivraison (C4) et tout son historique.
+    prisma.bonLivraison.deleteMany(),
+    prisma.schemaCommande.deleteMany(),
     // Commandes clients
     prisma.paiementCommande.deleteMany(),
     prisma.commandeClient.deleteMany(),
@@ -104,7 +117,9 @@ export async function reinitialiserBase(raison: string | undefined): Promise<{ s
     prisma.production.deleteMany(),
     prisma.planningLigneProduit.deleteMany(),
     prisma.planningProduction.deleteMany(),
-    // Caisse — le registre (3.1)
+    // Caisse — le registre (3.1). Remises AVANT sessions (RESTRICT, voir note).
+    prisma.remiseCaisse.deleteMany(),
+    prisma.sessionCaisse.deleteMany(),
     prisma.tauxDuJour.deleteMany(),
     prisma.depenseCaisse.deleteMany(),
     // Comptes — en dernier, référencé par (presque) tout ce qui précède.
