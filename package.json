@@ -22,6 +22,9 @@
     "schema": "prisma/schema.prisma",
     "seed": "tsx prisma/seed.ts"
   },
+  "overrides": {
+    "deepmerge-ts": "^8.0.1"
+  },
   "devDependencies": {
     "@testing-library/dom": "10.4.1",
     "@testing-library/react": "16.3.2",
