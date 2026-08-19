@@ -7,7 +7,7 @@
 - `apps/api/src/routes/production.ts` (717 lignes — le plus long routeur Niveau 2 du projet)
 - `apps/web/src/pages/Production.tsx`, `apps/web/src/pages/BonsLivraison.tsx`
 - Portions de `apps/api/src/services/pdf.ts` : `construirePdfBonsLivraison`, `nomFichierPdf` (la fonction générique `construirePdf`, utilisée par les exports de rapports, est renvoyée au futur chapitre Export/Rapports — le fichier `pdf.ts` dans son ensemble reste « En cours » dans la matrice jusque-là)
-- Portions de `packages/shared/src/index.ts` liées à la section 3.3 (schémas Zod, DTO, `totalDestinationsBacs`, `CODES_INGREDIENT`)
+- Portions de `packages/shared/src/index.ts` liées à la section 3.3 (schémas Zod, DTO, `totalDestinationsBacs`, `CODES_INGREDIENT`, `controleQualiteSchema`, `productionPertesSchema`, `pertesJustifiees`, `VERDICTS_QUALITE`)
 
 Ce module correspond intégralement à la section **3.3 « Production »** de la spécification — une refonte explicite documentée dans la spec elle-même : les anciennes « fiches recettes » sont retirées, remplacées par cinq volets indépendants + une vue d'écarts.
 
@@ -20,6 +20,7 @@ La spécification (section 3.3) est explicite sur le changement de paradigme : l
 - **c) Ingrédients utilisés** — saisis avec la production, décrémentent automatiquement le stock.
 - **d) Schéma de commande** — digitalisation de la fiche papier remplie la veille, alimente automatiquement le Planning.
 - **e) Bon de livraison** — digitalisation de la fiche remplie à la livraison, volontairement indépendante du Schéma.
+- **f) Contrôle qualité, pertes motivées et clôture** — verrou définitif posé sur une Production une fois son contenu vérifié (§7 bis).
 
 Une vue transversale (**Écarts**) compare enfin le prévu (Planning) au réalisé (somme des Productions du jour).
 
@@ -56,6 +57,8 @@ Deux nuances méritent d'être soulignées, toutes deux confirmées par la spec 
 2. **Un Schéma vide ne crée pas de Planning vide** : la condition `else if (lignesPlanning.length > 0)` évite de créer un enregistrement `PlanningProduction` inutile si aucune ligne n'a de quantité positive.
 
 Le tout est exécuté dans **une seule transaction Prisma** englobant le remplacement du Schéma et la mise à jour dérivée du Planning — cohérence garantie entre les deux tables, jamais l'une sans l'autre.
+
+**Renvoi croisé — Cycle de livraison** : dans le code actuel, enregistrer un Schéma de commande (`PUT /schema-commande`) ne se limite plus à alimenter le Planning — la même transaction appelle aussi `synchroniserPrevisionsCycles` (`apps/api/src/services/cyclesLivraison.ts`), qui crée ou met à jour, pour chaque client du Schéma, un `CycleLivraison` dont le statut initial est `PREVISION`. Ce mécanisme (transitions de statut, verrouillage, acceptation) est **entièrement** documenté dans un chapitre séparé, le Volume 11z-6 — Cycle de livraison ; il n'est pas détaillé ici pour ne pas dupliquer ce contenu.
 
 ## 5. e) Bon de livraison — volontairement indépendant
 
@@ -99,6 +102,25 @@ ecartReconciliation: totalDestinations - p.bacsProduits,
 
 `GET /api/production/ecarts?date=...` compare le Planning de la date (le prévu) à la somme de toutes les Productions enregistrées ce jour-là (le réalisé), sur 5 métriques (bacs, sacs de farine, paquets de levure, quantité d'huile, kg de sel). Une fonction interne `ligne()` construit chaque ligne du DTO avec un arrondi à 3 décimales sur l'écart (`Math.round((realise - prevu) * 1000) / 1000`), cohérent avec la précision `Decimal(12,3)` des quantités physiques en base (Volume 13).
 
+## 7 bis. f) Contrôle qualité, pertes motivées et clôture (section 3.3 f)
+
+Une `Production` naît avec `statut: "OUVERTE"` (`STATUTS_PRODUCTION` = `OUVERTE | CLOTUREE`, `packages/shared/src/index.ts`) : ses pertes et son contrôle qualité peuvent être saisis ou corrigés librement tant qu'elle n'est pas clôturée. `chargerProductionOuverte` (`apps/api/src/routes/production.ts`, ligne 763) est le garde-fou partagé par les trois routes de ce volet : il renvoie `404` si la Production n'existe pas, `409` (« Cette production est clôturée : plus aucune modification possible ») si `statut === "CLOTUREE"` — la clôture verrouille tout, y compris des champs qui n'ont de toute façon jamais leur propre route de modification après création (`bacsProduits` et les autres champs saisis à `POST /productions`, section §6, n'ont aucun endpoint `PUT` général).
+
+- **`PUT /productions/:id/pertes`** — remplace intégralement la répartition des pertes par motif (`ProductionPerte`), même idiome « remplacement, pas diff » que les dons (§6) et le Schéma de commande (§4) : `deleteMany` puis `createMany`. Chaque `motifPerteId` doit exister dans la table `MotifPerte` (liste fixe extensible) et ne peut apparaître qu'une fois (`400` sinon).
+- **`PUT /productions/:id/controle-qualite`** — un seul `ControleQualite` par Production (`upsert` sur `productionId`, contrainte d'unicité en base). `controleQualiteSchema` (`packages/shared/src/index.ts`) impose un `verdict` (`CONFORME` ou `NON_CONFORME`, `VERDICTS_QUALITE`) et **exige un `motifId`** dès que le verdict est `NON_CONFORME` (`.refine`, message « Un motif est requis quand le contrôle qualité est non conforme ») — facultatif si `CONFORME`. Le motif, quand fourni, doit exister dans `MotifNonConformite` (liste fixe extensible, ex. « Cuisson insuffisante », « Aspect non conforme », « Poids non conforme »).
+- **`POST /productions/:id/cloturer`** — le verrou définitif. Deux conditions bloquantes, vérifiées dans cet ordre :
+  1. Un contrôle qualité doit déjà être enregistré (`400`, `code: "CONTROLE_QUALITE_MANQUANT"`) — impossible de clôturer une Production jamais vérifiée.
+  2. Les pertes doivent être **exhaustivement** motivées : `pertesJustifiees({ bacsFoutus, pertes })` (`packages/shared/src/index.ts`) exige que la somme des `nombreBacs` des lignes `ProductionPerte` soit **exactement égale** à `bacsFoutus` — ni moins (des bacs foutus non expliqués), ni plus (`400`, `code: "PERTES_NON_JUSTIFIEES"`, message chiffré : *« Les pertes ne sont pas entièrement motivées : N bac(s) motivé(s) pour M bac(s) foutu(s) »*). Contrairement à la réconciliation des destinations (§6, `ecartReconciliation`), purement informative, cette vérification est **strictement bloquante** — nuance explicite du commentaire du code (« contrairement aux dons, purement informatifs »).
+
+  Une fois ces deux conditions réunies, la Production passe `statut: "CLOTUREE"`, `clotureeLe`/`clotureeParId` sont renseignés, et un événement `PRODUCTION_CLOTUREE` est publié sur le bus d'événements (`lib/events.ts`, Volume 12).
+
+**Exemple chiffré** — une production de 8 bacs foutus (`bacsFoutus: 8`) déjà passée en contrôle qualité `NON_CONFORME` (motif « Cuisson insuffisante ») :
+
+1. Le Responsable Production saisit deux lignes de perte : « Casse/manutention » 5 bacs, « Invendu périmé » 2 bacs. Total motivé = 7. `POST /productions/:id/cloturer` échoue avec `PERTES_NON_JUSTIFIEES` : *« 7 bac(s) motivé(s) pour 8 bac(s) foutu(s) »* — 1 bac reste sans motif, la clôture est refusée.
+2. Il corrige la ligne « Invendu périmé » à 3 bacs (total motivé = 8 = `bacsFoutus`). Un nouvel appel à `POST /productions/:id/cloturer` réussit : `statut` passe à `CLOTUREE`, toute tentative ultérieure de modifier les pertes ou le contrôle qualité de cette Production échoue désormais avec `409`.
+
+Fonction partagée `pertesJustifiees` : le frontend (`ProductionPage`, §8) l'appelle avec exactement les mêmes données pour désactiver le bouton « Clôturer » tant que la condition n'est pas remplie (`peutCloturer`), plutôt que de laisser l'utilisateur découvrir le blocage seulement après l'envoi — même philosophie que `totalDestinationsBacs` déjà rencontrée au §6.
+
 ## 8. Frontend
 
 `ProductionPage` (1003 lignes, la page la plus longue du module) regroupe cinq sections dans un seul écran : la carte `ZonesDepositaireCard` (gestion des zones de dépôt, éditable si écriture Commandes **ou** Production — exactement la règle « l'un des deux suffit » de la spec 3.3 d, vérifiée dans le JSX : `editable={peutEcrire("COMMANDES") || peutEcrire("PRODUCTION")}`), le tableau du Schéma de commande (Dépositaires groupés par zone via `groupesDepositaires`, Mamans en liste à part — reproduisant fidèlement la fiche papier), la vue Écarts, la liste des Plannings, et l'historique des Productions enregistrées. `BonsLivraisonPage` est un **écran séparé** (`/production/bons-livraison`), pour ne pas surcharger l'écran principal — exactement le même choix d'organisation que `/commandes/clients` pour le module Commandes (Volume 11h).
@@ -115,7 +137,7 @@ Une production de 200 bacs est enregistrée avec : 120 livrés Dépositaires, 50
 
 ## 10. Croisement avec `docs/spec-boulangerie.md`
 
-Correspondance vérifiée exhaustivement contre la section 3.3 (a à e) : Planning, Productions (réconciliation non bloquante, dons par motif via `MotifDon`), décrémentation via code d'ingrédient (pas par nom), Schéma de commande (alimentation automatique du Planning, zones de dépôt en lecture ouverte/écriture Commandes-ou-Production), Bon de livraison (Dépositaires uniquement, indépendance volontaire du Schéma). **Aucun écart trouvé** — y compris sur la nuance historique de la permission des zones de dépôt, où la spec documente elle-même une correction de conception (`écriture réservée à Commandes seul` → `Commandes OU Production`) déjà reflétée dans le code actuel (vérifié : `ZonesDepositaireCard editable={peutEcrire("COMMANDES") || peutEcrire("PRODUCTION")}`).
+Correspondance vérifiée exhaustivement contre la section 3.3 (a à f) : Planning, Productions (réconciliation non bloquante, dons par motif via `MotifDon`), décrémentation via code d'ingrédient (pas par nom), Schéma de commande (alimentation automatique du Planning, zones de dépôt en lecture ouverte/écriture Commandes-ou-Production), Bon de livraison (Dépositaires uniquement, indépendance volontaire du Schéma), Contrôle qualité/pertes/clôture (§7 bis — verdict avec motif obligatoire si non conforme, pertes exactement égales à `bacsFoutus`, verrouillage total après clôture). **Aucun écart trouvé** — y compris sur la nuance historique de la permission des zones de dépôt, où la spec documente elle-même une correction de conception (`écriture réservée à Commandes seul` → `Commandes OU Production`) déjà reflétée dans le code actuel (vérifié : `ZonesDepositaireCard editable={peutEcrire("COMMANDES") || peutEcrire("PRODUCTION")}`).
 
 ## 11. Erreurs fréquentes et cas limites
 
@@ -124,6 +146,9 @@ Correspondance vérifiée exhaustivement contre la section 3.3 (a à e) : Planni
 - **Écart de réconciliation, quel que soit son signe** : jamais bloquant, uniquement signalé.
 - **Bon de livraison sur un client non-Dépositaire** : rejeté en amont (`400`) par la vérification `typeClient: { nom: "Dépositaire" }`.
 - **Stock insuffisant lors de la décrémentation automatique** : la production entière échoue (transaction `Serializable`), pas de production « à moitié » enregistrée avec un stock incohérent.
+- **Clôture tentée sans contrôle qualité enregistré** : rejetée (`400`, `CONTROLE_QUALITE_MANQUANT`) avant même de vérifier les pertes.
+- **Somme des pertes différente de `bacsFoutus`, dans un sens ou dans l'autre** : clôture rejetée (`400`, `PERTES_NON_JUSTIFIEES`) — contrairement à l'écart de réconciliation (jamais bloquant), cette vérification l'est strictement.
+- **Modification des pertes ou du contrôle qualité d'une Production déjà clôturée** : `409` explicite (« plus aucune modification possible »), quel que soit le champ visé.
 
 ## 12. Résumé
 
