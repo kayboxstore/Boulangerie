@@ -133,3 +133,60 @@ describe("PUT /api/equipe/:id/activation — révocation de session (P0-01 round
     expect(mocks.invaliderSessionUtilisateur).not.toHaveBeenCalled();
   });
 });
+
+describe("PUT /api/equipe/:id/activation — protection du Principal (P0-01 round 5, point 1)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("un Administrateur secondaire (l'appelant mocké n'est pas Principal) ne peut pas désactiver le Principal", async () => {
+    mocks.findUnique.mockResolvedValue({ ...COMPTE_CIBLE, estAdminPrincipal: true });
+
+    const res = await request(appEquipe()).put("/api/equipe/u1/activation").send({ actif: false });
+
+    expect(res.status).toBe(409);
+    expect(res.body.erreur).toMatch(/transférez d'abord/i);
+  });
+
+  it("aucune écriture Prisma ni invalidation Socket.io n'a lieu lors du refus", async () => {
+    mocks.findUnique.mockResolvedValue({ ...COMPTE_CIBLE, estAdminPrincipal: true });
+
+    await request(appEquipe()).put("/api/equipe/u1/activation").send({ actif: false });
+
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.invaliderSessionUtilisateur).not.toHaveBeenCalled();
+  });
+
+  it("la désactivation du Principal reste refusée même en tentant de réactiver en même temps (actif:false prime)", async () => {
+    // Le body n'admet qu'un seul actif ; ce test vérifie que le refus porte
+    // uniquement sur la désactivation, pas sur une réactivation du Principal.
+    mocks.findUnique.mockResolvedValue({ ...COMPTE_CIBLE, estAdminPrincipal: true, actif: false });
+    mocks.update.mockResolvedValue({ ...COMPTE_CIBLE, estAdminPrincipal: true, actif: true });
+
+    const res = await request(appEquipe()).put("/api/equipe/u1/activation").send({ actif: true });
+
+    expect(res.status).toBe(200);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("l'ancien Principal, devenu un Administrateur ordinaire après transfert (estAdminPrincipal=false), peut être désactivé normalement", async () => {
+    mocks.findUnique.mockResolvedValue({ ...COMPTE_CIBLE, estAdminPrincipal: false });
+    mocks.update.mockResolvedValue({ ...COMPTE_CIBLE, estAdminPrincipal: false, actif: false });
+
+    const res = await request(appEquipe()).put("/api/equipe/u1/activation").send({ actif: false });
+
+    expect(res.status).toBe(200);
+    expect(mocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "u1" }, data: { actif: false, sessionActuelleId: null } }),
+    );
+    expect(mocks.invaliderSessionUtilisateur).toHaveBeenCalledTimes(1);
+  });
+
+  it("l'interdiction de s'auto-désactiver reste intacte même quand l'appelant est aussi le Principal", async () => {
+    mocks.findUnique.mockResolvedValue({ ...COMPTE_CIBLE, id: "admin-appelant", estAdminPrincipal: true });
+
+    const res = await request(appEquipe()).put("/api/equipe/admin-appelant/activation").send({ actif: false });
+
+    expect(res.status).toBe(409);
+    expect(res.body.erreur).toMatch(/propre compte/i);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+});

@@ -168,21 +168,30 @@ equipeRouter.post(
 );
 
 // Activation / désactivation d'un compte (section 3.14) — action directe (pas
-// critique), tout Admin. Un compte inactif ne peut plus se connecter (login
-// renvoie un 401 explicite) mais son historique reste intact. On ne peut pas se
-// désactiver soi-même.
+// critique), tout Admin. Un compte inactif ne peut plus se connecter : dès
+// avant le round 4, `requireAuth` rejetait déjà un compte devenu inactif (401)
+// via `chargerUtilisateur`, qui renvoie `null` si `!u.actif`. Ce qui manquait :
+// `sessionActuelleId` n'était pas explicitement effacé, et surtout une
+// connexion Socket.io déjà établie n'est réévaluée qu'au handshake — elle
+// pouvait donc rester connectée et continuer à recevoir des événements après
+// la désactivation HTTP. Le round 4 a ajouté l'effacement explicite du SID
+// (même écriture Prisma que `actif: false`) puis la déconnexion temps réel
+// via `invaliderSessionUtilisateur`, une fois cette écriture confirmée
+// réussie — jamais avant, jamais en cas d'échec. Une réactivation ne crée
+// jamais de nouvelle session artificielle : seul `actif` est modifié,
+// `sessionActuelleId` reste tel quel (déjà `null` depuis la désactivation) —
+// la prochaine connexion réelle en créera une.
 //
-// Correctif P0-01 (round 4, revue Codex, point 3) : une désactivation
-// n'invalidait auparavant PAS une session déjà ouverte — un jeton JWT émis
-// avant la désactivation restait valide jusqu'à son expiration naturelle
-// (`requireAuth` ne vérifie que `actif`, mais un jeton déjà en poche continue
-// de passer les contrôles qui ne recomparent pas `sessionActuelleId`). Cette
-// désactivation efface désormais `sessionActuelleId` dans LA MÊME écriture
-// que `actif: false`, puis invalide la session temps réel (Socket.io) une
-// fois cette écriture confirmée réussie — jamais avant, jamais en cas
-// d'échec. Une réactivation ne crée jamais de nouvelle session artificielle :
-// seul `actif` est modifié, `sessionActuelleId` reste tel quel (déjà `null`
-// depuis la désactivation) — la prochaine connexion réelle en créera une.
+// Correctif P0-01 (round 5, revue Codex, point 1) : cette route ne bloquait
+// que l'auto-désactivation. Un Admin secondaire (qui possède aussi
+// EQUIPE:ECRITURE) pouvait donc désactiver le Principal lui-même, laissant
+// `estAdminPrincipal=true` sur un compte inactif — un état qui rend tout
+// transfert normal impossible (`POST /:id/principal` exige que l'appelant SOIT
+// le Principal). Garde ajoutée, indépendante de l'appelant : impossible de
+// désactiver un compte qui porte encore `estAdminPrincipal=true` ; le statut
+// doit d'abord être transféré (`POST /:id/principal`), après quoi l'ancien
+// Principal, devenu un Administrateur ordinaire, redevient désactivable
+// normalement.
 equipeRouter.put("/:id/activation", requirePermission("EQUIPE", "ECRITURE"), async (req, res, next) => {
   try {
     const parsed = activationSchema.safeParse(req.body);
@@ -193,6 +202,11 @@ equipeRouter.put("/:id/activation", requirePermission("EQUIPE", "ECRITURE"), asy
     if (!compte) return res.status(404).json({ erreur: "Compte introuvable" });
     if (compte.id === req.utilisateur!.id && !parsed.data.actif) {
       return res.status(409).json({ erreur: "Impossible de désactiver votre propre compte" });
+    }
+    if (compte.estAdminPrincipal && !parsed.data.actif) {
+      return res.status(409).json({
+        erreur: "Transférez d'abord le statut d'Administrateur principal avant de désactiver ce compte",
+      });
     }
     const maj = await prisma.utilisateur.update({
       where: { id: compte.id },
@@ -269,8 +283,10 @@ equipeRouter.put("/:id", requirePermission("EQUIPE", "ECRITURE"), async (req, re
 // s'exécute immédiatement sans passer par traiterActionCritique — il doit
 // donc être verrouillé ici, sinon un Admin secondaire (même rôle, même
 // EQUIPE écriture) pourrait se l'attribuer lui-même. La cible doit être un
-// Administrateur ; l'index unique partiel en base garantit l'unicité, la
-// transaction retire puis attribue.
+// Administrateur ACTIF (round 5, revue Codex, point 2 : un compte inactif ne
+// peut pas devenir Principal — sinon la base se retrouve sans personne
+// capable d'agir avec ce statut) ; l'index unique partiel en base garantit
+// l'unicité, la transaction retire puis attribue.
 equipeRouter.post("/:id/principal", requirePermission("EQUIPE", "ECRITURE"), async (req, res, next) => {
   try {
     if (!req.utilisateur!.estAdminPrincipal) {
@@ -280,6 +296,9 @@ equipeRouter.post("/:id/principal", requirePermission("EQUIPE", "ECRITURE"), asy
     if (!cible) return res.status(404).json({ erreur: "Compte introuvable" });
     if (cible.role.nom !== ROLE_ADMINISTRATEUR) {
       return res.status(409).json({ erreur: "Seul un compte Administrateur peut devenir Principal" });
+    }
+    if (!cible.actif) {
+      return res.status(409).json({ erreur: "Ce compte est désactivé : il ne peut pas devenir Administrateur principal" });
     }
     if (cible.estAdminPrincipal) return res.status(409).json({ erreur: "Ce compte est déjà l'Administrateur principal" });
 
