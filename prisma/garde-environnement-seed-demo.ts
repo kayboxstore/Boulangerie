@@ -31,7 +31,15 @@ function hoteEstLocal(databaseUrl: string): boolean {
   } catch {
     return false;
   }
-  return HOTES_LOCAUX.has(hostname);
+  // `postgresql://` n'est pas un schéma "spécial" pour l'implémentation WHATWG
+  // URL de Node — contrairement à http(s), le hostname n'est ni mis en
+  // minuscules, ni dépouillé de ses crochets IPv6 automatiquement (vérifié :
+  // `new URL("postgresql://u@LOCALHOST/d").hostname === "LOCALHOST"`,
+  // `new URL("postgresql://u@[::1]/d").hostname === "[::1]"`). Sans cette
+  // normalisation, un DATABASE_URL local mais écrit `LOCALHOST` ou `[::1]`
+  // serait refusé à tort (échec fermé, pas une faille — mais une gêne réelle
+  // pour un développeur dont le shell/l'outil produit ces variantes).
+  return HOTES_LOCAUX.has(hostname.toLowerCase().replace(/^\[|\]$/g, ""));
 }
 
 /** Sous-ensemble de `process.env` nécessaire à la décision — passé explicitement pour rester testable sans mock global. */

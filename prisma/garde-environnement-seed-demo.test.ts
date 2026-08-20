@@ -60,6 +60,39 @@ describe("verifierEnvironnementSeedDemo — liste blanche (correctif P1-02)", ()
     expect(() => verifierEnvironnementSeedDemo({ NODE_ENV: "test", DATABASE_URL: LOCAL_127 })).not.toThrow();
   });
 
+  // `postgresql://` n'est pas un schéma "spécial" pour l'implémentation
+  // WHATWG URL de Node : contrairement à http(s), le hostname n'est ni mis en
+  // minuscules ni dépouillé de ses crochets IPv6 par `new URL()`. Sans
+  // normalisation explicite, ces variantes pourtant bien locales seraient
+  // refusées à tort (trouvé en revue indépendante round 2 — échec fermé, pas
+  // une faille, mais une vraie gêne pour un développeur local).
+  it("autorise un hôte local écrit en MAJUSCULES (new URL() ne normalise pas la casse pour ce schéma)", () => {
+    expect(() =>
+      verifierEnvironnementSeedDemo({ NODE_ENV: "development", DATABASE_URL: "postgresql://u:p@LOCALHOST:5432/db" }),
+    ).not.toThrow();
+  });
+
+  it("autorise ::1 écrit entre crochets, comme dans une vraie URL (new URL() ne retire pas les crochets pour ce schéma)", () => {
+    expect(() =>
+      verifierEnvironnementSeedDemo({ NODE_ENV: "development", DATABASE_URL: "postgresql://u:p@[::1]:5432/db" }),
+    ).not.toThrow();
+  });
+
+  it("un hôte distant ne devient PAS local en préfixant/suffixant localhost ou ::1 (pas de correspondance partielle)", () => {
+    const tentativesDeContournement = [
+      "postgresql://u:p@localhost.evil.example.com:5432/db",
+      "postgresql://u:p@evil.com/localhost:5432/db",
+      "postgresql://u:p@[::1].evil.com:5432/db",
+      "postgresql://u:p@notlocalhost:5432/db",
+    ];
+    for (const url of tentativesDeContournement) {
+      expect(
+        () => verifierEnvironnementSeedDemo({ NODE_ENV: "development", DATABASE_URL: url }),
+        `« ${url} » ne doit pas être reconnu comme local`,
+      ).toThrow(/ne pointe pas vers un hôte local/);
+    }
+  });
+
   it("autorise un DATABASE_URL distant UNIQUEMENT avec l'opt-in explicite SEED_DEMO_HOTE_DISTANT_AUTORISE=true", () => {
     expect(() =>
       verifierEnvironnementSeedDemo({
