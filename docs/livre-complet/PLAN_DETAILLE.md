@@ -1,6 +1,8 @@
 # Plan détaillé — Le Livre Boulangerie Lomoto
 
 > Ce document précise, pour chaque volume, les sous-sections prévues. Il se lit comme un plan de rédaction — le contenu réel est dans `volumes/`. Les cases à cocher sont mises à jour au fil de la rédaction.
+>
+> **Erratum (correctif P0-01, 19-20/08/2026)** : les mentions de `seed.ts` ci-dessous (comportement « autoritatif » sur la matrice de permissions) décrivent le code tel qu'il existait à la rédaction de ce plan — ce comportement a été retiré du chemin de production par le correctif P0-01. Voir `DEPLOIEMENT.md` § « Correctif P0-01 » pour l'état actuel. Ce document n'est pas réécrit rétroactivement au-delà de cette note.
 
 ## Volume 1 — Présentation du produit et du problème résolu ✅
 - Le contexte : une boulangerie, ses circuits de vente (Dépositaires, Mamans, Vente cash), sa paie

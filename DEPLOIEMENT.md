@@ -13,8 +13,10 @@ dur. C'est **un seul service** à déployer + une base PostgreSQL.
 
 Le fichier `render.yaml` (à la racine) décrit tout ça pour l'hébergeur
 **Render** : il crée la base, injecte automatiquement `DATABASE_URL`, génère un
-`JWT_SECRET` secret, lance les migrations, insère les données de démonstration,
-puis démarre le service.
+`JWT_SECRET` secret, lance les migrations, prépare la configuration
+structurelle minimale (rôles, permissions, motifs fixes — **aucun compte,
+aucun mot de passe, aucune donnée de démonstration**, voir « Se connecter »
+ci-dessous), puis démarre le service.
 
 ## Étapes (depuis le navigateur du téléphone)
 
@@ -153,18 +155,34 @@ seule version du client est installée : ce piège ne s'y pose pas.
 
 ## Se connecter
 
-Comptes de démonstration (mot de passe commun **`Lomoto2026!`**) :
+**Depuis ce correctif (P0-01, 19-20/08/2026 — voir plus bas), le chemin de
+déploiement ne crée plus jamais de compte de démonstration ni de mot de passe
+connu.** Sur une base neuve, la base est vide au premier démarrage : l'écran
+de connexion est automatiquement remplacé par l'**Assistant de premier
+lancement**, qui guide la création du tout premier compte — l'Administrateur
+Principal — avec un mot de passe choisi par le véritable responsable, jamais
+présumé par le code. Une fois ce compte créé, l'assistant se referme de
+lui-même (la base n'est plus vide) et l'écran de connexion normal reprend sa
+place, pour toujours.
 
-| Rôle | E-mail |
-|------|--------|
-| Administrateur principal | `admin@boulangerie-lomoto.com` |
-| Administrateur secondaire | `admin2@boulangerie-lomoto.com` |
-| Directeur Général | `dg@boulangerie-lomoto.com` |
-| Caissière | `caisse@boulangerie-lomoto.com` |
-| Chargé des commandes | `commandes@boulangerie-lomoto.com` |
+> ⚠️ **Ceci décrit le comportement du NOUVEAU chemin de déploiement, pas
+> nécessairement l'état d'une base déjà en production avant ce correctif.**
+> Si ce déploiement existait avant le 19-20/08/2026, il a pu exécuter l'ancien
+> `npm run db:seed` à un déploiement antérieur — dans ce cas, des comptes de
+> démonstration à mot de passe connu (`Lomoto2026!`) peuvent encore exister
+> réellement dans cette base tant qu'un assainissement manuel n'a pas été
+> effectué. Ce correctif empêche un futur redéploiement d'en recréer ou d'en
+> réattribuer le statut principal ; il ne supprime et ne modifie **aucune**
+> donnée déjà présente. Voir la procédure manuelle post-incident (documentée
+> séparément, jamais automatisée) pour l'inventaire et l'assainissement
+> contrôlé des comptes existants.
 
-> ⚠️ **Change ces mots de passe** (ou supprime les comptes de démo) si le
-> déploiement est exposé publiquement — l'URL est accessible à tous.
+> Les identifiants `admin@boulangerie-lomoto.com` / `Lomoto2026!` mentionnés
+> ailleurs dans ce dépôt (`README.md`, `prisma/seed-demo.ts`) sont **destinés
+> au développement local** — `npm run db:seed:demo` refuse explicitement de
+> s'exécuter hors d'un environnement de développement/test reconnu (voir
+> « Correctif P0-01 » ci-dessous) et n'est jamais invoqué par `render.yaml` ni
+> par aucun chemin de déploiement.
 
 ## Bon à savoir (offre gratuite Render)
 
@@ -173,9 +191,96 @@ Comptes de démonstration (mot de passe commun **`Lomoto2026!`**) :
 - La base PostgreSQL gratuite a une **durée de vie limitée** (Render l'indique à
   la création) — parfait pour tester, à repasser en offre payante pour un usage
   durable.
-- Les données de démonstration sont ré-insérées à chaque redéploiement, mais de
-  façon **non destructive** (les ventes/commandes que tu crées ne sont pas
-  effacées ; seuls les comptes/produits de base sont garantis présents).
+- Un redéploiement rejoue les migrations et le bootstrap de production
+  (rôles/permissions/motifs fixes). Sur une base déjà initialisée, ce
+  bootstrap **ne modifie et ne supprime plus jamais** une permission, un
+  niveau d'accès ou une hiérarchie de rôle existants — même si un
+  Administrateur les a modifiés entre-temps — et ne touche jamais aux comptes
+  existants ni à l'Administrateur Principal déjà en place. Voir « Correctif
+  P0-01 » ci-dessous.
+
+## Correctif P0-01 — séparation bootstrap de production / seed de démonstration (19-20/08/2026)
+
+Avant ce correctif, `render.yaml` exécutait `npm run db:seed` à **chaque**
+déploiement — un script qui crée des comptes à mot de passe connu et publié
+dans ce dépôt, et qui **réattribuait de force** le statut d'Administrateur
+Principal au compte générique `admin@boulangerie-lomoto.com`, même si le
+véritable responsable en avait délégué la propriété entre-temps. Un simple
+redéploiement pouvait donc rouvrir un accès connu et retirer le statut
+principal au vrai responsable.
+
+Le chemin de production et le chemin de développement sont maintenant
+complètement séparés :
+
+| | Production (`render.yaml`) | Développement local |
+|---|---|---|
+| Commande | `npm run db:bootstrap:production` | `npm run db:seed:demo` |
+| Fichier | `prisma/bootstrap-production.ts` | `prisma/seed-demo.ts` |
+| Crée | Rôles, permissions, motifs fixes (don/perte/non-conformité) — **jamais un compte** | Tout ce que fait le bootstrap, **plus** des comptes de démo à mot de passe connu, des clients/fournisseurs/stocks fictifs |
+| Sur une base déjà initialisée | Ignore intégralement tout rôle déjà existant (ne touche ni ses permissions ni sa hiérarchie) — n'installe que ce qui est réellement absent | Toujours réservé au dev — jamais exécuté en production |
+| `estAdminPrincipal` | Jamais touché | Réattribué de force à `admin@boulangerie-lomoto.com` (comportement historique, sans risque hors dev) |
+| Garde | Sûr par construction (le type `ClientBootstrap` rend `prisma.utilisateur.*` non compilable, y compris depuis l'intérieur de sa transaction atomique) | Liste **blanche** : refuse sauf si `NODE_ENV` vaut exactement `development`/`test` **ET** `DATABASE_URL` pointe vers un hôte local — un `NODE_ENV` absent, `staging` ou `preview` est refusé, tout comme un hôte distant, **sans aucune exception ni opt-in possible** (round 3 : l'opt-in round 2 a été jugé inacceptable et entièrement retiré) |
+
+Le premier compte de production (Administrateur Principal) est créé
+**exclusivement** par l'Assistant de premier lancement (voir « Se
+connecter » ci-dessus), jamais par un script de seed.
+
+### Round 2 (revue Codex externe) : non-destructivité, atomicité, vérification en CI
+
+Une revue externe (Codex) a identifié trois points supplémentaires, depuis
+corrigés :
+
+- **Non-destructif et atomique** — `bootstrap-production.ts` n'installe
+  désormais un rôle (et ses permissions) que s'il est **totalement absent** ;
+  un rôle déjà présent n'est plus jamais retouché, qu'il ait été créé par un
+  bootstrap précédent ou modifié depuis par un Administrateur via
+  `PUT /api/roles/:id/permissions`. Toute l'installation initiale tourne dans
+  une seule transaction PostgreSQL : un échec en cours de route n'écrit rien
+  (aucune initialisation partielle possible). Un futur changement de la
+  matrice d'un rôle **déjà déployé** doit passer par une migration Prisma
+  versionnée, plus jamais par un rejeu du bootstrap.
+- **Garde en liste blanche** — voir le tableau ci-dessus ; corrige le fait
+  qu'un `NODE_ENV` absent ou mal configuré laissait auparavant passer le seed
+  de démonstration.
+- **Vérifié en CI contre une vraie base PostgreSQL**, en plus des tests
+  unitaires mockés : `.github/workflows/ci.yml` exécute
+  `scripts/verifier-integration-bootstrap-ci.ts`.
+
+### Round 3 (revue Codex externe) : suppression du contournement, robustesse multiplateforme, preuves CI complètes
+
+Une seconde revue externe (Codex) a identifié quatre points supplémentaires,
+depuis corrigés :
+
+- **Contournement distant supprimé sans remplacement** — l'opt-in round 2
+  (`SEED_DEMO_HOTE_DISTANT_AUTORISE`) a été jugé inacceptable pour un script
+  qui crée des comptes à mot de passe connu : retiré entièrement (code, tests,
+  documentation). Un `DATABASE_URL` distant est désormais refusé sans
+  exception, quel que soit `NODE_ENV`.
+- **Robustesse multiplateforme** — `prisma/bootstrap-production.ts` détectait
+  son exécution directe via une comparaison manuelle `` `file://${process.argv[1]}` ``,
+  qui échoue silencieusement sous Windows et pour tout chemin nécessitant un
+  encodage URL (espaces...) — remplacée par `pathToFileURL` (le mécanisme
+  standard recommandé par Node), vérifié par un vrai sous-processus depuis un
+  chemin contenant un espace. Le script `db:seed:demo` utilisait une syntaxe
+  shell POSIX (`` NODE_ENV="${NODE_ENV:-development}" ``, Unix uniquement) —
+  remplacée par `scripts/lancer-seed-demo.mjs`, un lanceur Node pur,
+  multiplateforme, qui préserve exactement la même règle (défaut seulement si
+  `NODE_ENV` est absent, jamais un écrasement).
+- **La vérification d'intégration CI se protège elle-même** — le script
+  effectue de vraies écritures destructives volontaires (modification/
+  suppression de permission, échec de transaction injecté) ; il exige
+  désormais lui-même, avant tout accès Prisma, un hôte local, le nom de base
+  exact `lomoto_ci`, et une confirmation d'environnement propre à ce script
+  (voir `scripts/garde-integration-ci.ts`).
+- **Preuves PostgreSQL complètes** — la CI prouve désormais aussi qu'une
+  permission supprimée manuellement n'est jamais recréée, qu'une hiérarchie de
+  rôle modifiée n'est jamais réécrite, qu'un échec injecté en cours
+  d'installation entraîne un rollback RÉEL (zéro donnée partielle), qu'une
+  exécution normale après cet échec réussit intégralement, et exerce le VRAI
+  chemin `npm run db:bootstrap:production` (pas seulement la fonction
+  importée directement). Le refus du seed de démonstration en production
+  vérifie désormais le message précis de la garde, pas seulement un code de
+  sortie non nul.
 
 ## Autres hébergeurs
 
@@ -185,9 +290,14 @@ variables d'environnement — `DATABASE_URL` (PostgreSQL) et `JWT_SECRET` — pu
 
 ```
 npm install --include=dev
-npx prisma generate
-npx prisma migrate deploy
-npm run db:seed            # optionnel : données de démonstration
+NODE_ENV=production npx prisma generate
+NODE_ENV=production npx prisma migrate deploy
+NODE_ENV=production npm run db:bootstrap:production
 npm run build --workspace apps/web
-npm run start --workspace apps/api   # écoute sur $PORT
+NODE_ENV=production npm run start --workspace apps/api   # écoute sur $PORT
 ```
+
+`NODE_ENV=production` n'est pas qu'une convention ici : c'est ce qui, en
+défense en profondeur, ferait échouer immédiatement toute tentative
+(volontaire ou accidentelle) de lancer `npm run db:seed:demo` contre cette
+base.

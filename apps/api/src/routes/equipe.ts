@@ -16,6 +16,11 @@ import { traiterActionCritique } from "../services/actionsCritiques.js";
 import { busEvenements } from "../lib/events.js";
 import { genererMotDePasseTemporaire } from "../lib/recuperationMotDePasse.js";
 import { invaliderSessionUtilisateur } from "../lib/realtime.js";
+import {
+  desactiverCompteAtomique,
+  transfererStatutPrincipal,
+  ErreurTransfertPrincipalConcurrent,
+} from "../services/principal.js";
 
 export const equipeRouter = Router();
 
@@ -168,9 +173,39 @@ equipeRouter.post(
 );
 
 // Activation / désactivation d'un compte (section 3.14) — action directe (pas
-// critique), tout Admin. Un compte inactif ne peut plus se connecter (login
-// renvoie un 401 explicite) mais son historique reste intact. On ne peut pas se
-// désactiver soi-même.
+// critique), tout Admin. Un compte inactif ne peut plus se connecter : dès
+// avant le round 4, `requireAuth` rejetait déjà un compte devenu inactif (401)
+// via `chargerUtilisateur`, qui renvoie `null` si `!u.actif`. Ce qui manquait :
+// `sessionActuelleId` n'était pas explicitement effacé, et surtout une
+// connexion Socket.io déjà établie n'est réévaluée qu'au handshake — elle
+// pouvait donc rester connectée et continuer à recevoir des événements après
+// la désactivation HTTP. Le round 4 a ajouté l'effacement explicite du SID
+// (même écriture Prisma que `actif: false`) puis la déconnexion temps réel
+// via `invaliderSessionUtilisateur`, une fois cette écriture confirmée
+// réussie — jamais avant, jamais en cas d'échec. Une réactivation ne crée
+// jamais de nouvelle session artificielle : seul `actif` est modifié,
+// `sessionActuelleId` reste tel quel (déjà `null` depuis la désactivation) —
+// la prochaine connexion réelle en créera une.
+//
+// Correctif P0-01 (round 5, revue Codex, point 1) : cette route ne bloquait
+// que l'auto-désactivation. Un Admin secondaire (qui possède aussi
+// EQUIPE:ECRITURE) pouvait donc désactiver le Principal lui-même, laissant
+// `estAdminPrincipal=true` sur un compte inactif — un état qui rend tout
+// transfert normal impossible (`POST /:id/principal` exige que l'appelant SOIT
+// le Principal). Le statut doit d'abord être transféré (`POST /:id/principal`),
+// après quoi l'ancien Principal, devenu un Administrateur ordinaire, redevient
+// désactivable normalement.
+//
+// Correctif P0-01 (round 6, revue Codex, point 1) : une simple pré-lecture de
+// `estAdminPrincipal` suivie d'un `update` séparé laisse une fenêtre de
+// course — un transfert concurrent (`POST /:id/principal`) peut rendre ce
+// compte Principal ENTRE la lecture et l'écriture, produisant un
+// Administrateur Principal inactif. L'invariant est donc appliqué au niveau
+// de l'écriture elle-même, jamais d'une pré-lecture — voir
+// `services/principal.ts` (`desactiverCompteAtomique`), partagé avec
+// `scripts/verifier-concurrence-equipe-ci.ts` qui l'exerce sous une vraie
+// concurrence PostgreSQL (pas seulement des tests mockés, qui ne peuvent pas
+// simuler une vraie course).
 equipeRouter.put("/:id/activation", requirePermission("EQUIPE", "ECRITURE"), async (req, res, next) => {
   try {
     const parsed = activationSchema.safeParse(req.body);
@@ -182,9 +217,22 @@ equipeRouter.put("/:id/activation", requirePermission("EQUIPE", "ECRITURE"), asy
     if (compte.id === req.utilisateur!.id && !parsed.data.actif) {
       return res.status(409).json({ erreur: "Impossible de désactiver votre propre compte" });
     }
+
+    if (!parsed.data.actif) {
+      const resultat = await desactiverCompteAtomique(prisma, compte.id);
+      if (!resultat.ok) {
+        if (resultat.raison === "INTROUVABLE") return res.status(404).json({ erreur: "Compte introuvable" });
+        return res.status(409).json({
+          erreur: "Transférez d'abord le statut d'Administrateur principal avant de désactiver ce compte",
+        });
+      }
+      invaliderSessionUtilisateur(compte.id);
+      return res.json({ compte: versCompteDTO(resultat.compte) });
+    }
+
     const maj = await prisma.utilisateur.update({
       where: { id: compte.id },
-      data: { actif: parsed.data.actif },
+      data: { actif: true },
       include: INCLUDE_COMPTE,
     });
     res.json({ compte: versCompteDTO(maj) });
@@ -254,8 +302,22 @@ equipeRouter.put("/:id", requirePermission("EQUIPE", "ECRITURE"), async (req, re
 // s'exécute immédiatement sans passer par traiterActionCritique — il doit
 // donc être verrouillé ici, sinon un Admin secondaire (même rôle, même
 // EQUIPE écriture) pourrait se l'attribuer lui-même. La cible doit être un
-// Administrateur ; l'index unique partiel en base garantit l'unicité, la
-// transaction retire puis attribue.
+// Administrateur ACTIF (round 5, revue Codex, point 2 : un compte inactif ne
+// peut pas devenir Principal — sinon la base se retrouve sans personne
+// capable d'agir avec ce statut).
+//
+// Correctif P0-01 (round 6, revue Codex, point 1) : la version précédente
+// lisait `req.utilisateur!.estAdminPrincipal` (capturé au chargement de la
+// session, potentiellement périmé) et `cible.actif`/`cible.estAdminPrincipal`
+// (pré-lecture), puis écrivait sans revérifier ces conditions au moment de
+// l'écriture — une désactivation concurrente de la cible (ou un second
+// transfert concurrent du même ancien Principal) pouvait s'intercaler entre
+// la lecture et l'écriture. La transaction atomique (retrait puis attribution,
+// chacun conditionné sur l'état exigé AU MOMENT DE L'ÉCRITURE, jamais sur la
+// pré-lecture ci-dessous qui reste seulement un raccourci de rapidité) vit
+// dans `services/principal.ts` (`transfererStatutPrincipal`), partagée avec
+// `scripts/verifier-concurrence-equipe-ci.ts` qui l'exerce sous une vraie
+// concurrence PostgreSQL — voir ce fichier pour le détail du mécanisme.
 equipeRouter.post("/:id/principal", requirePermission("EQUIPE", "ECRITURE"), async (req, res, next) => {
   try {
     if (!req.utilisateur!.estAdminPrincipal) {
@@ -266,20 +328,23 @@ equipeRouter.post("/:id/principal", requirePermission("EQUIPE", "ECRITURE"), asy
     if (cible.role.nom !== ROLE_ADMINISTRATEUR) {
       return res.status(409).json({ erreur: "Seul un compte Administrateur peut devenir Principal" });
     }
+    if (!cible.actif) {
+      return res.status(409).json({ erreur: "Ce compte est désactivé : il ne peut pas devenir Administrateur principal" });
+    }
     if (cible.estAdminPrincipal) return res.status(409).json({ erreur: "Ce compte est déjà l'Administrateur principal" });
 
-    const compte = await prisma.$transaction(async (tx) => {
-      await tx.utilisateur.updateMany({
-        where: { estAdminPrincipal: true },
-        data: { estAdminPrincipal: false },
-      });
-      return tx.utilisateur.update({
-        where: { id: cible.id },
-        data: { estAdminPrincipal: true },
-        include: INCLUDE_COMPTE,
-      });
-    });
-    res.json({ compte: versCompteDTO(compte) });
+    try {
+      const compte = await transfererStatutPrincipal(prisma, req.utilisateur!.id, cible.id);
+      res.json({ compte: versCompteDTO(compte) });
+    } catch (e) {
+      if (e instanceof ErreurTransfertPrincipalConcurrent) {
+        return res.status(409).json({
+          erreur:
+            "Le transfert a échoué : l'état a changé entre-temps (vous n'êtes plus Principal, ou la cible n'est plus active/Administrateur/éligible). Aucune modification n'a été appliquée, réessayez.",
+        });
+      }
+      throw e;
+    }
   } catch (e) {
     next(e);
   }

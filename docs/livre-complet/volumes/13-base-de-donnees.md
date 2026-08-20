@@ -2,6 +2,8 @@
 
 **Niveau de risque : 1 — Critique** pour `schema.prisma` (la structure qui porte tout l'argent et toutes les permissions de l'application) ; **Niveau 3** pour `seed.ts` (jeu de données de démonstration). La quasi-totalité des modèles Niveau 1 (commandes, paie, permissions, approbations, délégations, audit, caisse) a déjà été expliquée en détail, champ par champ, dans son chapitre applicatif (Volumes 11a à 11k) — ce chapitre ne les reproduit pas ligne à ligne, il assemble la **vue d'ensemble relationnelle** qui manquait encore : comment tous ces modèles s'articulent entre eux, quelles conventions transversales les relient, et ce que l'historique des 29 migrations révèle sur l'évolution réelle du projet.
 
+> **Mise à jour (correctif P0-01, 19-20/08/2026, complété après revue externe)** : le §5.7 ci-dessous décrit `prisma/seed.ts` comme « autoritatif sur la matrice de permissions » (`upsertRole` supprimant via `deleteMany` toute permission absente de la liste). C'était vrai à la rédaction de ce chapitre, mais c'était précisément le risque de sécurité corrigé par P0-01 : `render.yaml` exécutait ce comportement à **chaque déploiement de production**, pouvant recréer des comptes à mot de passe connu et écraser silencieusement une permission modifiée par un Administrateur réel. Le fichier a été renommé `prisma/seed-demo.ts` (dev/test uniquement, refuse désormais de s'exécuter hors d'un environnement local explicitement reconnu) et son comportement « autoritatif » a été retiré du chemin de production : `prisma/bootstrap-production.ts` (nouveau, `npm run db:bootstrap:production`) n'installe un rôle que s'il est **totalement absent**, ne modifie et ne supprime plus jamais une permission déjà existante. Voir `DEPLOIEMENT.md` § « Correctif P0-01 » pour le comportement actuel faisant foi. Ce chapitre reste un instantané du code tel qu'il existait à sa rédaction et n'est pas réécrit au-delà de cette note.
+
 ## Fiche d'identité
 
 | Fichier | Lignes | Rôle |
@@ -259,6 +261,8 @@ Un second commentaire du même genre, mais **correctement tenu à jour** cette f
 Cette chronologie confirme, à l'échelle du schéma tout entier, un constat déjà fait chapitre par chapitre : le projet a évolué par **refontes successives et documentées**, jamais par simple accumulation — chaque changement de direction majeur (retrait de la vente au comptoir, remplacement de `Presence` par `Pointage`/`Absence`) laisse une trace explicite dans l'historique plutôt que de disparaître silencieusement.
 
 ## 5.7 `seed.ts` — bootstrap, pas un simple jeu de données
+
+> ⚠️ **Voir la mise à jour en tête de chapitre.** Ce §5.7 décrit le comportement de `prisma/seed.ts` **avant le correctif P0-01** — il n'est plus exécuté en production, et le comportement « autoritatif » décrit ci-dessous n'existe plus dans `prisma/bootstrap-production.ts`, le script qui a repris le chemin de production.
 
 Contrairement à un script de seed typique qui se contenterait de créer des lignes, `prisma/seed.ts` porte une responsabilité supplémentaire, documentée dans ses propres commentaires : il est **autoritatif sur la matrice de permissions**.
 

@@ -62,3 +62,89 @@ jobs:
 
       - name: Vérifier et compiler
         run: npm run build
+
+      - name: Vérification d'intégration PostgreSQL réelle du correctif P0-01 (round 4)
+        # Additif : ne remplace pas les tests unitaires mockés ci-dessus — les
+        # mêmes garanties (bootstrap idempotent, permission personnalisée
+        # jamais écrasée/recréée, hiérarchie de rôle jamais réécrite, rollback
+        # réel sur échec, zéro utilisateur à chaque étape, seed démo refusé en
+        # production — message précis vérifié —, base inchangée après ce
+        # refus, VRAI chemin `npm run db:bootstrap:production`), mais contre
+        # une vraie base PostgreSQL plutôt qu'un client Prisma simulé.
+        #
+        # CI_INTEGRATION_BOOTSTRAP_CONFIRME=true : confirmation explicite
+        # propre à ce script (round 3, point 3) — ce script effectue de
+        # VRAIES écritures destructives volontaires (modification/suppression
+        # de permission, échec de transaction injecté). Sa garde
+        # (scripts/garde-integration-ci.ts) exige EN PLUS que DATABASE_URL
+        # pointe vers un hôte local et la base exacte `lomoto_ci` définie
+        # ci-dessus (`env.DATABASE_URL`, service `postgres`) — jamais une
+        # base de développement réelle, jamais un hôte distant.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-integration-bootstrap-ci.ts
+
+      - name: Vérification de concurrence PostgreSQL réelle du correctif P0-01 (round 6, point 1)
+        # Additif, distinct du script ci-dessus : prouve l'atomicité des
+        # écritures de PUT /api/equipe/:id/activation et
+        # POST /api/equipe/:id/principal sous une VRAIE concurrence
+        # PostgreSQL (deux connexions séparées, Promise.allSettled, un
+        # crochet de test qui élargit délibérément la fenêtre de course pour
+        # un scénario déterministe) — jamais un Administrateur Principal
+        # inactif, jamais deux Principaux, rollback réel vérifié. Même garde
+        # que le script précédent (hôte local + base exacte `lomoto_ci` +
+        # confirmation explicite).
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-concurrence-equipe-ci.ts
+
+  garde-seed-demo-windows:
+    name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    # Aucun service PostgreSQL ici : la garde (garde-environnement-seed-demo.ts)
+    # doit refuser sur NODE_ENV AVANT toute tentative de connexion à
+    # DATABASE_URL — cette URL n'a donc besoin d'être ni réelle ni jamais
+    # contactée, seulement présente et syntaxiquement locale.
+    env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/lomoto_windows_ci_factice
+      NODE_ENV: production
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Générer le client Prisma (types nécessaires à seed-demo.ts)
+        run: npx prisma generate
+
+      - name: npm run db:seed:demo doit réellement échouer sous Windows avec NODE_ENV=production
+        # round 4, point 1 : la version round 3 résolvait puis exécutait
+        # node_modules/.bin/prisma.cmd via spawnSync SANS shell — un .cmd
+        # n'est pas un exécutable natif Windows, ceci échouait silencieusement
+        # d'une manière que les tests (Linux uniquement jusqu'ici) ne
+        # pouvaient pas détecter. Preuve directe, sur une vraie machine
+        # Windows : exit non nul ET message précis de la garde, pas
+        # n'importe quel échec (qui pourrait aussi bien venir d'un binaire
+        # introuvable que de la garde elle-même).
+        shell: pwsh
+        run: |
+          $sortie = npm run db:seed:demo 2>&1 | Out-String
+          Write-Host $sortie
+          if ($LASTEXITCODE -eq 0) {
+            Write-Error "npm run db:seed:demo a RÉUSSI avec NODE_ENV=production sous Windows — ne doit JAMAIS arriver"
+            exit 1
+          }
+          if ($sortie -notmatch 'NODE_ENV="production"') {
+            Write-Error "npm run db:seed:demo a échoué (attendu) mais SANS le message précis de la garde (NODE_ENV=`"production`") — voir la sortie ci-dessus pour la cause réelle de l'échec"
+            exit 1
+          }
+          Write-Host "OK : refusé sous Windows avec le message exact de la garde, exit=$LASTEXITCODE"
+          exit 0

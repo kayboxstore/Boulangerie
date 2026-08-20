@@ -1,6 +1,8 @@
 # Volume 21 — Construction et déploiement
 
 > Dernier volume de la série 19-21 (Tests, Performances, Déploiement), avant le basculement vers le Guide complet d'utilisation (Volume 22). Ce chapitre s'appuie sur deux sources documentaires jusqu'ici seulement identifiées, jamais lues intégralement : `DEPLOIEMENT.md` (guide pratique) et `docs/MISE-EN-PRODUCTION.md` (rapport d'audit d'une mise en production réelle, daté). Contrairement à `docs/spec-boulangerie.md` (comportement voulu, intemporel), ces deux fichiers décrivent un **état constaté à une date donnée** — ce chapitre le signale explicitement partout où c'est pertinent, plutôt que de présenter des faits datés comme une vérité permanente du code.
+>
+> **Mise à jour (correctif P0-01, 19-20/08/2026, complété après revue externe)** : ce chapitre décrit le `buildCommand` de `render.yaml` d'AVANT ce correctif — il exécutait `npm run db:seed` (créant des comptes de démonstration à mot de passe connu) à chaque déploiement de production. Ce n'est plus le cas : le build appelle désormais `npm run typecheck --workspace apps/api` puis `npm run db:bootstrap:production` (rôles/permissions/motifs fixes uniquement, jamais un compte, jamais rejoué de façon destructive). Voir `DEPLOIEMENT.md` § « Correctif P0-01 » pour l'état actuel faisant foi ; ce chapitre reste un instantané et n'est pas réécrit au-delà de cette note.
 
 ## 1. L'architecture de déploiement : un seul service
 
@@ -15,6 +17,8 @@ Déjà entrevu au Volume 5 (variables d'environnement) et au Volume 8 (repli SPA
 ### 2.1 Déploiement sur un autre hébergeur
 
 `DEPLOIEMENT.md` documente aussi la procédure manuelle pour un hébergeur autre que Render (Railway, Fly.io, un VPS...), qui ne fait que rendre explicites les étapes que `render.yaml` automatise :
+
+> ⚠️ **HISTORIQUE — NE PAS EXÉCUTER TEL QUEL** — `npm run db:seed` (marqué « optionnel » ci-dessous) créerait des comptes de démonstration à mot de passe connu contre une base réelle. Depuis le correctif P0-01, la commande à utiliser en production est `npm run db:bootstrap:production` (jamais `db:seed`/`db:seed:demo`, réservé au développement local) — voir `DEPLOIEMENT.md` § « Correctif P0-01 » pour la séquence actuelle faisant foi.
 
 ```
 npm install --include=dev
@@ -80,6 +84,8 @@ Le rapport reprend, sous un angle opérationnel de mise en production, l'observa
 ### 4.7 Comptes de démonstration
 
 `DEPLOIEMENT.md` documente l'existence de comptes de démonstration créés par `prisma/seed.ts` (Volume 13, `upsertRole`/jeu de données de démonstration), un pour chaque rôle principal, partageant un mot de passe commun documenté dans ce même fichier. Conformément à la contrainte de sécurité de ce livre, ce mot de passe n'est **pas reproduit ici** — le lecteur souhaitant le consulter est renvoyé directement à `DEPLOIEMENT.md`. Les deux documents (guide et rapport d'audit) recommandent tous deux, une fois l'équipe réelle constituée selon la procédure du §4.5, de changer ce mot de passe ou de désactiver ces comptes (écran Équipe → Activation, qui préserve leur historique plutôt que de les supprimer, cohérent avec la suppression bloquée par les bulletins de paie déjà vue au Volume 11k-1) — particulièrement si le déploiement est exposé publiquement, l'URL étant alors accessible à quiconque la connaît.
+
+> **Mise à jour (correctif P0-01)** : depuis ce correctif, le chemin de production **ne crée plus** ces comptes de démonstration — `prisma/seed.ts` (renommé `prisma/seed-demo.ts`) n'est plus jamais exécuté par `render.yaml`. Ce paragraphe reste néanmoins pertinent pour tout déploiement antérieur au correctif : des comptes créés par un ancien déploiement peuvent y subsister réellement tant qu'un assainissement manuel n'a pas été effectué — voir la procédure manuelle post-incident (document séparé, jamais automatisée) plutôt que la désactivation via l'écran Équipe décrite ci-dessus, qui suppose un accès déjà fonctionnel avec le vrai compte Administrateur Principal.
 
 ## 5. Ce qui n'est pas vérifiable dans l'environnement de rédaction de ce livre
 
