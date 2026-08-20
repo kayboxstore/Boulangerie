@@ -1,5 +1,5 @@
 /**
- * Bootstrap de production — Boulangerie Lomoto (correctif P0-01).
+ * Bootstrap de production — Boulangerie Lomoto (correctif P0-01, round 2).
  *
  * Contrepartie sûre de `prisma/seed-demo.ts` : ce fichier ne crée QUE de la
  * configuration structurelle strictement nécessaire au fonctionnement de
@@ -32,14 +32,31 @@
  *    vides plutôt que remplis d'une valeur de démonstration (`lireParametre`
  *    renvoie déjà un repli sûr si la clé n'existe pas, voir `lib/parametres.ts`).
  *
- * Idempotent par construction : chaque écriture est un `upsert` sur une clé
- * unique stable (nom de rôle, nom de motif) — rejouable indéfiniment, à
- * chaque déploiement, sans jamais dupliquer ni écraser une modification
- * ultérieure faite par un Admin (voir le commentaire sur `upsertRole` :
- * autoritatif sur la matrice de permissions elle-même, mais cette matrice
- * n'a par nature aucun lien avec un compte utilisateur).
+ * Non-destructif par construction (correctif round 2, suite à la revue
+ * indépendante « P1-01 ») : CHAQUE rôle et CHAQUE motif est traité
+ * individuellement en « créer seulement s'il est totalement absent ». Si un
+ * rôle existe déjà (qu'il ait été créé par un bootstrap précédent, ou que sa
+ * matrice de permissions ait depuis été modifiée par un Administrateur via
+ * `PUT /api/roles/:id/permissions`), ce fichier ne touche plus JAMAIS :
+ *  - une permission existante (aucun `update` de `niveauAcces`) ;
+ *  - la hiérarchie existante (`roleParentId`) ;
+ *  - il ne supprime plus non plus une permission absente de la matrice
+ *    (l'ancien `rolePermission.deleteMany` autoritatif a été retiré).
+ * Un rôle nouvellement introduit dans une future version de la matrice est
+ * bien installé (c'est la seule façon dont il peut jamais exister), mais
+ * modifier la matrice d'un rôle déjà déployé n'est plus possible via ce
+ * fichier — cela doit désormais passer par une migration Prisma versionnée
+ * (`prisma/migrations/`), jamais par un rejeu indéfini du bootstrap.
+ *
+ * Atomique : toute l'installation (rôles + permissions + motifs) tourne dans
+ * une seule transaction Prisma interactive. Si une écriture échoue en cours
+ * de route (contrainte violée, connexion perdue...), PostgreSQL annule tout
+ * ce que cette exécution avait déjà écrit — aucune initialisation partielle
+ * ne peut jamais persister. Voir `bootstrap-production.test.ts` pour la
+ * preuve (rôle cassé injecté au milieu de la liste, transaction avortée,
+ * zéro rôle créé) contre une vraie base PostgreSQL.
  */
-import { Module, NiveauAcces, PrismaClient } from "@prisma/client";
+import { Module, NiveauAcces, PrismaClient, Prisma } from "@prisma/client";
 
 type PermissionSeed = { module: Module; niveauAcces: NiveauAcces };
 
@@ -57,7 +74,9 @@ export interface RolePermissionSpec {
  * La matrice de rôles (section 2 de la spec), source UNIQUE — reprise telle
  * quelle par `seed-demo.ts` pour ne jamais la dupliquer entre les deux
  * scripts (un rôle créé différemment selon l'environnement serait un bug en
- * puissance).
+ * puissance). Rappel (voir en-tête) : ceci n'installe un rôle que s'il est
+ * absent — modifier ici la matrice d'un rôle déjà déployé ailleurs n'aura
+ * aucun effet ; passer par une migration Prisma pour ce cas.
  */
 export const MATRICE_ROLES: RolePermissionSpec[] = [
   // DG : lecture seule partout SAUF Paramètres (aucun accès, ni lecture ni écriture).
@@ -117,48 +136,68 @@ export const MOTIFS_DON = ["Police", "Baraka"];
 export const MOTIFS_PERTE = ["Cuisson ratée", "Casse / manutention", "Invendu périmé"];
 export const MOTIFS_NON_CONFORMITE = ["Cuisson insuffisante", "Aspect non conforme", "Poids non conforme"];
 
-/**
- * Type minimal requis par ce module : uniquement les modèles structurels.
- * Volontairement plus étroit que `PrismaClient` complet — un appel à
- * `prisma.utilisateur.*` (ou tout autre modèle métier) ne compilerait même
- * pas contre ce type, en plus d'être absent du code ci-dessous.
- */
-export type ClientBootstrap = Pick<PrismaClient, "role" | "rolePermission" | "motifDon" | "motifPerte" | "motifNonConformite">;
+const NOMS_MODELES_STRUCTURELS = ["role", "rolePermission", "motifDon", "motifPerte", "motifNonConformite"] as const;
 
 /**
- * Le seed est AUTORITATIF sur la matrice de permissions d'un rôle donné :
- * les permissions absentes de la liste sont supprimées (permet un retrait
- * futur, ex. DG sans accès Paramètres) — identique au comportement historique
- * de `seed.ts`, seulement déplacé ici pour devenir la source unique.
+ * Vue restreinte du client Prisma utilisable À L'INTÉRIEUR de la transaction
+ * atomique — mêmes 5 modèles que `ClientBootstrap`, mais typée sur
+ * `Prisma.TransactionClient` (le type du paramètre reçu par le callback de
+ * `$transaction`) plutôt que sur `PrismaClient` lui-même.
  */
-async function upsertRole(prisma: ClientBootstrap, spec: RolePermissionSpec) {
+export type TransactionBootstrap = Pick<Prisma.TransactionClient, (typeof NOMS_MODELES_STRUCTURELS)[number]>;
+
+/**
+ * Type minimal requis par ce module : uniquement les modèles structurels, et
+ * un `$transaction` dont le callback ne reçoit lui-même que ces 5 modèles
+ * (`TransactionBootstrap`) — pas le client de transaction complet. Un appel à
+ * `prisma.utilisateur.*` (ou tout autre modèle métier), que ce soit hors ou à
+ * l'intérieur de la transaction, ne compilerait même pas contre ce type, en
+ * plus d'être absent du code ci-dessous.
+ */
+export type ClientBootstrap = Pick<PrismaClient, (typeof NOMS_MODELES_STRUCTURELS)[number]> & {
+  $transaction: <T>(fn: (tx: TransactionBootstrap) => Promise<T>) => Promise<T>;
+};
+
+/**
+ * Installe un rôle SEULEMENT s'il n'existe pas encore — ne touche plus jamais
+ * un rôle déjà présent (ni ses permissions, ni sa hiérarchie). Voir l'en-tête
+ * du fichier : c'est le cœur du correctif P1-01 (round 2).
+ */
+async function installerRoleSiAbsent(tx: TransactionBootstrap, spec: RolePermissionSpec): Promise<boolean> {
+  const existant = await tx.role.findUnique({ where: { nom: spec.nom } });
+  if (existant) return false;
+
   const roleParent = spec.roleParentNom
-    ? await prisma.role.findUniqueOrThrow({ where: { nom: spec.roleParentNom } })
+    ? await tx.role.findUniqueOrThrow({ where: { nom: spec.roleParentNom } })
     : null;
 
-  const role = await prisma.role.upsert({
-    where: { nom: spec.nom },
-    update: { roleParentId: roleParent?.id ?? null },
-    create: { nom: spec.nom, roleParentId: roleParent?.id ?? null },
-  });
-
+  const role = await tx.role.create({ data: { nom: spec.nom, roleParentId: roleParent?.id ?? null } });
   for (const p of spec.permissions) {
-    await prisma.rolePermission.upsert({
-      where: { roleId_module: { roleId: role.id, module: p.module } },
-      update: { niveauAcces: p.niveauAcces },
-      create: { roleId: role.id, module: p.module, niveauAcces: p.niveauAcces },
-    });
+    await tx.rolePermission.create({ data: { roleId: role.id, module: p.module, niveauAcces: p.niveauAcces } });
   }
-  await prisma.rolePermission.deleteMany({
-    where: { roleId: role.id, module: { notIn: spec.permissions.map((p) => p.module) } },
-  });
+  return true;
+}
+
+type DelegueMotif = { findUnique: (args: { where: { nom: string } }) => Promise<unknown>; create: (args: { data: { nom: string } }) => Promise<unknown> };
+
+/** Même principe que `installerRoleSiAbsent`, pour les 3 listes de motifs fixes. */
+async function installerMotifsSiAbsents(delegue: DelegueMotif, noms: string[]): Promise<number> {
+  let installes = 0;
+  for (const nom of noms) {
+    const existant = await delegue.findUnique({ where: { nom } });
+    if (existant) continue;
+    await delegue.create({ data: { nom } });
+    installes++;
+  }
+  return installes;
 }
 
 export interface ResultatBootstrap {
-  roles: number;
-  motifsDon: number;
-  motifsPerte: number;
-  motifsNonConformite: number;
+  rolesInstalles: number;
+  rolesDejaPresents: number;
+  motifsDonInstalles: number;
+  motifsPerteInstalles: number;
+  motifsNonConformiteInstalles: number;
 }
 
 /**
@@ -168,31 +207,41 @@ export interface ResultatBootstrap {
  * `TypeClient`, `Produit`, `MatierePremiere` ni `ParametreBoutique` — recherche
  * exhaustive dans ce fichier : aucune de ces sept chaînes n'y apparaît en
  * dehors de ce commentaire, vérifié par `bootstrap-production.test.ts`.
+ *
+ * `roles`/`motifsDon`/`motifsPerte`/`motifsNonConformite` sont injectables
+ * (par défaut : les constantes exportées ci-dessus) UNIQUEMENT pour permettre
+ * aux tests de prouver l'atomicité avec une vraie transaction PostgreSQL (en
+ * injectant une spec volontairement cassée) — `seed-demo.ts` et le CLI
+ * ci-dessous n'utilisent jamais que les valeurs par défaut réelles.
  */
-export async function bootstrapProduction(prisma: ClientBootstrap): Promise<ResultatBootstrap> {
-  // Les rôles parents doivent exister avant leurs enfants — l'ordre de
-  // MATRICE_ROLES respecte déjà cette contrainte (Directeur Général en
-  // premier, Chargé des commandes après Caissier(ère) dont il dépend).
-  for (const spec of MATRICE_ROLES) {
-    await upsertRole(prisma, spec);
-  }
+export async function bootstrapProduction(
+  prisma: ClientBootstrap,
+  roles: RolePermissionSpec[] = MATRICE_ROLES,
+  motifsDon: string[] = MOTIFS_DON,
+  motifsPerte: string[] = MOTIFS_PERTE,
+  motifsNonConformite: string[] = MOTIFS_NON_CONFORMITE,
+): Promise<ResultatBootstrap> {
+  return prisma.$transaction(async (tx) => {
+    let rolesInstalles = 0;
+    // Les rôles parents doivent exister avant leurs enfants — l'ordre de
+    // MATRICE_ROLES respecte déjà cette contrainte (Directeur Général en
+    // premier, Chargé des commandes après Caissier(ère) dont il dépend).
+    for (const spec of roles) {
+      if (await installerRoleSiAbsent(tx, spec)) rolesInstalles++;
+    }
 
-  for (const nom of MOTIFS_DON) {
-    await prisma.motifDon.upsert({ where: { nom }, update: {}, create: { nom } });
-  }
-  for (const nom of MOTIFS_PERTE) {
-    await prisma.motifPerte.upsert({ where: { nom }, update: {}, create: { nom } });
-  }
-  for (const nom of MOTIFS_NON_CONFORMITE) {
-    await prisma.motifNonConformite.upsert({ where: { nom }, update: {}, create: { nom } });
-  }
+    const motifsDonInstalles = await installerMotifsSiAbsents(tx.motifDon, motifsDon);
+    const motifsPerteInstalles = await installerMotifsSiAbsents(tx.motifPerte, motifsPerte);
+    const motifsNonConformiteInstalles = await installerMotifsSiAbsents(tx.motifNonConformite, motifsNonConformite);
 
-  return {
-    roles: MATRICE_ROLES.length,
-    motifsDon: MOTIFS_DON.length,
-    motifsPerte: MOTIFS_PERTE.length,
-    motifsNonConformite: MOTIFS_NON_CONFORMITE.length,
-  };
+    return {
+      rolesInstalles,
+      rolesDejaPresents: roles.length - rolesInstalles,
+      motifsDonInstalles,
+      motifsPerteInstalles,
+      motifsNonConformiteInstalles,
+    };
+  });
 }
 
 // --- Exécution directe (`tsx prisma/bootstrap-production.ts` /
@@ -203,8 +252,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   bootstrapProduction(prisma)
     .then((resultat) => {
       console.log(
-        `Bootstrap de production terminé — ${resultat.roles} rôles, ${resultat.motifsDon} motifs de don, ` +
-          `${resultat.motifsPerte} motifs de perte, ${resultat.motifsNonConformite} motifs de non-conformité. ` +
+        `Bootstrap de production terminé — ${resultat.rolesInstalles} rôle(s) installé(s), ` +
+          `${resultat.rolesDejaPresents} déjà présent(s) et laissé(s) intact(s) ; ` +
+          `${resultat.motifsDonInstalles} motif(s) de don, ${resultat.motifsPerteInstalles} motif(s) de perte, ` +
+          `${resultat.motifsNonConformiteInstalles} motif(s) de non-conformité installé(s). ` +
           `Aucun utilisateur créé — utilisez l'Assistant de premier lancement pour créer l'Administrateur Principal.`,
       );
     })

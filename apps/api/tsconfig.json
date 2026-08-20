@@ -17,6 +17,7 @@
     "../../packages/shared/src/**/*.ts",
     "../../prisma/seed-demo.ts",
     "../../prisma/bootstrap-production.ts",
+    "../../prisma/garde-environnement-seed-demo.ts",
     "../../prisma/*.test.ts"
   ]
 }

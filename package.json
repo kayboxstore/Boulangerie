@@ -15,7 +15,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "db:bootstrap:production": "tsx prisma/bootstrap-production.ts",
-    "db:seed:demo": "prisma db seed",
+    "db:seed:demo": "NODE_ENV=\"${NODE_ENV:-development}\" prisma db seed",
     "test": "vitest run",
     "restore:backup": "tsx scripts/restaurer-sauvegarde.ts"
   },

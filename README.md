@@ -45,9 +45,9 @@ docker run -d --name lomoto-postgres \
 cp .env.example .env
 
 # 4. Migration + données de démonstration LOCALES UNIQUEMENT (rôles, permissions,
-#    comptes de démo à mot de passe connu, produits) — refuse de s'exécuter si
-#    NODE_ENV=production (voir « Comptes de démonstration » ci-dessous et
-#    DEPLOIEMENT.md § Correctif P0-01)
+#    comptes de démo à mot de passe connu, produits) — refuse de s'exécuter hors
+#    d'un environnement de développement/test avec une base locale (voir
+#    « Comptes de démonstration » ci-dessous et DEPLOIEMENT.md § Correctif P0-01)
 npx prisma migrate dev
 npm run db:seed:demo
 
@@ -64,17 +64,22 @@ npm test
 npm run build
 ```
 
-La suite automatisée couvre les règles partagées, les routes API critiques, l’authentification, les permissions, l’idempotence, les frontières de journée Kinshasa, les composants React/DOM, ainsi que le bootstrap de production et la garde du seed de démonstration (correctif P0-01). Dernière validation : **566 tests sur 566**, audit sans vulnérabilité, migrations PostgreSQL, génération Prisma et compilation API/web réussis.
+La suite automatisée couvre les règles partagées, les routes API critiques, l’authentification, les permissions, l’idempotence, les frontières de journée Kinshasa, les composants React/DOM, ainsi que le bootstrap de production (non-destructif et atomique) et la garde du seed de démonstration (correctif P0-01). Dernière validation : **582 tests sur 582**, plus une vérification d'intégration dédiée contre une vraie base PostgreSQL en CI, audit sans vulnérabilité, migrations PostgreSQL, génération Prisma et compilation API/web réussis.
 
 ## Comptes de démonstration
 
-> ⚠️ **Développement local UNIQUEMENT.** Ces comptes sont créés par
-> `npm run db:seed:demo`, qui refuse explicitement de s'exécuter dès que
-> `NODE_ENV=production` (aucun contournement possible) et n'est jamais invoqué
-> par le déploiement (`render.yaml`) — voir DEPLOIEMENT.md § « Correctif
-> P0-01 ». En production, le premier compte (Administrateur Principal) est créé
-> uniquement via l'Assistant de premier lancement, avec un mot de passe choisi
-> par le véritable responsable.
+> ⚠️ **Destinés au développement local.** Ces comptes sont créés par
+> `npm run db:seed:demo`, qui refuse de s'exécuter sauf si `NODE_ENV` vaut
+> exactement `development`/`test` **et** que `DATABASE_URL` pointe vers un
+> hôte local (liste blanche, sans contournement silencieux) — et n'est jamais
+> invoqué par le déploiement (`render.yaml`), voir DEPLOIEMENT.md § « Correctif
+> P0-01 ». Sur une base neuve, le premier compte de production (Administrateur
+> Principal) est créé uniquement via l'Assistant de premier lancement, avec un
+> mot de passe choisi par le véritable responsable. **Ceci décrit le nouveau
+> chemin de déploiement** : un déploiement de production antérieur à ce
+> correctif a pu exécuter l'ancien seed et créer réellement ces comptes —
+> voir DEPLOIEMENT.md § « Se connecter » pour l'assainissement manuel dans ce
+> cas.
 
 Mot de passe commun (dev uniquement) : `Lomoto2026!`
 

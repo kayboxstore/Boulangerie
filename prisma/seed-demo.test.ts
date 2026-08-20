@@ -1,7 +1,8 @@
 /**
- * Preuves du correctif P0-01, côté garde de production de `seed-demo.ts` :
- * ce script ne doit jamais pouvoir s'exécuter contre une base de production,
- * sans aucun contournement possible.
+ * Preuves du correctif P0-01, côté câblage de `seed-demo.ts` : la garde
+ * d'environnement (testée en détail, comme fonction pure, dans
+ * `garde-environnement-seed-demo.test.ts`) est bien appelée ici comme toute
+ * première instruction du module, avant tout accès à Prisma.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -16,36 +17,22 @@ afterEach(() => {
   else process.env.NODE_ENV = NODE_ENV_ORIGINAL;
 });
 
-describe("garde de production — prisma/seed-demo.ts (correctif P0-01)", () => {
-  it("refuse de s'exécuter avec NODE_ENV=production, avant tout accès à Prisma", async () => {
+describe("garde d'environnement — câblage réel dans prisma/seed-demo.ts (correctif P0-01)", () => {
+  it("refuse réellement de s'exécuter avec NODE_ENV=production, avant tout accès à Prisma", async () => {
     process.env.NODE_ENV = "production";
-    // Import dynamique : la garde est la première instruction du module, donc
-    // ce `throw` doit survenir avant même la construction du PrismaClient —
-    // aucune connexion réseau n'est tentée. Le module n'est jamais importé
-    // ailleurs sous NODE_ENV=production dans cette suite, donc aucun risque
-    // de mise en cache d'un état déjà rejeté.
-    await expect(import("./seed-demo.js")).rejects.toThrow(/NODE_ENV=production/);
+    // Import dynamique du VRAI module : la garde est la première instruction,
+    // donc ce `throw` doit survenir avant même la construction du
+    // PrismaClient — aucune connexion réseau n'est tentée. Le module n'est
+    // jamais importé ailleurs sous NODE_ENV=production dans cette suite, donc
+    // aucun risque de mise en cache d'un état déjà rejeté.
+    await expect(import("./seed-demo.js")).rejects.toThrow(/NODE_ENV="production"/);
   });
 
-  it("le message de la garde oriente explicitement vers le bootstrap de production", async () => {
-    process.env.NODE_ENV = "production";
-    await expect(import("./seed-demo.js")).rejects.toThrow(/db:bootstrap:production/);
-  });
-
-  it("la garde ne comporte aucune variable d'environnement de contournement", () => {
-    const debut = SOURCE.indexOf('if (process.env.NODE_ENV === "production")');
-    expect(debut).toBeGreaterThan(-1);
-    const fin = SOURCE.indexOf("\n}", debut);
-    expect(fin).toBeGreaterThan(debut);
-    const blocGarde = SOURCE.slice(debut, fin);
-    // Aucune autre variable d'environnement ne doit intervenir dans la
-    // condition (ex. un `SEED_FORCE=true` qui désactiverait la garde).
-    const referencesEnv = blocGarde.match(/process\.env\.\w+/g) ?? [];
-    expect(referencesEnv).toEqual(["process.env.NODE_ENV"]);
-  });
-
-  it("la garde est la toute première instruction exécutée, avant la création du client Prisma", () => {
-    const indexGarde = SOURCE.indexOf('if (process.env.NODE_ENV === "production")');
+  it("appelle verifierEnvironnementSeedDemo(process.env) comme toute première instruction, avant new PrismaClient()", () => {
+    expect(SOURCE).toContain(
+      'import { verifierEnvironnementSeedDemo } from "./garde-environnement-seed-demo.js"',
+    );
+    const indexGarde = SOURCE.indexOf("verifierEnvironnementSeedDemo(process.env)");
     const indexPrismaClient = SOURCE.indexOf("new PrismaClient()");
     expect(indexGarde).toBeGreaterThan(-1);
     expect(indexPrismaClient).toBeGreaterThan(-1);
@@ -64,19 +51,29 @@ describe("câblage du déploiement — le chemin de production n'invoque plus le
   );
   const renderYaml = readFileSync(fileURLToPath(new URL("../render.yaml", import.meta.url)), "utf-8");
 
-  it("package.json distingue db:bootstrap:production et db:seed:demo", () => {
+  it("package.json distingue db:bootstrap:production et db:seed:demo, avec NODE_ENV=development en DÉFAUT SEULEMENT (jamais en écrasement d'un NODE_ENV déjà hérité)", () => {
     expect(packageJson.scripts["db:bootstrap:production"]).toBe("tsx prisma/bootstrap-production.ts");
-    expect(packageJson.scripts["db:seed:demo"]).toBe("prisma db seed");
+    // "${NODE_ENV:-development}" et non "NODE_ENV=development" tout court :
+    // un NODE_ENV=production déjà présent dans l'environnement (ex. hérité
+    // par erreur d'un shell CI/déploiement) doit rester visible à la garde
+    // (garde-environnement-seed-demo.ts), jamais silencieusement écrasé par
+    // ce script — voir le scénario réel vérifié manuellement (P1-02).
+    expect(packageJson.scripts["db:seed:demo"]).toBe('NODE_ENV="${NODE_ENV:-development}" prisma db seed');
     expect(packageJson.scripts["db:seed"]).toBeUndefined();
     expect(packageJson.prisma.seed).toBe("tsx prisma/seed-demo.ts");
   });
 
-  it("render.yaml n'appelle plus le seed de démonstration dans le build de production", () => {
+  it("render.yaml n'appelle plus le seed de démonstration dans le build de production, et typechecke avant le bootstrap", () => {
     const correspondance = renderYaml.match(/buildCommand:\s*>-\n([\s\S]*?)\n\s*startCommand:/);
     expect(correspondance, "buildCommand introuvable dans render.yaml").not.toBeNull();
     const buildCommand = correspondance![1];
     expect(buildCommand).not.toMatch(/npm run db:seed\b/);
     expect(buildCommand).not.toContain("db:seed:demo");
+    expect(buildCommand).toContain("npm run typecheck --workspace apps/api");
     expect(buildCommand).toContain("npm run db:bootstrap:production");
+    // Le typecheck doit précéder le bootstrap : sans cet ordre, `tsx` (qui ne
+    // vérifie jamais les types) exécuterait le bootstrap avant toute
+    // vérification — voir render.yaml et la revue Passe B round 1.
+    expect(buildCommand.indexOf("typecheck")).toBeLessThan(buildCommand.indexOf("db:bootstrap:production"));
   });
 });

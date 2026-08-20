@@ -155,21 +155,34 @@ seule version du client est installée : ce piège ne s'y pose pas.
 
 ## Se connecter
 
-**La base de production ne contient jamais de compte de démonstration ni de
-mot de passe connu** (correctif P0-01, 19-20/08/2026 — voir plus bas). Au
-premier démarrage, la base est vide : l'écran de connexion est automatiquement
-remplacé par l'**Assistant de premier lancement**, qui guide la création du
-tout premier compte — l'Administrateur Principal — avec un mot de passe choisi
-par le véritable responsable, jamais présumé par le code. Une fois ce compte
-créé, l'assistant se referme de lui-même (la base n'est plus vide) et
-l'écran de connexion normal reprend sa place, pour toujours.
+**Depuis ce correctif (P0-01, 19-20/08/2026 — voir plus bas), le chemin de
+déploiement ne crée plus jamais de compte de démonstration ni de mot de passe
+connu.** Sur une base neuve, la base est vide au premier démarrage : l'écran
+de connexion est automatiquement remplacé par l'**Assistant de premier
+lancement**, qui guide la création du tout premier compte — l'Administrateur
+Principal — avec un mot de passe choisi par le véritable responsable, jamais
+présumé par le code. Une fois ce compte créé, l'assistant se referme de
+lui-même (la base n'est plus vide) et l'écran de connexion normal reprend sa
+place, pour toujours.
 
-> ⚠️ Les identifiants `admin@boulangerie-lomoto.com` / `Lomoto2026!` que l'on
-> peut voir mentionnés ailleurs dans ce dépôt (`README.md`,
-> `prisma/seed-demo.ts`) sont **strictement réservés au développement local**.
-> Ce script (`npm run db:seed:demo`) refuse explicitement de s'exécuter dès que
-> `NODE_ENV=production` — aucun contournement possible — et n'est de toute
-> façon jamais invoqué par `render.yaml` ni par aucun chemin de déploiement.
+> ⚠️ **Ceci décrit le comportement du NOUVEAU chemin de déploiement, pas
+> nécessairement l'état d'une base déjà en production avant ce correctif.**
+> Si ce déploiement existait avant le 19-20/08/2026, il a pu exécuter l'ancien
+> `npm run db:seed` à un déploiement antérieur — dans ce cas, des comptes de
+> démonstration à mot de passe connu (`Lomoto2026!`) peuvent encore exister
+> réellement dans cette base tant qu'un assainissement manuel n'a pas été
+> effectué. Ce correctif empêche un futur redéploiement d'en recréer ou d'en
+> réattribuer le statut principal ; il ne supprime et ne modifie **aucune**
+> donnée déjà présente. Voir la procédure manuelle post-incident (documentée
+> séparément, jamais automatisée) pour l'inventaire et l'assainissement
+> contrôlé des comptes existants.
+
+> Les identifiants `admin@boulangerie-lomoto.com` / `Lomoto2026!` mentionnés
+> ailleurs dans ce dépôt (`README.md`, `prisma/seed-demo.ts`) sont **destinés
+> au développement local** — `npm run db:seed:demo` refuse explicitement de
+> s'exécuter hors d'un environnement de développement/test reconnu (voir
+> « Correctif P0-01 » ci-dessous) et n'est jamais invoqué par `render.yaml` ni
+> par aucun chemin de déploiement.
 
 ## Bon à savoir (offre gratuite Render)
 
@@ -179,9 +192,12 @@ l'écran de connexion normal reprend sa place, pour toujours.
   la création) — parfait pour tester, à repasser en offre payante pour un usage
   durable.
 - Un redéploiement rejoue les migrations et le bootstrap de production
-  (rôles/permissions/motifs fixes, idempotent), mais **ne touche jamais** aux
-  comptes existants ni à l'Administrateur Principal déjà en place — voir
-  « Correctif P0-01 » ci-dessous.
+  (rôles/permissions/motifs fixes). Sur une base déjà initialisée, ce
+  bootstrap **ne modifie et ne supprime plus jamais** une permission, un
+  niveau d'accès ou une hiérarchie de rôle existants — même si un
+  Administrateur les a modifiés entre-temps — et ne touche jamais aux comptes
+  existants ni à l'Administrateur Principal déjà en place. Voir « Correctif
+  P0-01 » ci-dessous.
 
 ## Correctif P0-01 — séparation bootstrap de production / seed de démonstration (19-20/08/2026)
 
@@ -201,12 +217,37 @@ complètement séparés :
 | Commande | `npm run db:bootstrap:production` | `npm run db:seed:demo` |
 | Fichier | `prisma/bootstrap-production.ts` | `prisma/seed-demo.ts` |
 | Crée | Rôles, permissions, motifs fixes (don/perte/non-conformité) — **jamais un compte** | Tout ce que fait le bootstrap, **plus** des comptes de démo à mot de passe connu, des clients/fournisseurs/stocks fictifs |
+| Sur une base déjà initialisée | Ignore intégralement tout rôle déjà existant (ne touche ni ses permissions ni sa hiérarchie) — n'installe que ce qui est réellement absent | Toujours réservé au dev — jamais exécuté en production |
 | `estAdminPrincipal` | Jamais touché | Réattribué de force à `admin@boulangerie-lomoto.com` (comportement historique, sans risque hors dev) |
-| Garde | — (sûr par construction, aucun accès au modèle `Utilisateur`) | Refuse de s'exécuter si `NODE_ENV=production`, sans contournement possible |
+| Garde | Sûr par construction (le type `ClientBootstrap` rend `prisma.utilisateur.*` non compilable, y compris depuis l'intérieur de sa transaction atomique) | Liste **blanche** : refuse sauf si `NODE_ENV` vaut exactement `development`/`test` **ET** `DATABASE_URL` pointe vers un hôte local (ou un opt-in explicite `SEED_DEMO_HOTE_DISTANT_AUTORISE=true`) — un `NODE_ENV` absent, `staging` ou `preview` est refusé, tout comme un hôte distant même avec un `NODE_ENV` autorisé |
 
 Le premier compte de production (Administrateur Principal) est créé
 **exclusivement** par l'Assistant de premier lancement (voir « Se
 connecter » ci-dessus), jamais par un script de seed.
+
+### Round 2 (revue indépendante) : non-destructivité, atomicité, vérification en CI
+
+Une double revue indépendante a identifié trois points supplémentaires,
+depuis corrigés :
+
+- **Non-destructif et atomique** — `bootstrap-production.ts` n'installe
+  désormais un rôle (et ses permissions) que s'il est **totalement absent** ;
+  un rôle déjà présent n'est plus jamais retouché, qu'il ait été créé par un
+  bootstrap précédent ou modifié depuis par un Administrateur via
+  `PUT /api/roles/:id/permissions`. Toute l'installation initiale tourne dans
+  une seule transaction PostgreSQL : un échec en cours de route n'écrit rien
+  (aucune initialisation partielle possible). Un futur changement de la
+  matrice d'un rôle **déjà déployé** doit passer par une migration Prisma
+  versionnée, plus jamais par un rejeu du bootstrap.
+- **Garde en liste blanche** — voir le tableau ci-dessus ; corrige le fait
+  qu'un `NODE_ENV` absent ou mal configuré laissait auparavant passer le seed
+  de démonstration.
+- **Vérifié en CI contre une vraie base PostgreSQL**, en plus des tests
+  unitaires mockés : `.github/workflows/ci.yml` exécute
+  `scripts/verifier-integration-bootstrap-ci.ts`, qui prouve — sur le service
+  PostgreSQL éphémère de la CI — l'idempotence du bootstrap, la préservation
+  d'une permission modifiée manuellement après un rejeu, et le refus réel du
+  seed de démonstration avec `NODE_ENV=production`.
 
 ## Autres hébergeurs
 

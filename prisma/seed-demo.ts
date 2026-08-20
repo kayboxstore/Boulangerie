@@ -5,21 +5,26 @@
  * comptes avec un mot de passe connu et publié dans ce dépôt
  * (`Lomoto2026!`), force `admin@boulangerie-lomoto.com` comme Administrateur
  * Principal (retirant ce statut à tout autre compte), et invente des clients/
- * fournisseurs/stocks fictifs. Une garde ci-dessous refuse de s'exécuter si
- * `NODE_ENV=production` — voir §« Garde de production » — sans contournement
- * possible.
+ * fournisseurs/stocks fictifs. Une garde ci-dessous refuse de s'exécuter hors
+ * d'un environnement explicitement autorisé — voir §« Garde d'environnement »
+ * — sans contournement possible.
  *
- * Correctif P0-01 (19-20/08/2026) : ce fichier s'appelait `prisma/seed.ts` et
- * était exécuté par `render.yaml` à CHAQUE déploiement de production — un
- * redéploiement pouvait donc recréer des comptes à mot de passe connu et
- * reprendre de force le statut d'Administrateur Principal au compte
- * générique, même si le véritable responsable en avait délégué la propriété
- * entre-temps. Ce risque est corrigé à trois niveaux : (1) `render.yaml`
- * n'appelle plus ce script du tout ; (2) la configuration structurelle
- * réellement indispensable (rôles/permissions/motifs) a été extraite dans
- * `prisma/bootstrap-production.ts`, sûr par construction (aucun utilisateur) ;
- * (3) ce fichier refuse maintenant de s'exécuter si `NODE_ENV=production`,
- * en défense en profondeur si jamais un script l'invoquait encore par erreur.
+ * Correctif P0-01 (19-20/08/2026, round 2 après revue indépendante) : ce
+ * fichier s'appelait `prisma/seed.ts` et était exécuté par `render.yaml` à
+ * CHAQUE déploiement de production — un redéploiement pouvait donc recréer
+ * des comptes à mot de passe connu et reprendre de force le statut
+ * d'Administrateur Principal au compte générique, même si le véritable
+ * responsable en avait délégué la propriété entre-temps. Ce risque est
+ * corrigé à trois niveaux : (1) `render.yaml` n'appelle plus ce script du
+ * tout ; (2) la configuration structurelle réellement indispensable
+ * (rôles/permissions/motifs) a été extraite dans `prisma/bootstrap-production.ts`,
+ * sûr par construction (aucun utilisateur) ; (3) ce fichier refuse de
+ * s'exécuter hors d'un environnement explicitement reconnu comme local de
+ * développement/test — liste BLANCHE (`NODE_ENV` ET l'hôte de
+ * `DATABASE_URL`), pas liste noire : un `NODE_ENV` absent, mal orthographié,
+ * ou une valeur intermédiaire (`staging`) est refusé par défaut, tout comme
+ * un `DATABASE_URL` distant même avec un `NODE_ENV` autorisé — voir
+ * `garde-environnement-seed-demo.ts`.
  *
  * Crée : la hiérarchie de rôles + matrice de permissions et les motifs fixes
  * (délégués à `bootstrap-production.ts`, source unique — jamais dupliqués
@@ -30,21 +35,13 @@
 import { PrismaClient, Module, CodeIngredient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { bootstrapProduction } from "./bootstrap-production.js";
+import { verifierEnvironnementSeedDemo } from "./garde-environnement-seed-demo.js";
 
-// --- Garde de production — voir l'en-tête de ce fichier -------------------
+// --- Garde d'environnement — voir l'en-tête de ce fichier ------------------
 // Volontairement la toute première instruction exécutée par ce module, avant
 // même la création du client Prisma : aucun accès réseau, aucune écriture,
-// aucun contournement silencieux possible. `NODE_ENV` est la variable que
-// Render (et tout hébergeur Node standard) positionne à "production" en
-// production — même convention déjà utilisée par `apps/api/src/lib/jwt.ts`
-// pour refuser de démarrer sans `JWT_SECRET`.
-if (process.env.NODE_ENV === "production") {
-  throw new Error(
-    "prisma/seed-demo.ts refuse de s'exécuter avec NODE_ENV=production — ce script crée des comptes à mot de " +
-      "passe connu et des données fictives, réservés au développement/test. Utilisez " +
-      "`npm run db:bootstrap:production` pour une base de production (voir prisma/bootstrap-production.ts).",
-  );
-}
+// aucun contournement silencieux possible.
+verifierEnvironnementSeedDemo(process.env);
 
 const prisma = new PrismaClient();
 
@@ -291,7 +288,12 @@ async function main() {
   }
 
   console.log("Seed de démonstration terminé — 6 rôles, 3 types de clients, 8 utilisateurs, 5 clients, 4 produits, 6 matières premières, 2 motifs de don, 2 fournisseurs.");
-  console.log(`Mot de passe de démonstration pour tous les comptes : ${MOT_DE_PASSE_DEMO} — DEV/TEST UNIQUEMENT, jamais valide en production.`);
+  console.log(
+    `Mot de passe de démonstration pour tous les comptes : ${MOT_DE_PASSE_DEMO} — DEV/TEST UNIQUEMENT. Ce script ` +
+      "refuse de s'exécuter hors développement/test (voir garde-environnement-seed-demo.ts) ; un déploiement de " +
+      "production antérieur à ce correctif a pu créer ces comptes par le passé — voir la procédure manuelle " +
+      "post-incident si c'est le cas.",
+  );
 }
 
 main()

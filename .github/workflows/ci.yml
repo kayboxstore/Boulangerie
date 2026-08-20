@@ -62,3 +62,11 @@ jobs:
 
       - name: Vérifier et compiler
         run: npm run build
+
+      - name: Vérification d'intégration PostgreSQL réelle du correctif P0-01 (P1-03)
+        # Additif : ne remplace pas les tests unitaires mockés ci-dessus — les
+        # mêmes garanties (bootstrap idempotent, permission personnalisée
+        # jamais écrasée, zéro utilisateur, seed démo refusé en production,
+        # base inchangée après ce refus), mais contre une vraie base
+        # PostgreSQL plutôt qu'un client Prisma simulé.
+        run: npx tsx scripts/verifier-integration-bootstrap-ci.ts
