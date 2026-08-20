@@ -23,7 +23,10 @@
  * développement/test — liste BLANCHE (`NODE_ENV` ET l'hôte de
  * `DATABASE_URL`), pas liste noire : un `NODE_ENV` absent, mal orthographié,
  * ou une valeur intermédiaire (`staging`) est refusé par défaut, tout comme
- * un `DATABASE_URL` distant même avec un `NODE_ENV` autorisé — voir
+ * un `DATABASE_URL` distant même avec un `NODE_ENV` autorisé, SANS AUCUNE
+ * EXCEPTION (round 3 : l'opt-in par variable d'environnement offert en round 2
+ * pour un hôte distant a été entièrement retiré — code, tests, documentation —
+ * jugé inacceptable en revue : un opt-in reste un contournement) — voir
  * `garde-environnement-seed-demo.ts`.
  *
  * Crée : la hiérarchie de rôles + matrice de permissions et les motifs fixes

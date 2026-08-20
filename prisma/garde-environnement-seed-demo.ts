@@ -1,6 +1,6 @@
 /**
- * Garde d'environnement du seed de démonstration — correctif P0-01, round 2
- * (revue indépendante « P1-02 »).
+ * Garde d'environnement du seed de démonstration — correctif P0-01, round 3
+ * (revue indépendante « P1-02 », puis revue Codex round 3 « point 1 »).
  *
  * Fonction PURE (aucun accès Prisma, aucune E/S) volontairement extraite de
  * `prisma/seed-demo.ts` pour être testable sans jamais construire de
@@ -12,12 +12,18 @@
  * la garde. Ici, seules deux valeurs exactes sont explicitement autorisées ;
  * tout le reste (y compris l'absence de la variable) est refusé par défaut.
  *
- * Second verrou indépendant du premier : même avec un `NODE_ENV` autorisé,
- * un simple `DATABASE_URL` distant reste refusé — sans lui, changer
- * accidentellement `NODE_ENV=development` sur un déploiement dont la
- * variable pointerait vers une base distante réelle suffirait à seeder cette
- * base. L'hôte doit être local, ou l'opérateur doit le confirmer
- * explicitement (voir `SEED_DEMO_HOTE_DISTANT_AUTORISE`).
+ * Second verrou INDÉPENDANT et SANS EXCEPTION : même avec un `NODE_ENV`
+ * autorisé, un `DATABASE_URL` distant est refusé — sans exception, sans
+ * variable de contournement d'aucune sorte. Une version antérieure de cette
+ * garde offrait un opt-in par variable d'environnement pour un hôte distant ;
+ * jugé inacceptable en revue pour un script qui crée des comptes à mot de
+ * passe connu et réattribue `estAdminPrincipal` — un opt-in reste un
+ * contournement, même nommé explicitement. Il a donc été entièrement retiré
+ * — code, tests et documentation, sans laisser de trace du nom de cette
+ * variable dans ce fichier (vérifié par `garde-environnement-seed-demo.test.ts`).
+ * Un besoin futur d'environnement de démonstration distant devra passer par
+ * un mécanisme séparé, sans identifiants fixes, hors
+ * périmètre de ce fichier.
  */
 
 const ENVIRONNEMENTS_AUTORISES = new Set(["development", "test"]);
@@ -46,8 +52,6 @@ function hoteEstLocal(databaseUrl: string): boolean {
 export interface EnvironnementSeedDemo {
   NODE_ENV?: string;
   DATABASE_URL?: string;
-  /** Opt-in explicite, jamais un simple changement de NODE_ENV : voir l'en-tête. */
-  SEED_DEMO_HOTE_DISTANT_AUTORISE?: string;
 }
 
 /**
@@ -56,6 +60,10 @@ export interface EnvironnementSeedDemo {
  * `prisma/seed-demo.ts`, avant tout import à effet de bord et avant toute
  * construction de `PrismaClient` — voir `seed-demo.test.ts` pour la preuve
  * d'ordre d'exécution.
+ *
+ * SANS EXCEPTION : un `DATABASE_URL` distant est toujours refusé, quel que
+ * soit `NODE_ENV` — il n'existe aucune variable d'environnement, aucun
+ * paramètre, aucun mécanisme pour contourner cette vérification.
  */
 export function verifierEnvironnementSeedDemo(env: EnvironnementSeedDemo): void {
   const nodeEnv = env.NODE_ENV;
@@ -68,13 +76,11 @@ export function verifierEnvironnementSeedDemo(env: EnvironnementSeedDemo): void 
     );
   }
 
-  const hoteAutorise = hoteEstLocal(env.DATABASE_URL ?? "") || env.SEED_DEMO_HOTE_DISTANT_AUTORISE === "true";
-  if (!hoteAutorise) {
+  if (!hoteEstLocal(env.DATABASE_URL ?? "")) {
     throw new Error(
       "prisma/seed-demo.ts refuse de s'exécuter : DATABASE_URL ne pointe pas vers un hôte local " +
-        "(localhost/127.0.0.1/::1). Un NODE_ENV autorisé ne suffit jamais, seul, à seeder une base distante — " +
-        "si cette base est réellement une base de test jetable, confirmez-le explicitement avec " +
-        "SEED_DEMO_HOTE_DISTANT_AUTORISE=true.",
+        "(localhost/127.0.0.1/::1). Aucune exception n'existe pour un hôte distant, quel que soit NODE_ENV — " +
+        "ce script crée des comptes à mot de passe connu et réattribue estAdminPrincipal.",
     );
   }
 }

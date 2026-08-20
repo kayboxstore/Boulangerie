@@ -2,6 +2,8 @@
 
 **Niveau de risque : 3 — Support/infrastructure.** Traitement correct et concis. Ce chapitre explique le **rôle** de chaque variable d'environnement du projet — jamais sa valeur, conformément aux règles de sécurité de ce livre — en local (`.env.example`) et sur l'hébergeur (`render.yaml`).
 
+> **Mise à jour (correctif P0-01, 19-20/08/2026, complété après revue externe)** : la `buildCommand` de `render.yaml` citée dans ce chapitre (`npm run db:seed`) n'est plus exacte — le build de production n'exécute plus jamais le seed de démonstration. Elle appelle désormais `npm run typecheck --workspace apps/api` puis `npm run db:bootstrap:production` (rôles/permissions/motifs fixes uniquement, jamais un compte) à la place. Voir `DEPLOIEMENT.md` § « Correctif P0-01 » pour le `buildCommand` actuel faisant foi. Ce chapitre reste un instantané du code tel qu'il existait à sa rédaction et n'est pas réécrit au-delà de cette note.
+
 ## Fiche d'identité
 
 | Fichier | Rôle |
@@ -119,7 +121,7 @@ Chaque groupe de variables optionnelles correspond exactement à la section de s
 
 ## 5.7 Résumé
 
-La configuration du projet suit une règle simple, répétée dans les deux fichiers : trois variables sont strictement obligatoires (connexion base de données, secret JWT, port local), toutes les autres sont optionnelles et chacune a un repli documenté qui désactive proprement une fonctionnalité précise sans jamais mettre en péril le reste de l'application. `render.yaml` ajoute à cela la structure du déploiement lui-même — un seul service Node qui sert à la fois l'API et le frontend compilé, avec une chaîne de build qui régénère systématiquement le client Prisma, applique les migrations et rejoue le seed à chaque déploiement.
+La configuration du projet suit une règle simple, répétée dans les deux fichiers : trois variables sont strictement obligatoires (connexion base de données, secret JWT, port local), toutes les autres sont optionnelles et chacune a un repli documenté qui désactive proprement une fonctionnalité précise sans jamais mettre en péril le reste de l'application. `render.yaml` ajoute à cela la structure du déploiement lui-même — un seul service Node qui sert à la fois l'API et le frontend compilé, avec une chaîne de build qui régénère systématiquement le client Prisma et applique les migrations (voir la mise à jour en tête de chapitre : depuis le correctif P0-01, ce n'est plus le seed de démonstration qui est rejoué à chaque déploiement, mais le bootstrap de production, non destructif).
 
 ---
 

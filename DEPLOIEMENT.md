@@ -219,16 +219,16 @@ complètement séparés :
 | Crée | Rôles, permissions, motifs fixes (don/perte/non-conformité) — **jamais un compte** | Tout ce que fait le bootstrap, **plus** des comptes de démo à mot de passe connu, des clients/fournisseurs/stocks fictifs |
 | Sur une base déjà initialisée | Ignore intégralement tout rôle déjà existant (ne touche ni ses permissions ni sa hiérarchie) — n'installe que ce qui est réellement absent | Toujours réservé au dev — jamais exécuté en production |
 | `estAdminPrincipal` | Jamais touché | Réattribué de force à `admin@boulangerie-lomoto.com` (comportement historique, sans risque hors dev) |
-| Garde | Sûr par construction (le type `ClientBootstrap` rend `prisma.utilisateur.*` non compilable, y compris depuis l'intérieur de sa transaction atomique) | Liste **blanche** : refuse sauf si `NODE_ENV` vaut exactement `development`/`test` **ET** `DATABASE_URL` pointe vers un hôte local (ou un opt-in explicite `SEED_DEMO_HOTE_DISTANT_AUTORISE=true`) — un `NODE_ENV` absent, `staging` ou `preview` est refusé, tout comme un hôte distant même avec un `NODE_ENV` autorisé |
+| Garde | Sûr par construction (le type `ClientBootstrap` rend `prisma.utilisateur.*` non compilable, y compris depuis l'intérieur de sa transaction atomique) | Liste **blanche** : refuse sauf si `NODE_ENV` vaut exactement `development`/`test` **ET** `DATABASE_URL` pointe vers un hôte local — un `NODE_ENV` absent, `staging` ou `preview` est refusé, tout comme un hôte distant, **sans aucune exception ni opt-in possible** (round 3 : l'opt-in round 2 a été jugé inacceptable et entièrement retiré) |
 
 Le premier compte de production (Administrateur Principal) est créé
 **exclusivement** par l'Assistant de premier lancement (voir « Se
 connecter » ci-dessus), jamais par un script de seed.
 
-### Round 2 (revue indépendante) : non-destructivité, atomicité, vérification en CI
+### Round 2 (revue Codex externe) : non-destructivité, atomicité, vérification en CI
 
-Une double revue indépendante a identifié trois points supplémentaires,
-depuis corrigés :
+Une revue externe (Codex) a identifié trois points supplémentaires, depuis
+corrigés :
 
 - **Non-destructif et atomique** — `bootstrap-production.ts` n'installe
   désormais un rôle (et ses permissions) que s'il est **totalement absent** ;
@@ -244,10 +244,43 @@ depuis corrigés :
   de démonstration.
 - **Vérifié en CI contre une vraie base PostgreSQL**, en plus des tests
   unitaires mockés : `.github/workflows/ci.yml` exécute
-  `scripts/verifier-integration-bootstrap-ci.ts`, qui prouve — sur le service
-  PostgreSQL éphémère de la CI — l'idempotence du bootstrap, la préservation
-  d'une permission modifiée manuellement après un rejeu, et le refus réel du
-  seed de démonstration avec `NODE_ENV=production`.
+  `scripts/verifier-integration-bootstrap-ci.ts`.
+
+### Round 3 (revue Codex externe) : suppression du contournement, robustesse multiplateforme, preuves CI complètes
+
+Une seconde revue externe (Codex) a identifié quatre points supplémentaires,
+depuis corrigés :
+
+- **Contournement distant supprimé sans remplacement** — l'opt-in round 2
+  (`SEED_DEMO_HOTE_DISTANT_AUTORISE`) a été jugé inacceptable pour un script
+  qui crée des comptes à mot de passe connu : retiré entièrement (code, tests,
+  documentation). Un `DATABASE_URL` distant est désormais refusé sans
+  exception, quel que soit `NODE_ENV`.
+- **Robustesse multiplateforme** — `prisma/bootstrap-production.ts` détectait
+  son exécution directe via une comparaison manuelle `` `file://${process.argv[1]}` ``,
+  qui échoue silencieusement sous Windows et pour tout chemin nécessitant un
+  encodage URL (espaces...) — remplacée par `pathToFileURL` (le mécanisme
+  standard recommandé par Node), vérifié par un vrai sous-processus depuis un
+  chemin contenant un espace. Le script `db:seed:demo` utilisait une syntaxe
+  shell POSIX (`` NODE_ENV="${NODE_ENV:-development}" ``, Unix uniquement) —
+  remplacée par `scripts/lancer-seed-demo.mjs`, un lanceur Node pur,
+  multiplateforme, qui préserve exactement la même règle (défaut seulement si
+  `NODE_ENV` est absent, jamais un écrasement).
+- **La vérification d'intégration CI se protège elle-même** — le script
+  effectue de vraies écritures destructives volontaires (modification/
+  suppression de permission, échec de transaction injecté) ; il exige
+  désormais lui-même, avant tout accès Prisma, un hôte local, le nom de base
+  exact `lomoto_ci`, et une confirmation d'environnement propre à ce script
+  (voir `scripts/garde-integration-ci.ts`).
+- **Preuves PostgreSQL complètes** — la CI prouve désormais aussi qu'une
+  permission supprimée manuellement n'est jamais recréée, qu'une hiérarchie de
+  rôle modifiée n'est jamais réécrite, qu'un échec injecté en cours
+  d'installation entraîne un rollback RÉEL (zéro donnée partielle), qu'une
+  exécution normale après cet échec réussit intégralement, et exerce le VRAI
+  chemin `npm run db:bootstrap:production` (pas seulement la fonction
+  importée directement). Le refus du seed de démonstration en production
+  vérifie désormais le message précis de la garde, pas seulement un code de
+  sortie non nul.
 
 ## Autres hébergeurs
 

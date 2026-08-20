@@ -51,14 +51,14 @@ describe("câblage du déploiement — le chemin de production n'invoque plus le
   );
   const renderYaml = readFileSync(fileURLToPath(new URL("../render.yaml", import.meta.url)), "utf-8");
 
-  it("package.json distingue db:bootstrap:production et db:seed:demo, avec NODE_ENV=development en DÉFAUT SEULEMENT (jamais en écrasement d'un NODE_ENV déjà hérité)", () => {
+  it("package.json distingue db:bootstrap:production et db:seed:demo, via un lanceur Node multiplateforme (round 3)", () => {
     expect(packageJson.scripts["db:bootstrap:production"]).toBe("tsx prisma/bootstrap-production.ts");
-    // "${NODE_ENV:-development}" et non "NODE_ENV=development" tout court :
-    // un NODE_ENV=production déjà présent dans l'environnement (ex. hérité
-    // par erreur d'un shell CI/déploiement) doit rester visible à la garde
-    // (garde-environnement-seed-demo.ts), jamais silencieusement écrasé par
-    // ce script — voir le scénario réel vérifié manuellement (P1-02).
-    expect(packageJson.scripts["db:seed:demo"]).toBe('NODE_ENV="${NODE_ENV:-development}" prisma db seed');
+    // "node scripts/lancer-seed-demo.mjs" et non une syntaxe shell POSIX
+    // (`NODE_ENV="${NODE_ENV:-development}" prisma db seed`, qui échoue sous
+    // Windows/cmd.exe) — voir scripts/lancer-seed-demo.mjs et
+    // scripts/lancer-seed-demo.test.ts pour la règle "défaut si absent
+    // seulement, jamais un écrasement d'un NODE_ENV hérité".
+    expect(packageJson.scripts["db:seed:demo"]).toBe("node scripts/lancer-seed-demo.mjs");
     expect(packageJson.scripts["db:seed"]).toBeUndefined();
     expect(packageJson.prisma.seed).toBe("tsx prisma/seed-demo.ts");
   });

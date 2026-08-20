@@ -2,12 +2,14 @@
 
 **Niveau de risque : 3 — Support/infrastructure.** Traitement correct et concis, conforme au mandat pour cette catégorie de fichiers. Ce chapitre s'appuie sur `README.md` (source principale des étapes de démarrage) et sur ce qui a pu être **réellement vérifié** dans l'environnement de rédaction de ce livre — jamais supposé.
 
+> **Mise à jour (correctif P0-01, 19-20/08/2026, complété après revue externe)** : ce chapitre décrit `prisma/seed.ts` et le script npm `db:seed`, qui n'existent plus sous ces noms. Le seed de démonstration a été renommé `prisma/seed-demo.ts`, invoqué par `npm run db:seed:demo` (et non plus `npx prisma db seed` directement — cette dernière commande refuse désormais de s'exécuter si `NODE_ENV` n'est pas explicitement `development`/`test` **et** que `DATABASE_URL` ne pointe pas vers un hôte local). Un script séparé, `prisma/bootstrap-production.ts` (`npm run db:bootstrap:production`), gère désormais le chemin de production — voir `DEPLOIEMENT.md` § « Correctif P0-01 » pour le comportement actuel faisant foi. Ce chapitre reste un instantané du code tel qu'il existait à sa rédaction et n'est pas réécrit au-delà de cette note.
+
 ## Fiche d'identité
 
 | Fichier | Rôle |
 |---|---|
 | `README.md` | Démarrage rapide : prérequis, étapes d'installation, comptes de démonstration |
-| `package.json` (racine) | Scripts npm partagés (`dev`, `build`, `test`, `prisma:*`, `db:seed`) |
+| `package.json` (racine) | Scripts npm partagés (`dev`, `build`, `test`, `prisma:*`, `db:bootstrap:production`, `db:seed:demo` — anciennement `db:seed`, voir la mise à jour ci-dessus) |
 
 ## 5.1 Prérequis annoncés — vérifiés dans cet environnement
 

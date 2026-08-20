@@ -2,6 +2,12 @@
 
 > Dernière vérification : **2026-08-06**, à partir de l'état réel du code (commit `17187c6`) et de vérifications **en direct** sur `https://boulangerie-lomoto.com` (santé API, `/api/etat-systeme`, `/api/export/capacites`, `/api/apropos`, connexion avec un compte réel). Chaque point ci-dessous précise s'il a été **vérifié en direct**, **déduit** du code, ou **non vérifiable** depuis cette session.
 
+> ## ⚠️ Erratum daté (correctif P0-01, 19-20/08/2026)
+>
+> **Ces observations datent du 2026-08-06, avant le correctif P0-01, et ne décrivent plus la procédure actuelle.** Ce rapport constate notamment (§ ci-dessous) que 9 comptes de démonstration génériques (`admin@…`, `caisse@…`, etc., mot de passe commun connu) étaient présents sur `https://boulangerie-lomoto.com` — parce qu'à cette date, `render.yaml` exécutait `npm run db:seed` (créant/recréant ces comptes et réattribuant de force le statut d'Administrateur Principal au compte générique `admin@boulangerie-lomoto.com`) à **chaque déploiement de production**. Ce risque est corrigé depuis : le chemin de production n'exécute plus jamais ce seed — voir `DEPLOIEMENT.md` § « Correctif P0-01 ».
+>
+> **Ce document n'est pas réécrit rétroactivement** : ses observations restent la trace fidèle de ce qui a été constaté en direct à cette date. Elles ne doivent plus être lues comme décrivant l'état actuel du déploiement. Si ce déploiement particulier (`boulangerie-lomoto.com`) n'a pas été assaini depuis, les comptes génériques constatés ici peuvent encore exister réellement — voir la procédure manuelle d'assainissement post-incident (document séparé, jamais automatisée) pour les traiter en toute sécurité.
+
 Légende : 🔴 Obligatoire · 🟡 Recommandé · ⚪ Optionnel
 
 ---

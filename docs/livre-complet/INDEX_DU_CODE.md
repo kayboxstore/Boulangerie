@@ -57,7 +57,7 @@
 | `packages/shared/src/index.ts` — `travailleurCreateSchema`/`UpdateSchema`, `pointageCreerSchema`/`ModifierSchema`, `absenceDeclarerSchema`/`DecisionSchema`, `sanctionCreateSchema`, `moisISO`, `CalculPaieDTO`, `BulletinPaieDTO` | `volumes/11k-1/2/3-travailleurs-*.md` |
 | `prisma/schema.prisma` (42 modèles, 16 enums) | `volumes/13-base-de-donnees.md` |
 | `prisma/migrations/*.sql` (29 fichiers, synthèse chronologique) | `volumes/13-base-de-donnees.md` |
-| `prisma/seed.ts` | `volumes/13-base-de-donnees.md` |
+| `prisma/seed.ts` — renommé `prisma/seed-demo.ts` depuis le correctif P0-01 (19-20/08/2026) ; la partie « autoritative sur la matrice de permissions » décrite au §5.7 a été extraite dans `prisma/bootstrap-production.ts` (nouveau, non couvert par ce livre) | `volumes/13-base-de-donnees.md` |
 | `README.md` | `volumes/04-installation.md` |
 | `render.yaml` | `volumes/05-configuration.md` |
 | `.env.example` | `volumes/05-configuration.md` |

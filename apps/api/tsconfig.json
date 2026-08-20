@@ -18,6 +18,9 @@
     "../../prisma/seed-demo.ts",
     "../../prisma/bootstrap-production.ts",
     "../../prisma/garde-environnement-seed-demo.ts",
-    "../../prisma/*.test.ts"
+    "../../prisma/*.test.ts",
+    "../../scripts/garde-integration-ci.ts",
+    "../../scripts/garde-integration-ci.test.ts",
+    "../../scripts/verifier-integration-bootstrap-ci.ts"
   ]
 }

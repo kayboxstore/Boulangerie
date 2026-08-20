@@ -2,6 +2,8 @@
 
 > Suivi fichier par fichier de l'avancement du livre. États possibles : **À analyser** (pas encore ouvert pour rédaction) · **En cours** (chapitre commencé) · **Expliqué** (contenu rédigé, relecture code pas encore faite) · **Vérifié** (toutes les conditions de la section « Contrôle qualité » du mandat sont remplies).
 >
+> **Erratum (correctif P0-01, 19-20/08/2026)** : la ligne `prisma/seed.ts` ci-dessous (`upsertRole` autoritatif) décrit le code tel qu'il était au moment où ce fichier a été marqué « Vérifié » — ce comportement a depuis été retiré du chemin de production. Voir `DEPLOIEMENT.md` § « Correctif P0-01 » pour l'état actuel ; cette matrice n'est pas réécrite rétroactivement au-delà de cette note.
+>
 > Dernière mise à jour : voir `ETAT_DE_PROGRESSION.md` pour la synchronisation exacte. Ce fichier est mis à jour à la fin de chaque lot de travail.
 
 ## Légende des colonnes

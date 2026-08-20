@@ -1,6 +1,8 @@
 # État de progression — Livre technique Boulangerie Lomoto
 
 > À lire en premier au début de toute nouvelle session de travail sur ce livre, avec `MATRICE_DE_COUVERTURE.md` et `TABLE_DES_MATIERES.md`.
+>
+> **Erratum (correctif P0-01, 19-20/08/2026)** : les entrées ci-dessous mentionnant `prisma/seed.ts` (`upsertRole` autoritatif, etc.) décrivent fidèlement le code au moment de leur rédaction — elles ne sont pas réécrites rétroactivement, conformément à la règle de ce livre. Ce comportement a depuis été retiré du chemin de production ; voir `DEPLOIEMENT.md` § « Correctif P0-01 » pour l'état actuel.
 
 ## Session en cours
 

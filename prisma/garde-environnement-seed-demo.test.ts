@@ -1,11 +1,15 @@
 /**
- * Preuves du correctif P0-01 (round 2, P1-02) : la garde d'environnement du
+ * Preuves du correctif P0-01 (round 2/3, P1-02) : la garde d'environnement du
  * seed de démonstration est testée ici comme une fonction PURE — aucun accès
  * Prisma, aucun risque de déclencher `main()` ou `process.exit()` contre une
  * vraie base, contrairement à un import complet de `seed-demo.ts`.
  */
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { verifierEnvironnementSeedDemo } from "./garde-environnement-seed-demo.js";
+
+const SOURCE = readFileSync(fileURLToPath(new URL("./garde-environnement-seed-demo.ts", import.meta.url)), "utf-8");
 
 const LOCAL = "postgresql://postgres:x@localhost:5432/lomoto_dev";
 const LOCAL_127 = "postgresql://postgres:x@127.0.0.1:5432/lomoto_dev";
@@ -93,33 +97,35 @@ describe("verifierEnvironnementSeedDemo — liste blanche (correctif P1-02)", ()
     }
   });
 
-  it("autorise un DATABASE_URL distant UNIQUEMENT avec l'opt-in explicite SEED_DEMO_HOTE_DISTANT_AUTORISE=true", () => {
+  // Round 3 (revue Codex) : l'opt-in round 2 `SEED_DEMO_HOTE_DISTANT_AUTORISE`
+  // a été jugé inacceptable pour un script qui crée des comptes à mot de
+  // passe connu et réattribue `estAdminPrincipal` — retiré entièrement, sans
+  // aucun remplacement. Les tests ci-dessous prouvent qu'aucune variable
+  // d'environnement, quelle qu'elle soit, ne permet plus de contourner le
+  // refus d'un hôte distant.
+  it("un hôte distant reste refusé même avec une prétendue variable d'autorisation dans l'environnement (aucune exception, quel que soit son nom)", () => {
     expect(() =>
       verifierEnvironnementSeedDemo({
         NODE_ENV: "test",
         DATABASE_URL: DISTANT,
+        // @ts-expect-error — cette clé n'existe plus dans EnvironnementSeedDemo ;
+        // on la passe quand même pour prouver qu'elle est ignorée à l'exécution.
         SEED_DEMO_HOTE_DISTANT_AUTORISE: "true",
-      }),
-    ).not.toThrow();
-  });
-
-  it("l'opt-in distant n'importe quelle valeur autre que la chaîne exacte \"true\" reste refusé", () => {
-    expect(() =>
-      verifierEnvironnementSeedDemo({
-        NODE_ENV: "test",
-        DATABASE_URL: DISTANT,
-        SEED_DEMO_HOTE_DISTANT_AUTORISE: "1",
       }),
     ).toThrow(/ne pointe pas vers un hôte local/);
   });
 
-  it("l'opt-in distant ne contourne jamais la vérification NODE_ENV", () => {
-    expect(() =>
-      verifierEnvironnementSeedDemo({
-        NODE_ENV: "production",
-        DATABASE_URL: DISTANT,
-        SEED_DEMO_HOTE_DISTANT_AUTORISE: "true",
-      }),
-    ).toThrow(/NODE_ENV="production"/);
+  it("aucune exception distante n'existe même avec NODE_ENV=test ET NODE_ENV=development (les deux seules valeurs autorisées)", () => {
+    for (const nodeEnv of ["development", "test"]) {
+      expect(
+        () => verifierEnvironnementSeedDemo({ NODE_ENV: nodeEnv, DATABASE_URL: DISTANT }),
+        `NODE_ENV=${nodeEnv} ne doit jamais autoriser un hôte distant`,
+      ).toThrow(/ne pointe pas vers un hôte local/);
+    }
+  });
+
+  it("preuve statique : EnvironnementSeedDemo n'expose plus aucun champ d'opt-in distant", () => {
+    expect(SOURCE).not.toContain("SEED_DEMO_HOTE_DISTANT_AUTORISE");
+    expect(SOURCE).not.toContain("HoteDistantAutorise");
   });
 });

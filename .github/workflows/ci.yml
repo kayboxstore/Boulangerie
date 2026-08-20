@@ -63,10 +63,23 @@ jobs:
       - name: Vérifier et compiler
         run: npm run build
 
-      - name: Vérification d'intégration PostgreSQL réelle du correctif P0-01 (P1-03)
+      - name: Vérification d'intégration PostgreSQL réelle du correctif P0-01 (round 3)
         # Additif : ne remplace pas les tests unitaires mockés ci-dessus — les
         # mêmes garanties (bootstrap idempotent, permission personnalisée
-        # jamais écrasée, zéro utilisateur, seed démo refusé en production,
-        # base inchangée après ce refus), mais contre une vraie base
-        # PostgreSQL plutôt qu'un client Prisma simulé.
+        # jamais écrasée/recréée, hiérarchie de rôle jamais réécrite, rollback
+        # réel sur échec, zéro utilisateur à chaque étape, seed démo refusé en
+        # production — message précis vérifié —, base inchangée après ce
+        # refus, VRAI chemin `npm run db:bootstrap:production`), mais contre
+        # une vraie base PostgreSQL plutôt qu'un client Prisma simulé.
+        #
+        # CI_INTEGRATION_BOOTSTRAP_CONFIRME=true : confirmation explicite
+        # propre à ce script (round 3, point 3) — ce script effectue de
+        # VRAIES écritures destructives volontaires (modification/suppression
+        # de permission, échec de transaction injecté). Sa garde
+        # (scripts/garde-integration-ci.ts) exige EN PLUS que DATABASE_URL
+        # pointe vers un hôte local et la base exacte `lomoto_ci` définie
+        # ci-dessus (`env.DATABASE_URL`, service `postgres`) — jamais une
+        # base de développement réelle, jamais un hôte distant.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-integration-bootstrap-ci.ts

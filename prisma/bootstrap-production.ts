@@ -57,6 +57,7 @@
  * zéro rôle créé) contre une vraie base PostgreSQL.
  */
 import { Module, NiveauAcces, PrismaClient, Prisma } from "@prisma/client";
+import { pathToFileURL } from "node:url";
 
 type PermissionSeed = { module: Module; niveauAcces: NiveauAcces };
 
@@ -155,8 +156,25 @@ export type TransactionBootstrap = Pick<Prisma.TransactionClient, (typeof NOMS_M
  * plus d'être absent du code ci-dessous.
  */
 export type ClientBootstrap = Pick<PrismaClient, (typeof NOMS_MODELES_STRUCTURELS)[number]> & {
-  $transaction: <T>(fn: (tx: TransactionBootstrap) => Promise<T>) => Promise<T>;
+  $transaction: <T>(
+    fn: (tx: TransactionBootstrap) => Promise<T>,
+    options?: { maxWait?: number; timeout?: number },
+  ) => Promise<T>;
 };
+
+/**
+ * Timeout explicite de la transaction interactive (round 3, point 6 — P2
+ * signalé en revue). Le défaut Prisma (`timeout: 5000`ms, `maxWait: 2000`ms)
+ * est pensé pour une poignée d'écritures ; l'installation initiale complète
+ * enchaîne jusqu'à ~80 aller-retours séquentiels (6 rôles × jusqu'à 9
+ * permissions chacun, + 8 motifs, chacun `findUnique` puis éventuel
+ * `create`). Sur une base Render à froid (premier déploiement, connexion pas
+ * encore établie), le défaut pourrait être trop serré et faire échouer le
+ * tout premier bootstrap sans raison de fond — ce qui échouerait fermé (le
+ * build Render entier s'arrête, aucune écriture partielle, voir l'en-tête),
+ * mais reste une gêne opérationnelle évitable.
+ */
+const OPTIONS_TRANSACTION_BOOTSTRAP = { maxWait: 10_000, timeout: 30_000 };
 
 /**
  * Installe un rôle SEULEMENT s'il n'existe pas encore — ne touche plus jamais
@@ -241,13 +259,24 @@ export async function bootstrapProduction(
       motifsPerteInstalles,
       motifsNonConformiteInstalles,
     };
-  });
+  }, OPTIONS_TRANSACTION_BOOTSTRAP);
 }
 
 // --- Exécution directe (`tsx prisma/bootstrap-production.ts` /
 // `npm run db:bootstrap:production`) uniquement — ne s'exécute jamais quand
 // ce fichier est importé par `seed-demo.ts` ou par les tests.
-if (import.meta.url === `file://${process.argv[1]}`) {
+//
+// Round 3 (revue Codex, point 2) : `import.meta.url === \`file://${process.argv[1]}\``
+// n'est PAS fiable — sous Windows, `process.argv[1]` est un chemin natif
+// (`C:\...`, séparateurs `\`) qui ne correspond jamais littéralement à une
+// URL `file://` ; et tout chemin contenant des caractères devant être
+// encodés en URL (espaces, accents...) ne correspond pas non plus tel quel.
+// Un échec silencieux de cette comparaison signifie que le bloc ne s'exécute
+// JAMAIS : le processus se termine avec succès sans avoir rien bootstrapé.
+// `pathToFileURL` est la construction robuste recommandée par Node pour ce
+// test (POSIX, Windows, et chemins avec espaces/caractères spéciaux) —
+// vérifié par `bootstrap-production.test.ts` sur les trois cas.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const prisma = new PrismaClient();
   bootstrapProduction(prisma)
     .then((resultat) => {

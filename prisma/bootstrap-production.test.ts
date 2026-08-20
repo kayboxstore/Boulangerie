@@ -309,6 +309,60 @@ describe("bootstrapProduction — atomicité (P1-01)", () => {
   });
 });
 
+describe("bootstrapProduction — détection d'entrypoint CLI, multiplateforme (round 3, point 2)", () => {
+  it("utilise pathToFileURL, pas une concaténation manuelle `file://` (non fiable sous Windows / chemins à encoder)", () => {
+    expect(SOURCE).toContain('import { pathToFileURL } from "node:url"');
+    expect(SOURCE).toContain("import.meta.url === pathToFileURL(process.argv[1]).href");
+    expect(SOURCE).not.toMatch(/`file:\/\/\$\{process\.argv\[1\]\}`/);
+  });
+
+  it(
+    "le bloc CLI s'exécute réellement en exécution directe, y compris depuis un chemin contenant un espace",
+    async () => {
+      // Preuve dynamique, pas seulement statique : copie le fichier (+ ses
+      // imports relatifs) dans un répertoire temporaire DONT LE NOM CONTIENT
+      // UN ESPACE — exactement le genre de chemin que l'ancienne comparaison
+      // `` `file://${process.argv[1]}` `` pouvait mal gérer (les espaces d'un
+      // chemin doivent être pourcent-encodés dans une URL `file://`, ce que
+      // `pathToFileURL` fait correctement et qu'une concaténation manuelle ne
+      // fait pas). Placé SOUS `prisma/` pour que la résolution de
+      // `node_modules` (remontée de répertoires par Node) continue de
+      // fonctionner.
+      const { mkdtempSync, copyFileSync, rmSync } = await import("node:fs");
+      const path = await import("node:path");
+      const { spawnSync } = await import("node:child_process");
+
+      const dossierTemp = mkdtempSync(path.join(path.dirname(CHEMIN_SOURCE), "tmp espace test "));
+      try {
+        const copie = path.join(dossierTemp, "bootstrap-production.ts");
+        copyFileSync(CHEMIN_SOURCE, copie);
+
+        // DATABASE_URL volontairement injoignable (port 1) : si le bloc CLI
+        // s'exécute (comportement attendu), Prisma tente une connexion réelle
+        // et échoue avec un message de connexion explicite, code de sortie
+        // non nul. Si le bloc CLI ne s'exécutait JAMAIS (régression exacte
+        // signalée par la revue Codex), le processus se terminerait
+        // SILENCIEUSEMENT avec le code 0, sans avoir rien tenté.
+        const resultat = spawnSync("npx", ["tsx", copie], {
+          cwd: path.dirname(CHEMIN_SOURCE),
+          env: { ...process.env, DATABASE_URL: "postgresql://user:pass@127.0.0.1:1/injoignable" },
+          encoding: "utf-8",
+          timeout: 20_000,
+        });
+
+        expect(
+          resultat.status,
+          `sortie attendue non-nulle (preuve que le bloc CLI a bien été atteint) ; stdout=${resultat.stdout} stderr=${resultat.stderr}`,
+        ).not.toBe(0);
+        expect(resultat.stdout + resultat.stderr).toMatch(/Can't reach database|ECONNREFUSED|P1001/);
+      } finally {
+        rmSync(dossierTemp, { recursive: true, force: true });
+      }
+    },
+    25_000,
+  );
+});
+
 describe("bootstrapProduction — preuves statiques", () => {
   it("le CODE (hors commentaires) ne référence jamais un modèle utilisateur ou métier", () => {
     // Le docblock d'en-tête décrit volontairement ces modèles interdits pour
@@ -364,5 +418,21 @@ describe("bootstrapProduction — preuves statiques", () => {
     expect(fin).toBeGreaterThan(debut);
     const corps = SOURCE.slice(debut, fin);
     expect(corps).toContain("return prisma.$transaction(async (tx) => {");
+  });
+
+  it("la transaction reçoit un timeout explicite et généreux (round 3, point 6 — évite l'échec du 1ᵉʳ bootstrap sur une base Render froide)", () => {
+    expect(SOURCE).toContain("OPTIONS_TRANSACTION_BOOTSTRAP = { maxWait: 10_000, timeout: 30_000 }");
+    expect(SOURCE).toContain("}, OPTIONS_TRANSACTION_BOOTSTRAP);");
+    // Nettement au-dessus du défaut Prisma (timeout 5000ms, maxWait 2000ms) —
+    // sans quoi cette option n'aurait aucun effet réel. On cible précisément
+    // la valeur RÉELLEMENT utilisée (OPTIONS_TRANSACTION_BOOTSTRAP), pas
+    // n'importe quelle occurrence du mot "timeout" dans le fichier (qui
+    // apparaît aussi en prose, dans le docblock expliquant le défaut Prisma).
+    const correspondance = SOURCE.match(
+      /OPTIONS_TRANSACTION_BOOTSTRAP = \{ maxWait: ([\d_]+), timeout: ([\d_]+) \}/,
+    );
+    expect(correspondance).not.toBeNull();
+    expect(Number(correspondance![2].replace(/_/g, ""))).toBeGreaterThan(5000);
+    expect(Number(correspondance![1].replace(/_/g, ""))).toBeGreaterThan(2000);
   });
 });

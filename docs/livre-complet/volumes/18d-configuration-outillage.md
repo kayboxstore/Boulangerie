@@ -1,6 +1,8 @@
 # Volume 18d — Configuration et outillage (section M de la matrice)
 
 > Quatrième et dernier sous-chapitre du Volume 18 — et dernier chapitre nécessaire pour clore entièrement `MATRICE_DE_COUVERTURE.md`. Neuf fichiers de configuration Niveau 3, tous déjà mentionnés en passant (Volumes 3, 5, 7, 9) sans que leur contenu exact n'ait été montré. Traitement concis, conforme à la règle Niveau 3 du mandat.
+>
+> **Mise à jour (correctif P0-01, 19-20/08/2026, complété après revue externe)** : les extraits ci-dessous montrent `"db:seed": "prisma db seed"` et `"seed": "tsx prisma/seed.ts"` — ces noms n'existent plus. Le script npm est désormais `db:seed:demo` (dev/test uniquement, invoqué via un lanceur Node multiplateforme, `scripts/lancer-seed-demo.mjs`), la configuration `"prisma".seed` pointe vers `prisma/seed-demo.ts`, et `apps/api/tsconfig.json` référence `prisma/seed-demo.ts` (plus `prisma/bootstrap-production.ts`, nouveau). Voir `DEPLOIEMENT.md` § « Correctif P0-01 » pour l'état actuel faisant foi. Ce chapitre reste un instantané du code tel qu'il existait à sa rédaction et n'est pas réécrit au-delà de cette note.
 
 ## 1. `package.json` (racine) — l'orchestrateur du monorepo
 

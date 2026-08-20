@@ -53,6 +53,8 @@ Trois situations d'administration, distinctes de la gestion quotidienne déjà c
 
 Avant que le titulaire actuel du statut d'Administrateur Principal ne quitte l'organisation ou change de rôle, ce statut doit être **explicitement transféré** à un autre compte Administrateur — rappel du Volume 22i : ce transfert n'est possible que par le Principal en exercice lui-même, ce qui signifie concrètement qu'il doit être anticipé **avant** le départ, jamais après.
 
+> **Mise à jour (correctif P0-01, 19-20/08/2026)** : avant ce correctif, ce transfert normal (`/api/equipe/:id/principal`) n'était pas la seule façon dont le statut de Principal pouvait changer — un redéploiement de production rejouait `prisma/seed.ts`, qui réattribuait de force `estAdminPrincipal` au compte générique `admin@boulangerie-lomoto.com`, **sans passer par ce transfert explicite**. Ce risque est corrigé : le chemin de production (`prisma/bootstrap-production.ts`) ne touche plus jamais ce champ. Le transfert normal décrit dans cette section reste la seule façon légitime de changer le Principal aujourd'hui. Voir `DEPLOIEMENT.md` § « Correctif P0-01 » et, pour un déploiement antérieur potentiellement affecté, la procédure manuelle post-incident (document séparé).
+
 ### 3.2 Un roulement d'équipe
 
 Chaque arrivée ou départ dans l'équipe suit le même chemin déjà détaillé (fiche Travailleur → e-mail professionnel → compte pour une arrivée ; désactivation, jamais suppression tant qu'il existe un historique à préserver, pour un départ). Dans la durée, c'est surtout la discipline de désactiver rapidement les comptes qui ne doivent plus se connecter qui distingue une administration saine d'une accumulation de comptes actifs oubliés.
