@@ -133,3 +133,4 @@ jobs:
             exit 1
           }
           Write-Host "OK : refusé sous Windows avec le message exact de la garde, exit=$LASTEXITCODE"
+          exit 0
