@@ -1,14 +1,17 @@
 /**
- * Vérification de concurrence CI du correctif P0-01 (round 6, revue Codex,
- * point 1), contre une VRAIE base PostgreSQL éphémère — le service
+ * Vérification CI des invariants de concurrence du correctif P0-01
+ * (round 6, revue Codex, point 1), contre une VRAIE base PostgreSQL
+ * éphémère — le service
  * `postgres` de `.github/workflows/ci.yml`.
  *
  * `scripts/verifier-integration-bootstrap-ci.ts` prouve déjà le bootstrap de
  * production contre une vraie base ; ce script-ci prouve un invariant
  * différent, spécifique à `PUT /api/equipe/:id/activation` et
- * `POST /api/equipe/:id/principal` : qu'une course entre deux écritures
- * concurrentes ne peut jamais laisser la base dans un état invalide (zéro
- * Administrateur Principal actif, ou deux). Les tests mockés
+ * `POST /api/equipe/:id/principal` : deux scénarios lancent de vraies
+ * opérations concurrentes/parallèles, puis deux contrôles complémentaires
+ * vérifient les garde-fous et l'état final. L'ensemble confirme qu'une course
+ * ne laisse jamais la base dans un état invalide (zéro Administrateur
+ * Principal actif, ou deux). Les tests mockés
  * (`equipe.activation.test.ts`, `equipe.principal.test.ts`) prouvent que la
  * ROUTE appelle bien les bonnes écritures conditionnelles — ils ne peuvent
  * PAS prouver l'atomicité elle-même : un mock n'a pas de verrou de ligne, pas
@@ -27,8 +30,8 @@
  *
  * SÉCURITÉ : même garde que `verifier-integration-bootstrap-ci.ts` — voir
  * `scripts/garde-integration-ci.ts`. Ce script effectue de VRAIES écritures
- * concurrentes délibérées ; la garde exige simultanément un hôte local, le
- * nom de base EXACT `lomoto_ci`, et une confirmation explicite.
+ * délibérées, dont certaines concurrentes ; la garde exige simultanément un
+ * hôte local, le nom de base EXACT `lomoto_ci`, et une confirmation explicite.
  *
  * Usage (CI uniquement — voir .github/workflows/ci.yml) :
  *   CI_INTEGRATION_BOOTSTRAP_CONFIRME=true npx tsx scripts/verifier-concurrence-equipe-ci.ts
@@ -60,7 +63,7 @@ const prisma = new PrismaClient();
 const dbPourTransfert = prisma as unknown as Parameters<typeof transfererStatutPrincipal>[0];
 
 function echouer(message: string): never {
-  console.error(`\n❌ ÉCHEC vérification de concurrence CI (P0-01 / round 6) : ${message}\n`);
+  console.error(`\n❌ ÉCHEC vérification des invariants de concurrence CI (P0-01 / round 6) : ${message}\n`);
   process.exitCode = 1;
   throw new Error(message);
 }
@@ -156,7 +159,7 @@ async function main() {
     );
   }
 
-  console.log("→ Scénario 2/4 : deux transferts concurrents depuis le même ancien Principal…");
+  console.log("→ Scénario 2/4 : deux transferts lancés en parallèle depuis le même ancien Principal…");
   {
     await reinitialiserBase();
     const role = await creerRoleAdministrateur();
@@ -164,14 +167,15 @@ async function main() {
     const cibleA = await creerCompteAdmin("Cible A", "ciblea@test.local", role.id, false);
     const cibleB = await creerCompteAdmin("Cible B", "cibleb@test.local", role.id, false);
 
-    // Deux VRAIES connexions séparées, deux VRAIES transactions Prisma
-    // lancées en parallèle avec Promise.allSettled — aucun crochet de
-    // synchronisation ici : la garantie testée est que PostgreSQL sérialise
-    // les deux écritures sur la même ligne (celle de l'ancien Principal)
-    // quel que soit l'ordre réel d'arrivée, pas que l'une arrive
-    // "en même temps" que l'autre au sens strict.
+    // Deux VRAIES connexions séparées, préconnectées avant le lancement, puis
+    // deux VRAIES transactions Prisma lancées en parallèle avec
+    // Promise.allSettled. Il n'y a volontairement aucune barrière observant
+    // les verrous PostgreSQL : ce scénario prouve le résultat de deux
+    // opérations lancées en parallèle, mais ne prétend PAS démontrer leur
+    // chevauchement temporel exact au niveau du verrou de ligne.
     const clientA = new PrismaClient();
     const clientB = new PrismaClient();
+    await Promise.all([clientA.$connect(), clientB.$connect()]);
     const [resultatA, resultatB] = await Promise.allSettled([
       transfererStatutPrincipal(clientA as unknown as Parameters<typeof transfererStatutPrincipal>[0], ancien.id, cibleA.id),
       transfererStatutPrincipal(clientB as unknown as Parameters<typeof transfererStatutPrincipal>[0], ancien.id, cibleB.id),
@@ -182,8 +186,8 @@ async function main() {
     const echecs = [resultatA, resultatB].filter((r) => r.status === "rejected");
     if (succes.length !== 1) {
       echouer(
-        `scénario 2 : attendu exactement 1 transfert réussi sur 2 tentatives concurrentes, trouvé ${succes.length} ` +
-          "— deux transferts concurrents depuis le même ancien Principal NE DOIVENT PAS tous les deux réussir",
+        `scénario 2 : attendu exactement 1 transfert réussi sur 2 tentatives lancées en parallèle, trouvé ${succes.length} ` +
+          "— deux transferts depuis le même ancien Principal NE DOIVENT PAS tous les deux réussir",
       );
     }
     if (echecs.length !== 1 || !(echecs[0] as PromiseRejectedResult).reason instanceof ErreurTransfertPrincipalConcurrent) {
@@ -193,16 +197,16 @@ async function main() {
     if (nbPrincipauxActifs !== 1) {
       echouer(`scénario 2 : attendu exactement 1 Principal actif après les deux tentatives, trouvé ${nbPrincipauxActifs}`);
     }
-    console.log("  ✓ un seul des deux transferts concurrents a réussi, l'autre a échoué proprement, exactement un Principal au final.");
+    console.log("  ✓ un seul des deux transferts lancés en parallèle a réussi, l'autre a échoué proprement, exactement un Principal au final.");
   }
 
-  console.log("→ Scénario 3/4 : désactivation concurrente refusée quand la cible vient de devenir Principal…");
+  console.log("→ Contrôle 3/4 : désactivation refusée après que la cible est devenue Principal…");
   {
-    // Symétrique du scénario 1 : cette fois le transfert GAGNE la course
-    // (aucun crochet de pause), et la désactivation concurrente de la même
-    // cible, lancée juste après depuis une connexion séparée, doit être
-    // refusée par la garde atomique de `desactiverCompteAtomique` — jamais
-    // désactiver un compte qui vient de devenir Principal.
+    // Ce contrôle est volontairement SÉQUENTIEL : le transfert est entièrement
+    // terminé avant la tentative de désactivation. Il vérifie directement que
+    // la garde atomique de `desactiverCompteAtomique` refuse un compte déjà
+    // Principal. Il ne constitue pas un troisième scénario concurrent — le
+    // scénario 1 couvre la vraie course transfert/désactivation.
     await reinitialiserBase();
     const role = await creerRoleAdministrateur();
     const ancien = await creerCompteAdmin("Ancien Principal 3", "ancien3@test.local", role.id, true);
@@ -210,52 +214,52 @@ async function main() {
 
     await transfererStatutPrincipal(dbPourTransfert, ancien.id, cible.id);
 
-    const clientConcurrent = new PrismaClient();
+    const clientVerification = new PrismaClient();
     let resultat: Awaited<ReturnType<typeof desactiverCompteAtomique>>;
     try {
       resultat = await desactiverCompteAtomique(
-        clientConcurrent as unknown as Parameters<typeof desactiverCompteAtomique>[0],
+        clientVerification as unknown as Parameters<typeof desactiverCompteAtomique>[0],
         cible.id,
       );
     } finally {
-      await clientConcurrent.$disconnect();
+      await clientVerification.$disconnect();
     }
 
     if (resultat.ok) {
-      echouer("scénario 3 : la désactivation de la nouvelle Principale aurait dû être refusée (raison EST_PRINCIPAL)");
+      echouer("contrôle 3 : la désactivation de la nouvelle Principale aurait dû être refusée (raison EST_PRINCIPAL)");
     }
     if (resultat.raison !== "EST_PRINCIPAL") {
-      echouer(`scénario 3 : raison de refus attendue EST_PRINCIPAL, trouvée ${resultat.raison}`);
+      echouer(`contrôle 3 : raison de refus attendue EST_PRINCIPAL, trouvée ${resultat.raison}`);
     }
     const cibleApres = await prisma.utilisateur.findUniqueOrThrow({ where: { id: cible.id } });
     if (!cibleApres.actif || !cibleApres.estAdminPrincipal) {
-      echouer("scénario 3 : la nouvelle Principale doit rester active et Principale — la désactivation refusée ne doit rien avoir modifié");
+      echouer("contrôle 3 : la nouvelle Principale doit rester active et Principale — la désactivation refusée ne doit rien avoir modifié");
     }
     const nbPrincipauxActifs = await compterPrincipauxActifs();
     if (nbPrincipauxActifs !== 1) {
-      echouer(`scénario 3 : attendu exactement 1 Principal actif, trouvé ${nbPrincipauxActifs}`);
+      echouer(`contrôle 3 : attendu exactement 1 Principal actif, trouvé ${nbPrincipauxActifs}`);
     }
     console.log("  ✓ la désactivation de la nouvelle Principale a été refusée atomiquement, aucune écriture appliquée.");
   }
 
-  console.log("→ Scénario 4/4 : vérification globale finale — exactement un compte actif=true ET estAdminPrincipal=true…");
+  console.log("→ Contrôle 4/4 : vérification globale finale — exactement un compte actif=true ET estAdminPrincipal=true…");
   {
     const nbPrincipauxActifs = await compterPrincipauxActifs();
     if (nbPrincipauxActifs !== 1) {
-      echouer(`scénario 4 : état final attendu = exactement 1 Principal actif dans la base, trouvé ${nbPrincipauxActifs}`);
+      echouer(`contrôle 4 : état final attendu = exactement 1 Principal actif dans la base, trouvé ${nbPrincipauxActifs}`);
     }
     const nbPrincipauxTotal = await prisma.utilisateur.count({ where: { estAdminPrincipal: true } });
     if (nbPrincipauxTotal !== 1) {
-      echouer(`scénario 4 : attendu exactement 1 compte estAdminPrincipal=true au total (actif ou non), trouvé ${nbPrincipauxTotal}`);
+      echouer(`contrôle 4 : attendu exactement 1 compte estAdminPrincipal=true au total (actif ou non), trouvé ${nbPrincipauxTotal}`);
     }
     console.log("  ✓ invariant global vérifié : jamais zéro Principal, jamais deux.");
   }
 
   await reinitialiserBase();
   console.log(
-    "\n✅ Vérification de concurrence CI P0-01 (round 6) : les 4 scénarios passent contre une vraie base " +
-      "PostgreSQL avec de vraies écritures concurrentes — jamais d'Administrateur Principal inactif, jamais deux " +
-      "Principaux, jamais un rollback manqué.\n",
+    "\n✅ Vérification des invariants de concurrence CI P0-01 (round 6) : 2 scénarios lançant de vraies opérations " +
+      "concurrentes/parallèles et 2 contrôles complémentaires passent contre PostgreSQL — jamais d'Administrateur " +
+      "Principal inactif, jamais deux Principaux, jamais un rollback manqué.\n",
   );
 }
 
