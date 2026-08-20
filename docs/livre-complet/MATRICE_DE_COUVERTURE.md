@@ -30,8 +30,8 @@
 | `apps/api/src/lib/parametres.ts` | 2 | `lireParametre`, `ecrireParametre` | `volumes/18a-parametres-intervention-admin-restauration.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/prisma.ts` | 3 | client Prisma singleton | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/realtime.ts` | 2 | `initRealtime`, `getIo`, `roomUtilisateur`, `roomRole`, `invaliderSessionUtilisateur` | `volumes/12-api-reseau.md` | Vérifié | — | Aucun |
-| `apps/api/src/lib/idempotence.ts` | 1 | `executerEcritureIdempotente`, `ajouterEnteteRejeu`, `lireCleIdempotence`, `ErreurIdempotence` | `volumes/11j-caisse.md` (§5.2, usage), `volumes/11z-6-cycle-livraison.md` (§4, usage) | En cours | Utilisé et cité par plusieurs chapitres (Volume 11j, 11z-6, Commandes) mais sans chapitre propre qui explique le mécanisme lui-même en détail (clé, empreinte, rejeu, `CLE_IDEMPOTENCE_REUTILISEE`) — signalé le 19/08/2026, pas encore traité | Aucun repéré sur les usages couverts |
-| `apps/api/src/lib/temps.ts` | 1 | `jourLomoto`, `dateSQLDepuisJourLomoto`, `bornesJourLomoto` | `volumes/11j-caisse.md` (§5.2, usage) | En cours | Même remarque que `lib/idempotence.ts` ci-dessus — fonctions expliquées à leur usage dans Volume 11j, jamais dans un chapitre dédié au fichier lui-même | Aucun repéré sur les usages couverts |
+| `apps/api/src/lib/idempotence.ts` | 1 | `executerEcritureIdempotente`, `ajouterEnteteRejeu`, `lireCleIdempotence`, `empreinteIdempotence`, `ErreurIdempotence` | `volumes/11l-infrastructure-temps-idempotence.md` *(ajouté le 20/08/2026)* | Vérifié | — | Aucun |
+| `apps/api/src/lib/temps.ts` | 1 | `jourLomoto`, `dateSQLDepuisJourLomoto`, `bornesJourLomoto`, `decalerJourLomoto` | `volumes/11l-infrastructure-temps-idempotence.md` *(ajouté le 20/08/2026)* | Vérifié | `decalerJourLomoto` testée mais jamais appelée par le code applicatif actuel | Aucun |
 
 ## B. `apps/api/src/middleware/`
 
@@ -181,8 +181,8 @@
 | `apps/web/src/components/previsions/cycleLivraisonLogique.ts` | 1 | `cleLibelleStatutCycle`, `cleDescriptionStatutCycle`, `varianteBadgeStatutCycle` | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | — | Aucun |
 | `apps/web/src/components/previsions/EtapesCycleLivraison.tsx` | 1 | `EtapesCycleLivraison`, `BadgeDecrit` | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | — | Aucun |
 | `apps/web/src/components/previsions/DialogActionCycle.tsx` | 1 | `DialogActionCycle` (6 transitions de production/transport) | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | — | Aucun |
-| `apps/web/src/components/previsions/DialogAcceptationCycle.tsx` | 1 | `DialogAcceptationCycle` (`CONFIRMER_ACCEPTATION`, premier usage de l'idempotence côté client) | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | Aucun chapitre ne détaille encore `apps/api/src/lib/idempotence.ts` ni son pendant client `apps/web/src/lib/idempotence.ts` (`resoudreCleIdempotence`, `useCleIdempotence`) en profondeur — voir la lacune déjà notée plus haut | Aucun |
-| `apps/web/src/lib/idempotence.ts` | 1 | `resoudreCleIdempotence`, `useCleIdempotence`, `genererCleIdempotence` | `volumes/11j-caisse.md`, `volumes/11z-6-cycle-livraison.md` (usages, pas un chapitre dédié) | En cours | Généralisé le 19/08/2026 (audit) à 6 mutations financières (Commandes, Caisse) au-delà de `DialogAcceptationCycle` ; pas encore de chapitre propre — même lacune que son pendant serveur | Aucun repéré sur les usages couverts |
+| `apps/web/src/components/previsions/DialogAcceptationCycle.tsx` | 1 | `DialogAcceptationCycle` (`CONFIRMER_ACCEPTATION`, premier usage de l'idempotence côté client) | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | — | Aucun |
+| `apps/web/src/lib/idempotence.ts` | 1 | `resoudreCleIdempotence`, `useCleIdempotence`, `genererCleIdempotence` | `volumes/11l-infrastructure-temps-idempotence.md` *(ajouté le 20/08/2026)* | Vérifié | — | Aucun |
 
 ## L. `apps/web/src/components/ui/` (primitives, Niveau 3)
 
@@ -231,16 +231,18 @@
 
 > Audit du 2026-08-08 : la matrice ne comptait que 128 lignes de tableau pour 155 fichiers réels. Écart résolu et expliqué ci-dessous — les chiffres suivants comptent les **fichiers réels**, pas les lignes de tableau.
 >
-> **Mise à jour du 19/08/2026** : 11 fichiers ajoutés à la matrice — un module entier codé après la clôture initiale du livre (`routes/cycles-livraison.ts`, `services/cyclesLivraison.ts`, `packages/shared/src/cyclesLivraison.ts`, `pages/AcceptationsLivraison.tsx`, 4 fichiers de `components/previsions/`, tous Vérifiés via le nouveau Volume 11z-6) et deux fichiers d'infrastructure transversale jusque-là absents de la matrice (`apps/api/src/lib/idempotence.ts`, `apps/api/src/lib/temps.ts`, plus leur pendant client `apps/web/src/lib/idempotence.ts` — les trois laissés « En cours » : utilisés et expliqués à leur point d'usage par plusieurs chapitres, mais sans chapitre qui leur soit propre). Voir `ETAT_DE_PROGRESSION.md`, section « Session de mise à jour du 19/08/2026 ».
+> **Mise à jour du 19/08/2026** : 11 fichiers ajoutés à la matrice — un module entier codé après la clôture initiale du livre (`routes/cycles-livraison.ts`, `services/cyclesLivraison.ts`, `packages/shared/src/cyclesLivraison.ts`, `pages/AcceptationsLivraison.tsx`, 4 fichiers de `components/previsions/`, tous Vérifiés via le nouveau Volume 11z-6) et trois fichiers d'infrastructure transversale jusque-là absents de la matrice (`apps/api/src/lib/idempotence.ts`, `apps/api/src/lib/temps.ts`, `apps/web/src/lib/idempotence.ts`), laissés « En cours » faute de chapitre dédié.
+>
+> **Mise à jour du 20/08/2026** : les trois fichiers d'infrastructure transversale ci-dessus passent à « Vérifié » — nouveau Volume 11l (« Infrastructure transversale : fuseau Lomoto et idempotence des écritures »), qui referme cette lacune. Seul `packages/shared/src/index.ts` reste « En cours ».
 
 | État | Nombre de fichiers (sur 166 fichiers de code) |
 |---|---:|
 | À analyser | 0 |
-| En cours | 4 |
+| En cours | 1 |
 | Expliqué | 0 |
-| Vérifié | 162 |
+| Vérifié | 165 |
 
-**166 / 166 fichiers couverts** (162 Vérifié + 4 En cours — `packages/shared/src/index.ts` [cas particulier documenté ci-dessous], `apps/api/src/lib/idempotence.ts`, `apps/api/src/lib/temps.ts`, `apps/web/src/lib/idempotence.ts` [les trois pour la même raison : couverts à l'usage, pas encore par un chapitre dédié]). Le Volume 18 (18a-18d) a clos les 18 fichiers alors réellement « À analyser » ; le Volume 11z-6 (19/08/2026) a couvert les 8 fichiers du module Cycle de livraison, jusque-là absents de la matrice.
+**166 / 166 fichiers couverts** (165 Vérifié + 1 En cours — `packages/shared/src/index.ts`, cas particulier documenté ci-dessous). Le Volume 18 (18a-18d) a clos les 18 fichiers alors réellement « À analyser » ; le Volume 11z-6 (19/08/2026) a couvert les 8 fichiers du module Cycle de livraison ; le Volume 11l (20/08/2026) a couvert les 3 derniers fichiers d'infrastructure transversale — la matrice ne compte plus qu'une seule ligne « En cours ».
 
 Méthodologie de comptage (pour que ce tableau reste vérifiable) :
 - La section F regroupe volontairement les 29 fichiers `prisma/migrations/*.sql` sur **une seule ligne de tableau** (conforme au mandat : « couvertes de façon groupée, pas ligne à ligne »). Cette ligne, à l'état Vérifié, compte donc pour **29 fichiers Vérifié**, pas pour 1 — d'où l'écart originel (corrigé le 2026-08-08) entre 128 lignes de tableau et 155 fichiers.

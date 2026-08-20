@@ -84,6 +84,8 @@
 
 **Instantané figé** — Copie complète et indépendante d'un calcul à un instant donné (ex. un `BulletinPaie`), qui ne change jamais rétroactivement même si les données sources qui l'ont nourri sont modifiées après coup. S'oppose à une « vue dérivée » (Commissions, Caisse), toujours recalculée à la lecture. Voir Volume 11k-3.
 
+**Idempotence (écriture)** — Garantie qu'une même requête, envoyée deux fois (double-clic, retry réseau) avec un en-tête `Idempotency-Key` identique, ne produit l'effet métier qu'une seule fois — la seconde reçoit la réponse déjà obtenue plutôt que de rejouer l'écriture. Portée par une contrainte d'unicité SQL (`OperationIdempotente`), pas par un verrou applicatif. Voir Volume 11l.
+
 ## J
 
 **Journal append-only** — Table où les lignes ne sont jamais modifiées ni supprimées après coup, seulement ajoutées : le Journal d'audit (Volume 11g) et le journal des mouvements de stock (`MouvementStock`, Volume 11z-1) en sont les deux exemples du projet. **Précision (Volume 20)** : pour les mouvements de stock, l'état courant (`MatierePremiere.quantiteStock`) n'est PAS recalculé en sommant le journal à chaque lecture — il est stocké séparément et mis à jour de façon incrémentale (`increment`/`decrement`) dans la même transaction que l'écriture du journal (`appliquerMouvement`, `services/stocks.ts`), pour que sa lecture reste en O(1) plutôt que de nécessiter une agrégation. Seul l'historique (le détail des mouvements passés, le diff affiché par entrée du Journal d'audit) est porté par le journal lui-même — l'état agrégé courant ne l'est pas.

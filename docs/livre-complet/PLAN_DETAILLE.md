@@ -170,6 +170,15 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - Exemple chiffré complet (350 000 Fc, 26 jours, 2 absences NJ, 1 retenue 10 000 Fc → 313 077 Fc net)
 - 25/26 fichiers Niveau 1 couverts à l'issue de ce volume (`schema.prisma`, également Niveau 1, restait à traiter — voir Volume 13, qui referme réellement le Niveau 1 à 26/26 ; correction d'une annonce prématurée faite ici initialement)
 
+### 11l — Infrastructure transversale : fuseau Lomoto et idempotence des écritures ✅ *(ajouté le 20/08/2026, hors plan initial)*
+- `lib/temps.ts` : `jourLomoto`/`bornesJourLomoto`/`dateSQLDepuisJourLomoto` (`Intl.DateTimeFormat` sur `Africa/Kinshasa`, pas de dépendance externe), `decalerJourLomoto` (testée, jamais appelée par le code applicatif)
+- `lib/idempotence.ts` (serveur) : `executerEcritureIdempotente` — la ligne `OperationIdempotente` est créée *avant* l'écriture métier, dans la même transaction `Serializable`, et sert de verrou via la contrainte `@@unique([utilisateurId, portee, cle])` (course perdue → `P2002` → relecture de la réponse gagnante)
+- `empreinteIdempotence` : hachage SHA-256 sur un JSON canonicalisé (clés triées) — détecte la réutilisation d'une clé avec un contenu différent (`CLE_IDEMPOTENCE_REUTILISEE`, 409)
+- 7 points d'appel recensés (Commandes ×2, Caisse ×4, Cycle de livraison ×1) — un seul où l'en-tête est obligatoire (`CONFIRMER_ACCEPTATION`), les 6 autres restent facultatifs pour compatibilité ascendante
+- `apps/web/src/lib/idempotence.ts` : `resoudreCleIdempotence`/`useCleIdempotence` — deux notions d'« empreinte » distinctes de part et d'autre du réseau, à ne pas confondre (hachage opaque côté serveur, simple JSON côté client)
+- Observation : aucune purge de `OperationIdempotente` malgré un index sur `createdAt` qui le suggère
+- Écart repéré : aucun
+
 ### 11z-1 — Stocks, Fournisseurs et Catalogue produits ✅
 - `services/stocks.ts` : `appliquerMouvement` (point de passage unique de toute variation de stock, dans une transaction fournie par l'appelant), `franchitSeuil` (détection de transition, pas d'état), `emettreAlerteSeuil`
 - `routes/stocks.ts` : CRUD matières premières (stock initial via mouvement `ENTREE`, suppression bloquée par l'historique), journal des mouvements (`GET` plafonné à 100, `POST` manuel)

@@ -40,7 +40,7 @@
 | `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
 | `apps/web/src/pages/Caisse.tsx` | `volumes/11j-caisse.md` |
 | `packages/shared/src/index.ts` — `tauxDuJourSchema`, `depenseCreateSchema`, `depenseFarineSchema`, `sessionCaisseOuvertureSchema`, `sessionCaisseFermetureSchema`, `remiseCaisseCreateSchema`, `confirmerReglementsSchema`, `RegistreCaisseDTO`, `DepenseCaisseDTO`, `SessionCaisseDTO`, `RemiseCaisseDTO` | `volumes/11j-caisse.md` |
-| `apps/api/src/lib/temps.ts` | `volumes/11j-caisse.md` (usage, pas encore de chapitre dédié) |
+| `apps/api/src/lib/temps.ts` | `volumes/11l-infrastructure-temps-idempotence.md` |
 | `apps/api/src/routes/cycles-livraison.ts` | `volumes/11z-6-cycle-livraison.md` |
 | `apps/api/src/services/cyclesLivraison.ts` | `volumes/11z-6-cycle-livraison.md` |
 | `packages/shared/src/cyclesLivraison.ts` | `volumes/11z-6-cycle-livraison.md` |
@@ -49,8 +49,8 @@
 | `apps/web/src/components/previsions/EtapesCycleLivraison.tsx` | `volumes/11z-6-cycle-livraison.md` |
 | `apps/web/src/components/previsions/DialogActionCycle.tsx` | `volumes/11z-6-cycle-livraison.md` |
 | `apps/web/src/components/previsions/DialogAcceptationCycle.tsx` | `volumes/11z-6-cycle-livraison.md` |
-| `apps/api/src/lib/idempotence.ts` | `volumes/11j-caisse.md`, `volumes/11z-6-cycle-livraison.md` (usage, pas encore de chapitre dédié) |
-| `apps/web/src/lib/idempotence.ts` | `volumes/11j-caisse.md`, `volumes/11z-6-cycle-livraison.md` (usage, pas encore de chapitre dédié) |
+| `apps/api/src/lib/idempotence.ts` | `volumes/11l-infrastructure-temps-idempotence.md` (usages : `volumes/11j-caisse.md`, `volumes/11z-6-cycle-livraison.md`) |
+| `apps/web/src/lib/idempotence.ts` | `volumes/11l-infrastructure-temps-idempotence.md` (usages : `volumes/11j-caisse.md`, `volumes/11z-6-cycle-livraison.md`) |
 | `apps/api/src/routes/travailleurs.ts` | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md`, `volumes/11k-3-travailleurs-paie-bulletins.md` |
 | `apps/web/src/pages/Travailleurs.tsx` | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md` |
 | `apps/web/src/components/PaieCard.tsx` | `volumes/11k-3-travailleurs-paie-bulletins.md` |
@@ -207,6 +207,9 @@
 | `construireRegistre` / `sacsUtilisesLe` | `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
 | `CaissePage` / `Poste` | `apps/web/src/pages/Caisse.tsx` | `volumes/11j-caisse.md` |
 | `sessionAnterieureOuverteAvant` / `chargerSessionCaisseOuverte` | `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
+| `jourLomoto` / `bornesJourLomoto` / `dateSQLDepuisJourLomoto` / `decalerJourLomoto` | `apps/api/src/lib/temps.ts` | `volumes/11l-infrastructure-temps-idempotence.md` |
+| `executerEcritureIdempotente` / `empreinteIdempotence` / `lireCleIdempotence` | `apps/api/src/lib/idempotence.ts` | `volumes/11l-infrastructure-temps-idempotence.md` |
+| `resoudreCleIdempotence` / `useCleIdempotence` | `apps/web/src/lib/idempotence.ts` | `volumes/11l-infrastructure-temps-idempotence.md` |
 | `cyclesLivraisonRouter` (transitions, bon retourné, anomalies) | `apps/api/src/routes/cycles-livraison.ts` | `volumes/11z-6-cycle-livraison.md` |
 | `appliquerTransition` / `reclamerVersion` / `determinerStatutAcceptation` | `apps/api/src/services/cyclesLivraison.ts` | `volumes/11z-6-cycle-livraison.md` |
 | `AcceptationsLivraisonPage` | `apps/web/src/pages/AcceptationsLivraison.tsx` | `volumes/11z-6-cycle-livraison.md` |

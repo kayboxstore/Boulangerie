@@ -2,7 +2,7 @@
 
 > Dernier volume du plan de rédaction. Il ne présente aucun nouveau fichier de code : il consolide les trois documents de référence tenus à jour en continu depuis le premier chapitre (`GLOSSAIRE.md`, `INDEX_DU_CODE.md`, `annexes/ecarts-spec-code.md`) et clôt le livre par un rapport final de couverture.
 >
-> **Mise à jour du 19/08/2026** : les chiffres ci-dessous (§4, §6) sont ceux de la clôture initiale du livre (2026-08-12) et restent affichés tels quels pour la trace historique. Depuis cette date, une révision a ajouté 1 chapitre (Volume 11z-6, Cycle de livraison) et 11 fichiers à la matrice, et un 3ᵉ écart spec/code a été trouvé puis résolu le jour même — les chiffres réellement à jour sont **166/166 fichiers** (162 Vérifié + 4 En cours), **58 chapitres sur 26 volumes**, **3 écarts spec/code dont 2 encore ouverts**. Détail complet dans `ETAT_DE_PROGRESSION.md`, section « Session de mise à jour du 19/08/2026 ».
+> **Mise à jour des 19-20/08/2026** : les chiffres ci-dessous (§4, §6) sont ceux de la clôture initiale du livre (2026-08-12) et restent affichés tels quels pour la trace historique. Depuis cette date, deux révisions ont ajouté 2 chapitres (Volume 11z-6, Cycle de livraison, le 19/08 ; Volume 11l, Infrastructure temps/idempotence, le 20/08) et 11 fichiers à la matrice, et un 3ᵉ écart spec/code a été trouvé puis résolu le jour même de sa découverte — les chiffres réellement à jour sont **166/166 fichiers** (165 Vérifié + 1 En cours), **59 chapitres sur 26 volumes**, **3 écarts spec/code dont 2 encore ouverts**. Détail complet dans `ETAT_DE_PROGRESSION.md`, sections « Session de mise à jour du 19/08/2026 » et « Session du 20/08/2026 ».
 
 ## 1. Le Glossaire
 

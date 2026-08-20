@@ -14,10 +14,10 @@
 | `apps/web/src/components/previsions/cycleLivraisonLogique.ts` | 145 | Libellés/descriptions/couleurs de badge par statut (fonctions pures, testées) |
 | `apps/web/src/components/previsions/EtapesCycleLivraison.tsx` | 185 | Composant « stepper » visuel des 7 étapes nominales |
 | `apps/web/src/components/previsions/DialogActionCycle.tsx` | 221 | Dialogue de saisie des 6 transitions de production/transport (toutes sauf l'acceptation) |
-| `apps/web/src/components/previsions/DialogAcceptationCycle.tsx` | ~140 | Dialogue de la 7ᵉ transition, `CONFIRMER_ACCEPTATION` — premier usage historique de l'idempotence côté client (`apps/web/src/lib/idempotence.ts`), généralisée depuis à 5 autres mutations financières (Volume 11j §5.2) |
+| `apps/web/src/components/previsions/DialogAcceptationCycle.tsx` | ~140 | Dialogue de la 7ᵉ transition, `CONFIRMER_ACCEPTATION` — premier usage historique de l'idempotence côté client (`apps/web/src/lib/idempotence.ts`, Volume 11l), généralisée depuis à 5 autres mutations financières (Volume 11j §5.2) |
 
 - **Qui les appelle** : `cyclesLivraisonRouter` est monté sur `/api/production` dans `app.ts` (ses routes vivent donc sous `/api/production/cycles-livraison/...`, pas `/api/cycles-livraison`) ; consommé par deux écrans distincts, chacun réservé à une portion du cycle de vie.
-- **Ce qu'ils appellent** : `calculerCommande`/`calculerCommission` (Volume 11a) au moment de la conversion en commande ; `executerEcritureIdempotente` (`lib/idempotence.ts`, pas encore couvert par un chapitre dédié — Volume 11j §5.2) pour `CONFIRMER_ACCEPTATION` uniquement ; `bornesJourLomoto` (`lib/temps.ts`, même remarque).
+- **Ce qu'ils appellent** : `calculerCommande`/`calculerCommission` (Volume 11a) au moment de la conversion en commande ; `executerEcritureIdempotente` (`lib/idempotence.ts`, Volume 11l) pour `CONFIRMER_ACCEPTATION` uniquement ; `bornesJourLomoto` (`lib/temps.ts`, Volume 11l).
 - **Données modifiées** : `CycleLivraison` (créé automatiquement à l'enregistrement d'un Schéma de commande, Volume 11z-2 ; mis à jour à chaque transition), `CycleLivraisonLigne` (une par produit du cycle), `TransitionCycleLivraison` (journal append-only, jamais modifié ni supprimé), `AnomalieCycleLivraison`, et — seulement à `CONFIRMER_ACCEPTATION` en cas d'acceptation au moins partielle — `CommandeClient` et `Client.avanceDisponible`.
 
 ## 1. Pourquoi ce module existe — le problème qu'il résout
@@ -77,7 +77,7 @@ Deux autres routes du fichier (`bon-retourne`, `anomalies`) reprennent le même 
 
 ## 4. `CONFIRMER_ACCEPTATION` — l'action qui convertit une livraison en argent réel
 
-C'est la seule des 7 actions qui (a) exige l'écriture sur **Commandes** plutôt que sur Production, (b) exige l'en-tête `Idempotency-Key` (`lib/idempotence.ts`, seul autre usage documenté dans ce livre au Volume 12), et (c) peut créer une `CommandeClient`.
+C'est la seule des 7 actions qui (a) exige l'écriture sur **Commandes** plutôt que sur Production, (b) exige l'en-tête `Idempotency-Key` (`lib/idempotence.ts`, Volume 11l — la seule des 7 routes protégées par ce mécanisme où l'en-tête est obligatoire, pas facultatif), et (c) peut créer une `CommandeClient`.
 
 ```ts
 export function determinerStatutAcceptation(totalAccepte: number, totalDepose: number): StatutCycleLivraison {
@@ -148,4 +148,4 @@ Le Cycle de livraison est le point de jonction le plus dense du projet entre tro
 
 ---
 
-**Suite →** Retour à la Table des matières (`TABLE_DES_MATIERES.md`) — ce chapitre referme la mise à jour du livre du 19/08/2026. Les fichiers `apps/api/src/lib/temps.ts` et `apps/api/src/lib/idempotence.ts`, mentionnés à plusieurs reprises dans ce chapitre et au Volume 11j sans y avoir encore leur propre traitement, restent le manque le plus net identifié lors de cette révision (voir `ETAT_DE_PROGRESSION.md`).
+**Suite →** Volume 11l — Infrastructure transversale : fuseau Lomoto et idempotence des écritures (`apps/api/src/lib/temps.ts`, `apps/api/src/lib/idempotence.ts` et son pendant client), ajouté le 20/08/2026 pour combler le manque signalé ici et au Volume 11j lors de la révision du 19/08/2026.

@@ -52,6 +52,7 @@ Ce volume est scindé en un chapitre par domaine fonctionnel, dans l'ordre de pr
 | `11k-1-travailleurs-fiches-pointage.md` | `apps/api/src/routes/travailleurs.ts` (fiches, e-mail pro, pointage), `apps/web/src/pages/Travailleurs.tsx` (partiel) | 1 | ✅ |
 | `11k-2-travailleurs-absences-sanctions.md` | `apps/api/src/routes/travailleurs.ts` (absences, sanctions), `apps/web/src/pages/Travailleurs.tsx` (partiel) | 1 | ✅ |
 | `11k-3-travailleurs-paie-bulletins.md` | `apps/api/src/routes/travailleurs.ts` (paie, bulletins), `apps/web/src/components/PaieCard.tsx` | 1 | ✅ |
+| `11l-infrastructure-temps-idempotence.md` | `lib/temps.ts`, `lib/idempotence.ts` (serveur), `apps/web/src/lib/idempotence.ts` (client) | 1 | ✅ *(ajouté le 20/08/2026)* |
 | `11z-1-stocks-fournisseurs-produits.md` | `routes/stocks.ts`, `services/stocks.ts`, `routes/fournisseurs.ts`, `routes/produits.ts`, `pages/Stocks.tsx`, `pages/Fournisseurs.tsx`, `pages/Produits.tsx` | 2 | ✅ |
 | `11z-2-production.md` | `routes/production.ts`, `pages/Production.tsx`, `pages/BonsLivraison.tsx`, `services/pdf.ts` (partiel) | 2 | ✅ |
 | `11z-3-departements-zones-clients.md` | `routes/departements.ts`, `routes/zones-depositaires.ts`, `routes/clients.ts`, `DepartementsCard.tsx`, `ZonesDepositaireCard.tsx`, `DialogNouvelleZone.tsx`, `pages/Clients.tsx` | 2 | ✅ |
@@ -93,6 +94,6 @@ Un chapitre par grande zone fonctionnelle, écrit en croisant `docs/spec-boulang
 
 ---
 
-**Les 26 volumes (57 chapitres, plus 1 chapitre ajouté le 19/08/2026 — Volume 11z-6, Cycle de livraison — soit 58 au total) du Livre Boulangerie Lomoto sont désormais tous rédigés.** Voir le rapport final de couverture dans `volumes/26-glossaire-index-annexes.md` §4 et `ETAT_DE_PROGRESSION.md` §7 pour l'état d'origine, et `ETAT_DE_PROGRESSION.md`, section « Session de mise à jour du 19/08/2026 », pour la révision la plus récente.
+**Les 26 volumes (57 chapitres, plus 2 chapitres ajoutés depuis la clôture initiale — Volume 11z-6, Cycle de livraison, le 19/08/2026, et Volume 11l, Infrastructure temps/idempotence, le 20/08/2026 — soit 59 au total) du Livre Boulangerie Lomoto sont désormais tous rédigés.** Voir le rapport final de couverture dans `volumes/26-glossaire-index-annexes.md` §4 et `ETAT_DE_PROGRESSION.md` §7 pour l'état d'origine, et `ETAT_DE_PROGRESSION.md`, sections « Session de mise à jour du 19/08/2026 » et suivantes, pour les révisions les plus récentes.
 
 *Ce sommaire évoluera au fur et à mesure de la rédaction — notamment le découpage exact du Volume 11k (Travailleurs/Paie) et du Volume 18 (fichiers restants), qui seront précisés une fois ces chapitres entamés.*
