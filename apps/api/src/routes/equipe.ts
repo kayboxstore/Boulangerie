@@ -171,6 +171,18 @@ equipeRouter.post(
 // critique), tout Admin. Un compte inactif ne peut plus se connecter (login
 // renvoie un 401 explicite) mais son historique reste intact. On ne peut pas se
 // désactiver soi-même.
+//
+// Correctif P0-01 (round 4, revue Codex, point 3) : une désactivation
+// n'invalidait auparavant PAS une session déjà ouverte — un jeton JWT émis
+// avant la désactivation restait valide jusqu'à son expiration naturelle
+// (`requireAuth` ne vérifie que `actif`, mais un jeton déjà en poche continue
+// de passer les contrôles qui ne recomparent pas `sessionActuelleId`). Cette
+// désactivation efface désormais `sessionActuelleId` dans LA MÊME écriture
+// que `actif: false`, puis invalide la session temps réel (Socket.io) une
+// fois cette écriture confirmée réussie — jamais avant, jamais en cas
+// d'échec. Une réactivation ne crée jamais de nouvelle session artificielle :
+// seul `actif` est modifié, `sessionActuelleId` reste tel quel (déjà `null`
+// depuis la désactivation) — la prochaine connexion réelle en créera une.
 equipeRouter.put("/:id/activation", requirePermission("EQUIPE", "ECRITURE"), async (req, res, next) => {
   try {
     const parsed = activationSchema.safeParse(req.body);
@@ -184,9 +196,12 @@ equipeRouter.put("/:id/activation", requirePermission("EQUIPE", "ECRITURE"), asy
     }
     const maj = await prisma.utilisateur.update({
       where: { id: compte.id },
-      data: { actif: parsed.data.actif },
+      data: parsed.data.actif ? { actif: true } : { actif: false, sessionActuelleId: null },
       include: INCLUDE_COMPTE,
     });
+    if (!parsed.data.actif) {
+      invaliderSessionUtilisateur(compte.id);
+    }
     res.json({ compte: versCompteDTO(maj) });
   } catch (e) {
     next(e);

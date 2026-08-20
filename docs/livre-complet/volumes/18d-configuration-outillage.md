@@ -6,6 +6,8 @@
 
 ## 1. `package.json` (racine) — l'orchestrateur du monorepo
 
+> ⚠️ **HISTORIQUE — NE PAS COPIER TEL QUEL** — `"db:seed"` et `"seed": "tsx prisma/seed.ts"` ci-dessous n'existent plus depuis le correctif P0-01 ; voir la mise à jour en tête de chapitre pour les noms actuels.
+
 ```json
 {
   "workspaces": ["apps/*", "packages/*"],
@@ -39,6 +41,8 @@ Le script `restore:backup`, ajouté en même temps que `scripts/restaurer-sauveg
 Confirme, avec les numéros de version exacts au moment de l'audit, la liste déjà énoncée au Volume 3 : Express 4.21, Prisma Client 6.8, `bcryptjs` 3.0 (Volume 11c), `jsonwebtoken` 9.0 (`lib/jwt.ts`, Volume 11b), `node-cron` 4.6 (`planificateurSauvegarde.ts`, Volume 11z-4), `nodemailer` 9.0 (`services/email.ts`, Volume 11z-5), `pdfkit` 0.19 (`services/pdf.ts`, Volumes 11z-2/11z-5), `socket.io` 4.8 (`lib/realtime.ts`, Volume 12), `zod` 3.24 (Volume 15), `cors` 2.8 (`lib/origines.ts`, Volume 14), `dotenv` 16.5 (chargement de `.env`, Volume 5). Le seul script propre à ce paquet digne de remarque, `"typecheck": "tsc --noEmit"`, est celui invoqué par le `build` racine (§1) — jamais de compilation réelle vers `dist/`.
 
 ## 3. `apps/api/tsconfig.json` — configuration TypeScript du serveur
+
+> ⚠️ **HISTORIQUE — NE PAS COPIER TEL QUEL** — `"../../prisma/seed.ts"` n'existe plus (renommé `prisma/seed-demo.ts`) ; le `include` réel référence aussi désormais `prisma/bootstrap-production.ts` et plusieurs autres fichiers du correctif P0-01.
 
 ```json
 {

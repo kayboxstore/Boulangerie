@@ -73,6 +73,8 @@ Toutes optionnelles, avec des valeurs par défaut codées dans `services/sauvega
 
 Au-delà des variables déjà couvertes ci-dessus (chacune retrouvée à l'identique, avec les mêmes explications, dans `render.yaml`), ce fichier définit la **forme** du déploiement lui-même :
 
+> ⚠️ **HISTORIQUE — NE PAS EXÉCUTER TEL QUEL** — la ligne `npm run db:seed` du `buildCommand` ci-dessous est remplacée depuis le correctif P0-01 par `npm run typecheck --workspace apps/api && npm run db:bootstrap:production` (voir la mise à jour en tête de chapitre et `DEPLOIEMENT.md`).
+
 ```yaml
 databases:
   - name: lomoto-db

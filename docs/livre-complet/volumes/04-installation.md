@@ -26,6 +26,8 @@ Node 22 satisfait bien la contrainte « ≥ 20 ». **Non vérifiable dans cet en
 
 ## 5.2 Les cinq étapes du `README.md`
 
+> ⚠️ **HISTORIQUE — NE PAS EXÉCUTER TEL QUEL** — la ligne 4 (`npx prisma db seed`) est remplacée depuis le correctif P0-01 par `npm run db:seed:demo` (voir la mise à jour en tête de chapitre). Le reste du bloc reste correct.
+
 ```bash
 # 1. Dépendances
 npm install

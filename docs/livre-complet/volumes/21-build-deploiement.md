@@ -18,6 +18,8 @@ Déjà entrevu au Volume 5 (variables d'environnement) et au Volume 8 (repli SPA
 
 `DEPLOIEMENT.md` documente aussi la procédure manuelle pour un hébergeur autre que Render (Railway, Fly.io, un VPS...), qui ne fait que rendre explicites les étapes que `render.yaml` automatise :
 
+> ⚠️ **HISTORIQUE — NE PAS EXÉCUTER TEL QUEL** — `npm run db:seed` (marqué « optionnel » ci-dessous) créerait des comptes de démonstration à mot de passe connu contre une base réelle. Depuis le correctif P0-01, la commande à utiliser en production est `npm run db:bootstrap:production` (jamais `db:seed`/`db:seed:demo`, réservé au développement local) — voir `DEPLOIEMENT.md` § « Correctif P0-01 » pour la séquence actuelle faisant foi.
+
 ```
 npm install --include=dev
 npx prisma generate

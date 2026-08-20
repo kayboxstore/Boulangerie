@@ -1,19 +1,19 @@
 /**
  * Preuves du lanceur multiplateforme `db:seed:demo` — correctif P0-01,
- * round 3 (revue Codex, point 2). Testé comme des fonctions PURES,
+ * round 3 puis round 4 (revue Codex). Testé comme des fonctions PURES,
  * volontairement SANS dépendre de Bash (le point exact que la revue a
  * signalé pour l'ancienne syntaxe shell) : ni `spawnSync`, ni sous-shell,
- * juste les deux fonctions exportées par `lancer-seed-demo.mjs`.
+ * juste les fonctions exportées par `lancer-seed-demo.mjs`.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { resoudreCheminPrisma, resoudreNodeEnv } from "./lancer-seed-demo.mjs";
+import { injecterRepertoireBin, resoudreEntreePrisma, resoudreNodeEnv } from "./lancer-seed-demo.mjs";
 
 const SOURCE = readFileSync(fileURLToPath(new URL("./lancer-seed-demo.mjs", import.meta.url)), "utf-8");
 
-describe("resoudreNodeEnv — défaut SEULEMENT si absent, jamais un écrasement (round 3, point 2)", () => {
+describe("resoudreNodeEnv — défaut SEULEMENT si absent, jamais un écrasement", () => {
   it('devient "development" si NODE_ENV est absent (undefined)', () => {
     expect(resoudreNodeEnv(undefined)).toBe("development");
   });
@@ -35,30 +35,51 @@ describe("resoudreNodeEnv — défaut SEULEMENT si absent, jamais un écrasement
   });
 });
 
-describe("resoudreCheminPrisma — résolution cross-plateforme du binaire local", () => {
-  // `path.win32`/`path.posix` explicites (pas `path.join` ambiant) : preuve
-  // du VRAI format de chemin Windows (séparateurs `\`), vérifiable même en
-  // exécutant cette suite sur une machine Linux — voir le commentaire dans
-  // lancer-seed-demo.mjs.
-  it("utilise prisma.cmd avec des séparateurs Windows (win32), même testé depuis un autre OS", () => {
-    expect(resoudreCheminPrisma("C:\\repo", "win32")).toBe(
-      path.win32.join("C:\\repo", "node_modules", ".bin", "prisma.cmd"),
-    );
-    expect(resoudreCheminPrisma("C:\\repo", "win32")).toBe("C:\\repo\\node_modules\\.bin\\prisma.cmd");
+describe("resoudreEntreePrisma — résolution de la VRAIE entrée JS du CLI (round 4, point 1)", () => {
+  it("résout node_modules/prisma/build/index.js — un fichier qui existe réellement et est exécutable par Node", () => {
+    const entree = resoudreEntreePrisma(import.meta.url);
+    expect(entree.endsWith(path.join("prisma", "build", "index.js"))).toBe(true);
+    // Preuve la plus forte : le fichier résolu existe RÉELLEMENT sur disque
+    // (contrairement à un chemin de binaire .cmd deviné à la main, jamais
+    // vérifié — exactement le bug signalé en revue round 4).
+    expect(() => readFileSync(entree, "utf-8")).not.toThrow();
   });
 
-  it("utilise prisma (sans extension) avec des séparateurs POSIX sous Linux", () => {
-    expect(resoudreCheminPrisma("/repo", "linux")).toBe(path.posix.join("/repo", "node_modules", ".bin", "prisma"));
-    expect(resoudreCheminPrisma("/repo", "linux")).toBe("/repo/node_modules/.bin/prisma");
-  });
-
-  it("utilise prisma (sans extension) avec des séparateurs POSIX sous macOS (darwin)", () => {
-    expect(resoudreCheminPrisma("/repo", "darwin")).toBe("/repo/node_modules/.bin/prisma");
+  it("ne résout jamais vers un .cmd/.sh/binaire shim — seulement du JavaScript exécutable par process.execPath", () => {
+    const entree = resoudreEntreePrisma(import.meta.url);
+    expect(entree.endsWith(".cmd")).toBe(false);
+    expect(entree.endsWith(".sh")).toBe(false);
+    expect(entree.endsWith(".js")).toBe(true);
   });
 });
 
-describe("lancer-seed-demo.mjs — câblage et robustesse (preuves statiques)", () => {
-  it("n'utilise aucune syntaxe shell POSIX (substitution de paramètre, guillemets imbriqués) DANS LE CODE", () => {
+describe("injecterRepertoireBin — PATH augmenté, quelle que soit la casse de la clé existante", () => {
+  it("étend PATH (POSIX) sans le dupliquer", () => {
+    const resultat = injecterRepertoireBin({ PATH: "/usr/bin" }, "/repo/node_modules/.bin");
+    expect(resultat.PATH).toBe(`/repo/node_modules/.bin${path.delimiter}/usr/bin`);
+    expect(Object.keys(resultat)).toEqual(["PATH"]);
+  });
+
+  it("retrouve une clé Path en casse différente (Windows) plutôt que d'en créer une seconde", () => {
+    const resultat = injecterRepertoireBin({ Path: "C:\\Windows\\System32" }, "C:\\repo\\node_modules\\.bin");
+    expect(resultat.Path).toBe(`C:\\repo\\node_modules\\.bin${path.delimiter}C:\\Windows\\System32`);
+    expect(Object.keys(resultat)).toEqual(["Path"]);
+    expect(resultat.PATH).toBeUndefined();
+  });
+
+  it("crée PATH si totalement absent", () => {
+    const resultat = injecterRepertoireBin({}, "/repo/node_modules/.bin");
+    expect(resultat.PATH).toBe("/repo/node_modules/.bin");
+  });
+
+  it("préserve les autres variables d'environnement inchangées", () => {
+    const resultat = injecterRepertoireBin({ PATH: "/usr/bin", DATABASE_URL: "postgresql://x" }, "/bin");
+    expect(resultat.DATABASE_URL).toBe("postgresql://x");
+  });
+});
+
+describe("lancer-seed-demo.mjs — câblage et robustesse (preuves statiques, round 4)", () => {
+  it("n'utilise aucune syntaxe shell POSIX (substitution de paramètre) DANS LE CODE", () => {
     // Le docblock d'en-tête cite volontairement l'ancienne syntaxe en prose
     // pour expliquer ce qui a été remplacé — on ne vérifie donc que le CODE.
     const codeSansCommentaires = SOURCE.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
@@ -66,18 +87,26 @@ describe("lancer-seed-demo.mjs — câblage et robustesse (preuves statiques)", 
     expect(codeSansCommentaires).not.toMatch(/NODE_ENV="\$\{/);
   });
 
-  it("utilise pathToFileURL pour la détection d'entrypoint (round 3, point 2 — même précaution que bootstrap-production.ts)", () => {
+  it("utilise pathToFileURL pour la détection d'entrypoint (même précaution que bootstrap-production.ts)", () => {
     expect(SOURCE).toContain('import { pathToFileURL } from "node:url"');
     expect(SOURCE).toContain("import.meta.url === pathToFileURL(process.argv[1]).href");
-    // Retire les commentaires (`//...`) avant de vérifier l'absence du motif
-    // dans le CODE : le docblock d'en-tête le cite volontairement en prose
-    // pour expliquer ce qui a été remplacé.
     const codeSansCommentaires = SOURCE.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     expect(codeSansCommentaires).not.toContain("file://${process.argv[1]}");
   });
 
-  it("invoque le binaire prisma local directement, jamais via npx", () => {
-    expect(SOURCE).not.toContain('"npx"');
-    expect(SOURCE).toContain("spawnSync(cheminPrisma");
+  it("exécute l'entrée Prisma via process.execPath — jamais un .cmd, jamais npx, jamais shell:true (round 4, point 1)", () => {
+    expect(SOURCE).toContain("spawnSync(process.execPath, [entreePrisma");
+    // Le docblock d'en-tête cite volontairement ".cmd"/"shell: true"/"npx" en
+    // prose pour expliquer ce qui a été remplacé — on ne vérifie que le CODE.
+    const codeSansCommentaires = SOURCE.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    expect(codeSansCommentaires).not.toContain('"npx"');
+    expect(codeSansCommentaires).not.toContain("shell: true");
+    expect(codeSansCommentaires).not.toContain("shell:true");
+    expect(codeSansCommentaires).not.toContain(".cmd");
+  });
+
+  it("injecte node_modules/.bin dans PATH avant de spawn (nécessaire : le CLI Prisma spawn lui-même `tsx`)", () => {
+    expect(SOURCE).toContain("injecterRepertoireBin(process.env,");
+    expect(SOURCE).toContain('"node_modules", ".bin"');
   });
 });

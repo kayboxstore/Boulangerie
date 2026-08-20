@@ -68,6 +68,21 @@ describe("authentification et permissions serveur", () => {
     expect(res.body.code).toBe(CODE_SESSION_REMPLACEE);
   });
 
+  it("refuse un jeton émis avant une désactivation de compte (P0-01 round 4, point 3) : sessionActuelleId=null ne correspond plus à aucun sid", async () => {
+    // Reproduit exactement l'état laissé par PUT /api/equipe/:id/activation
+    // avec { actif: false } (equipe.ts) : sessionActuelleId mis à null dans
+    // la même écriture que actif. Un jeton signé avant cette désactivation
+    // porte encore un `sid` non-vide — jamais égal à `null` — donc rejeté ici
+    // par la même comparaison que le remplacement de session ci-dessus.
+    mocks.verifyToken.mockReturnValue({ sub: "utilisateur-1", roleId: "role-1", sid: "session-avant-desactivation" });
+    mocks.utilisateurFindUnique.mockResolvedValueOnce({ sessionActuelleId: null });
+
+    const res = await request(appProtegee()).get("/commandes").set("Authorization", "Bearer ancien-jeton");
+
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe(CODE_SESSION_REMPLACEE);
+  });
+
   it("autorise une session active possédant la permission demandée", async () => {
     mocks.verifyToken.mockReturnValue({ sub: "utilisateur-1", roleId: "role-1", sid: "session-active" });
     mocks.utilisateurFindUnique
