@@ -30,6 +30,8 @@
 | `apps/api/src/lib/parametres.ts` | 2 | `lireParametre`, `ecrireParametre` | `volumes/18a-parametres-intervention-admin-restauration.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/prisma.ts` | 3 | client Prisma singleton | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
 | `apps/api/src/lib/realtime.ts` | 2 | `initRealtime`, `getIo`, `roomUtilisateur`, `roomRole`, `invaliderSessionUtilisateur` | `volumes/12-api-reseau.md` | Vérifié | — | Aucun |
+| `apps/api/src/lib/idempotence.ts` | 1 | `executerEcritureIdempotente`, `ajouterEnteteRejeu`, `lireCleIdempotence`, `ErreurIdempotence` | `volumes/11j-caisse.md` (§5.2, usage), `volumes/11z-6-cycle-livraison.md` (§4, usage) | En cours | Utilisé et cité par plusieurs chapitres (Volume 11j, 11z-6, Commandes) mais sans chapitre propre qui explique le mécanisme lui-même en détail (clé, empreinte, rejeu, `CLE_IDEMPOTENCE_REUTILISEE`) — signalé le 19/08/2026, pas encore traité | Aucun repéré sur les usages couverts |
+| `apps/api/src/lib/temps.ts` | 1 | `jourLomoto`, `dateSQLDepuisJourLomoto`, `bornesJourLomoto` | `volumes/11j-caisse.md` (§5.2, usage) | En cours | Même remarque que `lib/idempotence.ts` ci-dessus — fonctions expliquées à leur usage dans Volume 11j, jamais dans un chapitre dédié au fichier lui-même | Aucun repéré sur les usages couverts |
 
 ## B. `apps/api/src/middleware/`
 
@@ -50,6 +52,7 @@
 | `apps/api/src/routes/clients.ts` | 2 | `clientsRouter`, `typeClientsRouter` (`MODIFIER_TYPE_CLIENT` via action critique) | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/commandes.ts` | 1 | `commandesRouter` (résumé, alertes dette, liste, création/doublon, règlements), `bornesDuJour`, `verifierAlertesDette` | `volumes/11h-commandes.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/commissions.ts` | 1 | `commissionsRouter` (`GET /`) | `volumes/11i-commissions.md` | Vérifié | — | Aucun |
+| `apps/api/src/routes/cycles-livraison.ts` | 1 | `cyclesLivraisonRouter` (liste/détail, transitions, bon retourné, anomalies), `appliquerTransition` | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | — | Aucun *(spec 3.3 f ajoutée le même jour — absente jusque-là)* |
 | `apps/api/src/routes/delegations.ts` | 1 | `delegationsRouter` (`GET /`, `POST /`, `DELETE /:id`) | `volumes/11e-delegations.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/departements.ts` | 2 | `departementsRouter`, `groupesRouter` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 | `apps/api/src/routes/equipe.ts` | 1 | `equipeRouter` (comptes, `verifierQuotaAdmins`, `/principal`) | `volumes/11d-equipe-roles-permissions.md` | Vérifié | — | Aucun |
@@ -73,6 +76,7 @@
 | Chemin | Niveau | Symboles clés | Chapitre | État | Lacunes | Écart spec |
 |---|:---:|---|---|---|---|---|
 | `apps/api/src/services/actionsCritiques.ts` | 1 | `EXECUTEURS`, `executerAction`, `traiterActionCritique`, `ErreurAction` | `volumes/11f-approbations.md` | Vérifié | — | Aucun |
+| `apps/api/src/services/cyclesLivraison.ts` | 1 | `TRANSITIONS_ATTENDUES`/`SUIVANTES`, `peutExecuterActionCycle`, `determinerStatutAcceptation`, `validerResultatAcceptation`, `ErreurCycleLivraison` | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | — | Aucun |
 | `apps/api/src/services/email.ts` | 2 | `envoyerRapport`, `emailConfigure` (Nodemailer/Gmail) | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/api/src/services/emailPro.ts` | 2 | `declencherEmailPro`, `verifierEmailPro`, `genererAdresseProUnique` | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/api/src/services/interventionsAdmin.ts` | 2 | `notifierInterventionAdmin`, `estHorsPerimetreAdmin` | `volumes/18a-parametres-intervention-admin-restauration.md` | Vérifié | — | Aucun |
@@ -90,6 +94,7 @@
 |---|:---:|---|---|---|---|---|
 | `packages/shared/src/index.ts` | 1 | Portions Niveau 1 (financier, permissions, délégations, actions critiques, audit, commandes, commissions, caisse, travailleurs/paie) **entièrement couvertes** ; portions Niveau 2/3 (stocks, fournisseurs, produits, production, départements, zones, clients, notifications, état système, paramètres, premier lancement, à propos, assistant, rapports, export) **couvertes au fil des chapitres 11z-1 à 11z-5** ; motif transversal de validation Zod synthétisé au Volume 15 (53 schémas, `.partial()`, `.refine()`, `setErrorMap`) | `volumes/11a` à `11k-*`, `volumes/11z-1` à `11z-5`, `volumes/12-api-reseau.md`, `volumes/15-validation.md` | En cours | Fichier de 1942 lignes servant tous les domaines ; tous les domaines fonctionnels ont été traversés au moins une fois par un chapitre thématique, mais aucun audit symbole-par-symbole exhaustif n'a formellement clos ce fichier — laissé « En cours » par rigueur plutôt que déclaré « Vérifié » sans cette vérification finale | Aucun repéré sur les parties couvertes |
 | `packages/shared/src/index.test.ts` | 1 | 11 tests Vitest (`calculerCommande` ×5, `calculerDepenseFarine` ×2, `aAcces` ×4) | `volumes/11a-noyau-financier-permissions.md`, `volumes/19-tests.md` (stratégie) | Vérifié | — | Aucun |
+| `packages/shared/src/cyclesLivraison.ts` | 1 | `STATUTS_CYCLE_LIVRAISON`, `ACTIONS_CYCLE_LIVRAISON`, `TYPES_ANOMALIE_CYCLE`, schémas Zod des transitions, DTO | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | — | Aucun |
 
 ## F. `prisma/`
 
@@ -136,8 +141,9 @@
 | `apps/web/src/pages/APropos.tsx` | 2 | `AProposPage` | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Assistant.tsx` | 2 | `AssistantPage`, `VueUtilisateur`, `VueAdmin`, `Composeur` | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Audit.tsx` | 2 | `AuditPage`, `champsPertinents` | `volumes/11g-journal-audit.md` | Vérifié | — | Aucun |
-| `apps/web/src/pages/BonsLivraison.tsx` | 2 | `BonsLivraisonPage` | `volumes/11z-2-production.md` | Vérifié | — | Aucun |
-| `apps/web/src/pages/Caisse.tsx` | 1 | `CaissePage`, `Poste` (tuile avec alerte solde négatif) | `volumes/11j-caisse.md` | Vérifié | — | Aucun |
+| `apps/web/src/pages/AcceptationsLivraison.tsx` | 1 | `AcceptationsLivraisonPage` | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | — | Aucun |
+| `apps/web/src/pages/BonsLivraison.tsx` | 2 | `BonsLivraisonPage` ; intègre aussi les 6 premières actions du cycle de livraison (`EtapesCycleLivraison`, `DialogActionCycle`) | `volumes/11z-2-production.md`, `volumes/11z-6-cycle-livraison.md` (partiel, actions de cycle) | Vérifié | — | Aucun |
+| `apps/web/src/pages/Caisse.tsx` | 1 | `CaissePage`, `Poste` (tuile avec alerte solde négatif), bandeau session bloquante | `volumes/11j-caisse.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Clients.tsx` | 2 | `ClientsPage` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Commandes.tsx` | 1 | `CommandesPage` (apercu client via `calculerCommande`, dialogue de conflit) | `volumes/11h-commandes.md` | Vérifié | — | Aucun |
 | `apps/web/src/pages/Commissions.tsx` | 1 | `CommissionsPage` | `volumes/11i-commissions.md` | Vérifié | — | Aucun |
@@ -172,6 +178,11 @@
 | `apps/web/src/components/PaieCard.tsx` | 1 | `PaieCard` (sanctions, calcul de paie, bulletins) | `volumes/11k-3-travailleurs-paie-bulletins.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/PanneauEmailPro.tsx` | 2 | `PanneauEmailPro` | `volumes/11z-5-apropos-assistant-export-rapports.md` | Vérifié | — | Aucun |
 | `apps/web/src/components/ZonesDepositaireCard.tsx` | 2 | `ZonesDepositaireCard` | `volumes/11z-3-departements-zones-clients.md` | Vérifié | — | Aucun |
+| `apps/web/src/components/previsions/cycleLivraisonLogique.ts` | 1 | `cleLibelleStatutCycle`, `cleDescriptionStatutCycle`, `varianteBadgeStatutCycle` | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | — | Aucun |
+| `apps/web/src/components/previsions/EtapesCycleLivraison.tsx` | 1 | `EtapesCycleLivraison`, `BadgeDecrit` | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | — | Aucun |
+| `apps/web/src/components/previsions/DialogActionCycle.tsx` | 1 | `DialogActionCycle` (6 transitions de production/transport) | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | — | Aucun |
+| `apps/web/src/components/previsions/DialogAcceptationCycle.tsx` | 1 | `DialogAcceptationCycle` (`CONFIRMER_ACCEPTATION`, premier usage de l'idempotence côté client) | `volumes/11z-6-cycle-livraison.md` *(ajouté le 19/08/2026)* | Vérifié | Aucun chapitre ne détaille encore `apps/api/src/lib/idempotence.ts` ni son pendant client `apps/web/src/lib/idempotence.ts` (`resoudreCleIdempotence`, `useCleIdempotence`) en profondeur — voir la lacune déjà notée plus haut | Aucun |
+| `apps/web/src/lib/idempotence.ts` | 1 | `resoudreCleIdempotence`, `useCleIdempotence`, `genererCleIdempotence` | `volumes/11j-caisse.md`, `volumes/11z-6-cycle-livraison.md` (usages, pas un chapitre dédié) | En cours | Généralisé le 19/08/2026 (audit) à 6 mutations financières (Commandes, Caisse) au-delà de `DialogAcceptationCycle` ; pas encore de chapitre propre — même lacune que son pendant serveur | Aucun repéré sur les usages couverts |
 
 ## L. `apps/web/src/components/ui/` (primitives, Niveau 3)
 
@@ -219,15 +230,17 @@
 ## Statistiques globales de la matrice
 
 > Audit du 2026-08-08 : la matrice ne comptait que 128 lignes de tableau pour 155 fichiers réels. Écart résolu et expliqué ci-dessous — les chiffres suivants comptent les **fichiers réels**, pas les lignes de tableau.
+>
+> **Mise à jour du 19/08/2026** : 11 fichiers ajoutés à la matrice — un module entier codé après la clôture initiale du livre (`routes/cycles-livraison.ts`, `services/cyclesLivraison.ts`, `packages/shared/src/cyclesLivraison.ts`, `pages/AcceptationsLivraison.tsx`, 4 fichiers de `components/previsions/`, tous Vérifiés via le nouveau Volume 11z-6) et deux fichiers d'infrastructure transversale jusque-là absents de la matrice (`apps/api/src/lib/idempotence.ts`, `apps/api/src/lib/temps.ts`, plus leur pendant client `apps/web/src/lib/idempotence.ts` — les trois laissés « En cours » : utilisés et expliqués à leur point d'usage par plusieurs chapitres, mais sans chapitre qui leur soit propre). Voir `ETAT_DE_PROGRESSION.md`, section « Session de mise à jour du 19/08/2026 ».
 
-| État | Nombre de fichiers (sur 155 fichiers de code) |
+| État | Nombre de fichiers (sur 166 fichiers de code) |
 |---|---:|
 | À analyser | 0 |
-| En cours | 1 |
+| En cours | 4 |
 | Expliqué | 0 |
-| Vérifié | 154 |
+| Vérifié | 162 |
 
-**155 / 155 fichiers couverts** (154 Vérifié + 1 En cours — `packages/shared/src/index.ts`, cas particulier documenté ci-dessous). Le Volume 18 (18a-18d) a clos les 18 derniers fichiers réellement « À analyser ».
+**166 / 166 fichiers couverts** (162 Vérifié + 4 En cours — `packages/shared/src/index.ts` [cas particulier documenté ci-dessous], `apps/api/src/lib/idempotence.ts`, `apps/api/src/lib/temps.ts`, `apps/web/src/lib/idempotence.ts` [les trois pour la même raison : couverts à l'usage, pas encore par un chapitre dédié]). Le Volume 18 (18a-18d) a clos les 18 fichiers alors réellement « À analyser » ; le Volume 11z-6 (19/08/2026) a couvert les 8 fichiers du module Cycle de livraison, jusque-là absents de la matrice.
 
 Méthodologie de comptage (pour que ce tableau reste vérifiable) :
 - La section F regroupe volontairement les 29 fichiers `prisma/migrations/*.sql` sur **une seule ligne de tableau** (conforme au mandat : « couvertes de façon groupée, pas ligne à ligne »). Cette ligne, à l'état Vérifié, compte donc pour **29 fichiers Vérifié**, pas pour 1 — d'où l'écart originel (corrigé le 2026-08-08) entre 128 lignes de tableau et 155 fichiers.

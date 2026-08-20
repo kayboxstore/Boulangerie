@@ -6,7 +6,7 @@
 
 | Fichier | Lignes | Rôle |
 |---|---:|---|
-| `apps/api/src/routes/commissions.ts` | 50 | Unique route : liste des commandes génératrices de commission, avec le total de la période |
+| `apps/api/src/routes/commissions.ts` | 65 | Unique route : liste des commandes génératrices de commission, avec le total de la période |
 | `apps/web/src/pages/Commissions.tsx` | 207 | Écran de consultation, filtrable par période, exportable |
 | `packages/shared/src/index.ts` (extrait) | — | `montantTotalPaye`, `CommissionLigneDTO` |
 
@@ -14,29 +14,49 @@
 - **Ce qu'ils appellent** : `prisma.commandeClient` (lecture seule — **aucun modèle `Commission` n'existe** dans le schéma, voir §5.1), `montantTotalPaye` (fonction pure partagée), `BarreExport` (composant Niveau 2/3 d'export impression/PDF/e-mail, déjà utilisé ailleurs dans l'application — non détaillé dans ce chapitre, traité au Volume 18).
 - **Données modifiées** : **aucune**. C'est le premier module Niveau 1 de ce livre entièrement en lecture seule — voir §5.1.
 
-## 5.1 Vue d'ensemble intuitive — une vue, pas une table
+## 5.1 Vue d'ensemble intuitive — un champ figé, relu mais jamais recalculé
 
 > ### 3.11 Commissions
-> Vue dédiée aux commandes de type **Maman** (les seules à générer une commission). Calcul **automatique** — aucune saisie manuelle. Visible en lecture seule par le Caissier(ère), le Chargé des commandes et le DG.
+> Vue dédiée aux commandes dont la commission a été générée (les « Mamans », les seules à en générer une). Calcul **automatique** — aucune saisie manuelle. Visible en lecture seule par le Caissier(ère), le Chargé des commandes et le DG.
 > — `docs/spec-boulangerie.md`, section 3.11
 
-Le mot « vue » dans la spec n'est pas une figure de style : il n'existe, dans `prisma/schema.prisma`, **aucun modèle `Commission`**. Chaque commande d'une cliente de Qualité « Maman » génère déjà, au moment de son enregistrement (Volume 11h), une commande `CommandeClient` classique — la commission n'est **jamais stockée séparément**, elle est **recalculée à la lecture**, à chaque appel de `GET /api/commissions`, à partir des commandes déjà existantes. C'est cohérent avec le glossaire du code, déjà repéré au Volume 11h (index « par terme métier ») : ce module est qualifié en commentaire de *« vue dérivée des commandes Maman »*. La distinction entre un module qui *écrit* sa propre donnée et un module qui se contente de *recalculer une projection* d'une donnée qui vit ailleurs est un point de compréhension central pour ce chapitre — sans lui, on pourrait chercher à tort une table ou une route d'écriture qui n'existent tout simplement pas.
+Le mot « vue » dans la spec désigne un écran de consultation, pas — comme on pourrait le supposer à tort — un recalcul permanent à la lecture : il n'existe, dans `prisma/schema.prisma`, **aucun modèle `Commission` séparé** (sur ce point la spec ne ment pas), mais `CommandeClient` porte bel et bien un champ propre, `commission` (`Int`, non nul en base), qui est écrit **une seule fois**, au moment où la commande est créée ou modifiée par le flux manuel (`apps/api/src/routes/commandes.ts`, Volume 11h), puis **jamais retouché ensuite**. `GET /api/commissions` ne fait que **relire** ce champ déjà calculé — il ne le recalcule à aucun moment.
+
+**Correction importante à noter (Lot 7 pt 6)** : la commission a longtemps été recalculée dynamiquement à chaque lecture, à partir du taux *courant* de `TypeClient.commissionParBac` — un comportement corrigé précisément parce qu'il réécrivait rétroactivement l'historique si le taux changeait ensuite en Paramètres, ou si le client était reclassé dans une autre Qualité entre-temps. Le commentaire en tête de `apps/api/src/routes/commissions.ts` (lignes 12-18) est explicite sur l'état actuel : *« La commission est figée sur `CommandeClient` au taux en vigueur au moment de l'enregistrement (Lot 7 pt 6) : filtrer/afficher cette valeur, jamais le taux courant du `TypeClient` »*. `calculerCommission` (`packages/shared/src/index.ts`, `quantiteBacs × commissionParBac`) n'est appelée que depuis `commandes.ts` — jamais depuis `commissions.ts`, qui ne fait que lire `CommandeClient.commission`. La distinction entre un module qui *écrit* sa propre donnée et un module qui se contente de *relire* une donnée déjà figée ailleurs reste le point de compréhension central pour ce chapitre — sans lui, on pourrait chercher à tort une route d'écriture qui n'existe pas dans ce fichier, ou croire, à tort désormais, que modifier le taux d'une Qualité changerait rétroactivement les commissions déjà affichées.
 
 ## 5.2 `GET /api/commissions` — l'unique route
 
 ```ts
 commissionsRouter.use(requireAuth);
 
+// Module Commissions (section 3.11) : vue dérivée des commandes dont la
+// commission a été générée (> 0 Fc/bac — les « Mamans »). La commission est
+// figée sur CommandeClient au taux en vigueur au moment de l'enregistrement
+// (Lot 7 pt 6) : filtrer/afficher cette valeur, jamais le taux courant du
+// TypeClient, pour ne pas réécrire rétroactivement l'historique si le taux
+// change ensuite ou si le client est reclassé dans une autre Qualité.
+// Lecture seule : Caissier(ère) et DG via la matrice de permissions.
 commissionsRouter.get("/", requirePermission("COMMISSIONS", "LECTURE"), async (req, res, next) => {
   try {
     const { du, au } = req.query as Record<string, string | undefined>;
+
+    if (du && !dateISOSchema.safeParse(du).success) {
+      return res.status(400).json({ erreur: "Date de début invalide (AAAA-MM-JJ)" });
+    }
+    if (au && !dateISOSchema.safeParse(au).success) {
+      return res.status(400).json({ erreur: "Date de fin invalide (AAAA-MM-JJ)" });
+    }
+    if (du && au && du > au) {
+      return res.status(400).json({ erreur: "La date de fin doit suivre la date de début" });
+    }
+
     const dateCreation: Prisma.DateTimeFilter = {};
-    if (du) dateCreation.gte = new Date(`${du}T00:00:00`);
-    if (au) dateCreation.lte = new Date(`${au}T23:59:59.999`);
+    if (du) dateCreation.gte = bornesJourLomoto(du)[0];
+    if (au) dateCreation.lte = bornesJourLomoto(au)[1];
 
     const commandes = await prisma.commandeClient.findMany({
-      where: { client: { typeClient: { commissionParBac: { gt: 0 } } }, ...(du || au ? { dateCreation } : {}) },
-      include: { client: { select: { nom: true, typeClient: { select: { commissionParBac: true } } } } },
+      where: { commission: { gt: 0 }, ...(du || au ? { dateCreation } : {}) },
+      include: { client: { select: { nom: true } } },
       orderBy: { numero: "desc" },
     });
 
@@ -44,7 +64,7 @@ commissionsRouter.get("/", requirePermission("COMMISSIONS", "LECTURE"), async (r
       commandeId: c.id, numero: c.numero, dateCreation: c.dateCreation.toISOString(),
       clientNom: c.client.nom, quantiteBacs: c.quantiteBacs,
       montantTotalPaye: montantTotalPaye(c),
-      commission: c.quantiteBacs * c.client.typeClient.commissionParBac,
+      commission: c.commission,
     }));
 
     res.json({ commissions: lignes, totalCommissions: lignes.reduce((somme, l) => somme + l.commission, 0) });
@@ -52,13 +72,15 @@ commissionsRouter.get("/", requirePermission("COMMISSIONS", "LECTURE"), async (r
 });
 ```
 
-**Le filtre qui définit tout le module** : `client: { typeClient: { commissionParBac: { gt: 0 } } }`. Aucune commande de Qualité Dépositaire ou Vente cash n'apparaît jamais dans cette liste — non pas parce que le code vérifie explicitement `typeClient.nom === "Maman"`, mais parce qu'il interroge directement le champ numérique `commissionParBac` de la Qualité associée au client. **Une conséquence directe et importante** : si un Admin créait, via les Paramètres (Volume 11f, `MODIFIER_TYPE_CLIENT`), une quatrième Qualité avec une commission non nulle, ses commandes apparaîtraient automatiquement ici, sans aucune modification de ce fichier — le module Commissions ne connaît pas la notion de « Maman » en tant que telle, seulement la règle générale « toute Qualité dont la commission par bac est strictement positive ». La spec, elle, parle explicitement des « commandes de type Maman » — une formulation plus étroite en apparence, mais qui correspond exactement à l'unique Qualité ayant une commission non nulle au moment de l'audit (Volume 11a : Dépositaire et Vente cash à 0 Fc de commission, Maman à 1 650 Fc). Le code généralise donc une règle que la spec énonce pour le cas particulier actuellement en vigueur — pas une contradiction, une implémentation par une condition plus générale que ce que l'énoncé littéral suggère.
+**Le filtre qui définit tout le module** : `commission: { gt: 0 }`, directement sur le champ **stocké** de `CommandeClient` — pas, comme un stade antérieur du code le faisait, un test sur `client.typeClient.commissionParBac` (qui n'aurait donné que le taux *courant* de la Qualité, jamais celui réellement en vigueur à l'enregistrement de chaque commande). Aucune commande de Qualité Dépositaire ou Vente cash n'apparaît jamais dans cette liste, pour une raison de fond équivalente à l'ancien comportement — leur `commissionParBac` par défaut vaut 0 Fc, donc `calculerCommission` (appelée dans `commandes.ts`) leur écrit `commission: 0` dès la création — mais avec une nuance temporelle désormais différente : un client **reclassé après coup** d'une Qualité à commission vers une Qualité sans commission conserve toutes ses commandes déjà enregistrées dans ce module (leur `commission` stockée reste positive, figée), alors que le comportement précédent (recalcul à la lecture sur le taux courant) les aurait fait disparaître rétroactivement de la liste. Symétriquement, relever `commissionParBac` d'une Qualité existante en Paramètres n'ajoute aucune commission aux commandes déjà enregistrées sous l'ancien taux — seules les commandes **futures** de cette Qualité porteront le nouveau taux, figé à leur tour dès leur enregistrement.
 
-Le filtre de dates (`du`/`au`) reprend exactement la même technique — bornes en heure locale implicite, sans suffixe UTC — que celle déjà rencontrée dans `GET /api/commandes` (Volume 11h, §5.7), cohérent puisque les deux routes filtrent le même champ (`CommandeClient.dateCreation`).
+**Une conséquence directe** : si un Admin créait, via les Paramètres (Volume 11f, `MODIFIER_TYPE_CLIENT`), une quatrième Qualité avec une commission non nulle, les commandes **futures** de ses clients apparaîtraient automatiquement ici — `calculerCommission` leur écrirait une `commission` positive dès leur enregistrement — sans aucune modification de ce fichier. Le module Commissions ne connaît toujours pas la notion de « Maman » en tant que telle, seulement la règle générale « toute commande dont la `commission` enregistrée est strictement positive ». La spec, elle, parle explicitement des « commandes des Mamans » — une formulation plus étroite en apparence, mais qui correspond exactement à l'unique Qualité ayant une commission non nulle au moment de l'audit (Volume 11a : Dépositaire et Vente cash à 0 Fc de commission, Maman à 1 650 Fc). Le code généralise donc une règle que la spec énonce pour le cas particulier actuellement en vigueur — pas une contradiction, une implémentation par une condition plus générale que ce que l'énoncé littéral suggère.
+
+Le filtre de dates (`du`/`au`) valide chaque borne avec `dateISOSchema` (`400` si mal formée) et rejette `du > au` (`400`), puis délègue à `bornesJourLomoto` (`apps/api/src/lib/temps.ts`) pour convertir chaque date en bornes de **jour Lomoto** — même fonction que celle déjà rencontrée pour le résumé de clôture quotidien (Volume 11z-5) — plutôt que de construire les bornes à la main avec un suffixe `T00:00:00`/`T23:59:59.999` en heure locale implicite comme le faisait un stade antérieur du code.
 
 **Le calcul de chaque ligne**, pour une commande incluse dans le résultat :
 - `montantTotalPaye(c)` : une fonction pure partagée (§5.3).
-- `commission: c.quantiteBacs * c.client.typeClient.commissionParBac` — calculée ici, directement dans la route, **pas** via une fonction dédiée de `packages/shared`. C'est la seule multiplication du fichier, suffisamment simple pour ne pas justifier une fonction séparée (à la différence de `calculerCommande`, Volume 11a, dont la complexité — six champs interdépendants — justifiait pleinement son extraction).
+- `commission: c.commission` — une simple **lecture** du champ déjà figé sur `CommandeClient`, **aucune multiplication n'a lieu dans cette route** : le calcul (`quantiteBacs × commissionParBac`) a déjà eu lieu une fois pour toutes, à l'enregistrement de la commande, dans `commandes.ts` (Volume 11h).
 
 `totalCommissions` : la somme de toutes les commissions de la période filtrée, calculée en une ligne (`reduce`) après coup — un total qui n'existe dans aucun champ de base, purement dérivé de la réponse déjà construite.
 
@@ -100,7 +122,9 @@ Un détail d'interface pensé pour l'impression, visible dans le JSX via la clas
 
 | Situation | Comportement |
 |---|---|
-| Nouvelle Qualité créée avec une commission non nulle | Ses commandes apparaissent automatiquement dans ce module, sans modification du code (§5.2). |
+| Nouvelle Qualité créée avec une commission non nulle | Les commandes **futures** de ses clients apparaissent automatiquement dans ce module dès leur enregistrement, sans modification du code (§5.2) ; aucune commande passée ne peut y apparaître rétroactivement. |
+| `commissionParBac` d'une Qualité relevé ou abaissé en Paramètres après coup | Aucun effet sur les commandes déjà enregistrées : leur `commission` reste celle figée à leur propre enregistrement (Lot 7 pt 6, §5.1). Seules les commandes créées après le changement portent le nouveau taux. |
+| Client reclassé d'une Qualité à commission vers une Qualité sans commission (ou l'inverse) | Ses commandes déjà enregistrées gardent leur `commission` d'origine, figée à l'enregistrement — elles ne disparaissent ni n'apparaissent rétroactivement dans ce module suite à la reclassification (§5.2). |
 | Commande soldée grâce à une avance, sans aucun paiement en espèces ce jour-là | `montantTotalPaye` affiche le montant brut complet, pas `montantRecu` (§5.3). |
 | Commande avec dette encore ouverte | `montantTotalPaye` affiche `montantRecu` (le montant partiel réellement remis) ; la commission, elle, reste calculée sur `quantiteBacs` sans égard à la dette (§5.3). |
 | Aucun filtre de date fourni | Toutes les commandes générant une commission sont renvoyées, sans plafond ni pagination — même constat qu'au Volume 11h pour `GET /api/commandes`. |
@@ -108,11 +132,11 @@ Un détail d'interface pensé pour l'impression, visible dans le JSX via la clas
 
 ## 5.6 Croisement avec la spécification
 
-Aucun écart trouvé. Les six champs de la spec (N°, Date, Nom du client, Bacs, Montant total payé, Commission disponible) correspondent exactement aux six champs de `CommissionLigneDTO`, avec les mêmes règles de calcul, y compris la formulation quasi verbatim de la règle « payé à 100 % même si une partie vient de l'avance » retrouvée dans le commentaire du code source lui-même. La seule nuance relevée (§5.2, généralisation à « toute Qualité à commission non nulle » plutôt qu'un test explicite sur le nom « Maman ») ne contredit rien dans la spec — elle en est une implémentation plus générale, cohérente avec le comportement actuellement observable.
+Aucun écart trouvé. Les six champs de la spec (N°, Date, Nom du client, Bacs, Montant total payé, Commission disponible) correspondent exactement aux six champs de `CommissionLigneDTO`, avec les mêmes règles de calcul, y compris la formulation quasi verbatim de la règle « payé à 100 % même si une partie vient de l'avance » retrouvée dans le commentaire du code source lui-même. Le champ 6 de la spec (« Commission disponible ») précise explicitement, depuis le Lot 7 pt 6, qu'elle est *« calculée au taux de commission en vigueur à l'enregistrement de la commande... **figée** sur la commande elle-même : un changement ultérieur du taux dans les Paramètres, ou un changement de Qualité du client, ne modifie jamais la commission déjà affichée ici »* (`docs/spec-boulangerie.md`, section 3.11) — correspondance exacte avec `CommandeClient.commission` (§5.1) et `calculerCommission` (Volume 11h). La seule nuance relevée (§5.2, généralisation à « toute commande dont la `commission` enregistrée est non nulle » plutôt qu'un test explicite sur le nom « Maman ») ne contredit rien dans la spec — elle en est une implémentation plus générale, cohérente avec le comportement actuellement observable.
 
 ## 5.7 Résumé
 
-Le module Commissions est le premier module Niveau 1 de ce livre à ne posséder aucune donnée propre : c'est une simple relecture, recalculée à chaque consultation, des commandes de clientes dont la Qualité porte une commission non nulle — jamais une Qualité nommément « Maman » au sens littéral du code, mais toute Qualité dont `commissionParBac > 0`. Sa seule vraie subtilité financière, `montantTotalPaye`, mérite d'être bien comprise : une commande soldée grâce à une avance est affichée comme intégralement payée, parce que l'argent correspondant a réellement été versé, seulement lors d'une commande antérieure. Aucun écart avec la spécification.
+Le module Commissions est le premier module Niveau 1 de ce livre à ne posséder aucune donnée propre — mais, depuis la correction Lot 7 pt 6, c'est une simple **relecture** d'un champ déjà figé, jamais un recalcul à la lecture : `CommandeClient.commission` est écrit une fois pour toutes à l'enregistrement de la commande (`calculerCommande`/`calculerCommission`, Volume 11h), au taux `TypeClient.commissionParBac` en vigueur à cet instant précis, puis ne varie plus jamais, même si ce taux change ensuite en Paramètres ou si le client change de Qualité. Le module filtre et affiche donc toute commande dont la `commission` enregistrée est strictement positive — jamais une Qualité nommément « Maman » au sens littéral du code, mais l'implémentation courante fait que seule cette Qualité produit aujourd'hui des commandes à commission non nulle. Sa seule vraie subtilité financière, `montantTotalPaye`, mérite d'être bien comprise : une commande soldée grâce à une avance est affichée comme intégralement payée, parce que l'argent correspondant a réellement été versé, seulement lors d'une commande antérieure. Aucun écart avec la spécification.
 
 ---
 

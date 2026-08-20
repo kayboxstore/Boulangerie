@@ -39,7 +39,18 @@
 | `packages/shared/src/index.ts` — `montantTotalPaye`, `CommissionLigneDTO` | `volumes/11i-commissions.md` |
 | `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
 | `apps/web/src/pages/Caisse.tsx` | `volumes/11j-caisse.md` |
-| `packages/shared/src/index.ts` — `tauxDuJourSchema`, `depenseCreateSchema`, `depenseFarineSchema`, `RegistreCaisseDTO`, `DepenseCaisseDTO` | `volumes/11j-caisse.md` |
+| `packages/shared/src/index.ts` — `tauxDuJourSchema`, `depenseCreateSchema`, `depenseFarineSchema`, `sessionCaisseOuvertureSchema`, `sessionCaisseFermetureSchema`, `remiseCaisseCreateSchema`, `confirmerReglementsSchema`, `RegistreCaisseDTO`, `DepenseCaisseDTO`, `SessionCaisseDTO`, `RemiseCaisseDTO` | `volumes/11j-caisse.md` |
+| `apps/api/src/lib/temps.ts` | `volumes/11j-caisse.md` (usage, pas encore de chapitre dédié) |
+| `apps/api/src/routes/cycles-livraison.ts` | `volumes/11z-6-cycle-livraison.md` |
+| `apps/api/src/services/cyclesLivraison.ts` | `volumes/11z-6-cycle-livraison.md` |
+| `packages/shared/src/cyclesLivraison.ts` | `volumes/11z-6-cycle-livraison.md` |
+| `apps/web/src/pages/AcceptationsLivraison.tsx` | `volumes/11z-6-cycle-livraison.md` |
+| `apps/web/src/components/previsions/cycleLivraisonLogique.ts` | `volumes/11z-6-cycle-livraison.md` |
+| `apps/web/src/components/previsions/EtapesCycleLivraison.tsx` | `volumes/11z-6-cycle-livraison.md` |
+| `apps/web/src/components/previsions/DialogActionCycle.tsx` | `volumes/11z-6-cycle-livraison.md` |
+| `apps/web/src/components/previsions/DialogAcceptationCycle.tsx` | `volumes/11z-6-cycle-livraison.md` |
+| `apps/api/src/lib/idempotence.ts` | `volumes/11j-caisse.md`, `volumes/11z-6-cycle-livraison.md` (usage, pas encore de chapitre dédié) |
+| `apps/web/src/lib/idempotence.ts` | `volumes/11j-caisse.md`, `volumes/11z-6-cycle-livraison.md` (usage, pas encore de chapitre dédié) |
 | `apps/api/src/routes/travailleurs.ts` | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md`, `volumes/11k-3-travailleurs-paie-bulletins.md` |
 | `apps/web/src/pages/Travailleurs.tsx` | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md` |
 | `apps/web/src/components/PaieCard.tsx` | `volumes/11k-3-travailleurs-paie-bulletins.md` |
@@ -195,6 +206,10 @@
 | `caisseRouter` (`GET /registre`, `PUT /taux`, `POST /depenses`, `DELETE /depenses/:id`, `PUT /depenses/farine`) | `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
 | `construireRegistre` / `sacsUtilisesLe` | `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
 | `CaissePage` / `Poste` | `apps/web/src/pages/Caisse.tsx` | `volumes/11j-caisse.md` |
+| `sessionAnterieureOuverteAvant` / `chargerSessionCaisseOuverte` | `apps/api/src/routes/caisse.ts` | `volumes/11j-caisse.md` |
+| `cyclesLivraisonRouter` (transitions, bon retourné, anomalies) | `apps/api/src/routes/cycles-livraison.ts` | `volumes/11z-6-cycle-livraison.md` |
+| `appliquerTransition` / `reclamerVersion` / `determinerStatutAcceptation` | `apps/api/src/services/cyclesLivraison.ts` | `volumes/11z-6-cycle-livraison.md` |
+| `AcceptationsLivraisonPage` | `apps/web/src/pages/AcceptationsLivraison.tsx` | `volumes/11z-6-cycle-livraison.md` |
 | `versTravailleurDTO` / `validerDepartementGroupe` / `verifierCompteLie` | `apps/api/src/routes/travailleurs.ts` | `volumes/11k-1-travailleurs-fiches-pointage.md` |
 | `verifierAlertesAbsenceEnAttente` | `apps/api/src/routes/travailleurs.ts` | `volumes/11k-2-travailleurs-absences-sanctions.md` |
 | `calculerPaieBrute` / `peutConsulterBulletinsDe` | `apps/api/src/routes/travailleurs.ts` | `volumes/11k-3-travailleurs-paie-bulletins.md` |
@@ -249,7 +264,8 @@
 
 | Section de `docs/spec-boulangerie.md` | Sujet | Chapitre du livre |
 |---|---|---|
-| 3.1 (registre journalier, dépense farine) | Caisse | `volumes/11a-noyau-financier-permissions.md` (formule farine), `volumes/11j-caisse.md` (écran complet) |
+| 3.1 (registre journalier, dépense farine, sessions/clôture, règlements déclaré/confirmé) | Caisse | `volumes/11a-noyau-financier-permissions.md` (formule farine), `volumes/11j-caisse.md` (écran complet) |
+| 3.3 f (Cycle de livraison — 11 statuts, anomalies, conversion en commande) | Cycle de livraison (C4) | `volumes/11z-6-cycle-livraison.md` |
 | 3.18 (fiche, pointage, absence, sanction, salaire/paie, bulletins) | Travailleurs | `volumes/11k-1-travailleurs-fiches-pointage.md`, `volumes/11k-2-travailleurs-absences-sanctions.md`, `volumes/11k-3-travailleurs-paie-bulletins.md` |
 | 3.4 (commandes, avance/dette, doublon) | Commandes clients | `volumes/11a-noyau-financier-permissions.md` (formule), `volumes/11h-commandes.md` (écran complet) |
 | 3.11 (Commissions) | Commissions | `volumes/11i-commissions.md` |

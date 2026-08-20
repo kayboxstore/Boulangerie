@@ -203,12 +203,20 @@ Voir découpage détaillé dans `TABLE_DES_MATIERES.md` (chapitres `11a` à `11z
 - `routes/apropos.ts` : page publique, champs partagés avec Paramètres, crédit développeur réservé à cet écran
 - `services/emailPro.ts` + `lib/cloudflareEmail.ts` : mécanisme complet (déjà entrevu aux 11k-1/11z-4), deux portées Cloudflare distinctes (Compte vs Zone)
 - `routes/assistant.ts` + `lib/ia.ts` : chat support avec premier niveau IA optionnel (`ASSISTANT_IA_ACTIF`), repli automatique vers l'escalade humaine, jamais d'exception qui romprait l'envoi du message
-- `routes/rapports.ts` : 7 widgets Tableau de bord — **observation** : commentaire de `/cloture-quotidienne` obsolète (n'a pas suivi l'extension de portée aux Admins documentée dans la spec 3.8)
+- `routes/rapports.ts` : 7 widgets Tableau de bord — **observation** : commentaire de `/cloture-quotidienne` obsolète (n'a pas suivi l'extension de portée aux Admins documentée dans la spec 3.8) — **corrigé dans le code le 19/08/2026** (plan d'action de l'audit), voir la note de résolution dans le chapitre
+- `?date=` optionnel sur `/cloture-quotidienne` (Lot 7 pt 1, ajouté après la rédaction initiale de ce sous-chapitre) : consultation du résumé d'un jour déjà passé
 - `routes/rapports-personnels.ts` : portée dédiée (`resoudrePortee`), hors matrice de permissions standard, 8 sources agrégées
-- `routes/export.ts` + `services/email.ts` + `construirePdf` générique (`services/pdf.ts`, désormais couvert intégralement) : vérification de permission a posteriori, un seul générateur PDF partagé par 3 écrans
+- `routes/export.ts` + `services/email.ts` + `construirePdf` générique (`services/pdf.ts`, désormais couvert intégralement) : vérification de permission a posteriori — **6 écrans** au 19/08/2026 (Lot 7 pt 4 a étendu l'export à Stocks/Fournisseurs/Caisse, initialement 3 seulement)
 - Écart repéré : aucun
 
-**Clôture du Volume 11z** (5 sous-chapitres, 12 routeurs API, 12 services, ~20 composants/pages frontend).
+### 11z-6 — Cycle de livraison (C4) ✅ *(ajouté le 19/08/2026, hors plan initial)*
+- `routes/cycles-livraison.ts` + `services/cyclesLivraison.ts` : machine à états à 11 statuts/7 actions, verrou optimiste systématique (`updateMany` filtré sur `{ id, version, statut }`), conversion en `CommandeClient` réelle à `CONFIRMER_ACCEPTATION`
+- `packages/shared/src/cyclesLivraison.ts` : vocabulaire partagé, schémas Zod, DTO
+- Anomalies : 6 types dont `CASH_TRANSPORTE_NON_RECU` (seule catégorie explicitement financière)
+- Frontend : `pages/BonsLivraison.tsx` (6 premières actions, partagé avec 11z-2), `pages/AcceptationsLivraison.tsx` (7ᵉ action), `components/previsions/*`
+- Écart repéré : aucun **une fois** la section 3.3 f ajoutée à la spec le même jour — absente de toute version antérieure de `docs/spec-boulangerie.md`, malgré ~1 200 lignes de code déjà en production
+
+**Clôture du Volume 11z** (5 sous-chapitres à la rédaction initiale, 6 depuis le 19/08/2026 ; 13 routeurs API, 13 services, ~25 composants/pages frontend au total).
 
 ## Volume 12 — API et communications réseau ✅
 - `lib/events.ts` : bus d'événements interne (`EventEmitter` natif Node), découplé de Socket.io — les modules métier publient sans connaître le transport

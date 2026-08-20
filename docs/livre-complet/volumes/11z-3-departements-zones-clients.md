@@ -60,18 +60,25 @@ Deux routeurs distincts pour deux natures de données différentes :
 
 Note de cohérence transversale : ce fichier confirme, en le retrouvant tel quel, le DTO `ClientDTO` déjà utilisé (sans être expliqué en détail) dans le chapitre Commandes (11h) — `avanceDisponible`, `typeClient` imbriqué, `zoneDepositaireNom`. Rien de nouveau à ce niveau, la boucle se referme simplement.
 
+### 5.1 Signalement des clients inactifs (suivi commercial, section 3.5, Lot 7 pt 5)
+
+`GET /` calcule, pour chaque client, `derniereCommandeLe` (date de la commande la plus récente, `prisma.commandeClient.groupBy({ by: ["clientId"], _max: { dateCreation: true } })`, agrégée en parallèle de la liste des clients) puis en dérive `joursDepuisDerniereCommande` via une fonction interne du même nom (`apps/api/src/routes/clients.ts`, lignes 24-33) : `null` si le client n'a jamais commandé, sinon le nombre de **jours Lomoto** entiers écoulés depuis (`bornesJourLomoto`/`jourLomoto`, `apps/api/src/lib/temps.ts` — même notion de « jour civil » que l'alerte dette de commandes.ts, pas un simple écart de millisecondes). Ces deux champs rejoignent `ClientDTO` (`packages/shared/src/index.ts`).
+
+La fonction pure `estClientInactif(joursDepuisDerniereCommande, seuilJours)` (`packages/shared/src/index.ts`) — `joursDepuisDerniereCommande === null || joursDepuisDerniereCommande >= seuilJours` — encode la règle métier : un client est inactif s'il n'a **jamais** commandé, ou si sa dernière commande date d'au moins `seuilJours` jours. Le seuil lui-même (`SEUIL_INACTIF_JOURS = 30`) est défini côté client uniquement, dans `apps/web/src/pages/Clients.tsx` — pas transmis par le serveur, pas de champ Paramètres dédié : `estClientInactif` reste une fonction pure paramétrable, `ClientsPage` lui fournit simplement `30`. `ClientsPage` en fait deux usages : une case à cocher « n'afficher que les clients inactifs » (filtre en mémoire sur la liste déjà chargée, `seulementInactifs`) et un badge visuel sur chaque ligne de client inactif (affichant soit « jamais commandé », soit le nombre de jours écoulés). La spec (3.5) écarte explicitement la création d'un nouveau modèle « prospect » pour ce besoin — c'est une simple lecture des commandes déjà existantes, aucune donnée nouvelle stockée en base.
+
 ## 6. Frontend
 
 - **`DepartementsCard`** : montée sur la page Travailleurs (Volume 11k), reçoit la liste des travailleurs déjà chargée par la page parente en `props` plutôt que de la requêter elle-même — évite une requête HTTP redondante puisque `TravailleursPage` a déjà cette donnée. Le sélecteur de chef, en édition, est filtré côté client sur `travailleurs.filter((tr) => tr.departement?.id === departementEditee.id)` — reflet direct de la règle serveur « chef choisi parmi les membres déjà rattachés ».
 - **`ZonesDepositaireCard`** : montée sur la page Production (Volume 11z-2), reçoit sa permission déjà résolue en `props` (`editable`) plutôt que de recalculer elle-même `peutEcrire("COMMANDES") || peutEcrire("PRODUCTION")` — cette logique vit dans le composant parent.
 - **`DialogNouvelleZone`** : composant réutilisable de création rapide (pas de renommage ni suppression, ces opérations restent sur `ZonesDepositaireCard`), monté depuis `ClientsPage` — c'est le point d'entrée concret de l'amélioration proactive documentée dans la spec (3.3 d) : le Chargé des commandes peut créer une zone sans quitter la fiche client, sans avoir besoin d'un accès au module Production.
-- **`ClientsPage`** : recherche par nom filtrée côté client (`useMemo`), champ Zone de dépôt affiché **conditionnellement** dans le formulaire (`qualiteClientEstDepositaire`, dérivé du nom de la Qualité sélectionnée — pas d'un champ dédié en base, donc recalculé à chaque changement de sélection), avec une nuance de nettoyage de données bien commentée dans le code : en édition, changer la Qualité vers une valeur non-Dépositaire doit **explicitement** effacer la zone (`null`), alors qu'à la création, l'omettre suffit (`undefined`, le champ est simplement absent du corps de la requête).
+- **`ClientsPage`** : recherche par nom filtrée côté client (`useMemo`), champ Zone de dépôt affiché **conditionnellement** dans le formulaire (`qualiteClientEstDepositaire`, dérivé du nom de la Qualité sélectionnée — pas d'un champ dédié en base, donc recalculé à chaque changement de sélection), avec une nuance de nettoyage de données bien commentée dans le code : en édition, changer la Qualité vers une valeur non-Dépositaire doit **explicitement** effacer la zone (`null`), alors qu'à la création, l'omettre suffit (`undefined`, le champ est simplement absent du corps de la requête). La case à cocher « clients inactifs » (§5.1) combine son filtre avec la recherche par nom dans le même `useMemo` — les deux filtres sont cumulatifs, pas exclusifs.
 
 ## 7. Croisement avec `docs/spec-boulangerie.md`
 
 - Section 3.18 (Départements & Groupes, « purement organisationnel, aucune permission associée ») : confirmé — gouverné par `TRAVAILLEURS`, chef sans droits particuliers. Aucun écart.
 - Section 3.3 d (Zones de dépôt, écriture Commandes OU Production, « l'un des deux suffit », correction de conception documentée) : confirmé par le middleware `ecritureZones`. Aucun écart.
 - Section 3.4 (Clients, Qualités avec prix/commission par bac, effet uniquement sur les commandes futures) : confirmé, avec `MODIFIER_TYPE_CLIENT` comme tâche critique. Aucun écart.
+- Section 3.5 (Clients inactifs, Lot 7 pt 5 — date de dernière commande ou « Jamais commandé », case à cocher pour ne lister que les clients sans commande depuis 30 jours ou plus, aucun nouveau modèle ni concept de « prospect ») : confirmé exactement par `joursDepuisDerniereCommande`/`estClientInactif`/`SEUIL_INACTIF_JOURS` (§5.1). Aucun écart.
 
 Aucun écart spec/code trouvé dans ce chapitre.
 
@@ -81,6 +88,7 @@ Aucun écart spec/code trouvé dans ce chapitre.
 - **Deux groupes de même nom dans le même département** : rejetés (`409`) ; le même nom dans deux départements différents est parfaitement valide.
 - **Tentative de gérer une zone sans écriture Commandes ni Production** : `403` explicite, distinct du `403` générique de `requirePermission` (message dédié précisant les deux modules alternatifs).
 - **Suppression d'une Qualité ou d'un client encore référencé** : bloquée par `409`, jamais par une erreur de contrainte de base brute renvoyée telle quelle à l'utilisateur.
+- **Client n'ayant jamais passé de commande** : `derniereCommandeLe` et `joursDepuisDerniereCommande` valent `null` ; `estClientInactif` le considère malgré tout inactif (`=== null` fait partie de la condition), il apparaît donc dans le filtre « clients inactifs » avec l'étiquette « jamais commandé ».
 
 ## 9. Résumé
 

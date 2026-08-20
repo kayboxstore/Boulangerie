@@ -42,6 +42,8 @@
 
 **cva (class-variance-authority)** — Bibliothèque utilitaire générant des classes Tailwind CSS conditionnelles à partir d'un ensemble de « variantes » nommées (ex. `default`/`gold`/`destructive` pour `Badge` ou `Button`). Voir Volume 9.
 
+**Cycle de livraison (C4)** — Module (`CycleLivraison`, ajouté au projet après la clôture initiale de ce livre) qui enveloppe un Schéma de commande d'un suivi du trajet réel : 11 statuts, du retrait en Production jusqu'à la confirmation de ce qui a été accepté chez le client, avec conversion automatique en `CommandeClient` réelle à l'acceptation. Voir Volume 11z-6.
+
 ## D
 
 **Décision (Absence)** — Acte distinct de la déclaration d'une absence, tranché par un Admin (secondaire ou Principal) : justifiée, non justifiée, ou en attente. Voir Volume 11k-2.
@@ -54,7 +56,7 @@
 
 ## E
 
-**Écart entre spec et code** — Mention normalisée utilisée dans tout ce livre (jamais résolue par l'auteur lui-même) dès qu'une divergence est constatée entre `docs/spec-boulangerie.md` (comportement voulu) et le code réel (comportement effectif). Toujours consignée dans `annexes/ecarts-spec-code.md` avec le statut « à confirmer avec l'équipe ». Deux écarts trouvés sur l'ensemble du livre : l'absence d'interface pour modifier les permissions d'un rôle (Volume 11d) et l'absence de Playwright malgré sa recommandation par la spec (Volume 19).
+**Écart entre spec et code** — Mention normalisée utilisée dans tout ce livre (jamais résolue par l'auteur lui-même) dès qu'une divergence est constatée entre `docs/spec-boulangerie.md` (comportement voulu) et le code réel (comportement effectif). Toujours consignée dans `annexes/ecarts-spec-code.md` avec le statut « à confirmer avec l'équipe ». Trois écarts trouvés sur l'ensemble du livre : l'absence d'interface pour modifier les permissions d'un rôle (Volume 11d) et l'absence de Playwright malgré sa recommandation par la spec (Volume 19) — tous deux encore ouverts — et l'absence totale du Cycle de livraison (C4) dans la spec (Volume 11z-6), résolue le jour même de sa découverte (19/08/2026) par l'ajout de la section 3.3 f.
 
 **ERD (Entity-Relationship Diagram)** — Diagramme montrant les modèles de données et leurs relations (cardinalités). Présenté en six vues par domaine au Volume 13, le schéma complet (42 modèles) étant trop dense pour un diagramme unique lisible.
 
