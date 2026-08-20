@@ -25,10 +25,17 @@ services:
     # de mot de passe, jamais de donnée de démonstration. Le seed de démonstration
     # (db:seed:demo) N'EST JAMAIS appelé ici ; il refuse même de s'exécuter si on
     # tentait de le lancer avec NODE_ENV=production (voir prisma/seed-demo.ts).
+    # `typecheck --workspace apps/api` AVANT le bootstrap (et non après, comme
+    # `build`) : c'est ce qui rend réel l'argument « un accès à prisma.utilisateur
+    # depuis bootstrap-production.ts ne compilerait même pas » (voir le type
+    # ClientBootstrap) — `npm run db:bootstrap:production` s'exécute via `tsx`, qui
+    # transpile sans jamais vérifier les types ; sans cette étape, cette garantie
+    # ne tiendrait qu'en CI/local, pas sur le chemin de déploiement réel.
     buildCommand: >-
       npm install --include=dev &&
       npx prisma generate &&
       npx prisma migrate deploy &&
+      npm run typecheck --workspace apps/api &&
       npm run db:bootstrap:production &&
       npm run build --workspace apps/web
     startCommand: npm run start --workspace apps/api
