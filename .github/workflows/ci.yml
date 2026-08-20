@@ -84,6 +84,20 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-integration-bootstrap-ci.ts
 
+      - name: Vérification de concurrence PostgreSQL réelle du correctif P0-01 (round 6, point 1)
+        # Additif, distinct du script ci-dessus : prouve l'atomicité des
+        # écritures de PUT /api/equipe/:id/activation et
+        # POST /api/equipe/:id/principal sous une VRAIE concurrence
+        # PostgreSQL (deux connexions séparées, Promise.allSettled, un
+        # crochet de test qui élargit délibérément la fenêtre de course pour
+        # un scénario déterministe) — jamais un Administrateur Principal
+        # inactif, jamais deux Principaux, rollback réel vérifié. Même garde
+        # que le script précédent (hôte local + base exacte `lomoto_ci` +
+        # confirmation explicite).
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-concurrence-equipe-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest

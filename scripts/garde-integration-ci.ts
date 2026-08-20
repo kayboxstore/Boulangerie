@@ -51,20 +51,23 @@ function analyserDatabaseUrl(databaseUrl: string): { hostname: string; nomBase: 
  * base jetable de CI. Doit être appelée comme toute première instruction du
  * script — voir `verifier-integration-bootstrap-ci.ts`.
  */
-export function verifierEnvironnementIntegrationCI(env: EnvironnementIntegrationCI): void {
+export function verifierEnvironnementIntegrationCI(
+  env: EnvironnementIntegrationCI,
+  nomScript = "scripts/verifier-integration-bootstrap-ci.ts",
+): void {
   if (env.CI_INTEGRATION_BOOTSTRAP_CONFIRME !== "true") {
     throw new Error(
-      "scripts/verifier-integration-bootstrap-ci.ts refuse de s'exécuter : CI_INTEGRATION_BOOTSTRAP_CONFIRME doit " +
-        'valoir exactement "true". Ce script effectue de VRAIES écritures destructives (modification/suppression ' +
-        "de permission, échec de transaction injecté délibérément) — cette confirmation, propre à ce script, " +
-        "évite qu'il soit lancé par erreur contre une base qui compte.",
+      `${nomScript} refuse de s'exécuter : CI_INTEGRATION_BOOTSTRAP_CONFIRME doit ` +
+        'valoir exactement "true". Ce script effectue de VRAIES écritures (round 6 : y compris des écritures ' +
+        "concurrentes délibérées) — cette confirmation, propre à ce script, évite qu'il soit lancé par erreur " +
+        "contre une base qui compte.",
     );
   }
 
   const analyse = analyserDatabaseUrl(env.DATABASE_URL ?? "");
   if (!analyse || !HOTES_LOCAUX.has(analyse.hostname)) {
     throw new Error(
-      "scripts/verifier-integration-bootstrap-ci.ts refuse de s'exécuter : DATABASE_URL ne pointe pas vers un " +
+      `${nomScript} refuse de s'exécuter : DATABASE_URL ne pointe pas vers un ` +
         "hôte local (localhost/127.0.0.1/::1). Aucune exception distante n'existe — ce script écrit et supprime " +
         "des données réelles.",
     );
@@ -72,7 +75,7 @@ export function verifierEnvironnementIntegrationCI(env: EnvironnementIntegration
 
   if (analyse.nomBase !== NOM_BASE_JETABLE_ATTENDU) {
     throw new Error(
-      `scripts/verifier-integration-bootstrap-ci.ts refuse de s'exécuter : le nom de base dans DATABASE_URL doit ` +
+      `${nomScript} refuse de s'exécuter : le nom de base dans DATABASE_URL doit ` +
         `être exactement "${NOM_BASE_JETABLE_ATTENDU}" (trouvé "${analyse.nomBase}") — réservé à la base jetable ` +
         "du service PostgreSQL de la CI, jamais une base de développement réelle.",
     );
