@@ -13,8 +13,10 @@ dur. C'est **un seul service** à déployer + une base PostgreSQL.
 
 Le fichier `render.yaml` (à la racine) décrit tout ça pour l'hébergeur
 **Render** : il crée la base, injecte automatiquement `DATABASE_URL`, génère un
-`JWT_SECRET` secret, lance les migrations, insère les données de démonstration,
-puis démarre le service.
+`JWT_SECRET` secret, lance les migrations, prépare la configuration
+structurelle minimale (rôles, permissions, motifs fixes — **aucun compte,
+aucun mot de passe, aucune donnée de démonstration**, voir « Se connecter »
+ci-dessous), puis démarre le service.
 
 ## Étapes (depuis le navigateur du téléphone)
 
@@ -153,18 +155,21 @@ seule version du client est installée : ce piège ne s'y pose pas.
 
 ## Se connecter
 
-Comptes de démonstration (mot de passe commun **`Lomoto2026!`**) :
+**La base de production ne contient jamais de compte de démonstration ni de
+mot de passe connu** (correctif P0-01, 19-20/08/2026 — voir plus bas). Au
+premier démarrage, la base est vide : l'écran de connexion est automatiquement
+remplacé par l'**Assistant de premier lancement**, qui guide la création du
+tout premier compte — l'Administrateur Principal — avec un mot de passe choisi
+par le véritable responsable, jamais présumé par le code. Une fois ce compte
+créé, l'assistant se referme de lui-même (la base n'est plus vide) et
+l'écran de connexion normal reprend sa place, pour toujours.
 
-| Rôle | E-mail |
-|------|--------|
-| Administrateur principal | `admin@boulangerie-lomoto.com` |
-| Administrateur secondaire | `admin2@boulangerie-lomoto.com` |
-| Directeur Général | `dg@boulangerie-lomoto.com` |
-| Caissière | `caisse@boulangerie-lomoto.com` |
-| Chargé des commandes | `commandes@boulangerie-lomoto.com` |
-
-> ⚠️ **Change ces mots de passe** (ou supprime les comptes de démo) si le
-> déploiement est exposé publiquement — l'URL est accessible à tous.
+> ⚠️ Les identifiants `admin@boulangerie-lomoto.com` / `Lomoto2026!` que l'on
+> peut voir mentionnés ailleurs dans ce dépôt (`README.md`,
+> `prisma/seed-demo.ts`) sont **strictement réservés au développement local**.
+> Ce script (`npm run db:seed:demo`) refuse explicitement de s'exécuter dès que
+> `NODE_ENV=production` — aucun contournement possible — et n'est de toute
+> façon jamais invoqué par `render.yaml` ni par aucun chemin de déploiement.
 
 ## Bon à savoir (offre gratuite Render)
 
@@ -173,9 +178,35 @@ Comptes de démonstration (mot de passe commun **`Lomoto2026!`**) :
 - La base PostgreSQL gratuite a une **durée de vie limitée** (Render l'indique à
   la création) — parfait pour tester, à repasser en offre payante pour un usage
   durable.
-- Les données de démonstration sont ré-insérées à chaque redéploiement, mais de
-  façon **non destructive** (les ventes/commandes que tu crées ne sont pas
-  effacées ; seuls les comptes/produits de base sont garantis présents).
+- Un redéploiement rejoue les migrations et le bootstrap de production
+  (rôles/permissions/motifs fixes, idempotent), mais **ne touche jamais** aux
+  comptes existants ni à l'Administrateur Principal déjà en place — voir
+  « Correctif P0-01 » ci-dessous.
+
+## Correctif P0-01 — séparation bootstrap de production / seed de démonstration (19-20/08/2026)
+
+Avant ce correctif, `render.yaml` exécutait `npm run db:seed` à **chaque**
+déploiement — un script qui crée des comptes à mot de passe connu et publié
+dans ce dépôt, et qui **réattribuait de force** le statut d'Administrateur
+Principal au compte générique `admin@boulangerie-lomoto.com`, même si le
+véritable responsable en avait délégué la propriété entre-temps. Un simple
+redéploiement pouvait donc rouvrir un accès connu et retirer le statut
+principal au vrai responsable.
+
+Le chemin de production et le chemin de développement sont maintenant
+complètement séparés :
+
+| | Production (`render.yaml`) | Développement local |
+|---|---|---|
+| Commande | `npm run db:bootstrap:production` | `npm run db:seed:demo` |
+| Fichier | `prisma/bootstrap-production.ts` | `prisma/seed-demo.ts` |
+| Crée | Rôles, permissions, motifs fixes (don/perte/non-conformité) — **jamais un compte** | Tout ce que fait le bootstrap, **plus** des comptes de démo à mot de passe connu, des clients/fournisseurs/stocks fictifs |
+| `estAdminPrincipal` | Jamais touché | Réattribué de force à `admin@boulangerie-lomoto.com` (comportement historique, sans risque hors dev) |
+| Garde | — (sûr par construction, aucun accès au modèle `Utilisateur`) | Refuse de s'exécuter si `NODE_ENV=production`, sans contournement possible |
+
+Le premier compte de production (Administrateur Principal) est créé
+**exclusivement** par l'Assistant de premier lancement (voir « Se
+connecter » ci-dessus), jamais par un script de seed.
 
 ## Autres hébergeurs
 
@@ -185,9 +216,14 @@ variables d'environnement — `DATABASE_URL` (PostgreSQL) et `JWT_SECRET` — pu
 
 ```
 npm install --include=dev
-npx prisma generate
-npx prisma migrate deploy
-npm run db:seed            # optionnel : données de démonstration
+NODE_ENV=production npx prisma generate
+NODE_ENV=production npx prisma migrate deploy
+NODE_ENV=production npm run db:bootstrap:production
 npm run build --workspace apps/web
-npm run start --workspace apps/api   # écoute sur $PORT
+NODE_ENV=production npm run start --workspace apps/api   # écoute sur $PORT
 ```
+
+`NODE_ENV=production` n'est pas qu'une convention ici : c'est ce qui, en
+défense en profondeur, ferait échouer immédiatement toute tentative
+(volontaire ou accidentelle) de lancer `npm run db:seed:demo` contre cette
+base.

@@ -12,5 +12,10 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src/**/*.ts", "../../packages/shared/src/**/*.ts", "../../prisma/seed.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../../packages/shared/src/**/*.ts",
+    "../../prisma/seed-demo.ts",
+    "../../prisma/bootstrap-production.ts"
+  ]
 }

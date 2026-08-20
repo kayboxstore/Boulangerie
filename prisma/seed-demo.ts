@@ -1,50 +1,56 @@
 /**
- * Seed initial — Boulangerie Lomoto (Phase 1).
+ * Seed de DÉMONSTRATION — Boulangerie Lomoto (développement/test UNIQUEMENT).
  *
- * Crée : la hiérarchie de rôles (section 2 de la spec), la matrice de
- * permissions lecture/écriture, les types de clients (section 3.4),
- * un utilisateur de démonstration par rôle et un catalogue de pains.
+ * ⚠️ NE JAMAIS EXÉCUTER CONTRE UNE BASE DE PRODUCTION. Ce script crée des
+ * comptes avec un mot de passe connu et publié dans ce dépôt
+ * (`Lomoto2026!`), force `admin@boulangerie-lomoto.com` comme Administrateur
+ * Principal (retirant ce statut à tout autre compte), et invente des clients/
+ * fournisseurs/stocks fictifs. Une garde ci-dessous refuse de s'exécuter si
+ * `NODE_ENV=production` — voir §« Garde de production » — sans contournement
+ * possible.
+ *
+ * Correctif P0-01 (19-20/08/2026) : ce fichier s'appelait `prisma/seed.ts` et
+ * était exécuté par `render.yaml` à CHAQUE déploiement de production — un
+ * redéploiement pouvait donc recréer des comptes à mot de passe connu et
+ * reprendre de force le statut d'Administrateur Principal au compte
+ * générique, même si le véritable responsable en avait délégué la propriété
+ * entre-temps. Ce risque est corrigé à trois niveaux : (1) `render.yaml`
+ * n'appelle plus ce script du tout ; (2) la configuration structurelle
+ * réellement indispensable (rôles/permissions/motifs) a été extraite dans
+ * `prisma/bootstrap-production.ts`, sûr par construction (aucun utilisateur) ;
+ * (3) ce fichier refuse maintenant de s'exécuter si `NODE_ENV=production`,
+ * en défense en profondeur si jamais un script l'invoquait encore par erreur.
+ *
+ * Crée : la hiérarchie de rôles + matrice de permissions et les motifs fixes
+ * (délégués à `bootstrap-production.ts`, source unique — jamais dupliqués
+ * ici), les types de clients (section 3.4), un utilisateur de démonstration
+ * par rôle, des clients/fournisseurs/matières premières fictifs et un
+ * catalogue de pains.
  */
-import { PrismaClient, Module, NiveauAcces, CodeIngredient } from "@prisma/client";
+import { PrismaClient, Module, CodeIngredient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { bootstrapProduction } from "./bootstrap-production.js";
+
+// --- Garde de production — voir l'en-tête de ce fichier -------------------
+// Volontairement la toute première instruction exécutée par ce module, avant
+// même la création du client Prisma : aucun accès réseau, aucune écriture,
+// aucun contournement silencieux possible. `NODE_ENV` est la variable que
+// Render (et tout hébergeur Node standard) positionne à "production" en
+// production — même convention déjà utilisée par `apps/api/src/lib/jwt.ts`
+// pour refuser de démarrer sans `JWT_SECRET`.
+if (process.env.NODE_ENV === "production") {
+  throw new Error(
+    "prisma/seed-demo.ts refuse de s'exécuter avec NODE_ENV=production — ce script crée des comptes à mot de " +
+      "passe connu et des données fictives, réservés au développement/test. Utilisez " +
+      "`npm run db:bootstrap:production` pour une base de production (voir prisma/bootstrap-production.ts).",
+  );
+}
 
 const prisma = new PrismaClient();
 
-const TOUS_LES_MODULES = Object.values(Module);
-
-// Mot de passe de démonstration commun (dev uniquement).
+// Mot de passe de démonstration commun — dev/test uniquement, JAMAIS valide
+// en production grâce à la garde ci-dessus.
 const MOT_DE_PASSE_DEMO = "Lomoto2026!";
-
-type PermissionSeed = { module: Module; niveauAcces: NiveauAcces };
-
-const ecriture = (module: Module): PermissionSeed => ({ module, niveauAcces: NiveauAcces.ECRITURE });
-const lecture = (module: Module): PermissionSeed => ({ module, niveauAcces: NiveauAcces.LECTURE });
-
-// Le seed est AUTORITATIF sur la matrice : les permissions absentes de la
-// liste sont supprimées (permet les retraits, ex. DG sans accès Paramètres).
-async function upsertRole(nom: string, roleParentNom: string | null, permissions: PermissionSeed[]) {
-  const roleParent = roleParentNom
-    ? await prisma.role.findUniqueOrThrow({ where: { nom: roleParentNom } })
-    : null;
-
-  const role = await prisma.role.upsert({
-    where: { nom },
-    update: { roleParentId: roleParent?.id ?? null },
-    create: { nom, roleParentId: roleParent?.id ?? null },
-  });
-
-  for (const p of permissions) {
-    await prisma.rolePermission.upsert({
-      where: { roleId_module: { roleId: role.id, module: p.module } },
-      update: { niveauAcces: p.niveauAcces },
-      create: { roleId: role.id, module: p.module, niveauAcces: p.niveauAcces },
-    });
-  }
-  await prisma.rolePermission.deleteMany({
-    where: { roleId: role.id, module: { notIn: permissions.map((p) => p.module) } },
-  });
-  return role;
-}
 
 /**
  * Retrofit (mise à jour de la section 2 de la spec) : fusionne
@@ -52,6 +58,8 @@ async function upsertRole(nom: string, roleParentNom: string | null, permissions
  * « Responsable Stock/Achats et Fournisseurs ». Les utilisateurs des deux
  * anciens rôles sont rattachés au rôle fusionné, puis les anciens rôles sont
  * supprimés. Idempotent : ne fait rien si les anciens rôles n'existent plus.
+ * Retrofit purement lié aux comptes de démonstration historiques — sans objet
+ * sur une base de production neuve, donc absent de `bootstrap-production.ts`.
  */
 async function fusionnerRolesStockAchats(nomFusionne: string) {
   const anciens = await prisma.role.findMany({
@@ -156,55 +164,8 @@ async function main() {
   // --- Retrofit : migration des comptes de démo vers boulangerie-lomoto.com ---
   await migrerEmailsDemoVersNouveauDomaine();
 
-  // --- Rôles, hiérarchie et matrice de permissions (section 2, à jour) ---
-
-  // DG : lecture seule partout SAUF Paramètres (aucun accès, ni lecture ni écriture).
-  await upsertRole(
-    "Directeur Général",
-    null,
-    TOUS_LES_MODULES.filter((m) => m !== Module.PARAMETRES).map(lecture),
-  );
-
-  // Administrateur (section 2, refonte des permissions). Les deux niveaux
-  // partagent CE rôle ; ils ne sont distingués que par Utilisateur.estAdminPrincipal.
-  // La matrice porte donc le socle de l'Admin SECONDAIRE : lecture sur tout,
-  // écriture sur Paramètres, Équipe et Travailleurs (qui couvre Activation, État
-  // système et Approbations, plus le roster du personnel depuis le retrait du
-  // rôle Chargé du personnel). L'Admin PRINCIPAL, super utilisateur, voit tous
-  // ses modules relevés en ÉCRITURE à la construction de son DTO
-  // (middleware/auth.ts) — même mécanisme que la fusion des délégations temporaires.
-  await upsertRole("Administrateur", "Directeur Général", [
-    ...TOUS_LES_MODULES.filter(
-      (m) => m !== Module.PARAMETRES && m !== Module.EQUIPE && m !== Module.TRAVAILLEURS,
-    ).map(lecture),
-    ecriture(Module.PARAMETRES),
-    ecriture(Module.EQUIPE),
-    ecriture(Module.TRAVAILLEURS),
-  ]);
-
-  // Caissier(ère) : écriture Caisse ; lecture Commandes (son subordonné),
-  // plus l'exception explicite : lecture Commissions et Production.
-  await upsertRole("Caissier(ère)", "Directeur Général", [
-    ecriture(Module.CAISSE),
-    lecture(Module.COMMANDES),
-    lecture(Module.COMMISSIONS),
-    lecture(Module.PRODUCTION),
-  ]);
-
-  // Chargé des commandes : écriture Commandes ; lecture Commissions (les
-  // commissions dérivent directement de ses commandes).
-  await upsertRole("Chargé des commandes", "Caissier(ère)", [
-    ecriture(Module.COMMANDES),
-    lecture(Module.COMMISSIONS),
-  ]);
-
-  await upsertRole("Responsable de production", "Directeur Général", [ecriture(Module.PRODUCTION)]);
-
-  // Rôle fusionné : écriture sur Stocks ET Fournisseurs & achats.
-  await upsertRole("Responsable Stock/Achats et Fournisseurs", "Directeur Général", [
-    ecriture(Module.STOCKS),
-    ecriture(Module.FOURNISSEURS),
-  ]);
+  // --- Rôles, permissions et motifs fixes — source unique : bootstrap-production.ts ---
+  await bootstrapProduction(prisma);
 
   // --- Types de clients (section 3.4) — montants en Fc ---
   const typesClients = [
@@ -233,6 +194,9 @@ async function main() {
   await upsertUtilisateur("Chargé du stock", "stock@boulangerie-lomoto.com", "Responsable Stock/Achats et Fournisseurs");
 
   // Le compte admin seedé est le compte Administrateur principal (unique).
+  // Réservé au seed de DÉMONSTRATION : `bootstrap-production.ts` ne touche
+  // jamais `estAdminPrincipal`, précisément pour ne jamais reproduire cet
+  // effet contre une base de production réelle (voir P0-01).
   await prisma.utilisateur.updateMany({
     where: { estAdminPrincipal: true, email: { not: "admin@boulangerie-lomoto.com" } },
     data: { estAdminPrincipal: false },
@@ -291,7 +255,7 @@ async function main() {
     });
   }
 
-  // --- Matières premières (section 3.2) — stock initial hors journal (seed) ---
+  // --- Matières premières (section 3.2) — stock initial FICTIF, dev/test uniquement ---
   // `code` relie les 4 ingrédients saisis à la production (section 3.3) à leur
   // matière : c'est lui qui pilote la décrémentation automatique du stock.
   // L'unité suit ce qui est réellement saisi (sacs de farine, paquets de levure).
@@ -313,19 +277,6 @@ async function main() {
     });
   }
 
-  // --- Motifs de don de bacs (section 3.3 b) — liste fixe extensible ---------
-  for (const nom of ["Police", "Baraka"]) {
-    await prisma.motifDon.upsert({ where: { nom }, update: {}, create: { nom } });
-  }
-
-  // --- Motifs de perte et de non-conformité (section 3.3 f) — liste fixe extensible ---
-  for (const nom of ["Cuisson ratée", "Casse / manutention", "Invendu périmé"]) {
-    await prisma.motifPerte.upsert({ where: { nom }, update: {}, create: { nom } });
-  }
-  for (const nom of ["Cuisson insuffisante", "Aspect non conforme", "Poids non conforme"]) {
-    await prisma.motifNonConformite.upsert({ where: { nom }, update: {}, create: { nom } });
-  }
-
   // --- Fournisseurs de démonstration (section 3.6) ---
   const fournisseurs = [
     { nom: "Minoterie du Congo", contact: "+243 820 000 010 — Av. des Moulins, Kinshasa" },
@@ -339,8 +290,8 @@ async function main() {
     });
   }
 
-  console.log("Seed terminé — 6 rôles, 3 types de clients, 8 utilisateurs, 5 clients, 4 produits, 6 matières premières, 2 motifs de don, 2 fournisseurs.");
-  console.log(`Mot de passe de démonstration pour tous les comptes : ${MOT_DE_PASSE_DEMO}`);
+  console.log("Seed de démonstration terminé — 6 rôles, 3 types de clients, 8 utilisateurs, 5 clients, 4 produits, 6 matières premières, 2 motifs de don, 2 fournisseurs.");
+  console.log(`Mot de passe de démonstration pour tous les comptes : ${MOT_DE_PASSE_DEMO} — DEV/TEST UNIQUEMENT, jamais valide en production.`);
 }
 
 main()

@@ -14,13 +14,14 @@
     "build": "npm run typecheck --workspace apps/api && npm run build --workspace apps/web",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "db:seed": "prisma db seed",
+    "db:bootstrap:production": "tsx prisma/bootstrap-production.ts",
+    "db:seed:demo": "prisma db seed",
     "test": "vitest run",
     "restore:backup": "tsx scripts/restaurer-sauvegarde.ts"
   },
   "prisma": {
     "schema": "prisma/schema.prisma",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed-demo.ts"
   },
   "overrides": {
     "deepmerge-ts": "^8.0.1"

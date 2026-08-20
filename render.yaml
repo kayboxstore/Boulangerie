@@ -20,11 +20,16 @@ services:
     region: frankfurt
     # --include=dev : Render met NODE_ENV=production, or on a besoin des outils
     # de build (vite, prisma CLI) qui sont en devDependencies.
+    # db:bootstrap:production (correctif P0-01) : ne crée QUE les rôles/permissions
+    # et motifs fixes indispensables au premier lancement — jamais de compte, jamais
+    # de mot de passe, jamais de donnée de démonstration. Le seed de démonstration
+    # (db:seed:demo) N'EST JAMAIS appelé ici ; il refuse même de s'exécuter si on
+    # tentait de le lancer avec NODE_ENV=production (voir prisma/seed-demo.ts).
     buildCommand: >-
       npm install --include=dev &&
       npx prisma generate &&
       npx prisma migrate deploy &&
-      npm run db:seed &&
+      npm run db:bootstrap:production &&
       npm run build --workspace apps/web
     startCommand: npm run start --workspace apps/api
     healthCheckPath: /api/health
