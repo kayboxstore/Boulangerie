@@ -98,6 +98,23 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-concurrence-equipe-ci.ts
 
+      - name: Vérification PostgreSQL réelle du correctif P1 — piste d'audit de MODIFIER_PERMISSIONS_ROLE (contre-revue Codex 24/08/2026)
+        # Additif, distinct des deux scripts ci-dessus : prouve que l'action
+        # critique MODIFIER_PERMISSIONS_ROLE écrit désormais une piste
+        # d'audit complète (état avant/après COMPLET et déterministe,
+        # diff ajouts/retraits/modifications, identité de l'acteur et du
+        # demandeur d'origine) DANS LA MÊME transaction PostgreSQL que les
+        # écritures RolePermission — avec deux preuves de ROLLBACK réel
+        # (échec d'une écriture de permission, échec de l'écriture d'audit
+        # elle-même) relues depuis une connexion séparée. Les tests unitaires
+        # mockés (apps/api/src/services/permissionsRoleAudit.test.ts)
+        # prouvent la logique ; seule une vraie base PostgreSQL peut prouver
+        # un vrai ROLLBACK. Même garde que les deux scripts précédents (hôte
+        # local + base exacte `lomoto_ci` + confirmation explicite).
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-audit-permissions-role-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest

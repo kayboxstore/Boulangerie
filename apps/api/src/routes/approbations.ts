@@ -55,7 +55,14 @@ approbationsRouter.post("/:id/approuver", async (req, res, next) => {
     if (!req.utilisateur!.estAdminPrincipal) {
       return res.status(403).json({ erreur: "Seul l'Administrateur principal peut approuver une demande" });
     }
-    const demande = await prisma.demandeApprobation.findUnique({ where: { id: req.params.id } });
+    // `demandePar` inclus explicitement : c'est l'identité du demandeur
+    // d'origine, distincte de l'Admin Principal qui approuve — voir
+    // `services/permissionsRoleAudit.ts`, seul exécuteur qui l'exploite
+    // aujourd'hui (piste d'audit de MODIFIER_PERMISSIONS_ROLE).
+    const demande = await prisma.demandeApprobation.findUnique({
+      where: { id: req.params.id },
+      include: { demandePar: { select: { id: true, nom: true } } },
+    });
     if (!demande) return res.status(404).json({ erreur: "Demande introuvable" });
     if (demande.statut !== "EN_ATTENTE") {
       return res.status(409).json({ erreur: "Cette demande a déjà été traitée" });
@@ -67,6 +74,7 @@ approbationsRouter.post("/:id/approuver", async (req, res, next) => {
       const { message } = await executerAction(
         demande.type as TypeActionCritique,
         demande.donnees as Record<string, unknown>,
+        demande.demandePar,
       );
       const maj = await prisma.demandeApprobation.update({
         where: { id: demande.id },

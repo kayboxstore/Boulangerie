@@ -4,6 +4,7 @@ import type { Request } from "express";
 import type { Module, NiveauAcces, ResultatActionCritique, TypeActionCritique } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { busEvenements } from "../lib/events.js";
+import { appliquerModificationPermissionsRole, type IdentiteActeur } from "./permissionsRoleAudit.js";
 
 /** Erreur métier d'une action critique, mappée en statut HTTP par l'appelant. */
 export class ErreurAction extends Error {
@@ -24,7 +25,14 @@ const MAX_COMPTES_ADMIN = 3;
 // ---------------------------------------------------------------------------
 
 type Donnees = Record<string, unknown>;
-type Executeur = (donnees: Donnees) => Promise<{ message: string }>;
+// `demandePar` : identité du demandeur d'origine quand l'exécution provient
+// de l'approbation d'une `DemandeApprobation` (Admin secondaire), `null`/absent
+// en exécution directe par l'Admin Principal. Seul `MODIFIER_PERMISSIONS_ROLE`
+// l'exploite pour l'instant (voir `permissionsRoleAudit.ts`) ; les autres
+// exécuteurs, à un seul paramètre, restent valides sans modification (une
+// fonction déclarant moins de paramètres que le type `Executeur` reste
+// assignable à ce type).
+type Executeur = (donnees: Donnees, demandePar?: IdentiteActeur | null) => Promise<{ message: string }>;
 
 const EXECUTEURS: Record<TypeActionCritique, Executeur> = {
   SUPPRIMER_UTILISATEUR: async ({ utilisateurId }) => {
@@ -94,32 +102,29 @@ const EXECUTEURS: Record<TypeActionCritique, Executeur> = {
     return { message: `Produit « ${produit.nom} » — taux de taxe fixé à ${produit.tauxTaxe} %` };
   },
 
-  MODIFIER_PERMISSIONS_ROLE: async ({ roleId, permissions }) => {
+  // Correctif P1 (contre-revue Codex, audit du 24/08/2026) : les écritures
+  // `RolePermission` restent des `upsert`/`deleteMany` inchangés (comportement
+  // métier préservé à l'identique) ; c'est désormais
+  // `appliquerModificationPermissionsRole` qui les enveloppe dans UNE SEULE
+  // transaction Serializable avec une piste d'audit explicite, complète et
+  // déterministe — voir `services/permissionsRoleAudit.ts` pour le détail
+  // et la justification du défaut corrigé.
+  MODIFIER_PERMISSIONS_ROLE: async ({ roleId, permissions }, demandePar) => {
     const role = await prisma.role.findUnique({ where: { id: roleId as string } });
     if (!role) throw new ErreurAction(404, "Rôle introuvable");
     const perms = permissions as { module: Module; niveauAcces: NiveauAcces }[];
-    await prisma.$transaction(async (tx) => {
-      for (const p of perms) {
-        await tx.rolePermission.upsert({
-          where: { roleId_module: { roleId: role.id, module: p.module } },
-          update: { niveauAcces: p.niveauAcces },
-          create: { roleId: role.id, module: p.module, niveauAcces: p.niveauAcces },
-        });
-      }
-      // Les modules absents de la liste (ou passés à AUCUN) sont retirés.
-      const gardes = perms.filter((p) => p.niveauAcces !== "AUCUN").map((p) => p.module);
-      await tx.rolePermission.deleteMany({
-        where: { roleId: role.id, module: { notIn: gardes.length ? gardes : ["CAISSE"] } },
-      });
-      if (!gardes.length) await tx.rolePermission.deleteMany({ where: { roleId: role.id } });
-    });
-    return { message: `Permissions du rôle « ${role.nom} » mises à jour` };
+    const { roleNom } = await appliquerModificationPermissionsRole(prisma, role.id, perms, demandePar ?? null);
+    return { message: `Permissions du rôle « ${roleNom} » mises à jour` };
   },
 };
 
 /** Rejoue une action critique à partir de son payload (utilisé à l'approbation). */
-export function executerAction(type: TypeActionCritique, donnees: Donnees): Promise<{ message: string }> {
-  return EXECUTEURS[type](donnees);
+export function executerAction(
+  type: TypeActionCritique,
+  donnees: Donnees,
+  demandePar?: IdentiteActeur | null,
+): Promise<{ message: string }> {
+  return EXECUTEURS[type](donnees, demandePar);
 }
 
 /**
