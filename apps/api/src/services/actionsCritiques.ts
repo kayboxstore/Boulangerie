@@ -6,87 +6,45 @@ import { prisma } from "../lib/prisma.js";
 import { busEvenements } from "../lib/events.js";
 import { ErreurAction } from "../lib/erreurAction.js";
 import { appliquerModificationPermissionsRole } from "./permissionsRoleAudit.js";
+import {
+  creerCompteAdminDirect,
+  modifierTauxTaxeDirect,
+  modifierTypeClientDirect,
+  supprimerUtilisateurDirect,
+  type DonneesCreerCompteAdmin,
+  type DonneesModifierTypeClient,
+} from "./actionsCritiquesMetier.js";
 
 export { ErreurAction } from "../lib/erreurAction.js";
-
-const ROLE_ADMINISTRATEUR = "Administrateur";
-const MAX_COMPTES_ADMIN = 3;
 
 // ---------------------------------------------------------------------------
 // Exécuteurs — source unique de vérité pour chaque tâche critique. Rejoués tels
 // quels à l'approbation (donc revérifient l'état, qui a pu changer entre-temps).
+//
+// SUPPRIMER_UTILISATEUR, CREER_COMPTE_ADMIN, MODIFIER_TYPE_CLIENT et
+// MODIFIER_TAUX_TAXE (mission P1 « atomicité exécution métier », 25/08/2026) :
+// délèguent désormais aux wrappers « Direct » de `actionsCritiquesMetier.ts`,
+// qui ouvrent chacun leur propre transaction Serializable et appellent la
+// MÊME fonction tx-aware que le chemin d'approbation
+// (`approuverEtExecuterActionMetier`, appelée par `routes/approbations.ts`)
+// — exigence #8 de la mission : le chemin direct de l'Admin Principal utilise
+// le même code métier, sans changement du contrat HTTP de ce fichier
+// (`executerAction`/`traiterActionCritique` inchangés pour leurs appelants).
 // ---------------------------------------------------------------------------
 
 type Donnees = Record<string, unknown>;
 type Executeur = (donnees: Donnees) => Promise<{ message: string }>;
 
 const EXECUTEURS: Record<TypeActionCritique, Executeur> = {
-  SUPPRIMER_UTILISATEUR: async ({ utilisateurId }) => {
-    const compte = await prisma.utilisateur.findUnique({ where: { id: utilisateurId as string } });
-    if (!compte) throw new ErreurAction(404, "Compte introuvable");
-    if (compte.estAdminPrincipal) {
-      throw new ErreurAction(409, "Transférez d'abord le statut d'Administrateur principal");
-    }
-    try {
-      await prisma.utilisateur.delete({ where: { id: compte.id } });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
-        throw new ErreurAction(
-          409,
-          "Suppression impossible : ce compte a de l'activité enregistrée (ventes, commandes…).",
-        );
-      }
-      throw e;
-    }
-    return { message: `Compte « ${compte.nom} » supprimé` };
-  },
+  SUPPRIMER_UTILISATEUR: ({ utilisateurId }) => supprimerUtilisateurDirect(prisma, utilisateurId as string),
 
-  CREER_COMPTE_ADMIN: async ({ nom, email, roleId, motDePasseHash, travailleurId }) => {
-    const existant = await prisma.utilisateur.findUnique({ where: { email: email as string } });
-    if (existant) throw new ErreurAction(409, "Un compte utilise déjà cette adresse e-mail");
-    const nbAdmins = await prisma.utilisateur.count({ where: { role: { nom: ROLE_ADMINISTRATEUR } } });
-    if (nbAdmins >= MAX_COMPTES_ADMIN) {
-      throw new ErreurAction(409, `Limite atteinte : au plus ${MAX_COMPTES_ADMIN} comptes Administrateur`);
-    }
-    const compte = await prisma.$transaction(async (tx) => {
-      const c = await tx.utilisateur.create({
-        data: {
-          nom: nom as string,
-          email: email as string,
-          roleId: roleId as string,
-          motDePasseHash: motDePasseHash as string,
-          motDePasseDoitChanger: true,
-        },
-      });
-      // Identifiant de connexion issu de Travailleurs (section 3.7) : la fiche
-      // d'origine reste liée au compte qu'elle vient de générer.
-      if (travailleurId) await tx.travailleur.update({ where: { id: travailleurId as string }, data: { utilisateurId: c.id } });
-      return c;
-    });
-    return { message: `Compte Administrateur « ${compte.nom} » créé` };
-  },
+  CREER_COMPTE_ADMIN: (donnees) => creerCompteAdminDirect(prisma, donnees as unknown as DonneesCreerCompteAdmin),
 
-  MODIFIER_TYPE_CLIENT: async ({ typeClientId, data }) => {
-    const d = data as { nom?: string; prixParBac?: number; commissionParBac?: number };
-    const existant = await prisma.typeClient.findUnique({ where: { id: typeClientId as string } });
-    if (!existant) throw new ErreurAction(404, "Qualité introuvable");
-    if (d.nom && d.nom !== existant.nom) {
-      const doublon = await prisma.typeClient.findUnique({ where: { nom: d.nom } });
-      if (doublon) throw new ErreurAction(409, "Une qualité porte déjà ce nom");
-    }
-    const tc = await prisma.typeClient.update({ where: { id: existant.id }, data: d });
-    return { message: `Qualité « ${tc.nom} » mise à jour` };
-  },
+  MODIFIER_TYPE_CLIENT: ({ typeClientId, data }) =>
+    modifierTypeClientDirect(prisma, typeClientId as string, data as DonneesModifierTypeClient),
 
-  MODIFIER_TAUX_TAXE: async ({ produitId, data }) => {
-    const existant = await prisma.produit.findUnique({ where: { id: produitId as string } });
-    if (!existant) throw new ErreurAction(404, "Produit introuvable");
-    const produit = await prisma.produit.update({
-      where: { id: existant.id },
-      data: data as Prisma.ProduitUpdateInput,
-    });
-    return { message: `Produit « ${produit.nom} » — taux de taxe fixé à ${produit.tauxTaxe} %` };
-  },
+  MODIFIER_TAUX_TAXE: ({ produitId, data }) =>
+    modifierTauxTaxeDirect(prisma, produitId as string, data as Prisma.ProduitUpdateManyMutationInput),
 
   // Correctif P1 (contre-revue Codex, audit du 24/08/2026 — Round 1 et 2) :
   // les écritures `RolePermission` restent des `upsert`/`deleteMany`

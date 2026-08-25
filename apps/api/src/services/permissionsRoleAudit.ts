@@ -4,7 +4,20 @@ import type { Module, NiveauAcces } from "@lomoto/shared";
 import type { prisma as prismaApp, TxClient } from "../lib/prisma.js";
 import { contexteRequete } from "../lib/contexteRequete.js";
 import { ErreurAction } from "../lib/erreurAction.js";
-import { ErreurDecisionConcurrente } from "./demandeApprobation.js";
+import {
+  approuverEtExecuterDemandeAtomique,
+  ErreurApprobationConcurrente,
+  ErreurConflitApprobationReessayable,
+  type CrochetsTestApprobationAtomique,
+} from "./demandeApprobation.js";
+
+// Ré-exportées pour compatibilité : ces deux classes ont été rendues
+// GÉNÉRIQUES (mission P1 « atomicité exécution métier », 25/08/2026) et
+// déplacées dans `demandeApprobation.ts`, d'où `approuverEtExecuterActionMetier`
+// (`services/actionsCritiquesMetier.ts`) les importe aussi désormais — mais
+// tout le code existant (`routes/approbations.ts`, les tests) continue de les
+// importer d'ICI sans aucun changement.
+export { ErreurApprobationConcurrente, ErreurConflitApprobationReessayable };
 
 /**
  * Piste d'audit ET atomicité d'approbation, dédiées à l'action critique
@@ -36,18 +49,20 @@ import { ErreurDecisionConcurrente } from "./demandeApprobation.js";
  * `APPROUVEE` — LE TOUT dans une seule transaction PostgreSQL Serializable.
  * Voir son en-tête pour le détail du mécanisme.
  *
- * P1 restant, explicitement non traité ici (voir rapport de livraison) : les
- * 4 AUTRES types d'action critique (`SUPPRIMER_UTILISATEUR`,
- * `CREER_COMPTE_ADMIN`, `MODIFIER_TYPE_CLIENT`, `MODIFIER_TAUX_TAXE`)
- * continuent de transiter par l'ANCIEN chemin non atomique dans
- * `routes/approbations.ts` — la même course (a)/(b) ci-dessus reste
- * possible pour eux. Une correction générique aurait exigé de rendre les
- * QUATRE autres exécuteurs de `actionsCritiques.ts` « tx-aware » (accepter
- * un client transactionnel déjà ouvert plutôt que d'utiliser chacun leur
- * propre `prisma.$transaction` ou écriture directe) — un refactor plus
- * large, hors du périmètre strict de ce Round 2 (« Deux P1 doivent être
- * corrigés », tous deux scopés à `MODIFIER_PERMISSIONS_ROLE`). Signalé
- * explicitement plutôt que prétendu résolu.
+ * P1 des 4 AUTRES types d'action critique — CORRIGÉ (mission « atomicité
+ * exécution métier + décision pour les 4 autres approbations », 25/08/2026) :
+ * au moment du Round 2 ci-dessus, `SUPPRIMER_UTILISATEUR`,
+ * `CREER_COMPTE_ADMIN`, `MODIFIER_TYPE_CLIENT` et `MODIFIER_TAUX_TAXE`
+ * continuaient de transiter par un chemin non atomique dans
+ * `routes/approbations.ts` — la même course (a)/(b) ci-dessus restait
+ * possible pour eux. Corrigé en rendant les QUATRE exécuteurs
+ * « tx-aware » (`services/actionsCritiquesMetier.ts` : `supprimerUtilisateurTx`,
+ * `creerCompteAdminTx`, `modifierTypeClientTx`, `modifierTauxTaxeTx`),
+ * réutilisant le même mécanisme générique que ci-dessous — désormais extrait
+ * dans `services/demandeApprobation.ts`
+ * (`approuverEtExecuterDemandeAtomique`), dont
+ * `approuverEtAppliquerModificationPermissionsRole` elle-même délègue
+ * maintenant l'essentiel (voir plus bas).
  *
  * Choix de conception (voir contraintes de la mission) :
  *  - AUCUN changement de schéma Prisma : réutilise `AuditLog` (mêmes
@@ -128,52 +143,10 @@ export class ErreurActeurRequisPourAudit extends Error {
   }
 }
 
-/**
- * Levée quand la réservation atomique de la `DemandeApprobation` n'affecte
- * aucune ligne — la demande a RÉELLEMENT déjà été traitée (approuvée,
- * rejetée) par une requête concurrente qui a gagné la course — OU quand,
- * après épuisement des tentatives de réessai sur un P2034 persistant, une
- * relecture RÉELLE (hors de toute transaction avortée) confirme que la
- * demande est bien devenue TERMINALE entre-temps (voir
- * `approuverEtAppliquerModificationPermissionsRole`, correctif Round 4).
- * Mappée en 409 par l'appelant (`routes/approbations.ts`) — jamais affirmée
- * sans cette relecture réelle : voir `ErreurConflitApprobationReessayable`
- * pour le cas distinct où la demande reste `EN_ATTENTE` malgré l'échec.
- *
- * Étend `ErreurDecisionConcurrente` (mécanisme générique,
- * `services/demandeApprobation.ts`) : un `instanceof ErreurDecisionConcurrente`
- * dans le routeur reconnaît donc aussi bien ce cas spécifique à
- * `MODIFIER_PERMISSIONS_ROLE` que le rejet/l'approbation générique des 4
- * autres types — sans rien changer pour le code existant qui teste
- * spécifiquement `instanceof ErreurApprobationConcurrente` (toujours vrai).
- */
-export class ErreurApprobationConcurrente extends ErreurDecisionConcurrente {
-  constructor() {
-    super("Cette demande a déjà été traitée — approuvée, rejetée, ou approuvée par une requête concurrente entre-temps.");
-  }
-}
-
-/**
- * Levée quand les tentatives de réessai sur un P2034 (conflit de
- * sérialisation PostgreSQL) sont épuisées ALORS QUE la demande, relue
- * RÉELLEMENT hors de toute transaction avortée, est encore `EN_ATTENTE` —
- * correctif Round 4 (contre-revue Codex du 25/08/2026) : distincte
- * d'`ErreurApprobationConcurrente`, qui affirme qu'une AUTRE décision a
- * réellement gagné (constaté par cette même relecture). Ici, personne n'a
- * gagné : c'est un conflit de sérialisation RÉEL et PERSISTANT (contention
- * élevée sur cette ressource, par exemple), pas une décision concurrente
- * terminale — la demande reste traitable, un nouvel essai a de bonnes
- * chances d'aboutir. Mappée en 503 (temporairement indisponible, réessayer)
- * par l'appelant, jamais en 500 brut ni en 409 « déjà traitée » (ce serait
- * un mensonge : l'action n'a PAS été décidée par quelqu'un d'autre).
- */
-export class ErreurConflitApprobationReessayable extends Error {
-  constructor() {
-    super(
-      "Conflit de sérialisation PostgreSQL persistant après plusieurs tentatives — la demande est toujours en attente, réessayez.",
-    );
-  }
-}
+// `ErreurApprobationConcurrente` et `ErreurConflitApprobationReessayable`
+// sont désormais définies et exportées par `demandeApprobation.ts` (mécanisme
+// générique, mission P1 du 25/08/2026) — importées et ré-exportées en tête de
+// ce fichier pour compatibilité totale avec le code existant.
 
 // Ordre alphabétique fixe, calculé une seule fois : source unique de
 // déterminisme pour tous les instantanés et diffs de ce module.
@@ -368,59 +341,18 @@ export interface ResultatApprobationPermissionsRole {
  * si elle est toujours `EN_ATTENTE`, `ErreurConflitApprobationReessayable`
  * (503, conflit réel mais PERSONNE n'a encore gagné — réessayer a de bonnes
  * chances d'aboutir). Jamais un 500 brut dans les deux cas.
+ *
+ * Mission P1 « atomicité exécution métier » (25/08/2026) : le mécanisme de
+ * réservation + réessai borné P2034 ci-dessus (jusqu'ici dupliqué ici) a été
+ * extrait en une fonction GÉNÉRIQUE, `approuverEtExecuterDemandeAtomique`
+ * (`services/demandeApprobation.ts`), désormais partagée avec les 4 autres
+ * types d'action critique (`services/actionsCritiquesMetier.ts`). Cette
+ * fonction ne fait plus que fournir le callback d'exécution métier propre à
+ * `MODIFIER_PERMISSIONS_ROLE` — comportement observable strictement
+ * inchangé (mêmes erreurs, mêmes crochets de test, même isolation
+ * Serializable, même réessai borné à 3 tentatives).
  */
-const NB_TENTATIVES_MAX_P2034 = 3;
-export interface CrochetsTestApprobation {
-  /**
-   * Appelé (si fourni) juste AVANT la réservation conditionnelle
-   * (`updateMany` sur `DemandeApprobation`) — jamais utilisé en production.
-   * Correctif Round 4 (contre-revue Codex du 25/08/2026, P1) : quand CETTE
-   * transaction est censée être celle qui se heurte réellement au verrou
-   * d'une autre transaction concurrente déjà en cours (le blocage survient
-   * PENDANT la réservation elle-même, ex. deux tentatives sur la MÊME
-   * `DemandeApprobation`), c'est ICI — et seulement ici, depuis `tx` — que
-   * le pid PostgreSQL réel de CETTE transaction doit être capturé, JAMAIS
-   * via un `PrismaClient` interrogé séparément avant l'appel : Prisma
-   * multiplexe ses requêtes sur un pool de connexions et rien ne garantit
-   * qu'une requête hors transaction et la transaction ouverte juste après
-   * réutilisent la même connexion physique — un tel pid capturé « avant »
-   * peut donc être celui d'une connexion totalement différente de celle qui
-   * se bloque réellement, rendant l'observation `pg_blocking_pids` ultérieure
-   * non probante. Voir `apresReservationAvantExecution` ci-dessous pour le
-   * cas symétrique (blocage survenant APRÈS une réservation qui, elle,
-   * réussit sans conflit).
-   */
-  avantReservation?: (tx: TxClient) => Promise<void>;
-  /**
-   * Appelé (si fourni) juste après que la réservation a réussi, AVANT la
-   * lecture/exécution de l'action — jamais utilisé par la route de
-   * production (`routes/approbations.ts` ne le passe jamais). Sert
-   * uniquement à `scripts/verifier-audit-permissions-role-ci.ts` pour
-   * garantir un chevauchement RÉEL et déterministe avec une seconde
-   * tentative concurrente (elle-même lancée DEPUIS ce crochet, sur une
-   * connexion séparée) — pas un simple pari sur le hasard du timing de
-   * `Promise.allSettled`. Même principe que
-   * `CrochetsTestTransfert.apresRetraitAvantAttribution` dans
-   * `services/principal.ts`. Reçoit `tx` (le client transactionnel en
-   * cours) pour permettre au script d'interroger `pg_backend_pid()` SUR LA
-   * CONNEXION RÉELLE de cette transaction — indispensable pour observer
-   * ensuite, depuis une troisième connexion, qu'une autre session est
-   * RÉELLEMENT bloquée sur CE pid précis (`pg_blocking_pids`), plutôt que de
-   * supposer un pid obtenu hors transaction.
-   */
-  apresReservationAvantExecution?: (tx: TxClient) => Promise<void>;
-  /**
-   * Appelé (si fourni) juste après que l'action a été exécutée (permissions
-   * écrites, audit journalisé) MAIS AVANT que la transaction ne committe —
-   * jamais utilisé en production. Correctif Round 3, P2-02 : permet de
-   * prouver qu'un conflit de sérialisation PostgreSQL (P2034) survenant
-   * APRÈS la réservation — sur l'écriture RolePermission elle-même, pas sur
-   * le premier `updateMany` — est lui aussi couvert par le réessai borné
-   * (voir plus bas). Même règle : reçoit `tx` pour obtenir le pid réel de
-   * cette transaction.
-   */
-  apresExecutionAvantRetour?: (tx: TxClient) => Promise<void>;
-}
+export type CrochetsTestApprobation = CrochetsTestApprobationAtomique;
 
 export async function approuverEtAppliquerModificationPermissionsRole(
   db: typeof prismaApp,
@@ -428,105 +360,34 @@ export async function approuverEtAppliquerModificationPermissionsRole(
   approbateur: IdentiteActeur,
   crochets?: CrochetsTestApprobation,
 ): Promise<ResultatApprobationPermissionsRole> {
-  for (let tentative = 1; tentative <= NB_TENTATIVES_MAX_P2034; tentative++) {
-    try {
-      // Chaque tentative ouvre une TOUTE NOUVELLE transaction : une
-      // transaction PostgreSQL avortée par un P2034 ne peut pas être
-      // « reprise » — elle doit être entièrement rejouée, réservation
-      // conditionnelle comprise, pour re-décider honnêtement de l'état
-      // réellement en vigueur au moment du nouvel essai.
-      return await db.$transaction(
-        async (tx) => {
-          const dateDecision = new Date();
-          if (crochets?.avantReservation) {
-            await crochets.avantReservation(tx);
-          }
-          const reservation = await tx.demandeApprobation.updateMany({
-            where: { id: demandeApprobationId, statut: "EN_ATTENTE" },
-            data: { statut: "APPROUVEE", approuveParId: approbateur.id, dateDecision, erreur: null },
-          });
-          if (reservation.count !== 1) throw new ErreurApprobationConcurrente();
-
-          if (crochets?.apresReservationAvantExecution) {
-            await crochets.apresReservationAvantExecution(tx);
-          }
-
-          const demande = await tx.demandeApprobation.findUniqueOrThrow({
-            where: { id: demandeApprobationId },
-            include: { demandePar: { select: { id: true, nom: true } } },
-          });
-          if (demande.type !== "MODIFIER_PERMISSIONS_ROLE") {
-            // Ne devrait jamais se produire : l'appelant
-            // (routes/approbations.ts) n'aiguille vers cette fonction que
-            // pour ce type précis. Garde défensive plutôt qu'une hypothèse
-            // silencieuse.
-            throw new Error(
-              `approuverEtAppliquerModificationPermissionsRole appelée pour un type d'action inattendu : ${demande.type}`,
-            );
-          }
-          const { roleId, permissions } = demande.donnees as unknown as {
-            roleId: string;
-            permissions: EntreePermission[];
-          };
-
-          const resultat = await appliquerModificationPermissionsRoleTx(tx, roleId, permissions, {
-            mode: "APPROBATION",
-            demandeApprobationId,
-            demandePar: demande.demandePar,
-          });
-
-          if (crochets?.apresExecutionAvantRetour) {
-            await crochets.apresExecutionAvantRetour(tx);
-          }
-
-          return {
-            roleNom: resultat.roleNom,
-            avant: resultat.avant,
-            apres: resultat.apres,
-            diff: resultat.diff,
-            demandeStatut: "APPROUVEE",
-            demandeApprouveParId: approbateur.id,
-            demandeDateDecision: dateDecision,
-          };
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  return approuverEtExecuterDemandeAtomique(db, demandeApprobationId, approbateur, async (tx, demande, dateDecision) => {
+    if (demande.type !== "MODIFIER_PERMISSIONS_ROLE") {
+      // Ne devrait jamais se produire : l'appelant (routes/approbations.ts)
+      // n'aiguille vers cette fonction que pour ce type précis. Garde
+      // défensive plutôt qu'une hypothèse silencieuse.
+      throw new Error(
+        `approuverEtAppliquerModificationPermissionsRole appelée pour un type d'action inattendu : ${demande.type}`,
       );
-    } catch (e) {
-      // Sous isolation Serializable, PostgreSQL peut ABORTER la transaction
-      // perdante avec une erreur de sérialisation (SQLSTATE 40001, P2034
-      // côté Prisma) à N'IMPORTE QUEL MOMENT de la transaction — pas
-      // seulement sur le premier `updateMany` de réservation (voir l'en-tête
-      // de cette fonction, correctif Round 3 P2-02). D'où l'enveloppe autour
-      // de l'appel COMPLET à `$transaction`, pas d'un seul `await` interne.
-      const estP2034 = e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034";
-      if (!estP2034) throw e;
-      if (tentative < NB_TENTATIVES_MAX_P2034) continue;
-      // Tentatives épuisées avec un P2034 persistant : chaque tentative a
-      // avorté SA PROPRE transaction (réservation comprise), donc rien ici
-      // ne permet de SUPPOSER que la demande a été tranchée par quelqu'un
-      // d'autre — correctif Round 4 (contre-revue Codex du 25/08/2026) :
-      // relit l'état RÉEL, hors de toute transaction avortée, pour décider
-      // honnêtement laquelle des deux erreurs distinctes renvoyer.
-      const demandeReelle = await db.demandeApprobation.findUnique({
-        where: { id: demandeApprobationId },
-        select: { statut: true },
-      });
-      if (!demandeReelle || demandeReelle.statut !== "EN_ATTENTE") {
-        // Devenue terminale (ou introuvable — cas défensif, aucune route ne
-        // supprime de DemandeApprobation) : une décision concurrente a
-        // RÉELLEMENT gagné pendant nos tentatives.
-        throw new ErreurApprobationConcurrente();
-      }
-      // Toujours EN_ATTENTE malgré l'épuisement des tentatives : conflit de
-      // sérialisation RÉEL et PERSISTANT, PAS une décision concurrente
-      // gagnante — jamais affirmer « déjà traitée » quand ce n'est pas le
-      // cas, et jamais remonter le P2034 brut (500).
-      throw new ErreurConflitApprobationReessayable();
     }
-  }
-  // Inatteignable : la boucle retourne ou lève à chaque itération, et
-  // `NB_TENTATIVES_MAX_P2034 >= 1`. Présent uniquement pour satisfaire le
-  // vérificateur de type (toutes les branches ne renvoient pas explicitement
-  // depuis le corps de la boucle du point de vue du compilateur).
-  throw new ErreurApprobationConcurrente();
+    const { roleId, permissions } = demande.donnees as unknown as {
+      roleId: string;
+      permissions: EntreePermission[];
+    };
+
+    const resultat = await appliquerModificationPermissionsRoleTx(tx, roleId, permissions, {
+      mode: "APPROBATION",
+      demandeApprobationId,
+      demandePar: demande.demandePar,
+    });
+
+    return {
+      roleNom: resultat.roleNom,
+      avant: resultat.avant,
+      apres: resultat.apres,
+      diff: resultat.diff,
+      demandeStatut: "APPROUVEE" as const,
+      demandeApprouveParId: approbateur.id,
+      demandeDateDecision: dateDecision,
+    };
+  }, crochets);
 }
