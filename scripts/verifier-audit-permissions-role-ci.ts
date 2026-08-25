@@ -19,18 +19,38 @@
  *      MÊME transaction (scénario 6) ;
  *  (2) un échec de l'écriture d'audit annule RÉELLEMENT toutes les écritures
  *      de permission déjà appliquées (scénario 7) ;
- *  (3) deux approbations RÉELLEMENT concurrentes (synchronisation
- *      déterministe via un crochet, PAS un pari sur le hasard du timing) sur
- *      la même demande produisent exactement un succès et un rejet contrôlé,
- *      sans double exécution ni doublon d'audit (scénario 10) ;
+ *  (3) deux approbations RÉELLEMENT concurrentes — blocage RÉELLEMENT
+ *      observé depuis une troisième connexion (`pg_blocking_pids`), jamais
+ *      un délai arbitraire — sur la même demande produisent exactement un
+ *      succès et un rejet contrôlé, sans double exécution ni doublon
+ *      d'audit (scénario 10) ;
  *  (4) un échec injecté APRÈS la réservation atomique de la demande annule
  *      RÉELLEMENT la réservation elle-même (la demande redevient EN_ATTENTE),
- *      en plus des permissions et de l'audit (scénario 11).
+ *      en plus des permissions et de l'audit (scénario 14).
+ * Round 3 (correctifs P1-01, P1-02, P2-02, contre-revue Codex du 24/08/2026)
+ * ajoute la preuve, contre la même vraie base, que :
+ *  (5) une approbation et un rejet RÉELLEMENT concurrents sur la même
+ *      demande se départagent de façon atomique dans les DEUX ordres — quand
+ *      l'approbation réserve en premier, le rejet concurrent échoue sans
+ *      jamais écraser la décision APPROUVEE (scénario 11) ; quand c'est le
+ *      rejet qui réserve en premier, l'approbation concurrente échoue SANS
+ *      JAMAIS exécuter l'action (scénario 12) ;
+ *  (6) un conflit de sérialisation PostgreSQL RÉEL (P2034) survenant APRÈS
+ *      la réservation — sur l'écriture RolePermission elle-même, pas sur le
+ *      premier `updateMany` — déclenche un réessai RÉEL (nouvelle
+ *      transaction rouverte), jamais un 500 brut, jamais de doublon d'audit
+ *      (scénario 13).
+ * Toutes les preuves de concurrence (scénarios 10 à 13) reposent désormais
+ * sur une observation RÉELLE du verrou PostgreSQL en jeu, depuis une
+ * troisième connexion (`pg_blocking_pids`), et non plus sur un délai
+ * arbitraire après lancement de la transaction concurrente — voir
+ * `pidDeLaTransaction` / `attendreBlocageReel` ci-dessous.
  * C'est l'objet de ce script — il exerce EXACTEMENT le code de production,
- * `appliquerModificationPermissionsRole` et
- * `approuverEtAppliquerModificationPermissionsRole`, importées telles quelles
- * depuis `apps/api/src/services/permissionsRoleAudit.js` (jamais
- * réimplémentées ici).
+ * `appliquerModificationPermissionsRole`,
+ * `approuverEtAppliquerModificationPermissionsRole` et
+ * `rejeterDemandeApprobationAtomique`, importées telles quelles depuis
+ * `apps/api/src/services/permissionsRoleAudit.js` et
+ * `apps/api/src/services/demandeApprobation.js` (jamais réimplémentées ici).
  *
  * SÉCURITÉ : même garde que les scripts P0-01 — `verifierEnvironnementIntegrationCI`
  * (réutilisée telle quelle, pas dupliquée) exige simultanément un hôte local,
@@ -48,6 +68,10 @@ import {
   ErreurApprobationConcurrente,
   type EntreePermission,
 } from "../apps/api/src/services/permissionsRoleAudit.js";
+import {
+  ErreurDecisionConcurrente,
+  rejeterDemandeApprobationAtomique,
+} from "../apps/api/src/services/demandeApprobation.js";
 import { contexteRequete } from "../apps/api/src/lib/contexteRequete.js";
 import { verifierEnvironnementIntegrationCI } from "./garde-integration-ci.js";
 
@@ -97,8 +121,80 @@ async function compterAuditLogsRole(roleId: string) {
   return prisma.auditLog.count({ where: { typeEntite: "Role", entiteId: roleId } });
 }
 
+// --- Preuve de verrou DÉTERMINISTE (correctif Round 3, P1-02) --------------
+//
+// Défaut corrigé : le scénario 10 (Round 2) lançait B DEPUIS le crochet de A
+// (transaction encore ouverte, verrou de ligne réellement tenu), mais
+// utilisait ensuite `await new Promise((resolve) => setTimeout(resolve,
+// 300))` pour « laisser le temps » à la requête de B d'atteindre PostgreSQL
+// et de se heurter au verrou — un DÉLAI ARBITRAIRE ne prouve PAS que B a
+// réellement atteint PostgreSQL et s'y trouve réellement en attente : le
+// scénario aurait pu passer même avec des opérations strictement
+// séquentielles (si B avait par exemple été anormalement lent à démarrer,
+// rien ne l'aurait détecté ; à l'inverse, un délai insuffisant sur une
+// machine chargée aurait pu laisser filer une fausse preuve de non-blocage).
+//
+// Remplacé par une observation RÉELLE, depuis une TROISIÈME connexion
+// PostgreSQL, du fait que la session de B est GÉNUINEMENT en attente d'un
+// verrou détenu par la session de A — via les vues système `pg_stat_activity`
+// / `pg_locks` de PostgreSQL (fonction native `pg_blocking_pids`), jamais un
+// pari sur le timing. Le délai maximal ci-dessous n'est utilisé QUE comme
+// garde-fou d'ÉCHEC de test (le scénario échoue explicitement si l'attente
+// n'est jamais observée) — JAMAIS comme mécanisme de synchronisation : la
+// boucle se termine dès que l'observation réussit, souvent en quelques
+// millisecondes.
+
+/**
+ * Pid PostgreSQL RÉEL de la connexion physique utilisée par CETTE
+ * transaction précise — interrogé SUR `tx` lui-même (jamais sur le client
+ * parent hors transaction, dont le pool pourrait allouer une connexion
+ * différente).
+ */
+async function pidDeLaTransaction(tx: { $queryRaw: PrismaClient["$queryRaw"] }): Promise<number> {
+  const lignes = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+  const pid = lignes[0]?.pid;
+  if (typeof pid !== "number") throw new Error("pidDeLaTransaction : pg_backend_pid() n'a renvoyé aucun pid exploitable");
+  return pid;
+}
+
+/**
+ * Bloque jusqu'à observer, depuis `observateur` (une TROISIÈME connexion,
+ * distincte des deux transactions en course), que la session PostgreSQL
+ * `pidBloque` est RÉELLEMENT en attente d'un verrou détenu par la session
+ * `pidBloquant` — via la fonction native `pg_blocking_pids(pid)`, qui liste
+ * les pid bloquant réellement une session donnée. Ne renvoie JAMAIS avant
+ * cette observation réelle ; lève un échec de test explicite si elle n'a
+ * jamais lieu avant `delaiMaxMs` (garde-fou, jamais la synchronisation
+ * elle-même).
+ */
+async function attendreBlocageReel(
+  observateur: PrismaClient,
+  pidBloque: number,
+  pidBloquant: number,
+  description: string,
+  delaiMaxMs = 5000,
+): Promise<void> {
+  const debut = Date.now();
+  for (;;) {
+    const lignes = await observateur.$queryRaw<{ bloquants: number[] }[]>`
+      SELECT pg_blocking_pids(${pidBloque}::int) AS bloquants
+    `;
+    const bloquants = (lignes[0]?.bloquants ?? []).map(Number);
+    if (bloquants.includes(pidBloquant)) return; // observation RÉELLE et positive — synchronisation terminée
+    if (Date.now() - debut > delaiMaxMs) {
+      throw new Error(
+        `${description} : jamais observé, depuis une connexion tierce, que la session pid=${pidBloque} est ` +
+          `réellement bloquée par la session pid=${pidBloquant} (pg_blocking_pids) dans les ${delaiMaxMs}ms — ce ` +
+          "délai est un GARDE-FOU D'ÉCHEC DE TEST, jamais un mécanisme de synchronisation ; son expiration signifie " +
+          "soit que le scénario est mal construit, soit qu'aucun conflit réel n'a eu lieu entre les deux sessions.",
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
 async function main() {
-  console.log("→ Scénario 1/11 : ajout d'une permission, exécution DIRECTE (base PostgreSQL réelle)…");
+  console.log("→ Scénario 1/14 : ajout d'une permission, exécution DIRECTE (base PostgreSQL réelle)…");
   let roleId!: string;
   let acteurId!: string;
   let acteurNom!: string;
@@ -125,7 +221,7 @@ async function main() {
     console.log("  ✓ RolePermission réellement créée, exactement 1 AuditLog écrit.");
   }
 
-  console.log("→ Scénario 2/11 : modification + ajout combinés (base réelle)…");
+  console.log("→ Scénario 2/14 : modification + ajout combinés (base réelle)…");
   {
     const resultat = await contexteRequete.run({ id: acteurId, nom: acteurNom }, () =>
       appliquerModificationPermissionsRole(dbPourAudit, roleId, [
@@ -144,7 +240,7 @@ async function main() {
     console.log("  ✓ modification ET ajout réels, tous deux visibles en base.");
   }
 
-  console.log("→ Scénario 3/11 : retrait total (liste vide) — base réelle…");
+  console.log("→ Scénario 3/14 : retrait total (liste vide) — base réelle…");
   {
     const resultat = await contexteRequete.run({ id: acteurId, nom: acteurNom }, () =>
       appliquerModificationPermissionsRole(dbPourAudit, roleId, []),
@@ -157,7 +253,7 @@ async function main() {
     console.log("  ✓ toutes les RolePermission réellement supprimées, diff.retraits exact.");
   }
 
-  console.log("→ Scénario 4/11 : absence de doublon d'audit sur un appel à plusieurs changements…");
+  console.log("→ Scénario 4/14 : absence de doublon d'audit sur un appel à plusieurs changements…");
   {
     const nbAvant = await compterAuditLogsRole(roleId);
     await contexteRequete.run({ id: acteurId, nom: acteurNom }, () =>
@@ -174,7 +270,7 @@ async function main() {
     console.log("  ✓ une seule ligne AuditLog pour 3 permissions changées dans le même appel.");
   }
 
-  console.log("→ Scénario 5/11 : répétition idempotente (même matrice deux fois) — diff vide au 2e appel réel…");
+  console.log("→ Scénario 5/14 : répétition idempotente (même matrice deux fois) — diff vide au 2e appel réel…");
   {
     const permsActuelles = (await permissionsReelles(roleId)).map((p) => ({
       module: p.module,
@@ -192,7 +288,7 @@ async function main() {
     console.log("  ✓ resoumission exacte : 1 nouvelle ligne d'audit quand même écrite, diff vide comme documenté.");
   }
 
-  console.log("→ Scénario 6/11 : ÉCHEC RÉEL d'une écriture de permission (valeur de module invalide) → ROLLBACK réel…");
+  console.log("→ Scénario 6/14 : ÉCHEC RÉEL d'une écriture de permission (valeur de module invalide) → ROLLBACK réel…");
   {
     // Le rejet d'une valeur de module hors énumération a lieu côté client
     // Prisma (validation contre le type généré), AVANT le réseau. Ce qui
@@ -245,7 +341,7 @@ async function main() {
     console.log("  ✓ échec PostgreSQL réel (enum invalide) → ROLLBACK réel de toute la transaction, zéro audit menteur.");
   }
 
-  console.log("→ Scénario 7/11 : ÉCHEC RÉEL de l'écriture d'audit (FK utilisateur inexistant) → ROLLBACK réel des permissions…");
+  console.log("→ Scénario 7/14 : ÉCHEC RÉEL de l'écriture d'audit (FK utilisateur inexistant) → ROLLBACK réel des permissions…");
   {
     const avant = await permissionsReelles(roleId);
     const nbAuditAvant = await compterAuditLogsRole(roleId);
@@ -287,7 +383,7 @@ async function main() {
     console.log("  ✓ échec PostgreSQL réel sur l'écriture d'audit → ROLLBACK réel de TOUTES les permissions déjà appliquées.");
   }
 
-  console.log("→ Scénario 8/11 : hors contexte de requête authentifiée → refus, aucune écriture committée…");
+  console.log("→ Scénario 8/14 : hors contexte de requête authentifiée → refus, aucune écriture committée…");
   {
     const avant = await permissionsReelles(roleId);
     const nbAuditAvant = await compterAuditLogsRole(roleId);
@@ -307,7 +403,7 @@ async function main() {
     console.log("  ✓ refus propre hors contexte authentifié, aucune écriture committée.");
   }
 
-  console.log("→ Scénario 9/11 : parcours APPROBATION réel — métadonnées Round 2 (base PostgreSQL réelle)…");
+  console.log("→ Scénario 9/14 : parcours APPROBATION réel — métadonnées Round 2 (base PostgreSQL réelle)…");
   let roleApprobationId!: string;
   {
     await reinitialiserBase();
@@ -354,7 +450,7 @@ async function main() {
     console.log("  ✓ métadonnées réelles exactes : typeActionCritique, modeExecution=APPROBATION, demandeApprobationId, demandePar≠acteur.");
   }
 
-  console.log("→ Scénario 10/11 : DEUX APPROBATIONS RÉELLEMENT CONCURRENTES (connexions séparées, synchronisation déterministe)…");
+  console.log("→ Scénario 10/14 : DEUX APPROBATIONS RÉELLEMENT CONCURRENTES (connexions séparées, verrou RÉELLEMENT observé)…");
   {
     const { role } = await creerRoleEtActeur("Rôle Test Concurrence", "acteur-concurrence@test.local");
     const principal = await prisma.utilisateur.create({
@@ -371,53 +467,53 @@ async function main() {
         demandeParId: secondaire.id,
       },
     });
-    // Connexion B, séparée, PRÉCONNECTÉE avant le lancement de A.
+    // Connexions B (participante à la course) et Observatrice (la preuve
+    // elle-même) — toutes deux SÉPARÉES de A, préconnectées.
     const clientB = new PrismaClient();
-    await clientB.$connect();
+    const clientObservateur = new PrismaClient();
+    await Promise.all([clientB.$connect(), clientObservateur.$connect()]);
     const dbPourAuditB = clientB as unknown as Parameters<typeof approuverEtAppliquerModificationPermissionsRole>[0];
 
     let promesseB: Promise<unknown> | undefined;
+    let pidB: number | undefined;
 
     // A s'exécute avec le crochet `apresReservationAvantExecution` : au
     // moment précis où A a RÉELLEMENT réservé la ligne (transaction encore
     // OUVERTE, verrou de ligne PostgreSQL RÉELLEMENT tenu, rien n'est encore
-    // committé), on LANCE B — sur sa propre connexion — puis on laisse
-    // seulement le temps à sa requête `updateMany` d'atteindre PostgreSQL et
-    // de se heurter au verrou de A (elle s'y bloque, elle ne peut pas
-    // encore avoir de résultat). Le crochet NE DOIT PAS attendre que B se
-    // termine : B ne peut se débloquer que lorsque A committe, et A ne peut
-    // committer qu'après que son crochet soit revenu — attendre B ici dans
-    // le crochet créerait un blocage mutuel (piège découvert et corrigé
-    // pendant l'écriture de ce script : la première version provoquait
-    // exactement ce interblocage, détecté par l'expiration du timeout de
-    // transaction Prisma). B est donc résolue APRÈS que A ait committé,
-    // une fois son verrou relâché.
+    // committé), on lance B — sur sa propre connexion. Le crochet NE DOIT PAS
+    // attendre que B se termine : B ne peut se débloquer que lorsque A
+    // committe, et A ne peut committer qu'après que son crochet soit revenu
+    // — attendre B ici créerait un blocage mutuel (piège découvert et
+    // corrigé pendant l'écriture initiale de ce script). Ce que le crochet
+    // ATTEND réellement, avant de laisser A committer : la CONFIRMATION,
+    // depuis `clientObservateur` (une troisième connexion), que la session de
+    // B est GÉNUINEMENT bloquée sur le verrou de A (`pg_blocking_pids`) — pas
+    // un délai arbitraire.
     const resultatA = await contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
       approuverEtAppliquerModificationPermissionsRole(
         dbPourAudit,
         demande.id,
         { id: principal.id, nom: principal.nom },
         {
-          apresReservationAvantExecution: async () => {
+          apresReservationAvantExecution: async (tx) => {
+            const pidA = await pidDeLaTransaction(tx);
+            pidB = await pidDeLaTransaction(clientB); // pid réel de B, obtenu AVANT de lancer sa requête bloquante
             promesseB = contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
               approuverEtAppliquerModificationPermissionsRole(dbPourAuditB, demande.id, { id: principal.id, nom: principal.nom }),
             );
-            // Laisse le temps à la requête de B d'atteindre PostgreSQL et de
-            // se mettre en attente du verrou de ligne AVANT de laisser A
-            // poursuivre vers son propre commit — sans quoi rien ne
-            // garantirait que la tentative de B ait seulement commencé
-            // pendant que A tient encore le verrou.
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            await attendreBlocageReel(clientObservateur, pidB, pidA, "scénario 10 (approbation vs approbation)");
           },
         },
       ),
     );
-    // À cet instant, A a committé et relâché son verrou — la requête de B,
-    // qui attendait ce verrou depuis l'intérieur de la transaction de A,
-    // peut désormais se débloquer, réévaluer son WHERE contre l'état
+    // À cet instant, l'observation ci-dessus a RÉELLEMENT eu lieu : B était
+    // bloquée sur le verrou de A au moment où A a poursuivi vers son commit —
+    // pas une hypothèse de timing. A committe maintenant, relâche son verrou,
+    // et B (qui attendait ce verrou depuis l'intérieur de sa propre
+    // transaction) peut se débloquer, réévaluer son WHERE contre l'état
     // réellement committé (déjà APPROUVEE), et se rejeter.
     const resultatB = await Promise.allSettled([promesseB]).then(([r]) => r);
-    await clientB.$disconnect();
+    await Promise.all([clientB.$disconnect(), clientObservateur.$disconnect()]);
 
     if (resultatA.demandeStatut !== "APPROUVEE") echouer("scénario 10 : A (gagnant) aurait dû réussir et passer la demande à APPROUVEE");
     if (!resultatB || resultatB.status !== "rejected") {
@@ -427,6 +523,7 @@ async function main() {
     if (!(erreurB instanceof ErreurApprobationConcurrente)) {
       echouer(`scénario 10 : B aurait dû échouer précisément avec ErreurApprobationConcurrente, reçu : ${erreurB}`);
     }
+    if (typeof pidB !== "number") echouer("scénario 10 : le pid de B aurait dû être capturé avant l'observation du blocage");
 
     const demandeReelle = await prisma.demandeApprobation.findUniqueOrThrow({ where: { id: demande.id } });
     if (demandeReelle.statut !== "APPROUVEE" || demandeReelle.approuveParId !== principal.id) {
@@ -439,13 +536,279 @@ async function main() {
       echouer(`scénario 10 : permissions finales attendues = [STOCKS:ECRITURE], trouvé ${JSON.stringify(permsFinales)}`);
     }
     console.log(
-      "  ✓ deux approbations RÉELLEMENT concurrentes (verrou de ligne PostgreSQL, synchronisation déterministe) : " +
-        "exactement 1 succès, 1 rejet contrôlé (ErreurApprobationConcurrente), 1 seul AuditLog, permissions correctes, " +
-        "demande approuvée une seule fois.",
+      "  ✓ deux approbations RÉELLEMENT concurrentes : le blocage de B sur le verrou de A a été OBSERVÉ (troisième " +
+        "connexion, pg_blocking_pids), jamais supposé par un délai — exactement 1 succès, 1 rejet contrôlé " +
+        "(ErreurApprobationConcurrente), 1 seul AuditLog, permissions correctes, demande approuvée une seule fois.",
     );
   }
 
-  console.log("→ Scénario 11/11 : ÉCHEC INJECTÉ après réservation (parcours APPROBATION) → ROLLBACK réel COMPLET…");
+  console.log("→ Scénario 11/14 : APPROBATION vs REJET concurrents — l'APPROBATION gagne (verrou RÉELLEMENT observé)…");
+  {
+    const { role } = await creerRoleEtActeur("Rôle Test Approb-gagne", "acteur-approb-gagne@test.local");
+    const principal = await prisma.utilisateur.create({
+      data: { nom: "Principal Approb-gagne", email: "principal-approb-gagne@test.local", roleId: role.id, motDePasseHash: "x", actif: true },
+    });
+    const secondaire = await prisma.utilisateur.create({
+      data: { nom: "Secondaire Approb-gagne", email: "secondaire-approb-gagne@test.local", roleId: role.id, motDePasseHash: "x", actif: true },
+    });
+    const demande = await prisma.demandeApprobation.create({
+      data: {
+        type: "MODIFIER_PERMISSIONS_ROLE",
+        donnees: { roleId: role.id, permissions: [{ module: "PRODUCTION", niveauAcces: "LECTURE" }] },
+        resume: "modifier les permissions du rôle « Rôle Test Approb-gagne »",
+        demandeParId: secondaire.id,
+      },
+    });
+    const clientRejet = new PrismaClient();
+    const clientObservateur = new PrismaClient();
+    await Promise.all([clientRejet.$connect(), clientObservateur.$connect()]);
+    const dbPourRejet = clientRejet as unknown as Parameters<typeof rejeterDemandeApprobationAtomique>[0];
+
+    let promesseRejet: Promise<unknown> | undefined;
+    let pidRejet: number | undefined;
+
+    const resultatApprobation = await contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
+      approuverEtAppliquerModificationPermissionsRole(
+        dbPourAudit,
+        demande.id,
+        { id: principal.id, nom: principal.nom },
+        {
+          apresReservationAvantExecution: async (tx) => {
+            const pidApprobation = await pidDeLaTransaction(tx);
+            pidRejet = await pidDeLaTransaction(clientRejet);
+            promesseRejet = rejeterDemandeApprobationAtomique(dbPourRejet, demande.id, { id: principal.id, nom: principal.nom });
+            await attendreBlocageReel(clientObservateur, pidRejet, pidApprobation, "scénario 11 (rejet bloqué par approbation)");
+          },
+        },
+      ),
+    );
+    const resultatRejet = await Promise.allSettled([promesseRejet]).then(([r]) => r);
+    await Promise.all([clientRejet.$disconnect(), clientObservateur.$disconnect()]);
+
+    if (resultatApprobation.demandeStatut !== "APPROUVEE") {
+      echouer("scénario 11 : l'approbation (gagnante) aurait dû réussir et passer la demande à APPROUVEE");
+    }
+    if (!resultatRejet || resultatRejet.status !== "rejected") {
+      echouer(`scénario 11 : le rejet (perdant) aurait dû échouer, résultat = ${JSON.stringify(resultatRejet)}`);
+    }
+    if (!((resultatRejet as PromiseRejectedResult).reason instanceof ErreurDecisionConcurrente)) {
+      echouer(`scénario 11 : le rejet aurait dû échouer précisément avec ErreurDecisionConcurrente, reçu : ${(resultatRejet as PromiseRejectedResult).reason}`);
+    }
+    if (typeof pidRejet !== "number") echouer("scénario 11 : le pid du rejet aurait dû être capturé avant l'observation du blocage");
+
+    const demandeReelle = await prisma.demandeApprobation.findUniqueOrThrow({ where: { id: demande.id } });
+    if (demandeReelle.statut !== "APPROUVEE" || demandeReelle.approuveParId !== principal.id) {
+      echouer("scénario 11 : la demande doit rester APPROUVEE — jamais écrasée en REJETEE par le rejet concurrent perdant");
+    }
+    const nbAudit = await prisma.auditLog.count({ where: { typeEntite: "Role", entiteId: role.id } });
+    if (nbAudit !== 1) echouer(`scénario 11 : attendu exactement 1 AuditLog, trouvé ${nbAudit}`);
+    const permsFinales = await permissionsReelles(role.id);
+    if (permsFinales.length !== 1 || permsFinales[0]?.module !== "PRODUCTION") {
+      echouer(`scénario 11 : permissions attendues = [PRODUCTION:LECTURE], trouvé ${JSON.stringify(permsFinales)}`);
+    }
+    console.log(
+      "  ✓ approbation vs rejet concurrents, blocage du rejet sur le verrou de l'approbation RÉELLEMENT observé " +
+        "(pg_blocking_pids) : l'approbation gagne, permissions appliquées, 1 seul AuditLog, statut final APPROUVEE, " +
+        "jamais écrasé.",
+    );
+  }
+
+  console.log("→ Scénario 12/14 : APPROBATION vs REJET concurrents — le REJET gagne (verrou RÉELLEMENT observé)…");
+  {
+    const { role } = await creerRoleEtActeur("Rôle Test Rejet-gagne", "acteur-rejet-gagne@test.local");
+    const principal = await prisma.utilisateur.create({
+      data: { nom: "Principal Rejet-gagne", email: "principal-rejet-gagne@test.local", roleId: role.id, motDePasseHash: "x", actif: true },
+    });
+    const secondaire = await prisma.utilisateur.create({
+      data: { nom: "Secondaire Rejet-gagne", email: "secondaire-rejet-gagne@test.local", roleId: role.id, motDePasseHash: "x", actif: true },
+    });
+    const demande = await prisma.demandeApprobation.create({
+      data: {
+        type: "MODIFIER_PERMISSIONS_ROLE",
+        donnees: { roleId: role.id, permissions: [{ module: "COMMANDES", niveauAcces: "ECRITURE" }] },
+        resume: "modifier les permissions du rôle « Rôle Test Rejet-gagne »",
+        demandeParId: secondaire.id,
+      },
+    });
+    const clientApprobation = new PrismaClient();
+    const clientObservateur = new PrismaClient();
+    await Promise.all([clientApprobation.$connect(), clientObservateur.$connect()]);
+    const dbPourApprobation = clientApprobation as unknown as Parameters<typeof approuverEtAppliquerModificationPermissionsRole>[0];
+
+    let promesseApprobation: Promise<unknown> | undefined;
+    let pidApprobation: number | undefined;
+
+    // Symétrique du scénario 11 : cette fois c'est le REJET qui réserve en
+    // premier (via son nouveau crochet `apresReservationAvantCommit`,
+    // `services/demandeApprobation.ts`) et l'APPROBATION concurrente qui se
+    // heurte réellement à son verrou.
+    await rejeterDemandeApprobationAtomique(
+      prisma as unknown as Parameters<typeof rejeterDemandeApprobationAtomique>[0],
+      demande.id,
+      { id: principal.id, nom: principal.nom },
+      {
+        apresReservationAvantCommit: async (tx) => {
+          const pidRejet = await pidDeLaTransaction(tx);
+          pidApprobation = await pidDeLaTransaction(clientApprobation);
+          promesseApprobation = contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
+            approuverEtAppliquerModificationPermissionsRole(dbPourApprobation, demande.id, { id: principal.id, nom: principal.nom }),
+          );
+          await attendreBlocageReel(clientObservateur, pidApprobation, pidRejet, "scénario 12 (approbation bloquée par rejet)");
+        },
+      },
+    );
+    const resultatApprobation = await Promise.allSettled([promesseApprobation]).then(([r]) => r);
+    await Promise.all([clientApprobation.$disconnect(), clientObservateur.$disconnect()]);
+
+    if (!resultatApprobation || resultatApprobation.status !== "rejected") {
+      echouer(`scénario 12 : l'approbation (perdante) aurait dû échouer, résultat = ${JSON.stringify(resultatApprobation)}`);
+    }
+    if (!((resultatApprobation as PromiseRejectedResult).reason instanceof ErreurApprobationConcurrente)) {
+      echouer(
+        `scénario 12 : l'approbation aurait dû échouer précisément avec ErreurApprobationConcurrente, reçu : ${(resultatApprobation as PromiseRejectedResult).reason}`,
+      );
+    }
+    if (typeof pidApprobation !== "number") echouer("scénario 12 : le pid de l'approbation aurait dû être capturé avant l'observation du blocage");
+
+    const demandeReelle = await prisma.demandeApprobation.findUniqueOrThrow({ where: { id: demande.id } });
+    if (demandeReelle.statut !== "REJETEE" || demandeReelle.approuveParId !== principal.id) {
+      echouer("scénario 12 : la demande doit rester REJETEE — l'approbation concurrente perdante ne doit jamais l'écraser en APPROUVEE");
+    }
+    const nbAudit = await prisma.auditLog.count({ where: { typeEntite: "Role", entiteId: role.id } });
+    if (nbAudit !== 0) echouer(`scénario 12 : aucune permission n'aurait dû être appliquée (rejet gagnant) — attendu 0 AuditLog, trouvé ${nbAudit}`);
+    const permsFinales = await permissionsReelles(role.id);
+    if (permsFinales.length !== 0) {
+      echouer(`scénario 12 : aucune RolePermission n'aurait dû être écrite (rejet gagnant), trouvé ${JSON.stringify(permsFinales)}`);
+    }
+    console.log(
+      "  ✓ rejet vs approbation concurrents, blocage de l'approbation sur le verrou du rejet RÉELLEMENT observé " +
+        "(pg_blocking_pids) : le rejet gagne, ZÉRO permission appliquée, ZÉRO AuditLog, statut final REJETEE, " +
+        "jamais écrasé — l'action n'est jamais exécutée pour une demande déjà rejetée.",
+    );
+  }
+
+  console.log("→ Scénario 13/14 : P2034 RÉEL pendant l'écriture RolePermission (pas la réservation) → réessai borné réel…");
+  {
+    // Correctif Round 3, P2-02 : la Round 2 ne prouvait un P2034 réel QUE sur
+    // le premier `updateMany` de réservation (deux approbations visant la
+    // MÊME DemandeApprobation, scénario 10). Ce scénario-ci force un P2034
+    // RÉEL à un point DIFFÉRENT de la transaction — l'écriture RolePermission
+    // elle-même — en faisant collisionner DEUX demandes DISTINCTES (donc dont
+    // les réservations, sur deux id différents, ne se bloquent PAS entre
+    // elles) ciblant le MÊME rôle et le MÊME module. A réserve, exécute (donc
+    // écrit RolePermission pour CAISSE) puis se met en pause dans le nouveau
+    // crochet `apresExecutionAvantRetour`, transaction encore ouverte. B
+    // réserve alors SA PROPRE demande (id différent → succès), puis tente le
+    // MÊME upsert RolePermission(role, CAISSE) → verrou réel de la ligne déjà
+    // modifiée par A, observé depuis une troisième connexion. Quand A
+    // committe, PostgreSQL détecte le conflit de sérialisation réel sur B
+    // (SQLSTATE 40001 / P2034 côté Prisma) — B réessaie automatiquement
+    // (boucle bornée de `approuverEtAppliquerModificationPermissionsRole`) et
+    // réussit à la tentative suivante, contre l'état désormais committé par A.
+    const { role } = await creerRoleEtActeur("Rôle Test P2034 réel", "acteur-p2034@test.local");
+    const principal = await prisma.utilisateur.create({
+      data: { nom: "Principal P2034", email: "principal-p2034@test.local", roleId: role.id, motDePasseHash: "x", actif: true },
+    });
+    const secondaire = await prisma.utilisateur.create({
+      data: { nom: "Secondaire P2034", email: "secondaire-p2034@test.local", roleId: role.id, motDePasseHash: "x", actif: true },
+    });
+    const demandeA = await prisma.demandeApprobation.create({
+      data: {
+        type: "MODIFIER_PERMISSIONS_ROLE",
+        donnees: { roleId: role.id, permissions: [{ module: "CAISSE", niveauAcces: "LECTURE" }] },
+        resume: "modifier les permissions du rôle « Rôle Test P2034 réel » (A)",
+        demandeParId: secondaire.id,
+      },
+    });
+    const demandeB = await prisma.demandeApprobation.create({
+      data: {
+        type: "MODIFIER_PERMISSIONS_ROLE",
+        donnees: { roleId: role.id, permissions: [{ module: "CAISSE", niveauAcces: "ECRITURE" }] },
+        resume: "modifier les permissions du rôle « Rôle Test P2034 réel » (B)",
+        demandeParId: secondaire.id,
+      },
+    });
+
+    const clientB = new PrismaClient();
+    const clientObservateur = new PrismaClient();
+    await Promise.all([clientB.$connect(), clientObservateur.$connect()]);
+    const dbPourAuditB = clientB as unknown as Parameters<typeof approuverEtAppliquerModificationPermissionsRole>[0];
+
+    let promesseB: Promise<unknown> | undefined;
+    let pidB: number | undefined;
+    let nbAppelsTransactionB = 0;
+    const clientBAvecCompteur = new Proxy(dbPourAuditB, {
+      get(cible, propriete, recepteur) {
+        if (propriete === "$transaction") {
+          return (...args: unknown[]) => {
+            nbAppelsTransactionB++;
+            return (cible.$transaction as (...a: unknown[]) => unknown)(...args);
+          };
+        }
+        return Reflect.get(cible, propriete, recepteur);
+      },
+    });
+
+    const resultatA = await contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
+      approuverEtAppliquerModificationPermissionsRole(
+        dbPourAudit,
+        demandeA.id,
+        { id: principal.id, nom: principal.nom },
+        {
+          apresExecutionAvantRetour: async (tx) => {
+            const pidA = await pidDeLaTransaction(tx);
+            pidB = await pidDeLaTransaction(clientB);
+            promesseB = contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
+              approuverEtAppliquerModificationPermissionsRole(
+                clientBAvecCompteur as unknown as Parameters<typeof approuverEtAppliquerModificationPermissionsRole>[0],
+                demandeB.id,
+                { id: principal.id, nom: principal.nom },
+              ),
+            );
+            // B doit se heurter au verrou RÉEL posé par l'upsert RolePermission
+            // de A (même ligne : roleId+module CAISSE), PAS à la réservation
+            // (deux id de demande différents, aucun conflit à cette étape).
+            await attendreBlocageReel(clientObservateur, pidB, pidA, "scénario 13 (P2034 réel sur l'upsert RolePermission)");
+          },
+        },
+      ),
+    );
+    const resultatB = await Promise.allSettled([promesseB]).then(([r]) => r);
+    await Promise.all([clientB.$disconnect(), clientObservateur.$disconnect()]);
+
+    if (resultatA.demandeStatut !== "APPROUVEE") echouer("scénario 13 : A aurait dû réussir dès la première tentative");
+    if (!resultatB || resultatB.status !== "fulfilled") {
+      echouer(`scénario 13 : B aurait dû finir par réussir après réessai(s), résultat = ${JSON.stringify(resultatB)}`);
+    }
+    if (nbAppelsTransactionB < 2) {
+      echouer(
+        `scénario 13 : B aurait dû avoir besoin d'AU MOINS 2 tentatives ($transaction rouvert après un P2034 réel), ` +
+          `trouvé ${nbAppelsTransactionB} — sans second appel, le P2034 réel de l'upsert n'a probablement pas eu lieu`,
+      );
+    }
+
+    const demandeAReelle = await prisma.demandeApprobation.findUniqueOrThrow({ where: { id: demandeA.id } });
+    const demandeBReelle = await prisma.demandeApprobation.findUniqueOrThrow({ where: { id: demandeB.id } });
+    if (demandeAReelle.statut !== "APPROUVEE" || demandeBReelle.statut !== "APPROUVEE") {
+      echouer("scénario 13 : les deux demandes doivent finir APPROUVEES (A directement, B après réessai)");
+    }
+    // B a committé APRÈS A (rouvert après le P2034 de A) : sa valeur gagne.
+    const permsFinales = await permissionsReelles(role.id);
+    if (permsFinales.length !== 1 || permsFinales[0]?.module !== "CAISSE" || permsFinales[0]?.niveauAcces !== "ECRITURE") {
+      echouer(`scénario 13 : permission finale attendue = [CAISSE:ECRITURE] (valeur de B, committée en dernier), trouvé ${JSON.stringify(permsFinales)}`);
+    }
+    // Exactement 2 AuditLog : l'essai avorté de B (P2034) ne committe RIEN,
+    // donc aucun AuditLog orphelin malgré le(s) réessai(s).
+    const nbAudit = await prisma.auditLog.count({ where: { typeEntite: "Role", entiteId: role.id } });
+    if (nbAudit !== 2) echouer(`scénario 13 : attendu exactement 2 AuditLog (1 par demande, aucun doublon malgré le réessai), trouvé ${nbAudit}`);
+    console.log(
+      `  ✓ P2034 RÉEL observé pendant l'upsert RolePermission (pas la réservation) : B a rouvert une TOUTE NOUVELLE ` +
+        `transaction (${nbAppelsTransactionB} appels à $transaction) et a fini par réussir, jamais de 500 brut, jamais ` +
+        "de doublon d'audit — la couverture P2034 s'étend bien à la transaction COMPLÈTE.",
+    );
+  }
+
+  console.log("→ Scénario 14/14 : ÉCHEC INJECTÉ après réservation (parcours APPROBATION) → ROLLBACK réel COMPLET…");
   {
     const { role } = await creerRoleEtActeur("Rôle Test Rollback Approbation", "acteur-rollback-approbation@test.local");
     const secondaire = await prisma.utilisateur.create({
@@ -478,10 +841,10 @@ async function main() {
     } catch (e) {
       leve = true;
       if (!(e instanceof Error) || !/foreign key constraint/i.test(e.message)) {
-        echouer(`scénario 11 : attendu une violation de clé étrangère PostgreSQL, reçu : ${e instanceof Error ? e.message : String(e)}`);
+        echouer(`scénario 14 : attendu une violation de clé étrangère PostgreSQL, reçu : ${e instanceof Error ? e.message : String(e)}`);
       }
     }
-    if (!leve) echouer("scénario 11 : l'appel aurait dû lever une erreur (acteur inexistant → FK AuditLog)");
+    if (!leve) echouer("scénario 14 : l'appel aurait dû lever une erreur (acteur inexistant → FK AuditLog)");
 
     const clientVerif = new PrismaClient();
     let demandeApres: Awaited<ReturnType<typeof prisma.demandeApprobation.findUniqueOrThrow>>;
@@ -497,14 +860,14 @@ async function main() {
 
     if (demandeApres.statut !== "EN_ATTENTE" || demandeApres.approuveParId !== null) {
       echouer(
-        `scénario 11 : ROLLBACK ATTENDU MAIS ABSENT — la RÉSERVATION (statut → APPROUVEE) a survécu à l'échec de ` +
+        `scénario 14 : ROLLBACK ATTENDU MAIS ABSENT — la RÉSERVATION (statut → APPROUVEE) a survécu à l'échec de ` +
           `l'écriture d'audit qui la suit dans la même transaction ; la demande doit redevenir EN_ATTENTE, trouvé ${JSON.stringify(demandeApres)}`,
       );
     }
     if (JSON.stringify(apresPerms.map((p) => ({ module: p.module, niveauAcces: p.niveauAcces }))) !== JSON.stringify(avantPerms)) {
-      echouer("scénario 11 : les écritures de permission auraient dû être annulées elles aussi");
+      echouer("scénario 14 : les écritures de permission auraient dû être annulées elles aussi");
     }
-    if (nbAuditApres !== nbAuditAvant) echouer("scénario 11 : aucune ligne d'audit ne peut avoir été créée (c'est elle qui a échoué)");
+    if (nbAuditApres !== nbAuditAvant) echouer("scénario 14 : aucune ligne d'audit ne peut avoir été créée (c'est elle qui a échoué)");
     console.log(
       "  ✓ échec injecté après réservation → ROLLBACK réel COMPLET : demande redevenue EN_ATTENTE, permissions " +
         "inchangées, aucun audit orphelin.",
@@ -513,12 +876,14 @@ async function main() {
 
   await reinitialiserBase();
   console.log(
-    "\n✅ Vérification PostgreSQL réelle des correctifs P1 (piste d'audit + atomicité d'approbation de " +
-      "MODIFIER_PERMISSIONS_ROLE) : 11 scénarios passent contre une vraie base, dont 3 preuves de ROLLBACK réel " +
-      "(échec de permission, échec d'audit en direct, échec d'audit après réservation d'approbation), 1 preuve de " +
-      "VRAIE concurrence PostgreSQL à synchronisation déterministe (verrou de ligne, deux connexions séparées) et " +
-      "1 preuve de refus hors contexte authentifié — jamais d'état partiel, jamais d'audit menteur, jamais de " +
-      "doublon, jamais de double approbation.\n",
+    "\n✅ Vérification PostgreSQL réelle des correctifs P1 (piste d'audit + atomicité d'approbation/rejet de " +
+      "MODIFIER_PERMISSIONS_ROLE, Rounds 1 à 3) : 14 scénarios passent contre une vraie base, dont 3 preuves de " +
+      "ROLLBACK réel (échec de permission, échec d'audit en direct, échec d'audit après réservation d'approbation), " +
+      "4 preuves de VRAIE concurrence PostgreSQL — approbation vs approbation, approbation vs rejet (les deux ordres), " +
+      "P2034 réel pendant l'écriture RolePermission — dont le blocage a été RÉELLEMENT OBSERVÉ depuis une troisième " +
+      "connexion (`pg_blocking_pids`), jamais supposé par un délai arbitraire, et 1 preuve de refus hors contexte " +
+      "authentifié — jamais d'état partiel, jamais d'audit menteur, jamais de doublon, jamais de double approbation, " +
+      "jamais de décision terminale écrasée, jamais de 500 brut sur un conflit de sérialisation attendu.\n",
   );
 }
 

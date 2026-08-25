@@ -18,6 +18,7 @@
  * `scripts/verifier-audit-permissions-role-ci.ts`.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Prisma } from "@prisma/client";
 import type { Module, NiveauAcces } from "@lomoto/shared";
 import { contexteRequete } from "../lib/contexteRequete.js";
 import { ErreurAction } from "../lib/erreurAction.js";
@@ -77,6 +78,11 @@ function creerClientFactice(
   let compteurAudit = 0;
   let echecUpsertPourModule: Module | null = null;
   let echecAuditLog = false;
+  // P2-02 (Round 3) : simule un conflit de sérialisation PostgreSQL (P2034)
+  // survenant PENDANT la transaction — pas sur le premier `updateMany` de
+  // réservation, mais plus tard (ici : l'upsert RolePermission), pour
+  // prouver que l'enveloppe de réessai couvre bien la transaction COMPLÈTE.
+  const p2034SurUpsert = { module: null as Module | null, restants: 0 };
 
   function construireDelegues(
     roles: Map<string, { id: string; nom: string }>,
@@ -103,6 +109,13 @@ function creerClientFactice(
             const { module, roleId } = args.where.roleId_module;
             if (echecUpsertPourModule === module) {
               throw new Error(`Échec Prisma simulé (contrainte) sur le module ${module}`);
+            }
+            if (p2034SurUpsert.module === module && p2034SurUpsert.restants > 0) {
+              p2034SurUpsert.restants--;
+              throw new Prisma.PrismaClientKnownRequestError(
+                "Transaction failed due to a write conflict or a deadlock. Please retry your transaction",
+                { code: "P2034", clientVersion: "test" },
+              );
             }
             const cle = `${roleId}:${module}`;
             const existant = permissions.get(cle);
@@ -174,6 +187,10 @@ function creerClientFactice(
     },
     forcerEchecAuditLog: (valeur: boolean) => {
       echecAuditLog = valeur;
+    },
+    forcerP2034SurUpsert: (module: Module | null, nbEchecs: number) => {
+      p2034SurUpsert.module = module;
+      p2034SurUpsert.restants = nbEchecs;
     },
   };
 }
@@ -490,6 +507,51 @@ describe("approuverEtAppliquerModificationPermissionsRole — parcours APPROBATI
     ).rejects.toThrow(/type d'action inattendu/);
     // La réservation avait déjà eu lieu avant la détection — mais la garde
     // lève DANS la même transaction, donc tout est annulé y compris elle.
+    expect(etat.demandes.get(DEMANDE_ID)!.statut).toBe("EN_ATTENTE");
+  });
+
+  // --- P2-02 (Round 3) : gestion COMPLÈTE de P2034, pas seulement sur le
+  // premier updateMany de réservation — voir l'en-tête de la fonction. ------
+  it("P2034 pendant l'upsert RolePermission (pas la réservation) : réessai borné, succès à la 3e tentative", async () => {
+    const { client, etat, forcerP2034SurUpsert } = creerClientFactice([], [demandeInitiale()]);
+    // Échoue par P2034 aux 2 premières tentatives (sur l'écriture
+    // RolePermission, APRÈS que la réservation ait déjà réussi dans cette
+    // même transaction avortée), réussit à la 3e — prouve que le réessai
+    // ouvre bien une TOUTE NOUVELLE transaction à chaque fois (la
+    // réservation est rejouée, pas supposée acquise) et que la boucle
+    // couvre la transaction ENTIÈRE, pas seulement l'updateMany initial.
+    forcerP2034SurUpsert("CAISSE", 2);
+    const resultat = await contexteRequete.run(ACTEUR, () =>
+      approuverEtAppliquerModificationPermissionsRole(client, DEMANDE_ID, ACTEUR),
+    );
+    expect(resultat.demandeStatut).toBe("APPROUVEE");
+    expect(client.$transaction).toHaveBeenCalledTimes(3);
+    expect(etat.demandes.get(DEMANDE_ID)!.statut).toBe("APPROUVEE");
+    expect(etat.auditLogs).toHaveLength(1); // jamais de doublon malgré les 2 tentatives avortées
+  });
+
+  it("P2034 persistant au-delà des tentatives bornées : ErreurApprobationConcurrente (jamais un 500 brut), jamais de réessai infini", async () => {
+    const { client, etat, forcerP2034SurUpsert } = creerClientFactice([], [demandeInitiale()]);
+    // Échoue par P2034 indéfiniment (bien plus que NB_TENTATIVES_MAX_P2034).
+    forcerP2034SurUpsert("CAISSE", 999);
+    await expect(
+      contexteRequete.run(ACTEUR, () => approuverEtAppliquerModificationPermissionsRole(client, DEMANDE_ID, ACTEUR)),
+    ).rejects.toThrow(ErreurApprobationConcurrente);
+    // Bornée à exactement 3 tentatives — jamais infinie.
+    expect(client.$transaction).toHaveBeenCalledTimes(3);
+    // Chaque transaction avortée annule aussi sa réservation : la demande
+    // reste EN_ATTENTE, jamais faussement APPROUVEE ni orpheline.
+    expect(etat.demandes.get(DEMANDE_ID)!.statut).toBe("EN_ATTENTE");
+    expect(etat.auditLogs).toHaveLength(0);
+  });
+
+  it("une erreur Prisma non-P2034 pendant l'upsert n'est jamais réessayée (remontée immédiatement)", async () => {
+    const { client, etat, forcerEchecUpsert } = creerClientFactice([], [demandeInitiale()]);
+    forcerEchecUpsert("CAISSE");
+    await expect(
+      contexteRequete.run(ACTEUR, () => approuverEtAppliquerModificationPermissionsRole(client, DEMANDE_ID, ACTEUR)),
+    ).rejects.toThrow(/Échec Prisma simulé \(contrainte\)/);
+    expect(client.$transaction).toHaveBeenCalledTimes(1); // pas de réessai pour une erreur qui n'est pas un conflit de sérialisation
     expect(etat.demandes.get(DEMANDE_ID)!.statut).toBe("EN_ATTENTE");
   });
 });

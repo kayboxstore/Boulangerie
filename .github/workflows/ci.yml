@@ -115,6 +115,22 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-audit-permissions-role-ci.ts
 
+      - name: Vérification HTTP réelle du correctif P2-01 — parcours complet de MODIFIER_PERMISSIONS_ROLE (Round 3, contre-revue Codex 24/08/2026)
+        # Additif, distinct des scripts ci-dessus : ceux-ci prouvent la
+        # logique de service contre PostgreSQL, mais pas le parcours HTTP
+        # complet — celui-ci exerce le VRAI routeur Express (rolesRouter,
+        # approbationsRouter), servi par supertest, avec une VRAIE
+        # authentification JWT (aucun mock d'auth ni de Prisma) : parcours
+        # direct (PUT /api/roles/:id/permissions par l'Admin Principal) et
+        # parcours approbation (soumission par un Admin secondaire, puis
+        # POST /api/approbations/:id/approuver par le Principal), avec
+        # relecture Prisma indépendante après chaque appel HTTP. Même garde
+        # que les scripts précédents (hôte local + base exacte lomoto_ci +
+        # confirmation explicite).
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-http-permissions-role-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest

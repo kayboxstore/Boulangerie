@@ -8,6 +8,12 @@ import {
   approuverEtAppliquerModificationPermissionsRole,
   ErreurApprobationConcurrente,
 } from "../services/permissionsRoleAudit.js";
+import {
+  enregistrerErreurSiEncoreEnAttente,
+  ErreurDecisionConcurrente,
+  marquerApprouveeSiEncoreEnAttente,
+  rejeterDemandeApprobationAtomique,
+} from "../services/demandeApprobation.js";
 
 export const approbationsRouter = Router();
 
@@ -91,21 +97,28 @@ approbationsRouter.post("/:id/approuver", async (req, res, next) => {
           // PostgreSQL : la demande est redevenue EN_ATTENTE. Cette écriture
           // de suivi (message d'erreur pour l'UI) est délibérément séparée —
           // ce n'est pas une action métier, aucune atomicité requise avec
-          // quoi que ce soit d'autre.
-          await prisma.demandeApprobation.update({ where: { id: req.params.id }, data: { erreur: e.message } });
+          // quoi que ce soit d'autre. Conditionnée sur EN_ATTENTE (correctif
+          // Round 3, P1-01) : jamais poser un message d'erreur périmé sur une
+          // demande déjà décidée (rejetée) entre-temps par une requête
+          // concurrente.
+          await enregistrerErreurSiEncoreEnAttente(prisma, req.params.id, e.message);
           return res.status(e.status).json({ erreur: `Exécution impossible : ${e.message}` });
         }
         throw e;
       }
     }
 
-    // Chemin EXISTANT, INCHANGÉ, pour les 4 autres types d'action critique
+    // Chemin EXISTANT pour les 4 autres types d'action critique
     // (SUPPRIMER_UTILISATEUR, CREER_COMPTE_ADMIN, MODIFIER_TYPE_CLIENT,
-    // MODIFIER_TAUX_TAXE) : la même course décrite en tête de
-    // `permissionsRoleAudit.ts` reste possible pour eux — P1 restant,
-    // signalé explicitement, non traité par ce correctif (hors périmètre
-    // strict du Round 2 : « Deux P1 doivent être corrigés », tous deux
-    // scopés à MODIFIER_PERMISSIONS_ROLE).
+    // MODIFIER_TAUX_TAXE) : l'EXÉCUTION métier elle-même reste
+    // NON transactionnelle avec la transition d'état — P1 restant, signalé
+    // explicitement, non traité par ce correctif (refactor des 4 exécuteurs
+    // en « tx-aware », hors périmètre de ce Round 3 — voir
+    // `services/demandeApprobation.ts`). Ce qui EST corrigé ici (Round 3,
+    // P1-01) : la transition finale vers APPROUVEE est désormais une
+    // écriture CONDITIONNELLE (`marquerApprouveeSiEncoreEnAttente`), jamais
+    // un `update` inconditionnel — elle ne peut plus écraser un rejet
+    // concurrent déjà gagnant.
     const demande = await prisma.demandeApprobation.findUnique({ where: { id: req.params.id } });
     if (!demande) return res.status(404).json({ erreur: "Demande introuvable" });
     if (demande.statut !== "EN_ATTENTE") {
@@ -116,15 +129,30 @@ approbationsRouter.post("/:id/approuver", async (req, res, next) => {
     // impossible, on renseigne l'erreur et on laisse la demande en attente.
     try {
       const { message } = await executerAction(demande.type as TypeActionCritique, demande.donnees as Record<string, unknown>);
-      const maj = await prisma.demandeApprobation.update({
-        where: { id: demande.id },
-        data: { statut: "APPROUVEE", approuveParId: req.utilisateur!.id, dateDecision: new Date(), erreur: null },
-        include: INCLUDE,
-      });
+      try {
+        await marquerApprouveeSiEncoreEnAttente(prisma, demande.id, {
+          id: req.utilisateur!.id,
+          nom: req.utilisateur!.nom,
+        });
+      } catch (e) {
+        if (e instanceof ErreurDecisionConcurrente) {
+          // L'action métier a RÉELLEMENT été exécutée ci-dessus, mais une
+          // décision concurrente (rejet) a entre-temps gagné la transition
+          // d'état — incohérence de fond inhérente au caractère NON
+          // transactionnel de ce chemin (dette documentée ci-dessus), pas
+          // masquée : message honnête plutôt qu'un succès ou un 409 muet.
+          return res.status(409).json({
+            erreur:
+              "Cette demande a été rejetée entre-temps par une requête concurrente, alors que l'action venait d'être exécutée — vérification manuelle nécessaire.",
+          });
+        }
+        throw e;
+      }
+      const maj = await prisma.demandeApprobation.findUniqueOrThrow({ where: { id: demande.id }, include: INCLUDE });
       res.json({ demande: versDTO(maj), message });
     } catch (e) {
       if (e instanceof ErreurAction) {
-        await prisma.demandeApprobation.update({ where: { id: demande.id }, data: { erreur: e.message } });
+        await enregistrerErreurSiEncoreEnAttente(prisma, demande.id, e.message);
         return res.status(e.status).json({ erreur: `Exécution impossible : ${e.message}` });
       }
       throw e;
@@ -139,16 +167,34 @@ approbationsRouter.post("/:id/rejeter", async (req, res, next) => {
     if (!req.utilisateur!.estAdminPrincipal) {
       return res.status(403).json({ erreur: "Seul l'Administrateur principal peut rejeter une demande" });
     }
-    const demande = await prisma.demandeApprobation.findUnique({ where: { id: req.params.id } });
-    if (!demande) return res.status(404).json({ erreur: "Demande introuvable" });
-    if (demande.statut !== "EN_ATTENTE") {
-      return res.status(409).json({ erreur: "Cette demande a déjà été traitée" });
+
+    // Pré-check LÉGER, uniquement pour un 404 honnête si la demande n'existe
+    // pas du tout — JAMAIS utilisé comme garantie de concurrence (correctif
+    // Round 3, P1-01) : la décision réelle appartient exclusivement à
+    // l'écriture conditionnelle atomique ci-dessous
+    // (`rejeterDemandeApprobationAtomique`, `services/demandeApprobation.ts`).
+    const existe = await prisma.demandeApprobation.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ erreur: "Demande introuvable" });
+
+    try {
+      await rejeterDemandeApprobationAtomique(prisma, req.params.id, {
+        id: req.utilisateur!.id,
+        nom: req.utilisateur!.nom,
+      });
+    } catch (e) {
+      if (e instanceof ErreurDecisionConcurrente) {
+        return res.status(409).json({ erreur: "Cette demande a déjà été traitée" });
+      }
+      throw e;
     }
-    const maj = await prisma.demandeApprobation.update({
-      where: { id: demande.id },
-      data: { statut: "REJETEE", approuveParId: req.utilisateur!.id, dateDecision: new Date() },
-      include: INCLUDE,
-    });
+
+    // Relecture APRÈS la réservation réussie et committée : le statut
+    // REJETEE est désormais terminal (aucune écriture concurrente, y compris
+    // une approbation qui gagnerait la course, ne peut plus le modifier —
+    // toutes passent par la même écriture conditionnelle `WHERE statut =
+    // 'EN_ATTENTE'`) — aucune fenêtre où cette relecture pourrait exposer un
+    // état ensuite écrasé.
+    const maj = await prisma.demandeApprobation.findUniqueOrThrow({ where: { id: req.params.id }, include: INCLUDE });
     res.json({ demande: versDTO(maj) });
   } catch (e) {
     next(e);
