@@ -3,50 +3,74 @@ import { MODULES } from "@lomoto/shared";
 import type { Module, NiveauAcces } from "@lomoto/shared";
 import type { prisma as prismaApp, TxClient } from "../lib/prisma.js";
 import { contexteRequete } from "../lib/contexteRequete.js";
+import { ErreurAction } from "../lib/erreurAction.js";
 
 /**
- * Piste d'audit dédiée, transactionnelle, pour l'action critique
- * `MODIFIER_PERMISSIONS_ROLE` (correctif P1 — contre-revue Codex de l'audit
- * complet du 24/08/2026).
+ * Piste d'audit ET atomicité d'approbation, dédiées à l'action critique
+ * `MODIFIER_PERMISSIONS_ROLE` (correctifs P1, contre-revue Codex de l'audit
+ * complet du 24/08/2026 — Round 1 : piste d'audit ; Round 2 : métadonnées de
+ * traçabilité enrichies + atomicité réservation/exécution/audit/approbation).
  *
- * Défaut corrigé : `EXECUTEURS.MODIFIER_PERMISSIONS_ROLE` (`actionsCritiques.ts`)
- * écrit `RolePermission` via `upsert`/`deleteMany`. L'extension Prisma
- * générale d'audit (`lib/audit.ts`) n'intercepte que `update`/`delete`
- * singuliers — jamais `upsert`, jamais `*Many`, jamais `create` — donc AUCUNE
- * de ces écritures n'était journalisée, y compris quand l'acteur est
- * l'Administrateur Principal (qui exécute cette action immédiatement, sans
- * passer par le workflow d'approbation qui aurait pu laisser une trace
- * alternative). La modification de permissions la plus sensible du système
- * ne laissait donc aucune trace exploitable.
+ * Round 1 — défaut corrigé : `EXECUTEURS.MODIFIER_PERMISSIONS_ROLE`
+ * (`actionsCritiques.ts`) écrit `RolePermission` via `upsert`/`deleteMany`.
+ * L'extension Prisma générale d'audit (`lib/audit.ts`) n'intercepte que
+ * `update`/`delete` singuliers — jamais `upsert`, jamais `*Many`, jamais
+ * `create` — donc aucune de ces écritures n'était journalisée.
+ *
+ * Round 2 — défaut corrigé : le parcours d'approbation
+ * (`routes/approbations.ts`, `POST /:id/approuver`) lisait le statut de la
+ * `DemandeApprobation` (`EN_ATTENTE` ?) SÉPARÉMENT de l'exécution de l'action
+ * ET de la transition vers `APPROUVEE` — trois écritures/lectures non
+ * atomiques entre elles :
+ *  (a) deux approbations concurrentes pouvaient toutes deux lire
+ *      `EN_ATTENTE` et exécuter l'action deux fois ;
+ *  (b) un crash entre l'exécution (permissions + audit déjà committés,
+ *      transaction indépendante) et la mise à jour du statut laissait la
+ *      demande éternellement `EN_ATTENTE` alors que l'action avait bien eu
+ *      lieu — un nouvel essai l'aurait rejouée une seconde fois.
+ * Corrigé pour `MODIFIER_PERMISSIONS_ROLE` par
+ * `approuverEtAppliquerModificationPermissionsRole` : réservation
+ * atomique de la demande (écriture conditionnelle `WHERE statut =
+ * 'EN_ATTENTE'`), exécution de l'action, écriture de l'audit et passage à
+ * `APPROUVEE` — LE TOUT dans une seule transaction PostgreSQL Serializable.
+ * Voir son en-tête pour le détail du mécanisme.
+ *
+ * P1 restant, explicitement non traité ici (voir rapport de livraison) : les
+ * 4 AUTRES types d'action critique (`SUPPRIMER_UTILISATEUR`,
+ * `CREER_COMPTE_ADMIN`, `MODIFIER_TYPE_CLIENT`, `MODIFIER_TAUX_TAXE`)
+ * continuent de transiter par l'ANCIEN chemin non atomique dans
+ * `routes/approbations.ts` — la même course (a)/(b) ci-dessus reste
+ * possible pour eux. Une correction générique aurait exigé de rendre les
+ * QUATRE autres exécuteurs de `actionsCritiques.ts` « tx-aware » (accepter
+ * un client transactionnel déjà ouvert plutôt que d'utiliser chacun leur
+ * propre `prisma.$transaction` ou écriture directe) — un refactor plus
+ * large, hors du périmètre strict de ce Round 2 (« Deux P1 doivent être
+ * corrigés », tous deux scopés à `MODIFIER_PERMISSIONS_ROLE`). Signalé
+ * explicitement plutôt que prétendu résolu.
  *
  * Choix de conception (voir contraintes de la mission) :
- *  - AUCUN changement de schéma Prisma : le correctif réutilise le modèle
- *    `AuditLog` existant tel quel (mêmes colonnes), en tirant parti de la
- *    souplesse de ses champs JSON `avant`/`apres` pour porter l'état complet
- *    des permissions ET les métadonnées propres à cette action (demandeur,
- *    diff). Rien n'est stocké qui ne soit pas dérivable de `avant`/`apres`
- *    OU absent du modèle de données réel du workflow d'approbation.
- *  - `lib/audit.ts` (l'extension générale) n'est PAS modifiée — un correctif
- *    ciblé, propre à cette action sensible, est ajouté à côté plutôt que de
- *    complexifier un mécanisme générique conçu pour `update`/`delete` afin
- *    de lui faire comprendre `upsert`/`*Many`, ce qui l'aurait rendu plus
- *    fragile pour tous les autres modèles qu'il couvre déjà correctement.
- *  - Une SEULE ligne `AuditLog` est écrite par exécution réussie (jamais une
- *    par permission modifiée) : elle porte l'état COMPLET (les 10 modules,
- *    y compris ceux à `AUCUN`) avant et après, trié par ordre alphabétique
- *    de module — déterministe, indépendant de l'ordre de retour des lignes
- *    par PostgreSQL. Les permissions ajoutées/retirées/modifiées sont
- *    calculées par comparaison pure de ces deux instantanés complets
- *    (`calculerDiffPermissions`), jamais stockées séparément : aucune
- *    désynchronisation possible entre le diff et l'état qu'il est censé
- *    résumer.
- *  - L'écriture d'audit a lieu DANS LA MÊME transaction Prisma que les
- *    écritures `RolePermission`, en dernière position : si une écriture de
- *    permission échoue, l'exécution s'arrête avant même d'atteindre
- *    l'écriture d'audit (rien n'est journalisé) ; si l'écriture d'audit
- *    échoue, PostgreSQL annule (ROLLBACK) la transaction entière, y compris
- *    les écritures de permission déjà appliquées plus tôt dans la même
- *    transaction. Aucun état partiel, jamais.
+ *  - AUCUN changement de schéma Prisma : réutilise `AuditLog` (mêmes
+ *    colonnes, champs JSON `avant`/`apres`) ET `DemandeApprobation` (mêmes
+ *    colonnes : `statut`, `approuveParId`, `dateDecision`, `erreur` déjà
+ *    présents) tels quels.
+ *  - `lib/audit.ts` (l'extension générale) n'est PAS modifiée.
+ *  - Une SEULE ligne `AuditLog` par exécution réussie, portant l'état COMPLET
+ *    (10 modules, y compris `AUCUN`) avant/après, trié par ordre alphabétique
+ *    de module — déterministe, indépendant de l'ordre de retour PostgreSQL —
+ *    PLUS les métadonnées de traçabilité exigées par le Round 2 :
+ *    `typeActionCritique`, `modeExecution` (`"DIRECTE"` ou `"APPROBATION"`),
+ *    `demandeApprobationId` (corrèle sans ambiguïté deux demandes distinctes
+ *    du même utilisateur visant le même rôle), et `demandePar` (le demandeur
+ *    d'origine, distinct de l'acteur qui a exécuté/approuvé).
+ *  - Transactions imbriquées indépendantes évitées : la logique d'écriture
+ *    (`appliquerModificationPermissionsRoleTx`) est une fonction INTERNE
+ *    acceptant un client transactionnel déjà ouvert (`TxClient`) — elle
+ *    n'ouvre jamais elle-même de transaction. Deux wrappers PUBLICS l'ouvrent
+ *    chacun une seule fois : `appliquerModificationPermissionsRole` (exécution
+ *    directe par l'Admin Principal) et
+ *    `approuverEtAppliquerModificationPermissionsRole` (approbation — qui y
+ *    ajoute la réservation atomique et la transition d'état, dans la MÊME
+ *    transaction).
  */
 
 export interface EntreePermission {
@@ -79,12 +103,20 @@ export interface ResultatModificationPermissionsRole {
 }
 
 /**
+ * Contexte d'exécution de l'action, sous forme d'union discriminée plutôt que
+ * de paramètres optionnels indépendants : rend IMPOSSIBLE de représenter un
+ * état invalide (ex. `modeExecution = "APPROBATION"` sans `demandeParId`, ou
+ * `demandeApprobationId` renseigné en exécution directe).
+ */
+export type ContexteExecutionAction =
+  | { mode: "DIRECTE" }
+  | { mode: "APPROBATION"; demandeApprobationId: string; demandePar: IdentiteActeur };
+
+/**
  * Levée quand l'action s'exécute hors contexte de requête authentifiée
  * (`contexteRequete` vide). Sans acteur identifié, aucune piste d'audit
  * fiable n'est possible : l'action entière est refusée plutôt que
- * silencieusement non tracée (contrairement à l'extension générale, qui se
- * contente de ne pas auditer hors contexte — acceptable pour elle car elle
- * couvre des écritures non critiques ; inacceptable ici).
+ * silencieusement non tracée.
  */
 export class ErreurActeurRequisPourAudit extends Error {
   constructor() {
@@ -92,6 +124,18 @@ export class ErreurActeurRequisPourAudit extends Error {
       "Modification des permissions d'un rôle refusée : aucun acteur authentifié dans le contexte de requête — " +
         "impossible de produire une piste d'audit fiable pour cette action sensible.",
     );
+  }
+}
+
+/**
+ * Levée quand la réservation atomique de la `DemandeApprobation` n'affecte
+ * aucune ligne — la demande a déjà été traitée (approuvée, rejetée) par
+ * cette même requête ou par une requête concurrente qui a gagné la course.
+ * Mappée en 409 par l'appelant (`routes/approbations.ts`).
+ */
+export class ErreurApprobationConcurrente extends Error {
+  constructor() {
+    super("Cette demande a déjà été traitée — approuvée, rejetée, ou approuvée par une requête concurrente entre-temps.");
   }
 }
 
@@ -118,10 +162,6 @@ async function instantane(tx: TxClient, roleId: string, roleNom: string): Promis
  * Partition déterministe et exhaustive (ajout / retrait / modification),
  * calculée UNIQUEMENT par comparaison des deux instantanés complets — jamais
  * stockée séparément de `avant`/`apres`, toujours dérivable d'eux.
- *  - ajout : le module était `AUCUN` avant, ne l'est plus après ;
- *  - retrait : le module n'était pas `AUCUN` avant, l'est devenu après ;
- *  - modification : le module n'était `AUCUN` ni avant ni après, mais le
- *    niveau d'accès diffère (ex. LECTURE → ECRITURE).
  */
 export function calculerDiffPermissions(avant: EntreePermission[], apres: EntreePermission[]): DiffPermissions {
   const avantParModule = new Map(avant.map((p) => [p.module, p.niveauAcces]));
@@ -139,76 +179,216 @@ export function calculerDiffPermissions(avant: EntreePermission[], apres: Entree
 }
 
 /**
- * Applique une nouvelle matrice de permissions à un rôle ET journalise
- * l'opération, DANS LA MÊME transaction PostgreSQL Serializable — logique
- * atomique partagée entre `EXECUTEURS.MODIFIER_PERMISSIONS_ROLE`
- * (`actionsCritiques.ts`) et `scripts/verifier-audit-permissions-role-ci.ts`,
- * qui l'exerce telle quelle contre une vraie base PostgreSQL (même
- * convention que `services/principal.ts` pour
- * `scripts/verifier-concurrence-equipe-ci.ts` : jamais de réimplémentation
- * parallèle qui pourrait diverger du code de production réel).
- *
- * `demandePar` distingue le demandeur d'origine (Admin secondaire dont la
- * demande a été approuvée) de l'acteur qui a réellement exécuté/autorisé
- * l'écriture (lu via `contexteRequete` — l'Admin Principal, que ce soit en
- * exécution directe ou en approbation). `null` quand l'action a été exécutée
- * directement par l'Admin Principal, sans détour par le workflow
- * d'approbation : dans ce cas demandeur et exécutant sont la même personne,
- * déjà portée par `utilisateurId`/`utilisateurNom` de la ligne `AuditLog`.
+ * Cœur transactionnel : applique la matrice de permissions ET journalise
+ * l'opération, en utilisant un client transactionnel DÉJÀ OUVERT (`tx`) —
+ * n'ouvre jamais elle-même de transaction (voir l'en-tête du fichier). Lève
+ * `ErreurAction(404, ...)` si le rôle a disparu depuis (ex. supprimé entre la
+ * création d'une demande d'approbation et son traitement) — vérifié DANS la
+ * transaction, donc sans fenêtre de course avec les écritures qui suivent.
+ */
+async function appliquerModificationPermissionsRoleTx(
+  tx: TxClient,
+  roleId: string,
+  permissions: EntreePermission[],
+  contexte: ContexteExecutionAction,
+): Promise<ResultatModificationPermissionsRole> {
+  const role = await tx.role.findUnique({ where: { id: roleId } });
+  if (!role) throw new ErreurAction(404, "Rôle introuvable");
+
+  const avantSnap = await instantane(tx, roleId, role.nom);
+
+  for (const p of permissions) {
+    await tx.rolePermission.upsert({
+      where: { roleId_module: { roleId, module: p.module } },
+      update: { niveauAcces: p.niveauAcces },
+      create: { roleId, module: p.module, niveauAcces: p.niveauAcces },
+    });
+  }
+  // Les modules absents de la liste (ou passés à AUCUN) sont retirés —
+  // comportement métier inchangé, identique à l'original.
+  const gardes = permissions.filter((p) => p.niveauAcces !== "AUCUN").map((p) => p.module);
+  await tx.rolePermission.deleteMany({
+    where: { roleId, module: { notIn: gardes.length ? gardes : ["CAISSE"] } },
+  });
+  if (!gardes.length) await tx.rolePermission.deleteMany({ where: { roleId } });
+
+  const apresSnap = await instantane(tx, roleId, role.nom);
+  const diff = calculerDiffPermissions(avantSnap.permissions, apresSnap.permissions);
+
+  // Toujours journalisé, même quand `diff` est entièrement vide (aucun
+  // changement réel — ex. resoumission exacte de l'état courant) : l'audit
+  // enregistre alors fidèlement « cette personne a confirmé cet état à cette
+  // date », plutôt que de faire dépendre l'existence d'une trace d'un calcul
+  // de no-op. Comportement volontaire, prouvé par un test dédié.
+  const acteur = contexteRequete.getStore();
+  if (!acteur) throw new ErreurActeurRequisPourAudit();
+
+  await tx.auditLog.create({
+    data: {
+      utilisateurId: acteur.id,
+      utilisateurNom: acteur.nom,
+      module: "EQUIPE" as Prisma.AuditLogCreateInput["module"],
+      typeEntite: "Role",
+      entiteId: roleId,
+      action: "MODIFICATION",
+      avant: avantSnap as unknown as Prisma.InputJsonValue,
+      apres: {
+        ...apresSnap,
+        typeActionCritique: "MODIFIER_PERMISSIONS_ROLE",
+        modeExecution: contexte.mode,
+        demandeApprobationId: contexte.mode === "APPROBATION" ? contexte.demandeApprobationId : null,
+        demandePar: contexte.mode === "APPROBATION" ? contexte.demandePar : null,
+        diff,
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  return { roleNom: role.nom, avant: avantSnap.permissions, apres: apresSnap.permissions, diff };
+}
+
+/**
+ * Exécution DIRECTE (Admin Principal, sans workflow d'approbation) : ouvre sa
+ * propre transaction Serializable et délègue tout le travail à
+ * `appliquerModificationPermissionsRoleTx`. Appelée par
+ * `EXECUTEURS.MODIFIER_PERMISSIONS_ROLE` (`actionsCritiques.ts`) — et par
+ * `scripts/verifier-audit-permissions-role-ci.ts`, qui l'exerce telle quelle
+ * contre une vraie base PostgreSQL (même convention que `services/principal.ts`
+ * pour `scripts/verifier-concurrence-equipe-ci.ts` : jamais de
+ * réimplémentation parallèle qui pourrait diverger du code de production).
  */
 export async function appliquerModificationPermissionsRole(
   db: typeof prismaApp,
   roleId: string,
   permissions: EntreePermission[],
-  demandePar: IdentiteActeur | null,
 ): Promise<ResultatModificationPermissionsRole> {
   return db.$transaction(
+    (tx) => appliquerModificationPermissionsRoleTx(tx, roleId, permissions, { mode: "DIRECTE" }),
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
+}
+
+export interface ResultatApprobationPermissionsRole {
+  roleNom: string;
+  avant: EntreePermission[];
+  apres: EntreePermission[];
+  diff: DiffPermissions;
+  demandeStatut: "APPROUVEE";
+  demandeApprouveParId: string;
+  demandeDateDecision: Date;
+}
+
+/**
+ * Réservation atomique + exécution + audit + transition `APPROUVEE`, LE TOUT
+ * dans une seule transaction PostgreSQL Serializable (correctif Round 2,
+ * P1-02).
+ *
+ * Mécanisme de réservation : `updateMany({ where: { id, statut:
+ * "EN_ATTENTE" }, data: { statut: "APPROUVEE", ... } })` — une écriture
+ * CONDITIONNELLE, jamais une pré-lecture séparée (même principe que
+ * `services/principal.ts`, déjà établi dans ce dépôt pour le même problème de
+ * classe). Sous le verrouillage de ligne PostgreSQL standard :
+ *  - Deux approbations concurrentes sur la MÊME demande : la seconde
+ *    transaction bloque sur le verrou de ligne jusqu'à ce que la première
+ *    committe (ou échoue) ; une fois la première committée, le `WHERE
+ *    statut = 'EN_ATTENTE'` de la seconde ne trouve plus rien (déjà
+ *    `APPROUVEE`) → `count = 0` → `ErreurApprobationConcurrente` → 409,
+ *    sans jamais exécuter l'action une seconde fois.
+ *  - `count === 1` : cette transaction a gagné la réservation, seule
+ *    habilitée à poursuivre — exécute l'action et écrit l'audit avec le
+ *    client transactionnel DÉJÀ OUVERT (jamais une transaction imbriquée
+ *    indépendante).
+ *  - Si l'exécution de l'action (ou l'écriture d'audit) échoue APRÈS la
+ *    réservation, PostgreSQL annule TOUTE la transaction — y compris la
+ *    réservation elle-même : la demande redevient `EN_ATTENTE` comme avant
+ *    l'appel (jamais d'approbation faussement réussie, jamais d'audit
+ *    orphelin).
+ */
+export interface CrochetsTestApprobation {
+  /**
+   * Appelé (si fourni) juste après que la réservation a réussi, AVANT la
+   * lecture/exécution de l'action — SEUL point d'ancrage de test de toute
+   * cette fonction, jamais utilisé par la route de production
+   * (`routes/approbations.ts` ne le passe jamais). Sert uniquement à
+   * `scripts/verifier-audit-permissions-role-ci.ts` pour garantir un
+   * chevauchement RÉEL et déterministe avec une seconde tentative
+   * concurrente (elle-même lancée DEPUIS ce crochet, sur une connexion
+   * séparée) — pas un simple pari sur le hasard du timing de
+   * `Promise.allSettled`. Même principe que
+   * `CrochetsTestTransfert.apresRetraitAvantAttribution` dans
+   * `services/principal.ts`.
+   */
+  apresReservationAvantExecution?: () => Promise<void>;
+}
+
+export async function approuverEtAppliquerModificationPermissionsRole(
+  db: typeof prismaApp,
+  demandeApprobationId: string,
+  approbateur: IdentiteActeur,
+  crochets?: CrochetsTestApprobation,
+): Promise<ResultatApprobationPermissionsRole> {
+  return db.$transaction(
     async (tx) => {
-      const role = await tx.role.findUniqueOrThrow({ where: { id: roleId } });
-
-      const avantSnap = await instantane(tx, roleId, role.nom);
-
-      for (const p of permissions) {
-        await tx.rolePermission.upsert({
-          where: { roleId_module: { roleId, module: p.module } },
-          update: { niveauAcces: p.niveauAcces },
-          create: { roleId, module: p.module, niveauAcces: p.niveauAcces },
+      const dateDecision = new Date();
+      // Sous isolation Serializable, PostgreSQL ne se contente pas toujours
+      // de faire attendre la transaction perdante puis de lui renvoyer
+      // `count: 0` une fois débloquée : il peut directement ABORTER cette
+      // transaction avec une erreur de sérialisation (SQLSTATE 40001, P2034
+      // côté Prisma) dès que le conflit est détecté. Constaté réellement en
+      // vérification PostgreSQL (scripts/verifier-audit-permissions-role-ci.ts,
+      // scénario 10) : sans ce `catch`, la transaction perdante d'une
+      // approbation concurrente remontait une erreur Prisma brute au lieu
+      // d'`ErreurApprobationConcurrente` — les deux issues signifient
+      // exactement la même chose du point de vue de l'appelant (« cette
+      // demande est déjà prise en charge par quelqu'un d'autre, réessayez »)
+      // et doivent donc produire la même erreur typée, mappée en 409 par la
+      // route.
+      let reservation: { count: number };
+      try {
+        reservation = await tx.demandeApprobation.updateMany({
+          where: { id: demandeApprobationId, statut: "EN_ATTENTE" },
+          data: { statut: "APPROUVEE", approuveParId: approbateur.id, dateDecision, erreur: null },
         });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034") {
+          throw new ErreurApprobationConcurrente();
+        }
+        throw e;
       }
-      // Les modules absents de la liste (ou passés à AUCUN) sont retirés —
-      // comportement métier inchangé, identique à l'original.
-      const gardes = permissions.filter((p) => p.niveauAcces !== "AUCUN").map((p) => p.module);
-      await tx.rolePermission.deleteMany({
-        where: { roleId, module: { notIn: gardes.length ? gardes : ["CAISSE"] } },
+      if (reservation.count !== 1) throw new ErreurApprobationConcurrente();
+
+      if (crochets?.apresReservationAvantExecution) {
+        await crochets.apresReservationAvantExecution();
+      }
+
+      const demande = await tx.demandeApprobation.findUniqueOrThrow({
+        where: { id: demandeApprobationId },
+        include: { demandePar: { select: { id: true, nom: true } } },
       });
-      if (!gardes.length) await tx.rolePermission.deleteMany({ where: { roleId } });
+      if (demande.type !== "MODIFIER_PERMISSIONS_ROLE") {
+        // Ne devrait jamais se produire : l'appelant (routes/approbations.ts)
+        // n'aiguille vers cette fonction que pour ce type précis. Garde
+        // défensive plutôt qu'une hypothèse silencieuse.
+        throw new Error(
+          `approuverEtAppliquerModificationPermissionsRole appelée pour un type d'action inattendu : ${demande.type}`,
+        );
+      }
+      const { roleId, permissions } = demande.donnees as unknown as { roleId: string; permissions: EntreePermission[] };
 
-      const apresSnap = await instantane(tx, roleId, role.nom);
-      const diff = calculerDiffPermissions(avantSnap.permissions, apresSnap.permissions);
-
-      // Toujours journalisé, même quand `diff` est entièrement vide (aucun
-      // changement réel — ex. resoumission exacte de l'état courant) :
-      // l'audit enregistre alors fidèlement « cette personne a confirmé cet
-      // état à cette date », ce qui reste une information de gouvernance
-      // légitime, plutôt que de faire dépendre l'existence d'une trace d'un
-      // calcul de no-op. Comportement volontaire, prouvé par un test dédié.
-      const acteur = contexteRequete.getStore();
-      if (!acteur) throw new ErreurActeurRequisPourAudit();
-
-      await tx.auditLog.create({
-        data: {
-          utilisateurId: acteur.id,
-          utilisateurNom: acteur.nom,
-          module: "EQUIPE" as Prisma.AuditLogCreateInput["module"],
-          typeEntite: "Role",
-          entiteId: roleId,
-          action: "MODIFICATION",
-          avant: avantSnap as unknown as Prisma.InputJsonValue,
-          apres: { ...apresSnap, demandePar, diff } as unknown as Prisma.InputJsonValue,
-        },
+      const resultat = await appliquerModificationPermissionsRoleTx(tx, roleId, permissions, {
+        mode: "APPROBATION",
+        demandeApprobationId,
+        demandePar: demande.demandePar,
       });
 
-      return { roleNom: role.nom, avant: avantSnap.permissions, apres: apresSnap.permissions, diff };
+      return {
+        roleNom: resultat.roleNom,
+        avant: resultat.avant,
+        apres: resultat.apres,
+        diff: resultat.diff,
+        demandeStatut: "APPROUVEE",
+        demandeApprouveParId: approbateur.id,
+        demandeDateDecision: dateDecision,
+      };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );

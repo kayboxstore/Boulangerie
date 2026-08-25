@@ -4,17 +4,10 @@ import type { Request } from "express";
 import type { Module, NiveauAcces, ResultatActionCritique, TypeActionCritique } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { busEvenements } from "../lib/events.js";
-import { appliquerModificationPermissionsRole, type IdentiteActeur } from "./permissionsRoleAudit.js";
+import { ErreurAction } from "../lib/erreurAction.js";
+import { appliquerModificationPermissionsRole } from "./permissionsRoleAudit.js";
 
-/** Erreur métier d'une action critique, mappée en statut HTTP par l'appelant. */
-export class ErreurAction extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+export { ErreurAction } from "../lib/erreurAction.js";
 
 const ROLE_ADMINISTRATEUR = "Administrateur";
 const MAX_COMPTES_ADMIN = 3;
@@ -25,14 +18,7 @@ const MAX_COMPTES_ADMIN = 3;
 // ---------------------------------------------------------------------------
 
 type Donnees = Record<string, unknown>;
-// `demandePar` : identité du demandeur d'origine quand l'exécution provient
-// de l'approbation d'une `DemandeApprobation` (Admin secondaire), `null`/absent
-// en exécution directe par l'Admin Principal. Seul `MODIFIER_PERMISSIONS_ROLE`
-// l'exploite pour l'instant (voir `permissionsRoleAudit.ts`) ; les autres
-// exécuteurs, à un seul paramètre, restent valides sans modification (une
-// fonction déclarant moins de paramètres que le type `Executeur` reste
-// assignable à ce type).
-type Executeur = (donnees: Donnees, demandePar?: IdentiteActeur | null) => Promise<{ message: string }>;
+type Executeur = (donnees: Donnees) => Promise<{ message: string }>;
 
 const EXECUTEURS: Record<TypeActionCritique, Executeur> = {
   SUPPRIMER_UTILISATEUR: async ({ utilisateurId }) => {
@@ -102,29 +88,28 @@ const EXECUTEURS: Record<TypeActionCritique, Executeur> = {
     return { message: `Produit « ${produit.nom} » — taux de taxe fixé à ${produit.tauxTaxe} %` };
   },
 
-  // Correctif P1 (contre-revue Codex, audit du 24/08/2026) : les écritures
-  // `RolePermission` restent des `upsert`/`deleteMany` inchangés (comportement
-  // métier préservé à l'identique) ; c'est désormais
+  // Correctif P1 (contre-revue Codex, audit du 24/08/2026 — Round 1 et 2) :
+  // les écritures `RolePermission` restent des `upsert`/`deleteMany`
+  // inchangés (comportement métier préservé à l'identique) ; c'est désormais
   // `appliquerModificationPermissionsRole` qui les enveloppe dans UNE SEULE
   // transaction Serializable avec une piste d'audit explicite, complète et
-  // déterministe — voir `services/permissionsRoleAudit.ts` pour le détail
-  // et la justification du défaut corrigé.
-  MODIFIER_PERMISSIONS_ROLE: async ({ roleId, permissions }, demandePar) => {
-    const role = await prisma.role.findUnique({ where: { id: roleId as string } });
-    if (!role) throw new ErreurAction(404, "Rôle introuvable");
+  // déterministe (y compris le 404 « Rôle introuvable », vérifié DANS la
+  // transaction — plus de pré-lecture séparée ici) — voir
+  // `services/permissionsRoleAudit.ts` pour le détail. Ce chemin ne sert que
+  // l'exécution DIRECTE par l'Admin Principal ; l'approbation d'une demande
+  // différée passe par `approuverEtAppliquerModificationPermissionsRole`,
+  // appelée directement par `routes/approbations.ts` (atomicité
+  // réservation+exécution+audit+transition, Round 2, P1-02).
+  MODIFIER_PERMISSIONS_ROLE: async ({ roleId, permissions }) => {
     const perms = permissions as { module: Module; niveauAcces: NiveauAcces }[];
-    const { roleNom } = await appliquerModificationPermissionsRole(prisma, role.id, perms, demandePar ?? null);
+    const { roleNom } = await appliquerModificationPermissionsRole(prisma, roleId as string, perms);
     return { message: `Permissions du rôle « ${roleNom} » mises à jour` };
   },
 };
 
-/** Rejoue une action critique à partir de son payload (utilisé à l'approbation). */
-export function executerAction(
-  type: TypeActionCritique,
-  donnees: Donnees,
-  demandePar?: IdentiteActeur | null,
-): Promise<{ message: string }> {
-  return EXECUTEURS[type](donnees, demandePar);
+/** Rejoue une action critique à partir de son payload (utilisé à l'approbation des 4 autres types). */
+export function executerAction(type: TypeActionCritique, donnees: Donnees): Promise<{ message: string }> {
+  return EXECUTEURS[type](donnees);
 }
 
 /**
