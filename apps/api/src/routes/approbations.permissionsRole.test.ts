@@ -39,6 +39,7 @@ vi.mock("../services/permissionsRoleAudit.js", async () => {
   );
   return {
     ErreurApprobationConcurrente: actual.ErreurApprobationConcurrente,
+    ErreurConflitApprobationReessayable: actual.ErreurConflitApprobationReessayable,
     approuverEtAppliquerModificationPermissionsRole: mocks.approuverEtAppliquer,
   };
 });
@@ -73,7 +74,7 @@ vi.mock("../middleware/auth.js", () => ({
 }));
 
 import { approbationsRouter } from "./approbations.js";
-import { ErreurApprobationConcurrente } from "../services/permissionsRoleAudit.js";
+import { ErreurApprobationConcurrente, ErreurConflitApprobationReessayable } from "../services/permissionsRoleAudit.js";
 
 function appApprobations() {
   const app = express();
@@ -139,6 +140,18 @@ describe("POST /api/approbations/:id/approuver — parcours APPROBATION, MODIFIE
 
     expect(res.status).toBe(409);
     expect(mocks.demandeFindUniqueOrThrow).not.toHaveBeenCalled(); // pas de relecture DTO après un 409
+  });
+
+  it("P2034 persistant, demande toujours EN_ATTENTE après épuisement (Round 4) : 503, message honnête, pas « déjà traitée »", async () => {
+    mocks.demandeFindUnique.mockResolvedValue({ type: "MODIFIER_PERMISSIONS_ROLE" });
+    mocks.approuverEtAppliquer.mockRejectedValue(new ErreurConflitApprobationReessayable());
+
+    const res = await request(appApprobations()).post(`/api/approbations/${DEMANDE_ID}/approuver`).send({});
+
+    expect(res.status).toBe(503);
+    expect(res.body.erreur).not.toMatch(/déjà été traitée/);
+    expect(res.body.erreur).toMatch(/réessay/i);
+    expect(mocks.demandeFindUniqueOrThrow).not.toHaveBeenCalled();
   });
 
   it("demande introuvable : 404, service jamais appelé", async () => {

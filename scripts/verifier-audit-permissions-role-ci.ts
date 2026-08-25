@@ -45,6 +45,29 @@
  * troisième connexion (`pg_blocking_pids`), et non plus sur un délai
  * arbitraire après lancement de la transaction concurrente — voir
  * `pidDeLaTransaction` / `attendreBlocageReel` ci-dessous.
+ *
+ * Round 4 (contre-revue Codex du 25/08/2026, P1) — défaut corrigé : le pid du
+ * participant B (ou du rejet/de l'approbation concurrente) était obtenu via
+ * `pidDeLaTransaction(clientB)` **avant** l'ouverture de sa propre
+ * transaction — un `PrismaClient` multiplexe ses requêtes sur un pool de
+ * connexions et rien ne garantit qu'une requête hors transaction et la
+ * transaction ouverte juste après réutilisent la MÊME connexion physique.
+ * Le pid observé pouvait donc désigner une connexion totalement différente
+ * de celle réellement bloquée, rendant l'observation `pg_blocking_pids`
+ * ultérieure non probante (elle pouvait passer même si aucun conflit réel
+ * n'affectait la connexion observée). Corrigé en capturant chaque pid
+ * EXCLUSIVEMENT depuis le client transactionnel `tx` de la transaction
+ * réellement susceptible de se bloquer — via de nouveaux crochets de test
+ * `avantReservation` (`permissionsRoleAudit.ts`, `demandeApprobation.ts`),
+ * déclenchés juste avant la réservation conditionnelle pour les scénarios
+ * 10-12 (le blocage y survient PENDANT la réservation elle-même), et via le
+ * crochet existant `apresReservationAvantExecution` de B pour le scénario 13
+ * (le blocage y survient APRÈS une réservation qui, elle, réussit sans
+ * conflit — sur l'écriture RolePermission qui suit). Chaque capture est
+ * synchronisée avec le reste du scénario par une barrière déterministe
+ * (`Promise` résolue explicitement depuis le crochet), jamais par un délai :
+ * le scénario n'avance vers `attendreBlocageReel` qu'une fois le pid
+ * RÉELLEMENT capturé depuis la transaction concernée.
  * C'est l'objet de ce script — il exerce EXACTEMENT le code de production,
  * `appliquerModificationPermissionsRole`,
  * `approuverEtAppliquerModificationPermissionsRole` et
@@ -476,6 +499,20 @@ async function main() {
 
     let promesseB: Promise<unknown> | undefined;
     let pidB: number | undefined;
+    // Barrière déterministe (correctif Round 4, P1) : ne PAS interroger le
+    // pid de B via `clientB` hors transaction (le pool Prisma ne garantit
+    // pas la réutilisation de la même connexion physique pour la transaction
+    // ouverte juste après — un tel pid pourrait désigner une connexion
+    // totalement différente de celle qui se bloque réellement). `pidB` est
+    // donc capturé DEPUIS `txB`, à l'intérieur même de la transaction de B,
+    // au point précis où B est sur le point de tenter sa réservation
+    // (bloquante ici, puisque même id de demande que A) — voir le crochet
+    // `avantReservation` de B ci-dessous. `pidBPret` ne se résout qu'une
+    // fois cette capture réellement effectuée.
+    let resolverPidBPret!: () => void;
+    const pidBPret = new Promise<void>((resolve) => {
+      resolverPidBPret = resolve;
+    });
 
     // A s'exécute avec le crochet `apresReservationAvantExecution` : au
     // moment précis où A a RÉELLEMENT réservé la ligne (transaction encore
@@ -485,10 +522,11 @@ async function main() {
     // committe, et A ne peut committer qu'après que son crochet soit revenu
     // — attendre B ici créerait un blocage mutuel (piège découvert et
     // corrigé pendant l'écriture initiale de ce script). Ce que le crochet
-    // ATTEND réellement, avant de laisser A committer : la CONFIRMATION,
-    // depuis `clientObservateur` (une troisième connexion), que la session de
-    // B est GÉNUINEMENT bloquée sur le verrou de A (`pg_blocking_pids`) — pas
-    // un délai arbitraire.
+    // ATTEND réellement, avant de laisser A committer : d'abord la barrière
+    // `pidBPret` (pid RÉEL de B capturé depuis sa propre transaction), puis
+    // la CONFIRMATION, depuis `clientObservateur` (une troisième connexion),
+    // que la session de B est GÉNUINEMENT bloquée sur le verrou de A
+    // (`pg_blocking_pids`) — jamais un délai arbitraire.
     const resultatA = await contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
       approuverEtAppliquerModificationPermissionsRole(
         dbPourAudit,
@@ -497,11 +535,20 @@ async function main() {
         {
           apresReservationAvantExecution: async (tx) => {
             const pidA = await pidDeLaTransaction(tx);
-            pidB = await pidDeLaTransaction(clientB); // pid réel de B, obtenu AVANT de lancer sa requête bloquante
             promesseB = contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
-              approuverEtAppliquerModificationPermissionsRole(dbPourAuditB, demande.id, { id: principal.id, nom: principal.nom }),
+              approuverEtAppliquerModificationPermissionsRole(dbPourAuditB, demande.id, { id: principal.id, nom: principal.nom }, {
+                // Le blocage de B survient PENDANT sa propre réservation
+                // (même id de demande que A, verrou de ligne déjà tenu par
+                // A) : le pid doit donc être capturé JUSTE AVANT cette
+                // réservation, depuis `txB` lui-même.
+                avantReservation: async (txB) => {
+                  pidB = await pidDeLaTransaction(txB);
+                  resolverPidBPret();
+                },
+              }),
             );
-            await attendreBlocageReel(clientObservateur, pidB, pidA, "scénario 10 (approbation vs approbation)");
+            await pidBPret;
+            await attendreBlocageReel(clientObservateur, pidB!, pidA, "scénario 10 (approbation vs approbation)");
           },
         },
       ),
@@ -566,6 +613,13 @@ async function main() {
 
     let promesseRejet: Promise<unknown> | undefined;
     let pidRejet: number | undefined;
+    // Barrière déterministe (correctif Round 4, P1) — voir scénario 10 :
+    // `pidRejet` doit être capturé DEPUIS la transaction du rejet elle-même
+    // (`avantReservation`), jamais via `clientRejet` hors transaction.
+    let resolverPidRejetPret!: () => void;
+    const pidRejetPret = new Promise<void>((resolve) => {
+      resolverPidRejetPret = resolve;
+    });
 
     const resultatApprobation = await contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
       approuverEtAppliquerModificationPermissionsRole(
@@ -575,9 +629,17 @@ async function main() {
         {
           apresReservationAvantExecution: async (tx) => {
             const pidApprobation = await pidDeLaTransaction(tx);
-            pidRejet = await pidDeLaTransaction(clientRejet);
-            promesseRejet = rejeterDemandeApprobationAtomique(dbPourRejet, demande.id, { id: principal.id, nom: principal.nom });
-            await attendreBlocageReel(clientObservateur, pidRejet, pidApprobation, "scénario 11 (rejet bloqué par approbation)");
+            promesseRejet = rejeterDemandeApprobationAtomique(dbPourRejet, demande.id, { id: principal.id, nom: principal.nom }, {
+              // Le rejet se heurte au verrou de l'approbation PENDANT sa
+              // propre réservation (même id de demande) : pid capturé juste
+              // avant, depuis sa transaction.
+              avantReservation: async (txRejet) => {
+                pidRejet = await pidDeLaTransaction(txRejet);
+                resolverPidRejetPret();
+              },
+            });
+            await pidRejetPret;
+            await attendreBlocageReel(clientObservateur, pidRejet!, pidApprobation, "scénario 11 (rejet bloqué par approbation)");
           },
         },
       ),
@@ -637,6 +699,14 @@ async function main() {
 
     let promesseApprobation: Promise<unknown> | undefined;
     let pidApprobation: number | undefined;
+    // Barrière déterministe (correctif Round 4, P1) — voir scénario 10 :
+    // `pidApprobation` doit être capturé DEPUIS la transaction de
+    // l'approbation elle-même (`avantReservation`), jamais via
+    // `clientApprobation` hors transaction.
+    let resolverPidApprobationPret!: () => void;
+    const pidApprobationPret = new Promise<void>((resolve) => {
+      resolverPidApprobationPret = resolve;
+    });
 
     // Symétrique du scénario 11 : cette fois c'est le REJET qui réserve en
     // premier (via son nouveau crochet `apresReservationAvantCommit`,
@@ -649,11 +719,19 @@ async function main() {
       {
         apresReservationAvantCommit: async (tx) => {
           const pidRejet = await pidDeLaTransaction(tx);
-          pidApprobation = await pidDeLaTransaction(clientApprobation);
           promesseApprobation = contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
-            approuverEtAppliquerModificationPermissionsRole(dbPourApprobation, demande.id, { id: principal.id, nom: principal.nom }),
+            approuverEtAppliquerModificationPermissionsRole(dbPourApprobation, demande.id, { id: principal.id, nom: principal.nom }, {
+              // L'approbation se heurte au verrou du rejet PENDANT sa propre
+              // réservation (même id de demande) : pid capturé juste avant,
+              // depuis sa transaction.
+              avantReservation: async (txApprobation) => {
+                pidApprobation = await pidDeLaTransaction(txApprobation);
+                resolverPidApprobationPret();
+              },
+            }),
           );
-          await attendreBlocageReel(clientObservateur, pidApprobation, pidRejet, "scénario 12 (approbation bloquée par rejet)");
+          await pidApprobationPret;
+          await attendreBlocageReel(clientObservateur, pidApprobation!, pidRejet, "scénario 12 (approbation bloquée par rejet)");
         },
       },
     );
@@ -748,6 +826,18 @@ async function main() {
         return Reflect.get(cible, propriete, recepteur);
       },
     });
+    // Barrière déterministe (correctif Round 4, P1) : contrairement aux
+    // scénarios 10-12, le blocage de B ne survient PAS pendant sa réservation
+    // (demandeB a un id DIFFÉRENT de demandeA — aucun conflit à cette étape)
+    // mais PENDANT l'écriture RolePermission qui suit. `pidB` doit donc être
+    // capturé APRÈS que la réservation de B a RÉUSSI mais AVANT que
+    // l'écriture RolePermission ne démarre — exactement le point où
+    // `apresReservationAvantExecution` de B s'exécute — jamais via `clientB`
+    // hors transaction (interrogé avant même que B n'ouvre sa transaction).
+    let resolverPidBPret!: () => void;
+    const pidBPret = new Promise<void>((resolve) => {
+      resolverPidBPret = resolve;
+    });
 
     const resultatA = await contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
       approuverEtAppliquerModificationPermissionsRole(
@@ -757,18 +847,28 @@ async function main() {
         {
           apresExecutionAvantRetour: async (tx) => {
             const pidA = await pidDeLaTransaction(tx);
-            pidB = await pidDeLaTransaction(clientB);
             promesseB = contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
               approuverEtAppliquerModificationPermissionsRole(
                 clientBAvecCompteur as unknown as Parameters<typeof approuverEtAppliquerModificationPermissionsRole>[0],
                 demandeB.id,
                 { id: principal.id, nom: principal.nom },
+                {
+                  // La réservation de B (id distinct de A) réussit sans
+                  // conflit — c'est ICI, juste après, que son pid réel doit
+                  // être capturé : le blocage réel survient juste après,
+                  // pendant l'upsert RolePermission (même ligne que A).
+                  apresReservationAvantExecution: async (txB) => {
+                    pidB = await pidDeLaTransaction(txB);
+                    resolverPidBPret();
+                  },
+                },
               ),
             );
+            await pidBPret;
             // B doit se heurter au verrou RÉEL posé par l'upsert RolePermission
             // de A (même ligne : roleId+module CAISSE), PAS à la réservation
             // (deux id de demande différents, aucun conflit à cette étape).
-            await attendreBlocageReel(clientObservateur, pidB, pidA, "scénario 13 (P2034 réel sur l'upsert RolePermission)");
+            await attendreBlocageReel(clientObservateur, pidB!, pidA, "scénario 13 (P2034 réel sur l'upsert RolePermission)");
           },
         },
       ),

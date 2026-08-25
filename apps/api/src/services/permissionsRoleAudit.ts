@@ -130,12 +130,15 @@ export class ErreurActeurRequisPourAudit extends Error {
 
 /**
  * Levée quand la réservation atomique de la `DemandeApprobation` n'affecte
- * aucune ligne — la demande a déjà été traitée (approuvée, rejetée) par
- * cette même requête ou par une requête concurrente qui a gagné la course —
- * OU quand un conflit de sérialisation PostgreSQL (P2034) répété n'a pas pu
- * être tranché après épuisement des tentatives (voir
- * `approuverEtAppliquerModificationPermissionsRole`). Mappée en 409 par
- * l'appelant (`routes/approbations.ts`).
+ * aucune ligne — la demande a RÉELLEMENT déjà été traitée (approuvée,
+ * rejetée) par une requête concurrente qui a gagné la course — OU quand,
+ * après épuisement des tentatives de réessai sur un P2034 persistant, une
+ * relecture RÉELLE (hors de toute transaction avortée) confirme que la
+ * demande est bien devenue TERMINALE entre-temps (voir
+ * `approuverEtAppliquerModificationPermissionsRole`, correctif Round 4).
+ * Mappée en 409 par l'appelant (`routes/approbations.ts`) — jamais affirmée
+ * sans cette relecture réelle : voir `ErreurConflitApprobationReessayable`
+ * pour le cas distinct où la demande reste `EN_ATTENTE` malgré l'échec.
  *
  * Étend `ErreurDecisionConcurrente` (mécanisme générique,
  * `services/demandeApprobation.ts`) : un `instanceof ErreurDecisionConcurrente`
@@ -147,6 +150,28 @@ export class ErreurActeurRequisPourAudit extends Error {
 export class ErreurApprobationConcurrente extends ErreurDecisionConcurrente {
   constructor() {
     super("Cette demande a déjà été traitée — approuvée, rejetée, ou approuvée par une requête concurrente entre-temps.");
+  }
+}
+
+/**
+ * Levée quand les tentatives de réessai sur un P2034 (conflit de
+ * sérialisation PostgreSQL) sont épuisées ALORS QUE la demande, relue
+ * RÉELLEMENT hors de toute transaction avortée, est encore `EN_ATTENTE` —
+ * correctif Round 4 (contre-revue Codex du 25/08/2026) : distincte
+ * d'`ErreurApprobationConcurrente`, qui affirme qu'une AUTRE décision a
+ * réellement gagné (constaté par cette même relecture). Ici, personne n'a
+ * gagné : c'est un conflit de sérialisation RÉEL et PERSISTANT (contention
+ * élevée sur cette ressource, par exemple), pas une décision concurrente
+ * terminale — la demande reste traitable, un nouvel essai a de bonnes
+ * chances d'aboutir. Mappée en 503 (temporairement indisponible, réessayer)
+ * par l'appelant, jamais en 500 brut ni en 409 « déjà traitée » (ce serait
+ * un mensonge : l'action n'a PAS été décidée par quelqu'un d'autre).
+ */
+export class ErreurConflitApprobationReessayable extends Error {
+  constructor() {
+    super(
+      "Conflit de sérialisation PostgreSQL persistant après plusieurs tentatives — la demande est toujours en attente, réessayez.",
+    );
   }
 }
 
@@ -329,14 +354,43 @@ export interface ResultatApprobationPermissionsRole {
  * survienne, déclenche une TOUTE NOUVELLE transaction (une transaction
  * avortée par PostgreSQL ne peut pas être « reprise » — il faut en rouvrir
  * une) ; au nouvel essai, la réservation conditionnelle re-décide HONNÊTEMENT
- * si la demande est toujours `EN_ATTENTE` (jamais une supposition). Si les
- * tentatives s'épuisent avec un P2034 persistant, la dernière erreur est
- * mappée en `ErreurApprobationConcurrente` (409) plutôt que remontée brute —
- * l'interprétation la plus sûre d'un conflit de sérialisation répété sur
- * cette ressource précise, jamais un 500.
+ * si la demande est toujours `EN_ATTENTE` (jamais une supposition).
+ *
+ * Correctif Round 4 (contre-revue Codex du 25/08/2026) — message honnête
+ * après épuisement : la Round 3 mappait systématiquement l'épuisement des
+ * tentatives en `ErreurApprobationConcurrente` (« déjà traitée »), ce qui
+ * pouvait être un MENSONGE — un P2034 persistant (forte contention, par
+ * exemple) ne signifie PAS forcément qu'une autre décision a gagné, la
+ * demande peut très bien être encore `EN_ATTENTE`. Corrigé en relisant
+ * l'état RÉEL de la `DemandeApprobation` (hors de toute transaction
+ * avortée) après épuisement : si elle est devenue terminale,
+ * `ErreurApprobationConcurrente` (409, une décision a réellement gagné) ;
+ * si elle est toujours `EN_ATTENTE`, `ErreurConflitApprobationReessayable`
+ * (503, conflit réel mais PERSONNE n'a encore gagné — réessayer a de bonnes
+ * chances d'aboutir). Jamais un 500 brut dans les deux cas.
  */
 const NB_TENTATIVES_MAX_P2034 = 3;
 export interface CrochetsTestApprobation {
+  /**
+   * Appelé (si fourni) juste AVANT la réservation conditionnelle
+   * (`updateMany` sur `DemandeApprobation`) — jamais utilisé en production.
+   * Correctif Round 4 (contre-revue Codex du 25/08/2026, P1) : quand CETTE
+   * transaction est censée être celle qui se heurte réellement au verrou
+   * d'une autre transaction concurrente déjà en cours (le blocage survient
+   * PENDANT la réservation elle-même, ex. deux tentatives sur la MÊME
+   * `DemandeApprobation`), c'est ICI — et seulement ici, depuis `tx` — que
+   * le pid PostgreSQL réel de CETTE transaction doit être capturé, JAMAIS
+   * via un `PrismaClient` interrogé séparément avant l'appel : Prisma
+   * multiplexe ses requêtes sur un pool de connexions et rien ne garantit
+   * qu'une requête hors transaction et la transaction ouverte juste après
+   * réutilisent la même connexion physique — un tel pid capturé « avant »
+   * peut donc être celui d'une connexion totalement différente de celle qui
+   * se bloque réellement, rendant l'observation `pg_blocking_pids` ultérieure
+   * non probante. Voir `apresReservationAvantExecution` ci-dessous pour le
+   * cas symétrique (blocage survenant APRÈS une réservation qui, elle,
+   * réussit sans conflit).
+   */
+  avantReservation?: (tx: TxClient) => Promise<void>;
   /**
    * Appelé (si fourni) juste après que la réservation a réussi, AVANT la
    * lecture/exécution de l'action — jamais utilisé par la route de
@@ -384,6 +438,9 @@ export async function approuverEtAppliquerModificationPermissionsRole(
       return await db.$transaction(
         async (tx) => {
           const dateDecision = new Date();
+          if (crochets?.avantReservation) {
+            await crochets.avantReservation(tx);
+          }
           const reservation = await tx.demandeApprobation.updateMany({
             where: { id: demandeApprobationId, statut: "EN_ATTENTE" },
             data: { statut: "APPROUVEE", approuveParId: approbateur.id, dateDecision, erreur: null },
@@ -444,12 +501,27 @@ export async function approuverEtAppliquerModificationPermissionsRole(
       const estP2034 = e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034";
       if (!estP2034) throw e;
       if (tentative < NB_TENTATIVES_MAX_P2034) continue;
-      // Tentatives épuisées avec un P2034 persistant : mappé en
-      // `ErreurApprobationConcurrente` (409) plutôt que remonté brut —
-      // l'interprétation la plus sûre d'un conflit de sérialisation répété
-      // sur cette ressource précise (quelqu'un d'autre la traite
-      // manifestement en parallèle), jamais un 500.
-      throw new ErreurApprobationConcurrente();
+      // Tentatives épuisées avec un P2034 persistant : chaque tentative a
+      // avorté SA PROPRE transaction (réservation comprise), donc rien ici
+      // ne permet de SUPPOSER que la demande a été tranchée par quelqu'un
+      // d'autre — correctif Round 4 (contre-revue Codex du 25/08/2026) :
+      // relit l'état RÉEL, hors de toute transaction avortée, pour décider
+      // honnêtement laquelle des deux erreurs distinctes renvoyer.
+      const demandeReelle = await db.demandeApprobation.findUnique({
+        where: { id: demandeApprobationId },
+        select: { statut: true },
+      });
+      if (!demandeReelle || demandeReelle.statut !== "EN_ATTENTE") {
+        // Devenue terminale (ou introuvable — cas défensif, aucune route ne
+        // supprime de DemandeApprobation) : une décision concurrente a
+        // RÉELLEMENT gagné pendant nos tentatives.
+        throw new ErreurApprobationConcurrente();
+      }
+      // Toujours EN_ATTENTE malgré l'épuisement des tentatives : conflit de
+      // sérialisation RÉEL et PERSISTANT, PAS une décision concurrente
+      // gagnante — jamais affirmer « déjà traitée » quand ce n'est pas le
+      // cas, et jamais remonter le P2034 brut (500).
+      throw new ErreurConflitApprobationReessayable();
     }
   }
   // Inatteignable : la boucle retourne ou lève à chaque itération, et

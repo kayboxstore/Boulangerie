@@ -61,6 +61,19 @@ export interface IdentiteDecideur {
 
 export interface CrochetsTestDecision {
   /**
+   * Appelé (si fourni) juste AVANT la réservation conditionnelle
+   * (`updateMany`) — jamais utilisé en production. Correctif Round 4
+   * (contre-revue Codex du 25/08/2026, P1) : à utiliser quand CETTE
+   * transaction est censée se heurter réellement au verrou d'une autre
+   * transaction déjà en cours (blocage PENDANT la réservation elle-même) —
+   * capture le pid PostgreSQL réel de CETTE transaction depuis `tx`, jamais
+   * via un `PrismaClient` interrogé séparément avant l'appel (le pool de
+   * connexions de Prisma ne garantit pas la réutilisation de la même
+   * connexion physique entre une requête hors transaction et la transaction
+   * ouverte juste après).
+   */
+  avantReservation?: (tx: TxClient) => Promise<void>;
+  /**
    * Appelé (si fourni) juste après que la réservation a réussi, AVANT le
    * commit — jamais utilisé par les routes de production. Sert uniquement
    * aux scripts de vérification PostgreSQL réelle pour garantir un
@@ -90,6 +103,7 @@ export async function rejeterDemandeApprobationAtomique(
   crochets?: CrochetsTestDecision,
 ): Promise<void> {
   await db.$transaction(async (tx) => {
+    if (crochets?.avantReservation) await crochets.avantReservation(tx);
     const { count } = await tx.demandeApprobation.updateMany({
       where: { id: demandeApprobationId, statut: "EN_ATTENTE" },
       data: { statut: "REJETEE", approuveParId: rejeteur.id, dateDecision: new Date() },

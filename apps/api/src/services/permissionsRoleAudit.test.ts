@@ -28,6 +28,7 @@ import {
   calculerDiffPermissions,
   ErreurActeurRequisPourAudit,
   ErreurApprobationConcurrente,
+  ErreurConflitApprobationReessayable,
   type EntreePermission,
 } from "./permissionsRoleAudit.js";
 
@@ -83,6 +84,13 @@ function creerClientFactice(
   // réservation, mais plus tard (ici : l'upsert RolePermission), pour
   // prouver que l'enveloppe de réessai couvre bien la transaction COMPLÈTE.
   const p2034SurUpsert = { module: null as Module | null, restants: 0 };
+  // P2-02 (Round 4) : simule une décision CONCURRENTE réellement gagnante
+  // (une AUTRE transaction, entièrement indépendante, committée) au moment
+  // précis du DERNIER échec P2034 forcé — mutation DIRECTE de `etat`, hors
+  // du mécanisme de rollback simulé propre à CETTE transaction, exactement
+  // comme le ferait une transaction concurrente committée séparément en
+  // PostgreSQL réel.
+  let decisionExterneApresDernierP2034: { statut: "APPROUVEE" | "REJETEE"; approuveParId: string } | null = null;
 
   function construireDelegues(
     roles: Map<string, { id: string; nom: string }>,
@@ -112,6 +120,10 @@ function creerClientFactice(
             }
             if (p2034SurUpsert.module === module && p2034SurUpsert.restants > 0) {
               p2034SurUpsert.restants--;
+              if (p2034SurUpsert.restants === 0 && decisionExterneApresDernierP2034) {
+                const id = [...etat.demandes.keys()][0]!;
+                etat.demandes.set(id, { ...etat.demandes.get(id)!, ...decisionExterneApresDernierP2034 });
+              }
               throw new Prisma.PrismaClientKnownRequestError(
                 "Transaction failed due to a write conflict or a deadlock. Please retry your transaction",
                 { code: "P2034", clientVersion: "test" },
@@ -177,6 +189,14 @@ function creerClientFactice(
       etat.demandes = demandesCopie;
       return resultat;
     }),
+    // Lecture HORS transaction, sur l'état réellement COMMITTÉ — utilisée par
+    // la relecture après épuisement des tentatives P2034 (Round 4, P2-02).
+    demandeApprobation: {
+      findUnique: vi.fn(async ({ where: { id } }: { where: { id: string } }) => {
+        const d = etat.demandes.get(id);
+        return d ? { statut: d.statut } : null;
+      }),
+    },
   };
 
   return {
@@ -191,6 +211,9 @@ function creerClientFactice(
     forcerP2034SurUpsert: (module: Module | null, nbEchecs: number) => {
       p2034SurUpsert.module = module;
       p2034SurUpsert.restants = nbEchecs;
+    },
+    simulerDecisionExterneApresDernierP2034: (statut: "APPROUVEE" | "REJETEE", approuveParId: string) => {
+      decisionExterneApresDernierP2034 = { statut, approuveParId };
     },
   };
 }
@@ -530,19 +553,50 @@ describe("approuverEtAppliquerModificationPermissionsRole — parcours APPROBATI
     expect(etat.auditLogs).toHaveLength(1); // jamais de doublon malgré les 2 tentatives avortées
   });
 
-  it("P2034 persistant au-delà des tentatives bornées : ErreurApprobationConcurrente (jamais un 500 brut), jamais de réessai infini", async () => {
+  // --- P2-02 (Round 4) : message honnête après épuisement — jamais une
+  // affirmation automatique « déjà traitée », toujours une relecture RÉELLE
+  // de l'état hors de la transaction avortée avant de choisir l'erreur. ----
+  it("P2034 persistant, demande TOUJOURS EN_ATTENTE après relecture : ErreurConflitApprobationReessayable (jamais un 500 brut, jamais « déjà traitée » à tort), jamais de réessai infini", async () => {
     const { client, etat, forcerP2034SurUpsert } = creerClientFactice([], [demandeInitiale()]);
-    // Échoue par P2034 indéfiniment (bien plus que NB_TENTATIVES_MAX_P2034).
+    // Échoue par P2034 indéfiniment (bien plus que NB_TENTATIVES_MAX_P2034) —
+    // AUCUNE décision concurrente ne gagne jamais : personne n'a tranché.
     forcerP2034SurUpsert("CAISSE", 999);
     await expect(
       contexteRequete.run(ACTEUR, () => approuverEtAppliquerModificationPermissionsRole(client, DEMANDE_ID, ACTEUR)),
-    ).rejects.toThrow(ErreurApprobationConcurrente);
+    ).rejects.toThrow(ErreurConflitApprobationReessayable);
     // Bornée à exactement 3 tentatives — jamais infinie.
     expect(client.$transaction).toHaveBeenCalledTimes(3);
     // Chaque transaction avortée annule aussi sa réservation : la demande
-    // reste EN_ATTENTE, jamais faussement APPROUVEE ni orpheline.
+    // reste EN_ATTENTE, jamais faussement APPROUVEE ni orpheline — et c'est
+    // exactement CE qui doit produire l'erreur « réessayable », pas « déjà
+    // traitée » (ce serait un mensonge ici).
     expect(etat.demandes.get(DEMANDE_ID)!.statut).toBe("EN_ATTENTE");
     expect(etat.auditLogs).toHaveLength(0);
+  });
+
+  it("P2034 persistant, mais une AUTRE transaction gagne réellement pendant les tentatives : ErreurApprobationConcurrente (409, pas 503)", async () => {
+    const { client, etat, forcerP2034SurUpsert, simulerDecisionExterneApresDernierP2034 } = creerClientFactice(
+      [],
+      [demandeInitiale()],
+    );
+    // Exactement 3 échecs forcés (= NB_TENTATIVES_MAX_P2034) : le dernier
+    // coïncide avec l'épuisement des tentatives — c'est CE moment précis que
+    // simule la décision externe ci-dessous.
+    forcerP2034SurUpsert("CAISSE", 3);
+    // Simule une décision RÉELLEMENT gagnante d'une transaction concurrente
+    // indépendante, committée pendant que la nôtre épuisait ses tentatives —
+    // la relecture après épuisement doit la découvrir et lever l'erreur
+    // spécifique « déjà traitée », PAS le conflit générique réessayable.
+    simulerDecisionExterneApresDernierP2034("REJETEE", "u-autre-decideur");
+    await expect(
+      contexteRequete.run(ACTEUR, () => approuverEtAppliquerModificationPermissionsRole(client, DEMANDE_ID, ACTEUR)),
+    ).rejects.toThrow(ErreurApprobationConcurrente);
+    expect(client.$transaction).toHaveBeenCalledTimes(3);
+    // La décision externe (REJETEE) est bien celle observée — jamais écrasée
+    // ni contredite par notre propre tentative épuisée.
+    expect(etat.demandes.get(DEMANDE_ID)!.statut).toBe("REJETEE");
+    expect(etat.demandes.get(DEMANDE_ID)!.approuveParId).toBe("u-autre-decideur");
+    expect(etat.auditLogs).toHaveLength(0); // notre exécution n'a jamais abouti
   });
 
   it("une erreur Prisma non-P2034 pendant l'upsert n'est jamais réessayée (remontée immédiatement)", async () => {

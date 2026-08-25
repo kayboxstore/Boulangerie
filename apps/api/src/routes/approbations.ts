@@ -7,6 +7,7 @@ import { ErreurAction, executerAction } from "../services/actionsCritiques.js";
 import {
   approuverEtAppliquerModificationPermissionsRole,
   ErreurApprobationConcurrente,
+  ErreurConflitApprobationReessayable,
 } from "../services/permissionsRoleAudit.js";
 import {
   enregistrerErreurSiEncoreEnAttente,
@@ -91,6 +92,14 @@ approbationsRouter.post("/:id/approuver", async (req, res, next) => {
       } catch (e) {
         if (e instanceof ErreurApprobationConcurrente) {
           return res.status(409).json({ erreur: "Cette demande a déjà été traitée" });
+        }
+        if (e instanceof ErreurConflitApprobationReessayable) {
+          // Distinct du 409 ci-dessus (correctif Round 4) : ici, PERSONNE
+          // n'a gagné — un conflit de sérialisation PostgreSQL réel et
+          // persistant a empêché de trancher, la demande reste EN_ATTENTE.
+          // Un 409 « déjà traitée » serait un mensonge ; 503 signale un état
+          // temporaire, réessayable.
+          return res.status(503).json({ erreur: e.message });
         }
         if (e instanceof ErreurAction) {
           // La transaction entière (réservation incluse) a été annulée par
