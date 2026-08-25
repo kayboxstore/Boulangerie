@@ -178,6 +178,17 @@ async function main() {
     );
   }
 
+  // Réinitialisation OBLIGATOIRE entre les deux scénarios : un index unique
+  // PARTIEL PostgreSQL (`Utilisateur_admin_principal_unique`, défini en SQL
+  // brut dans la migration — jamais représentable dans schema.prisma, donc
+  // jamais recréé par un simple `prisma db push`) garantit au plus UN
+  // `estAdminPrincipal = true` en base. Sans cette réinitialisation, créer un
+  // second Principal pour le scénario 2 violerait réellement cette
+  // contrainte (P2002) — découvert en CI (migrations réelles appliquées),
+  // pas localement avec `db push` (qui ignore cet index, absent du schéma
+  // déclaratif).
+  await reinitialiserBase();
+
   console.log("→ Scénario 2/2 : parcours APPROBATION réel — soumission par un secondaire, approbation par le Principal (VRAI HTTP)…");
   {
     const roleAdmin = await creerRoleAdministrateurAvecEquipeEcriture("Administrateur Approbation");
