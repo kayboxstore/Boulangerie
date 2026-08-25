@@ -12,7 +12,8 @@ import {
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
-import { traiterActionCritique } from "../services/actionsCritiques.js";
+import { ErreurAction, traiterActionCritique } from "../services/actionsCritiques.js";
+import { rattacherTravailleurAuNouveauCompteTx } from "../services/actionsCritiquesMetier.js";
 import { busEvenements } from "../lib/events.js";
 import { genererMotDePasseTemporaire } from "../lib/recuperationMotDePasse.js";
 import { invaliderSessionUtilisateur } from "../lib/realtime.js";
@@ -119,12 +120,25 @@ equipeRouter.post("/", requirePermission("EQUIPE", "ECRITURE"), async (req, res,
       return res.status(r.http).json(r.body);
     }
 
-    const compte = await prisma.$transaction(async (tx) => {
-      const c = await tx.utilisateur.create({ data: { nom, email, roleId, motDePasseHash, motDePasseDoitChanger: true }, include: INCLUDE_COMPTE });
-      await tx.travailleur.update({ where: { id: travailleur.id }, data: { utilisateurId: c.id } });
-      return c;
-    });
-    res.status(201).json({ compte: versCompteDTO(compte) });
+    // Correctif P1 (Round 2, contre-revue Codex du 25/08/2026) : le
+    // rattachement du Travailleur au compte créé n'est plus un `update`
+    // inconditionnel — une écriture conditionnelle (voir
+    // `rattacherTravailleurAuNouveauCompteTx`, réutilisée telle quelle depuis
+    // `services/actionsCritiquesMetier.ts` pour ne pas dupliquer la même
+    // garde) empêche d'écraser silencieusement un rattachement plus récent
+    // fait entre-temps par un autre chemin (par ex. `PUT /api/travailleurs/:id`
+    // entre les pré-vérifications ci-dessus et cette transaction).
+    try {
+      const compte = await prisma.$transaction(async (tx) => {
+        const c = await tx.utilisateur.create({ data: { nom, email, roleId, motDePasseHash, motDePasseDoitChanger: true }, include: INCLUDE_COMPTE });
+        await rattacherTravailleurAuNouveauCompteTx(tx, { travailleurId: travailleur.id, compteId: c.id, emailAttendu: email });
+        return c;
+      });
+      res.status(201).json({ compte: versCompteDTO(compte) });
+    } catch (e) {
+      if (e instanceof ErreurAction) return res.status(e.status).json({ erreur: e.message });
+      throw e;
+    }
   } catch (e) {
     next(e);
   }

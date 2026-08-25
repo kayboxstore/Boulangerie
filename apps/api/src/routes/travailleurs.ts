@@ -238,22 +238,44 @@ travailleursRouter.put("/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), as
     const depGroupe = await validerDepartementGroupe(departementFinal, groupeFinal);
     if ("erreur" in depGroupe) return res.status(depGroupe.status).json({ erreur: depGroupe.erreur });
 
-    const travailleur = await prisma.travailleur.update({
-      where: { id: existant.id },
-      data: {
-        nom,
-        telephone,
-        poste,
-        dateEmbauche: dateEmbauche ? new Date(dateEmbauche) : undefined,
-        // undefined = intact ; null = délier ; id = lier.
-        utilisateurId,
-        departementId: depGroupe.departementId,
-        groupeId: depGroupe.groupeId,
-        salaireMensuel,
-        joursTravaillesParMois,
-      },
-      include: INCLUDE_TRAVAILLEUR,
-    });
+    const donneesEcriture = {
+      nom,
+      telephone,
+      poste,
+      dateEmbauche: dateEmbauche ? new Date(dateEmbauche) : undefined,
+      // undefined = intact ; null = délier ; id = lier.
+      utilisateurId,
+      departementId: depGroupe.departementId,
+      groupeId: depGroupe.groupeId,
+      salaireMensuel,
+      joursTravaillesParMois,
+    };
+
+    let travailleur;
+    if (utilisateurId !== undefined) {
+      // Correctif P1 (Round 2, contre-revue Codex du 25/08/2026) : cette
+      // requête modifie EXPLICITEMENT le rattachement (lier ou délier) —
+      // `verifierCompteLie` ci-dessus n'est qu'une prélecture, dépassée dès
+      // qu'un autre chemin (ex. l'approbation d'une demande CREER_COMPTE_ADMIN)
+      // modifie `utilisateurId` entre-temps. L'écriture est donc conditionnée
+      // sur la valeur RÉELLEMENT observée (`existant.utilisateurId`) — jamais
+      // un `update` inconditionnel — pour ne jamais écraser silencieusement
+      // un rattachement changé entre la prélecture et cette écriture.
+      const { count } = await prisma.travailleur.updateMany({
+        where: { id: existant.id, utilisateurId: existant.utilisateurId },
+        data: donneesEcriture,
+      });
+      if (count !== 1) {
+        return res.status(409).json({ erreur: "Le rattachement de cette fiche a changé entre-temps — réessayez." });
+      }
+      travailleur = await prisma.travailleur.findUniqueOrThrow({ where: { id: existant.id }, include: INCLUDE_TRAVAILLEUR });
+    } else {
+      travailleur = await prisma.travailleur.update({
+        where: { id: existant.id },
+        data: donneesEcriture,
+        include: INCLUDE_TRAVAILLEUR,
+      });
+    }
     res.json({ travailleur: versTravailleurDTO(travailleur) });
   } catch (e) {
     next(e);

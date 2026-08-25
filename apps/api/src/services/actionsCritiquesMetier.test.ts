@@ -25,6 +25,7 @@ import {
   creerCompteAdminDirect,
   creerCompteAdminTx,
   ErreurActeurRequisPourAudit,
+  ErreurExecutionDirecteReessayable,
   MAX_COMPTES_ADMIN,
   modifierTauxTaxeDirect,
   modifierTypeClientDirect,
@@ -53,10 +54,16 @@ interface ProduitState {
   nom: string;
   tauxTaxe: number;
 }
+interface RoleState {
+  id: string;
+  nom: string;
+}
 interface TravailleurState {
   id: string;
   nom: string;
   utilisateurId: string | null;
+  emailProStatut: "AUCUNE" | "EN_ATTENTE_VERIFICATION" | "ACTIF" | "ECHEC";
+  emailProAdresse: string | null;
 }
 interface DemandeState {
   id: string;
@@ -99,7 +106,10 @@ const ACTEUR = { id: "u-principal", nom: "Aline (Admin Principal)" };
  * RÉEL qu'au succès — un rollback PostgreSQL réel se comporte à l'identique
  * (aucune écriture, y compris partielle, ne survit à une levée).
  */
+const ROLE_ADMIN_PAR_DEFAUT: RoleState = { id: "role-admin", nom: ROLE_ADMINISTRATEUR };
+
 function creerClientFactice(seed: {
+  roles?: RoleState[];
   utilisateurs?: UtilisateurState[];
   typeClients?: TypeClientState[];
   produits?: ProduitState[];
@@ -107,6 +117,7 @@ function creerClientFactice(seed: {
   demandes?: DemandeState[];
 }) {
   const etat = {
+    roles: new Map((seed.roles ?? [ROLE_ADMIN_PAR_DEFAUT]).map((r) => [r.id, { ...r }])),
     utilisateurs: new Map((seed.utilisateurs ?? []).map((u) => [u.id, { ...u }])),
     typeClients: new Map((seed.typeClients ?? []).map((t) => [t.id, { ...t }])),
     produits: new Map((seed.produits ?? []).map((p) => [p.id, { ...p }])),
@@ -121,8 +132,15 @@ function creerClientFactice(seed: {
   // remplacement de `$transaction` (qui casse la surcharge de type de la
   // méthode réelle).
   let forcerP2003SurSuppression = false;
+  // Force `count: 0` sur le PROCHAIN `travailleur.updateMany` — simule une
+  // modification concurrente RÉELLE survenue entre la prélecture et
+  // l'écriture conditionnelle (le `where` composé ne matcherait alors plus
+  // rien), sans avoir à reproduire une vraie course dans ce client factice en
+  // mémoire à connexion unique. Même convention que `forcerP2003SurSuppression`.
+  let forcerEchecRattachementConcurrent = false;
 
   function construireDelegues(
+    roles: Map<string, RoleState>,
     utilisateurs: Map<string, UtilisateurState>,
     typeClients: Map<string, TypeClientState>,
     produits: Map<string, ProduitState>,
@@ -131,6 +149,9 @@ function creerClientFactice(seed: {
     auditLogs: AuditLogState[],
   ) {
     return {
+      role: {
+        findUnique: vi.fn(async (args: { where: { id: string } }) => roles.get(args.where.id) ?? null),
+      },
       utilisateur: {
         findUnique: vi.fn(async (args: { where: { id?: string; email?: string } }) => {
           if (args.where.id) return utilisateurs.get(args.where.id) ?? null;
@@ -142,7 +163,8 @@ function creerClientFactice(seed: {
         ),
         create: vi.fn(async (args: { data: Omit<UtilisateurState, "id" | "roleNom" | "estAdminPrincipal"> & { roleId: string } }) => {
           const id = `u-nouveau-${++compteurId}`;
-          const u: UtilisateurState = { ...args.data, id, roleNom: ROLE_ADMINISTRATEUR, estAdminPrincipal: false };
+          const roleNom = roles.get(args.data.roleId)?.nom ?? "?";
+          const u: UtilisateurState = { ...args.data, id, roleNom, estAdminPrincipal: false };
           utilisateurs.set(id, u);
           return u;
         }),
@@ -190,12 +212,29 @@ function creerClientFactice(seed: {
       },
       travailleur: {
         findUnique: vi.fn(async (args: { where: { id: string } }) => travailleurs.get(args.where.id) ?? null),
-        updateMany: vi.fn(async (args: { where: { id: string }; data: Partial<TravailleurState> }) => {
+        findUniqueOrThrow: vi.fn(async (args: { where: { id: string } }) => {
           const t = travailleurs.get(args.where.id);
-          if (!t) return { count: 0 };
-          travailleurs.set(args.where.id, { ...t, ...args.data });
-          return { count: 1 };
+          if (!t) throw new Error("Travailleur introuvable en base factice");
+          return t;
         }),
+        updateMany: vi.fn(
+          async (args: {
+            where: { id: string; utilisateurId?: string | null; emailProStatut?: string; emailProAdresse?: string };
+            data: Partial<TravailleurState>;
+          }) => {
+            if (forcerEchecRattachementConcurrent) {
+              forcerEchecRattachementConcurrent = false;
+              return { count: 0 };
+            }
+            const t = travailleurs.get(args.where.id);
+            if (!t) return { count: 0 };
+            if ("utilisateurId" in args.where && t.utilisateurId !== args.where.utilisateurId) return { count: 0 };
+            if (args.where.emailProStatut !== undefined && t.emailProStatut !== args.where.emailProStatut) return { count: 0 };
+            if (args.where.emailProAdresse !== undefined && t.emailProAdresse !== args.where.emailProAdresse) return { count: 0 };
+            travailleurs.set(args.where.id, { ...t, ...args.data });
+            return { count: 1 };
+          },
+        ),
       },
       demandeApprobation: {
         findUnique: vi.fn(async (args: { where: { id: string }; select?: Record<string, true> }) => {
@@ -229,6 +268,7 @@ function creerClientFactice(seed: {
   }
 
   const delegue = construireDelegues(
+    etat.roles,
     etat.utilisateurs,
     etat.typeClients,
     etat.produits,
@@ -241,6 +281,7 @@ function creerClientFactice(seed: {
     // Clone : le callback opère sur une COPIE, jamais sur `etat` directement —
     // ne recopie dans `etat` qu'au succès (voir en-tête de la fonction).
     const clone = {
+      roles: new Map([...etat.roles].map(([k, v]) => [k, { ...v }])),
       utilisateurs: new Map([...etat.utilisateurs].map(([k, v]) => [k, { ...v }])),
       typeClients: new Map([...etat.typeClients].map(([k, v]) => [k, { ...v }])),
       produits: new Map([...etat.produits].map(([k, v]) => [k, { ...v }])),
@@ -249,6 +290,7 @@ function creerClientFactice(seed: {
       auditLogs: [] as AuditLogState[],
     };
     const txClone = construireDelegues(
+      clone.roles,
       clone.utilisateurs,
       clone.typeClients,
       clone.produits,
@@ -258,6 +300,7 @@ function creerClientFactice(seed: {
     );
     const resultat = await fn(txClone);
     // Succès : commit — recopie le clone dans l'état réel.
+    etat.roles = clone.roles;
     etat.utilisateurs = clone.utilisateurs;
     etat.typeClients = clone.typeClients;
     etat.produits = clone.produits;
@@ -274,6 +317,9 @@ function creerClientFactice(seed: {
     transactionSpy,
     forcerP2003SurProchaineSuppression: () => {
       forcerP2003SurSuppression = true;
+    },
+    forcerEchecRattachementConcurrent: () => {
+      forcerEchecRattachementConcurrent = true;
     },
   };
 }
@@ -334,6 +380,13 @@ describe("supprimerUtilisateurDirect / Tx", () => {
 
 describe("creerCompteAdminDirect / Tx", () => {
   const DONNEES = { nom: "Nouvel Admin", email: "nouvel@lomoto.cd", roleId: "role-admin", motDePasseHash: "hash" };
+  const TRAVAILLEUR_LIBRE: TravailleurState = {
+    id: "t-1",
+    nom: "Bakari",
+    utilisateurId: null,
+    emailProStatut: "ACTIF",
+    emailProAdresse: DONNEES.email,
+  };
 
   it("succès sans travailleurId : compte créé, aucun audit (create jamais intercepté)", async () => {
     const { db, etat, transactionSpy } = creerClientFactice({});
@@ -345,9 +398,7 @@ describe("creerCompteAdminDirect / Tx", () => {
   });
 
   it("succès avec travailleurId : rattachement ATOMIQUE + audit Travailleur", async () => {
-    const { db, etat } = creerClientFactice({
-      travailleurs: [{ id: "t-1", nom: "Bakari", utilisateurId: null }],
-    });
+    const { db, etat } = creerClientFactice({ travailleurs: [TRAVAILLEUR_LIBRE] });
     await contexteRequete.run(ACTEUR, () => creerCompteAdminDirect(db, { ...DONNEES, travailleurId: "t-1" }));
     const compte = [...etat.utilisateurs.values()][0]!;
     expect(etat.travailleurs.get("t-1")!.utilisateurId).toBe(compte.id);
@@ -391,13 +442,115 @@ describe("creerCompteAdminDirect / Tx", () => {
     expect(etat.auditLogs).toHaveLength(0);
   });
 
+  // --- Correctif P1 (Round 2, contre-revue Codex du 25/08/2026) — écrasement
+  // empêché du rattachement Travailleur ------------------------------------
+
+  it("Travailleur déjà rattaché à un autre compte entre-temps : ErreurAction 409, aucune création survivante", async () => {
+    const { db, etat } = creerClientFactice({
+      travailleurs: [{ ...TRAVAILLEUR_LIBRE, utilisateurId: "u-deja-rattache" }],
+    });
+    await expect(
+      contexteRequete.run(ACTEUR, () => creerCompteAdminDirect(db, { ...DONNEES, travailleurId: "t-1" })),
+    ).rejects.toMatchObject({ status: 409 });
+    expect([...etat.utilisateurs.values()]).toHaveLength(0); // rollback : compte créé PUIS annulé
+    expect(etat.travailleurs.get("t-1")!.utilisateurId).toBe("u-deja-rattache"); // rattachement récent JAMAIS écrasé
+    expect(etat.auditLogs).toHaveLength(0);
+  });
+
+  it("adresse professionnelle inactive (emailProStatut ≠ ACTIF) : ErreurAction 409", async () => {
+    const { db, etat } = creerClientFactice({
+      travailleurs: [{ ...TRAVAILLEUR_LIBRE, emailProStatut: "EN_ATTENTE_VERIFICATION" }],
+    });
+    await expect(
+      contexteRequete.run(ACTEUR, () => creerCompteAdminDirect(db, { ...DONNEES, travailleurId: "t-1" })),
+    ).rejects.toMatchObject({ status: 409 });
+    expect([...etat.utilisateurs.values()]).toHaveLength(0);
+    expect(etat.travailleurs.get("t-1")!.utilisateurId).toBeNull();
+  });
+
+  it("adresse professionnelle différente de l'email figé dans la demande : ErreurAction 409", async () => {
+    const { db, etat } = creerClientFactice({
+      travailleurs: [{ ...TRAVAILLEUR_LIBRE, emailProAdresse: "adresse-a-change@lomoto.cd" }],
+    });
+    await expect(
+      contexteRequete.run(ACTEUR, () => creerCompteAdminDirect(db, { ...DONNEES, travailleurId: "t-1" })),
+    ).rejects.toMatchObject({ status: 409 });
+    expect([...etat.utilisateurs.values()]).toHaveLength(0);
+    expect(etat.travailleurs.get("t-1")!.utilisateurId).toBeNull();
+  });
+
+  it("rôle introuvable : ErreurAction 404, aucune création", async () => {
+    const { db, etat } = creerClientFactice({ roles: [] });
+    await expect(contexteRequete.run(ACTEUR, () => creerCompteAdminDirect(db, DONNEES))).rejects.toMatchObject({ status: 404 });
+    expect([...etat.utilisateurs.values()]).toHaveLength(0);
+  });
+
+  it("rôle n'étant plus « Administrateur » (renommé entre-temps) : ErreurAction 409 explicite, aucune création", async () => {
+    const { db, etat } = creerClientFactice({ roles: [{ id: "role-admin", nom: "Rôle renommé" }] });
+    await expect(contexteRequete.run(ACTEUR, () => creerCompteAdminDirect(db, DONNEES))).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining("Administrateur"),
+    });
+    expect([...etat.utilisateurs.values()]).toHaveLength(0);
+  });
+
+  it("updateMany.count === 0 malgré une prélecture favorable (modification concurrente RÉELLE) : 409, ROLLBACK complet", async () => {
+    const { db, etat, forcerEchecRattachementConcurrent } = creerClientFactice({ travailleurs: [TRAVAILLEUR_LIBRE] });
+    forcerEchecRattachementConcurrent();
+    await expect(
+      contexteRequete.run(ACTEUR, () => creerCompteAdminDirect(db, { ...DONNEES, travailleurId: "t-1" })),
+    ).rejects.toMatchObject({ status: 409 });
+    expect([...etat.utilisateurs.values()]).toHaveLength(0); // rollback : compte créé PUIS annulé
+    expect(etat.travailleurs.get("t-1")!.utilisateurId).toBeNull();
+    expect(etat.auditLogs).toHaveLength(0);
+  });
+
   it("acteur absent du contexte de requête au moment de l'audit Travailleur : ROLLBACK, aucune création survivante", async () => {
-    const { db, etat } = creerClientFactice({ travailleurs: [{ id: "t-1", nom: "Bakari", utilisateurId: null }] });
+    const { db, etat } = creerClientFactice({ travailleurs: [TRAVAILLEUR_LIBRE] });
     await expect(db.$transaction((tx) => creerCompteAdminTx(tx, { ...DONNEES, travailleurId: "t-1" }))).rejects.toBeInstanceOf(
       ErreurActeurRequisPourAudit,
     );
     expect([...etat.utilisateurs.values()]).toHaveLength(0);
     expect(etat.travailleurs.get("t-1")!.utilisateurId).toBeNull();
+  });
+});
+
+describe("Réessai borné P2034 sur les wrappers directs (Round 2, correctif P2)", () => {
+  // Ces tests-ci n'ont pas besoin du client factice complet : seule la boucle
+  // de réessai autour de `db.$transaction` est exercée, avec un `db` minimal
+  // dont `$transaction` est directement contrôlé par le test.
+  function dbAvecTransactionControlee(comportements: Array<"p2034" | "succes">) {
+    let appel = 0;
+    const transactionSpy = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+      const comportement = comportements[appel];
+      appel++;
+      if (comportement === "p2034") throw new ErreurP2034Factice();
+      return fn({}); // `tx` n'est jamais lu par les fonctions Tx dans ces tests (succès trivial simulé plus bas)
+    });
+    return { db: { $transaction: transactionSpy } as unknown as Parameters<typeof supprimerUtilisateurDirect>[0], transactionSpy };
+  }
+
+  it("P2034 sur la 1ʳᵉ tentative, succès à la 2ᵉ : résultat renvoyé normalement, 2 transactions ouvertes", async () => {
+    const { db, etat, transactionSpy } = creerClientFactice({
+      utilisateurs: [{ id: "u-1", nom: "Bakari", email: "bakari@lomoto.cd", roleId: "role-1", roleNom: "Caissier(ère)", motDePasseHash: "x", motDePasseDoitChanger: false, estAdminPrincipal: false }],
+    });
+    // Le premier appel réel à `$transaction` (celui du client factice, déjà un
+    // `vi.fn()`) lève un P2034 avant même d'exécuter son callback ; le second
+    // appel garde le comportement réel du client factice.
+    transactionSpy.mockRejectedValueOnce(new ErreurP2034Factice());
+
+    const resultat = await contexteRequete.run(ACTEUR, () => supprimerUtilisateurDirect(db, "u-1"));
+    expect(resultat.message).toMatch(/Bakari/);
+    expect(transactionSpy).toHaveBeenCalledTimes(2); // 1 tentative avortée + 1 réussie
+    expect(etat.utilisateurs.has("u-1")).toBe(false);
+  });
+
+  it("trois P2034 directs consécutifs : ErreurExecutionDirecteReessayable (503 via traiterActionCritique), jamais un 500 brut", async () => {
+    const { db } = dbAvecTransactionControlee(["p2034", "p2034", "p2034"]);
+    await expect(contexteRequete.run(ACTEUR, () => supprimerUtilisateurDirect(db, "u-1"))).rejects.toBeInstanceOf(
+      ErreurExecutionDirecteReessayable,
+    );
+    expect(db.$transaction).toHaveBeenCalledTimes(3); // NB_TENTATIVES_MAX_P2034_DIRECT
   });
 });
 

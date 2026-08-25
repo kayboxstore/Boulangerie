@@ -46,12 +46,22 @@
 import { PrismaClient } from "@prisma/client";
 import express from "express";
 import request from "supertest";
+import { ROLE_ADMINISTRATEUR } from "@lomoto/shared";
 import { verifierEnvironnementIntegrationCI } from "./garde-integration-ci.js";
 
 verifierEnvironnementIntegrationCI(process.env, "scripts/verifier-http-actions-metier-ci.ts");
 
 const prisma = new PrismaClient();
-const ROLE_ADMIN = "Administrateur HTTP Réel";
+// Correctif (Round 2, contre-revue Codex du 25/08/2026) : DOIT être
+// EXACTEMENT `ROLE_ADMINISTRATEUR` (« Administrateur ») — un nom de rôle
+// différent (l'ancien « Administrateur HTTP Réel ») fait prendre à
+// `routes/equipe.ts` (`role.nom === ROLE_ADMINISTRATEUR`) le chemin de
+// création DIRECTE non-admin au lieu du chemin CREER_COMPTE_ADMIN, et fait
+// désormais rejeter la demande par la revérification de rôle du correctif
+// P1 (`creerCompteAdminTx`) — les scénarios 4 et 6 (CREER_COMPTE_ADMIN)
+// testaient donc, avant ce correctif, le MAUVAIS chemin de code sans jamais
+// le signaler.
+const ROLE_ADMIN = ROLE_ADMINISTRATEUR;
 const ROLE_AUTRE = "Autre Rôle HTTP Réel";
 
 function echouer(message: string): never {
@@ -76,6 +86,7 @@ async function creerRoleAvecPermissions(nom: string) {
     data: [
       { roleId: role.id, module: "EQUIPE", niveauAcces: "ECRITURE" },
       { roleId: role.id, module: "PARAMETRES", niveauAcces: "ECRITURE" },
+      { roleId: role.id, module: "TRAVAILLEURS", niveauAcces: "ECRITURE" },
     ],
   });
   return role;
@@ -101,6 +112,7 @@ async function main() {
   const { typeClientsRouter } = await import("../apps/api/src/routes/clients.js");
   const { produitsRouter } = await import("../apps/api/src/routes/produits.js");
   const { approbationsRouter } = await import("../apps/api/src/routes/approbations.js");
+  const { travailleursRouter } = await import("../apps/api/src/routes/travailleurs.js");
   const { signToken } = await import("../apps/api/src/lib/jwt.js");
 
   const app = express();
@@ -109,10 +121,11 @@ async function main() {
   app.use("/api/type-clients", typeClientsRouter);
   app.use("/api/produits", produitsRouter);
   app.use("/api/approbations", approbationsRouter);
+  app.use("/api/travailleurs", travailleursRouter);
 
   await reinitialiserBase();
 
-  console.log("→ Scénario 1/8 : SUPPRIMER_UTILISATEUR, parcours DIRECT réel — DELETE /api/equipe/:id (Admin Principal)…");
+  console.log("→ Scénario 1/9 : SUPPRIMER_UTILISATEUR, parcours DIRECT réel — DELETE /api/equipe/:id (Admin Principal)…");
   {
     const roleAdmin = await creerRoleAvecPermissions(ROLE_ADMIN);
     const roleAutre = await creerRoleAvecPermissions(ROLE_AUTRE);
@@ -138,7 +151,7 @@ async function main() {
     console.log("  ✓ compte réellement supprimé, AuditLog réellement écrit — chemin HTTP direct entièrement réel.");
   }
 
-  console.log("→ Scénario 2/8 : MODIFIER_TYPE_CLIENT, parcours DIRECT réel — PUT /api/type-clients/:id (Admin Principal)…");
+  console.log("→ Scénario 2/9 : MODIFIER_TYPE_CLIENT, parcours DIRECT réel — PUT /api/type-clients/:id (Admin Principal)…");
   {
     await reinitialiserBase();
     const roleAdmin = await creerRoleAvecPermissions(ROLE_ADMIN);
@@ -162,7 +175,7 @@ async function main() {
     console.log("  ✓ TypeClient réellement mis à jour — chemin HTTP direct entièrement réel.");
   }
 
-  console.log("→ Scénario 3/8 : MODIFIER_TAUX_TAXE, parcours DIRECT réel — PUT /api/produits/:id (Admin Principal)…");
+  console.log("→ Scénario 3/9 : MODIFIER_TAUX_TAXE, parcours DIRECT réel — PUT /api/produits/:id (Admin Principal)…");
   {
     await reinitialiserBase();
     const roleAdmin = await creerRoleAvecPermissions(ROLE_ADMIN);
@@ -186,7 +199,7 @@ async function main() {
     console.log("  ✓ Produit réellement mis à jour — chemin HTTP direct entièrement réel.");
   }
 
-  console.log("→ Scénario 4/8 : CREER_COMPTE_ADMIN, parcours DIRECT réel — POST /api/equipe (Admin Principal)…");
+  console.log("→ Scénario 4/9 : CREER_COMPTE_ADMIN, parcours DIRECT réel — POST /api/equipe (Admin Principal)…");
   {
     await reinitialiserBase();
     const roleAdmin = await creerRoleAvecPermissions(ROLE_ADMIN);
@@ -205,7 +218,12 @@ async function main() {
       .post("/api/equipe")
       .set("Authorization", `Bearer ${jetonPrincipal}`)
       .send({ travailleurId: travailleur.id, roleId: roleAdmin.id, motDePasse: "motdepasse123" });
-    if (res.status !== 201) echouer(`scénario 4 : attendu 201, reçu ${res.status} (corps : ${JSON.stringify(res.body)})`);
+    // CREER_COMPTE_ADMIN passe par `traiterActionCritique` (section 2/3.16) :
+    // exécution directe par l'Admin Principal → 200 `{statut:"execute"}`,
+    // JAMAIS 201 (ce code n'est renvoyé que par le chemin de création directe
+    // d'un compte NON-Administrateur, plus bas dans `routes/equipe.ts`).
+    if (res.status !== 200) echouer(`scénario 4 : attendu 200, reçu ${res.status} (corps : ${JSON.stringify(res.body)})`);
+    if (res.body.statut !== "execute") echouer(`scénario 4 : statut de réponse attendu "execute", reçu ${JSON.stringify(res.body)}`);
 
     const clientVerif = new PrismaClient();
     let compteReel: Awaited<ReturnType<typeof clientVerif.utilisateur.findFirst>>;
@@ -223,7 +241,7 @@ async function main() {
     console.log("  ✓ compte Administrateur réellement créé, fiche Travailleur réellement rattachée — chemin HTTP direct entièrement réel.");
   }
 
-  console.log("→ Scénario 5/8 : SUPPRIMER_UTILISATEUR, parcours APPROBATION réel — POST /api/approbations/:id/approuver…");
+  console.log("→ Scénario 5/9 : SUPPRIMER_UTILISATEUR, parcours APPROBATION réel — POST /api/approbations/:id/approuver…");
   {
     await reinitialiserBase();
     const roleAdmin = await creerRoleAvecPermissions(ROLE_ADMIN);
@@ -263,19 +281,20 @@ async function main() {
     console.log("  ✓ réservation + suppression réelle + transition APPROUVEE, toutes committées ensemble — parcours HTTP approbation entièrement réel.");
   }
 
-  console.log("→ Scénario 6/8 : CREER_COMPTE_ADMIN, parcours APPROBATION réel — rattachement Travailleur atomique…");
+  console.log("→ Scénario 6/9 : CREER_COMPTE_ADMIN, parcours APPROBATION réel — rattachement Travailleur atomique…");
   {
     await reinitialiserBase();
     const roleAdmin = await creerRoleAvecPermissions(ROLE_ADMIN);
     const { utilisateur: principal, jeton: jetonPrincipal } = await creerCompteConnecte("Principal S6", "principal-s6@test.local", roleAdmin.id, true, signToken);
     const { utilisateur: secondaire } = await creerCompteConnecte("Secondaire S6", "secondaire-s6@test.local", roleAdmin.id, false, signToken);
+    const emailS6 = "nouvelle-admin-s6@test.local";
     const travailleur = await prisma.travailleur.create({
-      data: { nom: "Nouvelle Admin S6", poste: "Administratrice", dateEmbauche: new Date("2026-01-01") },
+      data: { nom: "Nouvelle Admin S6", poste: "Administratrice", dateEmbauche: new Date("2026-01-01"), emailProStatut: "ACTIF", emailProAdresse: emailS6 },
     });
     const demande = await prisma.demandeApprobation.create({
       data: {
         type: "CREER_COMPTE_ADMIN",
-        donnees: { nom: "Nouvelle Admin S6", email: "nouvelle-admin-s6@test.local", roleId: roleAdmin.id, motDePasseHash: "hash-s6", travailleurId: travailleur.id },
+        donnees: { nom: "Nouvelle Admin S6", email: emailS6, roleId: roleAdmin.id, motDePasseHash: "hash-s6", travailleurId: travailleur.id },
         resume: "créer le compte Administrateur « Nouvelle Admin S6 »",
         demandeParId: secondaire.id,
       },
@@ -301,7 +320,7 @@ async function main() {
     console.log("  ✓ compte créé + Travailleur rattaché + demande APPROUVEE, tout committé dans la MÊME transaction — parcours HTTP approbation entièrement réel.");
   }
 
-  console.log("→ Scénario 7/8 : MODIFIER_TYPE_CLIENT, parcours APPROBATION réel…");
+  console.log("→ Scénario 7/9 : MODIFIER_TYPE_CLIENT, parcours APPROBATION réel…");
   {
     await reinitialiserBase();
     const roleAdmin = await creerRoleAvecPermissions(ROLE_ADMIN);
@@ -334,7 +353,7 @@ async function main() {
     console.log("  ✓ TypeClient réellement mis à jour + demande APPROUVEE, dans la MÊME transaction — parcours HTTP approbation entièrement réel.");
   }
 
-  console.log("→ Scénario 8/8 : MODIFIER_TAUX_TAXE, parcours APPROBATION réel…");
+  console.log("→ Scénario 8/9 : MODIFIER_TAUX_TAXE, parcours APPROBATION réel…");
   {
     await reinitialiserBase();
     const roleAdmin = await creerRoleAvecPermissions(ROLE_ADMIN);
@@ -367,12 +386,105 @@ async function main() {
     console.log("  ✓ Produit réellement mis à jour + demande APPROUVEE, dans la MÊME transaction — parcours HTTP approbation entièrement réel.");
   }
 
+  console.log(
+    "→ Scénario 9/9 : CREER_COMPTE_ADMIN, protection RÉELLE contre l'écrasement du rattachement (correctif P1, Round 2, " +
+      "contre-revue Codex du 25/08/2026) — Travailleur rattaché entre-temps à un AUTRE compte via le VRAI parcours HTTP " +
+      "Travailleurs, avant que l'ancienne demande ne soit approuvée…",
+  );
+  {
+    await reinitialiserBase();
+    const roleAdmin = await creerRoleAvecPermissions(ROLE_ADMIN);
+    const roleAutre = await creerRoleAvecPermissions(ROLE_AUTRE);
+    const { jeton: jetonPrincipal } = await creerCompteConnecte("Principal S9", "principal-s9@test.local", roleAdmin.id, true, signToken);
+    const { utilisateur: secondaire } = await creerCompteConnecte("Secondaire S9", "secondaire-s9@test.local", roleAdmin.id, false, signToken);
+
+    const email = "nouvelle-admin-s9@test.local";
+    const travailleur = await prisma.travailleur.create({
+      data: { nom: "Fiche S9", poste: "Administratrice", dateEmbauche: new Date("2026-01-01"), emailProStatut: "ACTIF", emailProAdresse: email },
+    });
+
+    // 1) Une demande CREER_COMPTE_ADMIN RÉELLE est créée pour ce Travailleur,
+    //    encore libre à cet instant.
+    const demande = await prisma.demandeApprobation.create({
+      data: {
+        type: "CREER_COMPTE_ADMIN",
+        donnees: { nom: "Nouvelle Admin S9", email, roleId: roleAdmin.id, motDePasseHash: "hash-s9", travailleurId: travailleur.id },
+        resume: "créer le compte Administrateur « Nouvelle Admin S9 »",
+        demandeParId: secondaire.id,
+      },
+    });
+
+    // 2) AVANT l'approbation, ce Travailleur est légitimement rattaché à un
+    //    AUTRE compte via le VRAI parcours HTTP autorisé
+    //    (PUT /api/travailleurs/:id, routeur réel, requireAuth réel) —
+    //    exactement ce que ferait un Chargé du personnel, sans savoir qu'une
+    //    demande d'approbation désormais obsolète vise encore cette fiche.
+    const compteAutre = await prisma.utilisateur.create({
+      data: { nom: "Compte Autre S9", email: "compte-autre-s9@test.local", roleId: roleAutre.id, motDePasseHash: "x", actif: true },
+    });
+    const resRattachement = await request(app)
+      .put(`/api/travailleurs/${travailleur.id}`)
+      .set("Authorization", `Bearer ${jetonPrincipal}`)
+      .send({ utilisateurId: compteAutre.id });
+    if (resRattachement.status !== 200) {
+      echouer(
+        `scénario 9 : le rattachement réel préalable (PUT /api/travailleurs/:id) aurait dû réussir, reçu ${resRattachement.status} ` +
+          `(corps : ${JSON.stringify(resRattachement.body)})`,
+      );
+    }
+
+    // 3) L'ancienne demande, désormais obsolète, est approuvée — DOIT échouer
+    //    proprement plutôt que d'écraser silencieusement le rattachement RÉCENT.
+    const resApprobation = await request(app)
+      .post(`/api/approbations/${demande.id}/approuver`)
+      .set("Authorization", `Bearer ${jetonPrincipal}`)
+      .send({});
+    if (resApprobation.status !== 409) {
+      echouer(
+        `scénario 9 : attendu 409 (rattachement devenu obsolète entre-temps), reçu ${resApprobation.status} ` +
+          `(corps : ${JSON.stringify(resApprobation.body)})`,
+      );
+    }
+
+    const clientVerif = new PrismaClient();
+    let travailleurReel: Awaited<ReturnType<typeof clientVerif.travailleur.findUniqueOrThrow>>;
+    let demandeReelle: Awaited<ReturnType<typeof clientVerif.demandeApprobation.findUniqueOrThrow>>;
+    let compteNouveau: Awaited<ReturnType<typeof clientVerif.utilisateur.findFirst>>;
+    let auditsTravailleur: Awaited<ReturnType<typeof clientVerif.auditLog.findMany>>;
+    try {
+      travailleurReel = await clientVerif.travailleur.findUniqueOrThrow({ where: { id: travailleur.id } });
+      demandeReelle = await clientVerif.demandeApprobation.findUniqueOrThrow({ where: { id: demande.id } });
+      compteNouveau = await clientVerif.utilisateur.findFirst({ where: { email } });
+      auditsTravailleur = await clientVerif.auditLog.findMany({ where: { typeEntite: "Travailleur", entiteId: travailleur.id } });
+    } finally {
+      await clientVerif.$disconnect();
+    }
+    if (travailleurReel.utilisateurId !== compteAutre.id) {
+      echouer("scénario 9 : le rattachement RÉCENT (fait via l'API Travailleurs) a été écrasé — régression du correctif P1 Round 2");
+    }
+    if (compteNouveau) echouer("scénario 9 : AUCUN compte Administrateur n'aurait dû être créé pour cette demande devenue obsolète");
+    if (demandeReelle.statut !== "EN_ATTENTE") {
+      echouer(`scénario 9 : la demande aurait dû rester EN_ATTENTE (réservation annulée par le rollback), trouvé ${demandeReelle.statut}`);
+    }
+    if (demandeReelle.approuveParId !== null || demandeReelle.dateDecision !== null) {
+      echouer("scénario 9 : aucun champ approuveParId/dateDecision n'aurait dû être committé sur cette tentative avortée");
+    }
+    if (auditsTravailleur.length !== 0) {
+      echouer(`scénario 9 : aucun AuditLog Travailleur (mensonger ou non) ne devrait exister ici, trouvé ${auditsTravailleur.length}`);
+    }
+    console.log(
+      "  ✓ rattachement réel (PUT /api/travailleurs/:id) conservé intact, approbation de la demande obsolète refusée avec 409, " +
+        "AUCUN compte Administrateur créé, demande redevenue EN_ATTENTE (jamais approuveParId/dateDecision committés), aucun " +
+        "AuditLog mensonger — chemin HTTP entièrement réel, aucun écrasement silencieux.",
+    );
+  }
+
   await reinitialiserBase();
   console.log(
-    "\n✅ Vérification HTTP réelle (mission P1, 25/08/2026) : 8 scénarios (4 types × direct/approbation) passent " +
-      "contre un VRAI serveur Express + VRAIE authentification JWT + VRAIE base PostgreSQL — aucun mock " +
-      "d'authentification, de service d'écriture, ou de Prisma ; toutes les écritures relues depuis une connexion " +
-      "Prisma indépendante après chaque appel HTTP.\n",
+    "\n✅ Vérification HTTP réelle (mission P1, Round 1 + Round 2 du 25/08/2026) : 9 scénarios (4 types × direct/approbation, " +
+      "PLUS la protection contre l'écrasement du rattachement Travailleur) passent contre un VRAI serveur Express + VRAIE " +
+      "authentification JWT + VRAIE base PostgreSQL — aucun mock d'authentification, de service d'écriture, ou de Prisma ; " +
+      "toutes les écritures relues depuis une connexion Prisma indépendante après chaque appel HTTP.\n",
   );
 }
 

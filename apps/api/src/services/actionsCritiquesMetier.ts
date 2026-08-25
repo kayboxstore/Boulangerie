@@ -95,6 +95,65 @@ export class ErreurActeurRequisPourAudit extends Error {
   }
 }
 
+/**
+ * Levée quand l'exécution DIRECTE (Admin Principal, hors workflow
+ * d'approbation) d'une des 4 actions ci-dessous épuise ses tentatives de
+ * réessai sur un conflit de sérialisation PostgreSQL (P2034) persistant —
+ * correctif P2 (Round 2, contre-revue Codex du 25/08/2026). Contrairement au
+ * chemin d'approbation (`ErreurApprobationConcurrente`/
+ * `ErreurConflitApprobationReessayable`, `demandeApprobation.ts`), il
+ * n'existe ici aucune `DemandeApprobation` dont l'état pourrait distinguer
+ * « quelqu'un d'autre a déjà gagné » d'un « conflit réel mais personne n'a
+ * gagné » — l'exécution directe ne réserve rien, chaque tentative rejoue
+ * simplement la MÊME action métier dans une TOUTE NOUVELLE transaction. Un
+ * P2034 persistant ici signifie donc toujours une contention réelle et
+ * temporaire (ex. deux actions directes concurrentes sur la même ressource,
+ * ou une action directe et une approbation concurrentes) — jamais une
+ * décision déjà prise par quelqu'un d'autre. Mappée en 503 (réessayable) par
+ * l'appelant HTTP (`traiterActionCritique`, `actionsCritiques.ts`) — jamais
+ * un 500 brut, jamais une affirmation de succès ou de conflit déjà décidé.
+ */
+export class ErreurExecutionDirecteReessayable extends Error {
+  constructor() {
+    super(
+      "Conflit de sérialisation PostgreSQL persistant après plusieurs tentatives — réessayez.",
+    );
+  }
+}
+
+const NB_TENTATIVES_MAX_P2034_DIRECT = 3;
+
+/**
+ * Ouvre une TOUTE NOUVELLE transaction Serializable à chaque tentative (une
+ * transaction avortée par PostgreSQL ne peut pas être « reprise » — voir
+ * `demandeApprobation.ts`, même principe) et réessaie un P2034 jusqu'à
+ * `NB_TENTATIVES_MAX_P2034_DIRECT` fois — utilisée par les 4 wrappers
+ * `*Direct` ci-dessous, qui n'ouvraient jusqu'ici leur transaction
+ * Serializable qu'une seule fois : un P2034 y remontait donc en erreur
+ * Prisma brute (500 via le handler générique Express) plutôt qu'en 503
+ * honnête, alors même que le chemin d'approbation des mêmes 4 types
+ * bénéficiait déjà de ce réessai via `approuverEtExecuterDemandeAtomique`.
+ */
+async function executerDirectAvecReessaiP2034<T>(
+  db: typeof prismaApp,
+  executer: (tx: TxClient) => Promise<T>,
+): Promise<T> {
+  for (let tentative = 1; tentative <= NB_TENTATIVES_MAX_P2034_DIRECT; tentative++) {
+    try {
+      return await db.$transaction(executer, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (e) {
+      const estP2034 = e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034";
+      if (!estP2034) throw e;
+      if (tentative < NB_TENTATIVES_MAX_P2034_DIRECT) continue;
+      throw new ErreurExecutionDirecteReessayable();
+    }
+  }
+  // Inatteignable : la boucle retourne ou lève à chaque itération, et
+  // `NB_TENTATIVES_MAX_P2034_DIRECT >= 1`. Présent uniquement pour satisfaire
+  // le vérificateur de type.
+  throw new ErreurExecutionDirecteReessayable();
+}
+
 const CLE_SENSIBLE = /hash|motdepasse|password|secret|token/i;
 
 /**
@@ -190,9 +249,7 @@ export async function supprimerUtilisateurTx(tx: TxClient, utilisateurId: string
 }
 
 export async function supprimerUtilisateurDirect(db: typeof prismaApp, utilisateurId: string): Promise<{ message: string }> {
-  return db.$transaction((tx) => supprimerUtilisateurTx(tx, utilisateurId), {
-    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-  });
+  return executerDirectAvecReessaiP2034(db, (tx) => supprimerUtilisateurTx(tx, utilisateurId));
 }
 
 // ---------------------------------------------------------------------------
@@ -207,11 +264,99 @@ export interface DonneesCreerCompteAdmin {
   travailleurId?: string | null;
 }
 
+export interface RattachementTravailleurAttendu {
+  travailleurId: string;
+  compteId: string;
+  /** Email professionnel figé au moment où le rattachement a été décidé (soumission de la demande, ou requête directe) — doit encore correspondre EXACTEMENT à celui de la fiche au moment de l'écriture. */
+  emailAttendu: string;
+}
+
+/**
+ * Rattache un Travailleur à un compte Utilisateur nouvellement créé — par une
+ * écriture CONDITIONNELLE (`updateMany` avec l'état attendu dans son
+ * `where`), jamais un `update` inconditionnel — correctif P1 (Round 2,
+ * contre-revue Codex du 25/08/2026) : l'ancienne version
+ * (`where: { id: travailleurId }` seul) permettait à une demande
+ * `CREER_COMPTE_ADMIN` devenue obsolète d'écraser SILENCIEUSEMENT un
+ * rattachement plus récent fait entre-temps par un autre chemin (l'API
+ * Travailleurs, ou une autre création de compte) — scénario : demande créée
+ * pour un Travailleur encore libre → ce Travailleur est légitimement
+ * rattaché à un autre compte via `PUT /api/travailleurs/:id` → l'ancienne
+ * demande est approuvée → l'ancien code remplaçait `utilisateurId` sans
+ * condition, laissant potentiellement l'autre compte orphelin.
+ *
+ * Utilisée par `creerCompteAdminTx` (chemin `CREER_COMPTE_ADMIN`, direct et
+ * approbation) ET par la création directe d'un compte NON-Administrateur
+ * (`routes/equipe.ts`, `POST /api/equipe`) — les deux chemins qui créent un
+ * `Utilisateur` puis l'attachent à une fiche `Travailleur` déjà existante
+ * partagent donc EXACTEMENT la même garantie, plutôt que de dupliquer (et
+ * risquer de faire diverger) la même logique de garde.
+ *
+ * La garantie porte sur l'écriture elle-même (`where`), pas seulement sur la
+ * prélecture qui précède (qui ne sert qu'à produire un message d'erreur
+ * clair) : `count !== 1` après l'`updateMany` signifie que l'état a changé
+ * entre la prélecture et cette écriture, DANS LA MÊME transaction — sous
+ * Serializable, soit PostgreSQL a bloqué cette transaction sur le verrou de
+ * la ligne (puis son `WHERE` ne matche plus une fois débloquée → `count = 0`
+ * → 409 propre), soit il l'abandonne avec un P2034 si la ligne a déjà été
+ * committée par une autre transaction depuis l'ouverture de la nôtre
+ * (rattrapé par le réessai borné de l'appelant, qui rejouera alors la
+ * prélecture avec l'état RÉELLEMENT à jour). Dans tous les cas, jamais
+ * d'écrasement silencieux.
+ */
+export async function rattacherTravailleurAuNouveauCompteTx(
+  tx: TxClient,
+  { travailleurId, compteId, emailAttendu }: RattachementTravailleurAttendu,
+): Promise<void> {
+  const travailleurAvant = await tx.travailleur.findUnique({ where: { id: travailleurId } });
+  if (!travailleurAvant) throw new ErreurAction(404, "Fiche Travailleur introuvable");
+  if (travailleurAvant.utilisateurId !== null) {
+    throw new ErreurAction(409, "Rattachement impossible : cette fiche a déjà été liée à un autre compte entre-temps — réessayez.");
+  }
+  if (travailleurAvant.emailProStatut !== "ACTIF" || travailleurAvant.emailProAdresse !== emailAttendu) {
+    throw new ErreurAction(
+      409,
+      "Rattachement impossible : l'adresse professionnelle de cette fiche a changé entre-temps — réessayez.",
+    );
+  }
+  const { count } = await tx.travailleur.updateMany({
+    where: { id: travailleurId, utilisateurId: null, emailProStatut: "ACTIF", emailProAdresse: emailAttendu },
+    data: { utilisateurId: compteId },
+  });
+  if (count !== 1) {
+    throw new ErreurAction(
+      409,
+      "Rattachement impossible : la fiche Travailleur a été modifiée entre-temps (déjà liée à un autre compte, ou son adresse professionnelle a changé) — réessayez.",
+    );
+  }
+  const travailleurApres = await tx.travailleur.findUniqueOrThrow({ where: { id: travailleurId } });
+  await auditerTx(tx, {
+    module: "TRAVAILLEURS",
+    typeEntite: "Travailleur",
+    entiteId: travailleurId,
+    action: "MODIFICATION",
+    avant: travailleurAvant,
+    apres: travailleurApres,
+  });
+}
+
 export async function creerCompteAdminTx(tx: TxClient, donnees: DonneesCreerCompteAdmin): Promise<{ message: string }> {
   const { nom, email, roleId, motDePasseHash, travailleurId } = donnees;
 
   const existant = await tx.utilisateur.findUnique({ where: { email } });
   if (existant) throw new ErreurAction(409, "Un compte utilise déjà cette adresse e-mail");
+
+  // Correctif P1 (Round 2, contre-revue Codex du 25/08/2026) : une demande
+  // d'approbation différée fige `roleId` à la soumission — si le rôle visé a
+  // depuis été renommé (n'est plus « Administrateur »), le rejouer telle
+  // quelle créerait un compte hors de la logique métier CREER_COMPTE_ADMIN
+  // (quota, notifications…) sans que rien ne le signale. Revérifié DANS la
+  // transaction, avant toute écriture.
+  const role = await tx.role.findUnique({ where: { id: roleId } });
+  if (!role) throw new ErreurAction(404, "Rôle introuvable");
+  if (role.nom !== ROLE_ADMINISTRATEUR) {
+    throw new ErreurAction(409, "Le rôle visé n'est plus « Administrateur » — cette demande n'est plus applicable telle quelle.");
+  }
 
   // Vérifié DANS la transaction Serializable : deux approbations concurrentes
   // de création de compte Administrateur, lisant toutes deux un compte sous
@@ -234,21 +379,7 @@ export async function creerCompteAdminTx(tx: TxClient, donnees: DonneesCreerComp
   // d'origine reste liée au compte qu'elle vient de générer — rattachement
   // ATOMIQUE avec la création (même transaction).
   if (travailleurId) {
-    const travailleurAvant = await tx.travailleur.findUnique({ where: { id: travailleurId } });
-    if (!travailleurAvant) throw new ErreurAction(404, "Fiche Travailleur introuvable");
-    const { count } = await tx.travailleur.updateMany({
-      where: { id: travailleurId },
-      data: { utilisateurId: compte.id },
-    });
-    if (count !== 1) throw new ErreurAction(404, "Fiche Travailleur introuvable");
-    await auditerTx(tx, {
-      module: "TRAVAILLEURS",
-      typeEntite: "Travailleur",
-      entiteId: travailleurId,
-      action: "MODIFICATION",
-      avant: travailleurAvant,
-      apres: { ...travailleurAvant, utilisateurId: compte.id },
-    });
+    await rattacherTravailleurAuNouveauCompteTx(tx, { travailleurId, compteId: compte.id, emailAttendu: email });
   }
 
   return { message: `Compte Administrateur « ${compte.nom} » créé` };
@@ -258,9 +389,7 @@ export async function creerCompteAdminDirect(
   db: typeof prismaApp,
   donnees: DonneesCreerCompteAdmin,
 ): Promise<{ message: string }> {
-  return db.$transaction((tx) => creerCompteAdminTx(tx, donnees), {
-    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-  });
+  return executerDirectAvecReessaiP2034(db, (tx) => creerCompteAdminTx(tx, donnees));
 }
 
 // ---------------------------------------------------------------------------
@@ -303,9 +432,7 @@ export async function modifierTypeClientDirect(
   typeClientId: string,
   data: DonneesModifierTypeClient,
 ): Promise<{ message: string }> {
-  return db.$transaction((tx) => modifierTypeClientTx(tx, typeClientId, data), {
-    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-  });
+  return executerDirectAvecReessaiP2034(db, (tx) => modifierTypeClientTx(tx, typeClientId, data));
 }
 
 // ---------------------------------------------------------------------------
@@ -338,9 +465,7 @@ export async function modifierTauxTaxeDirect(
   produitId: string,
   data: Prisma.ProduitUpdateManyMutationInput,
 ): Promise<{ message: string }> {
-  return db.$transaction((tx) => modifierTauxTaxeTx(tx, produitId, data), {
-    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-  });
+  return executerDirectAvecReessaiP2034(db, (tx) => modifierTauxTaxeTx(tx, produitId, data));
 }
 
 // ---------------------------------------------------------------------------

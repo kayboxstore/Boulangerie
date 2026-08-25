@@ -51,6 +51,7 @@
  *   CI_INTEGRATION_BOOTSTRAP_CONFIRME=true npx tsx scripts/verifier-concurrence-actions-metier-ci.ts
  */
 import { PrismaClient, Prisma } from "@prisma/client";
+import { ROLE_ADMINISTRATEUR } from "@lomoto/shared";
 import {
   approuverEtExecuterActionMetier,
 } from "../apps/api/src/services/actionsCritiquesMetier.js";
@@ -400,9 +401,15 @@ async function main() {
   console.log("→ Scénario E : ROLLBACK COMPLET de CREER_COMPTE_ADMIN, rattachement Travailleur INCLUS (échec réel juste avant commit)…");
   {
     const { principal } = await creerRoleEtDeuxUtilisateurs();
-    const { secondaire: demandeur, role: roleAdmin } = await creerRoleEtDeuxUtilisateurs();
-    const travailleur = await prisma.travailleur.create({ data: { nom: "Nouvelle Admin E", poste: "Administratrice", dateEmbauche: new Date("2026-01-01") } });
+    const { secondaire: demandeur } = await creerRoleEtDeuxUtilisateurs();
+    // Rôle LITTÉRALEMENT « Administrateur » (`ROLE_ADMINISTRATEUR`) —
+    // indispensable : `creerCompteAdminTx` revérifie désormais (correctif P1,
+    // Round 2) que `roleId` désigne toujours ce rôle exact.
+    const roleAdmin = await prisma.role.create({ data: { nom: ROLE_ADMINISTRATEUR, roleParentId: null } });
     const email = `nouvelle-admin-e-${idUnique("e")}@test.local`;
+    const travailleur = await prisma.travailleur.create({
+      data: { nom: "Nouvelle Admin E", poste: "Administratrice", dateEmbauche: new Date("2026-01-01"), emailProStatut: "ACTIF", emailProAdresse: email },
+    });
     const demande = await prisma.demandeApprobation.create({
       data: {
         type: "CREER_COMPTE_ADMIN",
@@ -515,13 +522,214 @@ async function main() {
     console.log("  ✓ ROLLBACK COMPLET confirmé pour les deux actions de modification : aucune écriture métier ni de réservation ne survit à un échec injecté juste avant le commit.");
   }
 
+  console.log(
+    "→ Scénario G : APPROBATION de CREER_COMPTE_ADMIN vs rattachement CONCURRENT du Travailleur (correctif P1, Round 2, " +
+      "contre-revue Codex du 25/08/2026) — verrou RÉELLEMENT observé, aucun écrasement silencieux, aucun compte orphelin…",
+  );
+  {
+    // Reproduit, à la connexion PostgreSQL près, EXACTEMENT le mécanisme
+    // conditionnel introduit dans `routes/travailleurs.ts` (PUT /:id,
+    // correctif P1 Round 2) — orchestré manuellement ici (transaction
+    // ouverte, mise en pause, committée au moment voulu) car la route HTTP
+    // elle-même n'expose aucun point d'ancrage de test pour retenir son
+    // verrou de ligne à volonté (voir `scripts/verifier-http-actions-metier-ci.ts`,
+    // scénario 9, pour la preuve SÉQUENTIELLE via le VRAI routeur HTTP,
+    // complémentaire de celle-ci).
+    await reinitialiserBase(); // Role.nom est unique : repart d'une base propre avant de recréer « Administrateur ».
+    const { principal } = await creerRoleEtDeuxUtilisateurs();
+    const { secondaire: demandeur } = await creerRoleEtDeuxUtilisateurs();
+    const roleAdmin = await prisma.role.create({ data: { nom: ROLE_ADMINISTRATEUR, roleParentId: null } });
+    const email = `nouvelle-admin-g-${idUnique("g")}@test.local`;
+    const travailleur = await prisma.travailleur.create({
+      data: { nom: "Nouvelle Admin G", poste: "Administratrice", dateEmbauche: new Date("2026-01-01"), emailProStatut: "ACTIF", emailProAdresse: email },
+    });
+    const roleAutre = await creerRoleEtDeuxUtilisateurs();
+    const compteAutre = await prisma.utilisateur.create({
+      data: { nom: "Compte Autre G", email: `compte-autre-g-${idUnique("x")}@test.local`, roleId: roleAutre.role.id, motDePasseHash: "x", actif: true },
+    });
+    const demande = await prisma.demandeApprobation.create({
+      data: {
+        type: "CREER_COMPTE_ADMIN",
+        donnees: { nom: "Nouvelle Admin G", email, roleId: roleAdmin.id, motDePasseHash: "hash-g", travailleurId: travailleur.id },
+        resume: "créer le compte Administrateur « Nouvelle Admin G »",
+        demandeParId: demandeur.id,
+      },
+    });
+
+    const clientRattachement = new PrismaClient();
+    const clientObservateur = new PrismaClient();
+    await Promise.all([clientRattachement.$connect(), clientObservateur.$connect()]);
+
+    let pidRattachement: number | undefined;
+    let resolverRattachementPret!: () => void;
+    const rattachementPret = new Promise<void>((resolve) => {
+      resolverRattachementPret = resolve;
+    });
+    let resolverLaisserCommitter!: () => void;
+    const laisserCommitter = new Promise<void>((resolve) => {
+      resolverLaisserCommitter = resolve;
+    });
+
+    // Le rattachement concurrent réserve la ligne Travailleur EN PREMIER
+    // (même `updateMany` conditionnel que la route réelle) et retient sa
+    // transaction ouverte — verrou de ligne RÉELLEMENT tenu — jusqu'à ce que
+    // le test l'autorise explicitement à committer.
+    const promesseRattachement = clientRattachement.$transaction(async (tx) => {
+      const pid = await pidDeLaTransaction(tx);
+      pidRattachement = pid;
+      const { count } = await tx.travailleur.updateMany({
+        where: { id: travailleur.id, utilisateurId: null, emailProStatut: "ACTIF", emailProAdresse: email },
+        data: { utilisateurId: compteAutre.id },
+      });
+      if (count !== 1) throw new Error("scénario G : le rattachement concurrent aurait dû réserver la ligne (count=1 attendu)");
+      resolverRattachementPret();
+      await laisserCommitter;
+    });
+    await rattachementPret;
+
+    // L'approbation démarre ENSUITE, pendant que le rattachement concurrent
+    // tient encore son verrou — son propre `updateMany` (dans
+    // `rattacherTravailleurAuNouveauCompteTx`) va RÉELLEMENT se bloquer
+    // dessus. Le pid de l'approbation est capturé DEPUIS sa propre
+    // transaction (`apresReservationAvantExecution`, AVANT qu'elle
+    // n'atteigne ce point de blocage), jamais via un client hors transaction.
+    let pidApprobation: number | undefined;
+    const promesseApprobation = contexteRequete.run({ id: principal.id, nom: principal.nom }, () =>
+      approuverEtExecuterActionMetier(dbPourActionsMetier, demande.id, { id: principal.id, nom: principal.nom }, {
+        apresReservationAvantExecution: async (tx) => {
+          pidApprobation = await pidDeLaTransaction(tx);
+        },
+      }),
+    );
+
+    // Attend que le pid de l'approbation soit capturé, PUIS observe RÉELLEMENT
+    // (troisième connexion, `pg_blocking_pids`) qu'elle est bloquée sur le
+    // verrou du rattachement concurrent — jamais un délai comme preuve.
+    for (let tentative = 0; typeof pidApprobation !== "number" && tentative < 250; tentative++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    if (typeof pidApprobation !== "number") echouer("scénario G : le pid de l'approbation n'a jamais été capturé");
+    await attendreBlocageReel(clientObservateur, pidApprobation, pidRattachement!, "scénario G");
+
+    // Le blocage RÉEL est confirmé : le rattachement concurrent peut
+    // maintenant committer — il gagne la course (son écriture est déjà
+    // appliquée et sur le point d'être définitive).
+    resolverLaisserCommitter();
+    await promesseRattachement;
+    await clientRattachement.$disconnect();
+
+    // L'approbation, débloquée, réévalue son `WHERE` contre l'état
+    // RÉELLEMENT committé (`utilisateurId` n'est plus `null`) — `count = 0`
+    // → `ErreurAction 409` → ROLLBACK COMPLET de TOUTE la transaction
+    // d'approbation (réservation de la demande ET compte déjà créé compris).
+    const resultatApprobation = await Promise.allSettled([promesseApprobation]).then(([r]) => r);
+    await clientObservateur.$disconnect();
+    if (!resultatApprobation || resultatApprobation.status !== "rejected") {
+      echouer(`scénario G : l'approbation (perdante) aurait dû échouer, résultat = ${JSON.stringify(resultatApprobation)}`);
+    }
+    const erreurApprobation = (resultatApprobation as PromiseRejectedResult).reason as { status?: number; message?: string };
+    if (erreurApprobation.status !== 409) {
+      echouer(`scénario G : l'approbation aurait dû échouer avec un statut 409, reçu ${JSON.stringify(erreurApprobation)}`);
+    }
+
+    const clientVerif = new PrismaClient();
+    try {
+      const travailleurReel = await clientVerif.travailleur.findUniqueOrThrow({ where: { id: travailleur.id } });
+      if (travailleurReel.utilisateurId !== compteAutre.id) {
+        echouer("scénario G : le rattachement concurrent GAGNANT a été écrasé — régression du correctif P1 Round 2");
+      }
+      const compteNouveau = await clientVerif.utilisateur.findFirst({ where: { email } });
+      if (compteNouveau) echouer("scénario G : AUCUN compte Administrateur n'aurait dû survivre — celui créé par l'approbation perdante doit être annulé par le rollback");
+      const demandeReelle = await clientVerif.demandeApprobation.findUniqueOrThrow({ where: { id: demande.id } });
+      if (demandeReelle.statut !== "EN_ATTENTE") echouer(`scénario G : la réservation de la demande aurait dû être annulée, statut attendu EN_ATTENTE, trouvé ${demandeReelle.statut}`);
+      if (demandeReelle.approuveParId !== null || demandeReelle.dateDecision !== null) {
+        echouer("scénario G : aucun champ approuveParId/dateDecision n'aurait dû être committé sur la tentative perdante");
+      }
+      const nbAudit = await clientVerif.auditLog.count({ where: { typeEntite: "Travailleur", entiteId: travailleur.id } });
+      if (nbAudit !== 0) echouer(`scénario G : aucun AuditLog Travailleur ne devrait exister (le rattachement gagnant n'en écrit pas, celui de l'approbation a été annulé), trouvé ${nbAudit}`);
+    } finally {
+      await clientVerif.$disconnect();
+    }
+    console.log(
+      "  ✓ blocage RÉEL observé (pg_blocking_pids) entre le rattachement concurrent et l'approbation : le rattachement " +
+        "gagne, l'approbation perdante échoue avec 409 et son ROLLBACK COMPLET annule le compte Administrateur qu'elle " +
+        "avait déjà créé — jamais d'écrasement silencieux, jamais de compte orphelin, un seul état final cohérent.",
+    );
+  }
+
+  // --- P2034 RÉEL sur un chemin DIRECT (Admin Principal, hors approbation) —
+  // LIMITE DOCUMENTÉE (mission P1, Round 2, contre-revue Codex du 25/08/2026)
+  // ----------------------------------------------------------------------
+  //
+  // La mission demande une preuve PostgreSQL RÉELLE que le réessai borné sur
+  // P2034 des 4 wrappers `*Direct` (`executerDirectAvecReessaiP2034`,
+  // `actionsCritiquesMetier.ts`) fonctionne — « ou expliquer précisément
+  // toute limite si la génération déterministe d'un P2034 direct est
+  // techniquement impossible ».
+  //
+  // Analyse : chaque scénario de concurrence CI-DESSUS (A, B, C, G) obtient
+  // sa DÉTERMINISME grâce à un point d'ancrage de test explicite
+  // (`CrochetsTestApprobationAtomique` — `avantReservation`,
+  // `apresReservationAvantExecution`, `apresExecutionAvantRetour` —
+  // exposés par `approuverEtExecuterDemandeAtomique`,
+  // `services/demandeApprobation.ts`) qui met en pause UNE transaction
+  // pendant qu'une seconde, concurrente, se heurte réellement à son verrou —
+  // observé sans ambiguïté via `pg_blocking_pids` avant de laisser la
+  // première committer.
+  //
+  // Les 4 wrappers `*Direct` (`supprimerUtilisateurDirect`,
+  // `creerCompteAdminDirect`, `modifierTypeClientDirect`,
+  // `modifierTauxTaxeDirect`) N'EXPOSENT DÉLIBÉRÉMENT AUCUN point d'ancrage
+  // équivalent — la mission demande explicitement de « réutiliser ce
+  // mécanisme [le réessai borné] pour les quatre wrappers directs SANS
+  // MODIFIER LE CONTRAT DES SUCCÈS », ce qui exclut d'ajouter un paramètre de
+  // test à leur signature publique. Sans un tel point d'ancrage, il n'existe
+  // AUCUN moyen de mettre en pause, de l'extérieur, une transaction ouverte
+  // par `creerCompteAdminDirect` (ou l'un des 3 autres) entre sa lecture et
+  // son écriture, pour garantir un chevauchement RÉEL et déterministe avec
+  // une seconde transaction concurrente.
+  //
+  // Deux alternatives ont été explicitement écartées, chacune pour une
+  // raison précise :
+  //  1. Piloter manuellement DEUX transactions reproduisant le même schéma de
+  //     lecture (`count`) puis d'écriture (`create`) que `creerCompteAdminTx`
+  //     (même principe que le scénario E ci-dessus, qui pilote UNE seule
+  //     transaction manuellement) — cela exigerait de piloter la SECONDE
+  //     transaction manuellement AUSSI (pour garantir l'ordre de commit),
+  //     donc de ne JAMAIS appeler le vrai `creerCompteAdminDirect` : la
+  //     preuve porterait alors sur une RÉIMPLICATION du mécanisme, pas sur le
+  //     code de production réel — contraire à la convention déjà établie
+  //     dans ce dépôt (« jamais une réimplémentation parallèle qui pourrait
+  //     diverger du vrai comportement », voir `services/principal.ts`).
+  //  2. Lancer deux appels RÉELS et non pilotés à `creerCompteAdminDirect`
+  //     via `Promise.all`, en espérant un chevauchement de fenêtres de
+  //     lecture — cela DÉPEND du hasard du timing réseau/E-S entre les deux
+  //     transactions non synchronisées : exactement le type de preuve non
+  //     déterministe et instable en CI que cette mission (et toutes les
+  //     précédentes, voir Round 3/4 de PR #31) interdit explicitement
+  //     (« aucun délai/hasard de timing utilisé comme preuve »).
+  //
+  // Preuve alternative apportée à la place, RIGOUREUSE et DÉTERMINISTE, mais
+  // MOCKÉE plutôt que PostgreSQL réelle (`actionsCritiquesMetier.test.ts`,
+  // describe « Réessai borné P2034 sur les wrappers directs ») : un `db`
+  // factice dont `$transaction` est contrôlé directement par le test prouve,
+  // sans aucune ambiguïté de timing, que (a) un P2034 sur la 1ʳᵉ tentative
+  // est bien réessayé dans une TOUTE NOUVELLE transaction et que la 2ᵉ
+  // tentative réussit normalement, et que (b) trois P2034 consécutifs
+  // produisent exactement `ErreurExecutionDirecteReessayable` (503 via
+  // `traiterActionCritique`), jamais un 500 brut. Cette preuve couvre la
+  // LOGIQUE du réessai avec une précision qu'aucun scénario PostgreSQL réel,
+  // non déterministe, n'aurait pu apporter ici.
+  // ----------------------------------------------------------------------
+
   await reinitialiserBase();
   console.log(
-    `\n✅ Vérification de concurrence PostgreSQL réelle (mission P1, 25/08/2026) : 3 scénarios de concurrence ` +
-      `RÉELLEMENT observée (pg_blocking_pids, jamais un délai), chacun rejoué ${NB_ITERATIONS_CONCURRENCE} fois sans ` +
-      "instabilité, PLUS 3 scénarios de rollback (SUPPRIMER_UTILISATEUR sur P2003 réel, CREER_COMPTE_ADMIN incluant " +
-      "le rattachement Travailleur, MODIFIER_TYPE_CLIENT et MODIFIER_TAUX_TAXE) — tous vérifiés depuis une connexion " +
-      "Prisma indépendante.\n",
+    `\n✅ Vérification de concurrence PostgreSQL réelle (mission P1, Round 1 + Round 2 du 25/08/2026) : 3 scénarios de ` +
+      `concurrence RÉELLEMENT observée (pg_blocking_pids, jamais un délai), chacun rejoué ${NB_ITERATIONS_CONCURRENCE} ` +
+      "fois sans instabilité, PLUS 3 scénarios de rollback (SUPPRIMER_UTILISATEUR sur P2003 réel, CREER_COMPTE_ADMIN incluant " +
+      "le rattachement Travailleur, MODIFIER_TYPE_CLIENT et MODIFIER_TAUX_TAXE), PLUS le scénario G (approbation de " +
+      "CREER_COMPTE_ADMIN vs rattachement concurrent du Travailleur, correctif P1 Round 2) — tous vérifiés depuis une " +
+      "connexion Prisma indépendante.\n",
   );
 }
 

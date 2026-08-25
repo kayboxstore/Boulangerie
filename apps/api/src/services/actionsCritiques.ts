@@ -8,6 +8,7 @@ import { ErreurAction } from "../lib/erreurAction.js";
 import { appliquerModificationPermissionsRole } from "./permissionsRoleAudit.js";
 import {
   creerCompteAdminDirect,
+  ErreurExecutionDirecteReessayable,
   modifierTauxTaxeDirect,
   modifierTypeClientDirect,
   supprimerUtilisateurDirect,
@@ -91,6 +92,13 @@ export async function traiterActionCritique(
       return { http: 200, body: { statut: "execute", message } };
     } catch (e) {
       if (e instanceof ErreurAction) return { http: e.status, body: { erreur: e.message } };
+      // Correctif P2 (Round 2, contre-revue Codex du 25/08/2026) : un conflit
+      // de sérialisation PostgreSQL (P2034) persistant sur l'exécution
+      // DIRECTE des 4 types métier (`services/actionsCritiquesMetier.ts`) est
+      // désormais réessayé un nombre borné de fois ; après épuisement, il
+      // remonte ICI comme `ErreurExecutionDirecteReessayable` — jamais un 500
+      // brut, jamais une affirmation de succès.
+      if (e instanceof ErreurExecutionDirecteReessayable) return { http: 503, body: { erreur: e.message } };
       throw e;
     }
   }
