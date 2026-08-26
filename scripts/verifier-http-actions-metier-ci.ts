@@ -469,22 +469,200 @@ async function main() {
     if (demandeReelle.approuveParId !== null || demandeReelle.dateDecision !== null) {
       echouer("scénario 9 : aucun champ approuveParId/dateDecision n'aurait dû être committé sur cette tentative avortée");
     }
-    if (auditsTravailleur.length !== 0) {
-      echouer(`scénario 9 : aucun AuditLog Travailleur (mensonger ou non) ne devrait exister ici, trouvé ${auditsTravailleur.length}`);
+    // Correctif P1 (Round 3, contre-revue Codex du 26/08/2026) : le
+    // rattachement légitime de l'étape 2 (PUT /api/travailleurs/:id) écrit
+    // désormais RÉELLEMENT un AuditLog manuel transactionnel (voir Scénario
+    // 10 ci-dessous) — l'assertion « zéro audit » d'avant ce correctif était
+    // une absence de PREUVE (rien n'était jamais audité ici), pas une preuve
+    // d'absence de problème. Corrigé : exactement UN AuditLog (celui du
+    // rattachement légitime qui A RÉUSSI), jamais deux (la tentative
+    // d'approbation rejetée en 409 ci-dessus ne doit, elle, en ajouter aucun).
+    if (auditsTravailleur.length !== 1) {
+      echouer(
+        `scénario 9 : exactement 1 AuditLog Travailleur attendu (le rattachement légitime réussi de l'étape 2 ; ` +
+          `la tentative d'approbation rejetée en 409 ne doit, elle, en ajouter aucun), trouvé ${auditsTravailleur.length}`,
+      );
+    }
+    if (auditsTravailleur[0]!.apres === null || (auditsTravailleur[0]!.apres as { utilisateurId?: string }).utilisateurId !== compteAutre.id) {
+      echouer("scénario 9 : l'unique AuditLog réel doit refléter le rattachement légitime (apres.utilisateurId = compteAutre.id)");
     }
     console.log(
-      "  ✓ rattachement réel (PUT /api/travailleurs/:id) conservé intact, approbation de la demande obsolète refusée avec 409, " +
-        "AUCUN compte Administrateur créé, demande redevenue EN_ATTENTE (jamais approuveParId/dateDecision committés), aucun " +
-        "AuditLog mensonger — chemin HTTP entièrement réel, aucun écrasement silencieux.",
+      "  ✓ rattachement réel (PUT /api/travailleurs/:id) conservé intact ET réellement audité (1 AuditLog exact), " +
+        "approbation de la demande obsolète refusée avec 409 SANS ajouter de second AuditLog, AUCUN compte Administrateur créé, " +
+        "demande redevenue EN_ATTENTE (jamais approuveParId/dateDecision committés) — chemin HTTP entièrement réel, aucun " +
+        "écrasement silencieux, aucune double journalisation.",
     );
+  }
+
+  console.log(
+    "→ Scénario 10/10 : PUT /api/travailleurs/:id, audit manuel transactionnel du rattachement (correctif P1, Round 3, " +
+      "contre-revue Codex du 26/08/2026) — updateMany n'est jamais intercepté par l'extension d'audit générale…",
+  );
+  {
+    await reinitialiserBase();
+    const roleAdmin = await creerRoleAvecPermissions(ROLE_ADMIN);
+    const { jeton: jetonPrincipal } = await creerCompteConnecte("Principal S10", "principal-s10@test.local", roleAdmin.id, true, signToken);
+    const compteA = await prisma.utilisateur.create({
+      data: { nom: "Compte A S10", email: "compte-a-s10@test.local", roleId: roleAdmin.id, motDePasseHash: "x", actif: true },
+    });
+    const compteB = await prisma.utilisateur.create({
+      data: { nom: "Compte B S10", email: "compte-b-s10@test.local", roleId: roleAdmin.id, motDePasseHash: "x", actif: true },
+    });
+
+    console.log("  → 10a : liaison réussie (utilisateurId null → id) — exactement 1 AuditLog exact…");
+    const fiche = await prisma.travailleur.create({
+      data: { nom: "Fiche S10", poste: "Boulanger", dateEmbauche: new Date("2026-01-01"), salaireMensuel: 150_000, joursTravaillesParMois: 26 },
+    });
+    const resLiaison = await request(app)
+      .put(`/api/travailleurs/${fiche.id}`)
+      .set("Authorization", `Bearer ${jetonPrincipal}`)
+      .send({ utilisateurId: compteA.id });
+    if (resLiaison.status !== 200) echouer(`scénario 10a : attendu 200, reçu ${resLiaison.status} (corps : ${JSON.stringify(resLiaison.body)})`);
+    {
+      const v = new PrismaClient();
+      let audits: Awaited<ReturnType<typeof v.auditLog.findMany>>;
+      try {
+        audits = await v.auditLog.findMany({ where: { typeEntite: "Travailleur", entiteId: fiche.id } });
+      } finally {
+        await v.$disconnect();
+      }
+      if (audits.length !== 1) echouer(`scénario 10a : exactement 1 AuditLog attendu après la liaison, trouvé ${audits.length}`);
+      const a = audits[0]!;
+      if (a.action !== "MODIFICATION") echouer("scénario 10a : action attendue MODIFICATION");
+      const avant = a.avant as { utilisateurId: string | null } | null;
+      const apres = a.apres as { utilisateurId: string | null } | null;
+      if (avant?.utilisateurId !== null) echouer("scénario 10a : avant.utilisateurId réel attendu null");
+      if (apres?.utilisateurId !== compteA.id) echouer("scénario 10a : apres.utilisateurId réel attendu = compteA");
+    }
+    console.log("    ✓ 1 AuditLog réel exact (avant.utilisateurId=null → apres.utilisateurId=compteA), aucune double journalisation.");
+
+    console.log("  → 10b : déliaison réussie (utilisateurId id → null) — un second AuditLog exact…");
+    const resDeliaison = await request(app)
+      .put(`/api/travailleurs/${fiche.id}`)
+      .set("Authorization", `Bearer ${jetonPrincipal}`)
+      .send({ utilisateurId: null });
+    if (resDeliaison.status !== 200) echouer(`scénario 10b : attendu 200, reçu ${resDeliaison.status} (corps : ${JSON.stringify(resDeliaison.body)})`);
+    {
+      const v = new PrismaClient();
+      let audits: Awaited<ReturnType<typeof v.auditLog.findMany>>;
+      try {
+        audits = await v.auditLog.findMany({ where: { typeEntite: "Travailleur", entiteId: fiche.id }, orderBy: { createdAt: "asc" } });
+      } finally {
+        await v.$disconnect();
+      }
+      if (audits.length !== 2) echouer(`scénario 10b : exactement 2 AuditLog cumulés attendus (liaison + déliaison), trouvé ${audits.length}`);
+      const a = audits[1]!;
+      const avant = a.avant as { utilisateurId: string | null } | null;
+      const apres = a.apres as { utilisateurId: string | null } | null;
+      if (avant?.utilisateurId !== compteA.id) echouer("scénario 10b : avant.utilisateurId réel attendu = compteA");
+      if (apres?.utilisateurId !== null) echouer("scénario 10b : apres.utilisateurId réel attendu null");
+    }
+    console.log("    ✓ second AuditLog réel exact (avant.utilisateurId=compteA → apres.utilisateurId=null).");
+
+    console.log("  → 10c : modification combinée utilisateurId + poste/salaire — un AuditLog avant/après COMPLET…");
+    const resCombine = await request(app)
+      .put(`/api/travailleurs/${fiche.id}`)
+      .set("Authorization", `Bearer ${jetonPrincipal}`)
+      .send({ utilisateurId: compteB.id, poste: "Chef boulanger", salaireMensuel: 220_000 });
+    if (resCombine.status !== 200) echouer(`scénario 10c : attendu 200, reçu ${resCombine.status} (corps : ${JSON.stringify(resCombine.body)})`);
+    {
+      const v = new PrismaClient();
+      let audits: Awaited<ReturnType<typeof v.auditLog.findMany>>;
+      try {
+        audits = await v.auditLog.findMany({ where: { typeEntite: "Travailleur", entiteId: fiche.id }, orderBy: { createdAt: "asc" } });
+      } finally {
+        await v.$disconnect();
+      }
+      if (audits.length !== 3) echouer(`scénario 10c : exactement 3 AuditLog cumulés attendus, trouvé ${audits.length}`);
+      const a = audits[2]!;
+      const avant = a.avant as { utilisateurId: string | null; poste: string; salaireMensuel: number } | null;
+      const apres = a.apres as { utilisateurId: string | null; poste: string; salaireMensuel: number } | null;
+      if (avant?.utilisateurId !== null || avant?.poste !== "Boulanger" || avant?.salaireMensuel !== 150_000) {
+        echouer(`scénario 10c : instantané "avant" réel incomplet ou inexact : ${JSON.stringify(avant)}`);
+      }
+      if (apres?.utilisateurId !== compteB.id || apres?.poste !== "Chef boulanger" || apres?.salaireMensuel !== 220_000) {
+        echouer(`scénario 10c : instantané "apres" réel incomplet ou inexact : ${JSON.stringify(apres)}`);
+      }
+    }
+    console.log("    ✓ AuditLog réel unique, avant/après COMPLETS (utilisateurId ET poste ET salaireMensuel), écriture combinée atomique.");
+
+    console.log(
+      "  → 10d : course RÉELLE entre deux PUT concurrents visant la MÊME fiche libre (jamais un délai comme preuve — " +
+        "verrouillage de ligne PostgreSQL réel via Promise.all sur deux vraies requêtes HTTP)…",
+    );
+    const ficheLibre = await prisma.travailleur.create({
+      data: { nom: "Fiche Course S10", poste: "Vendeuse", dateEmbauche: new Date("2026-01-01") },
+    });
+    const [resCourseA, resCourseB] = await Promise.all([
+      request(app).put(`/api/travailleurs/${ficheLibre.id}`).set("Authorization", `Bearer ${jetonPrincipal}`).send({ utilisateurId: compteA.id }),
+      request(app).put(`/api/travailleurs/${ficheLibre.id}`).set("Authorization", `Bearer ${jetonPrincipal}`).send({ utilisateurId: compteB.id }),
+    ]);
+    const statuts = [resCourseA.status, resCourseB.status].sort();
+    if (statuts[0] !== 200 || statuts[1] !== 409) {
+      echouer(
+        `scénario 10d : sur deux PUT réellement concurrents visant la même fiche libre, attendu exactement un 200 et un 409, ` +
+          `reçu [${resCourseA.status}, ${resCourseB.status}]`,
+      );
+    }
+    {
+      const v = new PrismaClient();
+      let ficheReelle: Awaited<ReturnType<typeof v.travailleur.findUniqueOrThrow>>;
+      let audits: Awaited<ReturnType<typeof v.auditLog.findMany>>;
+      try {
+        ficheReelle = await v.travailleur.findUniqueOrThrow({ where: { id: ficheLibre.id } });
+        audits = await v.auditLog.findMany({ where: { typeEntite: "Travailleur", entiteId: ficheLibre.id } });
+      } finally {
+        await v.$disconnect();
+      }
+      if (ficheReelle.utilisateurId !== compteA.id && ficheReelle.utilisateurId !== compteB.id) {
+        echouer("scénario 10d : la fiche réelle devrait être rattachée au gagnant réel de la course (compteA OU compteB)");
+      }
+      // Exactement 1 AuditLog réel — celui du gagnant réel de la course
+      // (déterminé en base, jamais présumé) ; le perdant (409) n'en écrit
+      // AUCUN : aucun écrasement silencieux, aucune double journalisation.
+      if (audits.length !== 1) {
+        echouer(`scénario 10d : exactement 1 AuditLog réel attendu (le gagnant réel de la course), trouvé ${audits.length}`);
+      }
+      const apres = audits[0]!.apres as { utilisateurId: string | null } | null;
+      if (apres?.utilisateurId !== ficheReelle.utilisateurId) {
+        echouer("scénario 10d : l'unique AuditLog réel doit refléter le gagnant réel de la course (relu en base, jamais présumé)");
+      }
+    }
+    console.log(
+      "    ✓ course réellement disputée (deux vraies requêtes HTTP concurrentes, verrouillage de ligne PostgreSQL réel, jamais " +
+        "un délai comme preuve) : exactement un 200 + un 409, exactement 1 AuditLog réel — celui du gagnant réel, aucun pour le " +
+        "perdant, aucun écrasement silencieux.",
+    );
+
+    // Limite honnêtement documentée (même convention que le bloc R2-8 de
+    // `verifier-concurrence-actions-metier-ci.ts`) : prouver, contre une
+    // VRAIE base PostgreSQL et via des entrées HTTP légitimes, qu'un échec de
+    // l'écriture `tx.auditLog.create` elle-même entraîne bien le rollback de
+    // la modification `updateMany` qui l'a précédée dans la MÊME transaction
+    // nécessiterait soit de faire échouer artificiellement cette insertion
+    // précise (aucune entrée HTTP légitime ne peut violer une contrainte sur
+    // `AuditLog` : `module`/`typeEntite`/`entiteId`/`action` sont tous des
+    // littéraux fixés par le code, jamais dérivés du corps de la requête),
+    // soit d'ajouter un crochet de test dédié à la route de production
+    // (hors périmètre de ce correctif, qui ne demande aucun changement de
+    // contrat public). La garantie elle-même découle directement d'une
+    // primitive PostgreSQL (toute instruction qui échoue DANS une
+    // transaction encore ouverte annule la transaction ENTIÈRE, y compris
+    // les écritures précédentes) — jamais réimplémentée manuellement ici —
+    // et le contrat OBSERVABLE (« l'appelant HTTP ne voit jamais un succès
+    // pour une modification devenue non tracée ») est prouvé de façon
+    // déterministe par le test mocké dédié
+    // (`routes/travailleurs.audit.test.ts`, scénario « échec de l'écriture
+    // d'audit »).
   }
 
   await reinitialiserBase();
   console.log(
-    "\n✅ Vérification HTTP réelle (mission P1, Round 1 + Round 2 du 25/08/2026) : 9 scénarios (4 types × direct/approbation, " +
-      "PLUS la protection contre l'écrasement du rattachement Travailleur) passent contre un VRAI serveur Express + VRAIE " +
-      "authentification JWT + VRAIE base PostgreSQL — aucun mock d'authentification, de service d'écriture, ou de Prisma ; " +
-      "toutes les écritures relues depuis une connexion Prisma indépendante après chaque appel HTTP.\n",
+    "\n✅ Vérification HTTP réelle (mission P1, Round 1 + Round 2 + Round 3 du 25-26/08/2026) : 10 scénarios (4 types × " +
+      "direct/approbation, la protection contre l'écrasement du rattachement Travailleur, PLUS l'audit manuel transactionnel du " +
+      "rattachement) passent contre un VRAI serveur Express + VRAIE authentification JWT + VRAIE base PostgreSQL — aucun mock " +
+      "d'authentification, de service d'écriture, ou de Prisma ; toutes les écritures relues depuis une connexion Prisma " +
+      "indépendante après chaque appel HTTP.\n",
   );
 }
 
