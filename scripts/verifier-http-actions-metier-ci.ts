@@ -586,74 +586,59 @@ async function main() {
     }
     console.log("    ✓ AuditLog réel unique, avant/après COMPLETS (utilisateurId ET poste ET salaireMensuel), écriture combinée atomique.");
 
-    console.log(
-      "  → 10d : course RÉELLE entre deux PUT concurrents visant la MÊME fiche libre (jamais un délai comme preuve — " +
-        "verrouillage de ligne PostgreSQL réel via Promise.all sur deux vraies requêtes HTTP)…",
-    );
-    const ficheLibre = await prisma.travailleur.create({
-      data: { nom: "Fiche Course S10", poste: "Vendeuse", dateEmbauche: new Date("2026-01-01") },
-    });
-    const [resCourseA, resCourseB] = await Promise.all([
-      request(app).put(`/api/travailleurs/${ficheLibre.id}`).set("Authorization", `Bearer ${jetonPrincipal}`).send({ utilisateurId: compteA.id }),
-      request(app).put(`/api/travailleurs/${ficheLibre.id}`).set("Authorization", `Bearer ${jetonPrincipal}`).send({ utilisateurId: compteB.id }),
-    ]);
-    const statuts = [resCourseA.status, resCourseB.status].sort();
-    if (statuts[0] !== 200 || statuts[1] !== 409) {
-      echouer(
-        `scénario 10d : sur deux PUT réellement concurrents visant la même fiche libre, attendu exactement un 200 et un 409, ` +
-          `reçu [${resCourseA.status}, ${resCourseB.status}]`,
-      );
-    }
-    {
-      const v = new PrismaClient();
-      let ficheReelle: Awaited<ReturnType<typeof v.travailleur.findUniqueOrThrow>>;
-      let audits: Awaited<ReturnType<typeof v.auditLog.findMany>>;
-      try {
-        ficheReelle = await v.travailleur.findUniqueOrThrow({ where: { id: ficheLibre.id } });
-        audits = await v.auditLog.findMany({ where: { typeEntite: "Travailleur", entiteId: ficheLibre.id } });
-      } finally {
-        await v.$disconnect();
-      }
-      if (ficheReelle.utilisateurId !== compteA.id && ficheReelle.utilisateurId !== compteB.id) {
-        echouer("scénario 10d : la fiche réelle devrait être rattachée au gagnant réel de la course (compteA OU compteB)");
-      }
-      // Exactement 1 AuditLog réel — celui du gagnant réel de la course
-      // (déterminé en base, jamais présumé) ; le perdant (409) n'en écrit
-      // AUCUN : aucun écrasement silencieux, aucune double journalisation.
-      if (audits.length !== 1) {
-        echouer(`scénario 10d : exactement 1 AuditLog réel attendu (le gagnant réel de la course), trouvé ${audits.length}`);
-      }
-      const apres = audits[0]!.apres as { utilisateurId: string | null } | null;
-      if (apres?.utilisateurId !== ficheReelle.utilisateurId) {
-        echouer("scénario 10d : l'unique AuditLog réel doit refléter le gagnant réel de la course (relu en base, jamais présumé)");
-      }
-    }
-    console.log(
-      "    ✓ course réellement disputée (deux vraies requêtes HTTP concurrentes, verrouillage de ligne PostgreSQL réel, jamais " +
-        "un délai comme preuve) : exactement un 200 + un 409, exactement 1 AuditLog réel — celui du gagnant réel, aucun pour le " +
-        "perdant, aucun écrasement silencieux.",
-    );
-
-    // Limite honnêtement documentée (même convention que le bloc R2-8 de
-    // `verifier-concurrence-actions-metier-ci.ts`) : prouver, contre une
-    // VRAIE base PostgreSQL et via des entrées HTTP légitimes, qu'un échec de
-    // l'écriture `tx.auditLog.create` elle-même entraîne bien le rollback de
-    // la modification `updateMany` qui l'a précédée dans la MÊME transaction
-    // nécessiterait soit de faire échouer artificiellement cette insertion
-    // précise (aucune entrée HTTP légitime ne peut violer une contrainte sur
-    // `AuditLog` : `module`/`typeEntite`/`entiteId`/`action` sont tous des
-    // littéraux fixés par le code, jamais dérivés du corps de la requête),
-    // soit d'ajouter un crochet de test dédié à la route de production
-    // (hors périmètre de ce correctif, qui ne demande aucun changement de
-    // contrat public). La garantie elle-même découle directement d'une
-    // primitive PostgreSQL (toute instruction qui échoue DANS une
-    // transaction encore ouverte annule la transaction ENTIÈRE, y compris
-    // les écritures précédentes) — jamais réimplémentée manuellement ici —
-    // et le contrat OBSERVABLE (« l'appelant HTTP ne voit jamais un succès
-    // pour une modification devenue non tracée ») est prouvé de façon
-    // déterministe par le test mocké dédié
-    // (`routes/travailleurs.audit.test.ts`, scénario « échec de l'écriture
-    // d'audit »).
+    // Limites honnêtement documentées (même convention que le bloc R2-8 de
+    // `verifier-concurrence-actions-metier-ci.ts`) :
+    //
+    // 1) Course RÉELLE (count!==1) sur CETTE route précise, via deux vraies
+    //    requêtes HTTP concurrentes — tentée puis retirée après investigation.
+    //    Une première version envoyait deux `PUT` sur la même fiche libre via
+    //    `Promise.all`, en espérant que PostgreSQL retienne un seul gagnant.
+    //    Diagnostic RÉEL effectué (instrumentation temporaire, retirée après
+    //    coup) : les deux requêtes ne s'exécutent PAS réellement en parallèle
+    //    au niveau SQL — la première (lecture `existant` + `verifierCompteLie`
+    //    + transaction complète, y compris le COMMIT) se termine ENTIÈREMENT
+    //    avant que la seconde ne lise `existant` à son tour. La seconde lit
+    //    donc légitimement l'état DÉJÀ modifié par la première et écrit une
+    //    transition VALIDE (ex. compteC → compteD) — ce n'est PAS un défaut
+    //    d'atomicité, c'est `Promise.all` qui ne garantit PAS une vraie
+    //    simultanéité pour deux requêtes in-process aussi rapides (aucun
+    //    délai réseau réel avec `supertest`). Résultat observé, non
+    //    déterministe selon l'ordonnancement du microtask queue de Node : soit
+    //    un 200+un 409 (par coïncidence, si un chevauchement réel se produit),
+    //    soit deux 200 (légitimes, la seconde écriture étant réellement
+    //    valide vu l'état qu'elle observe) — les deux issues sont correctes
+    //    du point de vue de l'application, mais ni l'une ni l'autre ne prouve
+    //    de façon FIABLE le comportement sous contention réelle. Livrer un tel
+    //    test serait soit flaky (échec aléatoire sur un comportement pourtant
+    //    correct), soit un faux sentiment de preuve (succès par coïncidence).
+    //    Une preuve déterministe équivalente à celle du Scénario G
+    //    (`verifier-concurrence-actions-metier-ci.ts` : pid capturé DANS la
+    //    transaction, blocage réel confirmé via `pg_blocking_pids`, jamais un
+    //    délai) nécessiterait un crochet de pause dédié sur CETTE route —
+    //    hors périmètre de ce correctif, qui ne change QUE l'audit et ne doit
+    //    modifier aucun contrat public de `PUT /api/travailleurs/:id`.
+    //    Compensé par une preuve MOCKÉE déterministe et déjà exhaustive
+    //    (`routes/travailleurs.audit.test.ts`, scénario « rattachement
+    //    modifié entre-temps » : `count:0` forcé → 409, `auditLog.create`
+    //    jamais appelé).
+    //
+    // 2) Échec de l'écriture `tx.auditLog.create` elle-même entraînant le
+    //    rollback de l'`updateMany` qui l'a précédée : prouver ceci contre une
+    //    VRAIE base PostgreSQL via des entrées HTTP légitimes nécessiterait
+    //    de faire échouer artificiellement cette insertion précise (aucune
+    //    entrée HTTP légitime ne peut violer une contrainte sur `AuditLog` :
+    //    `module`/`typeEntite`/`entiteId`/`action` sont tous des littéraux
+    //    fixés par le code, jamais dérivés du corps de la requête), soit
+    //    d'ajouter un crochet de test dédié à la route de production (même
+    //    limite que ci-dessus). La garantie elle-même découle directement
+    //    d'une primitive PostgreSQL (toute instruction qui échoue DANS une
+    //    transaction encore ouverte annule la transaction ENTIÈRE, y compris
+    //    les écritures précédentes) — jamais réimplémentée manuellement ici —
+    //    et le contrat OBSERVABLE (« l'appelant HTTP ne voit jamais un succès
+    //    pour une modification devenue non tracée ») est prouvé de façon
+    //    déterministe par le test mocké dédié
+    //    (`routes/travailleurs.audit.test.ts`, scénario « échec de l'écriture
+    //    d'audit »).
   }
 
   await reinitialiserBase();
