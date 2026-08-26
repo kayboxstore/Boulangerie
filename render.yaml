@@ -1,16 +1,11 @@
 # Blueprint de déploiement Render — Boulangerie Lomoto
 # ---------------------------------------------------------------------------
 # Déploie l'application comme UN SEUL service web (l'API Express sert aussi le
-# frontend compilé) + une base PostgreSQL managée. Aucun terminal requis : on
-# connecte ce dépôt GitHub à Render depuis le navigateur (même depuis un
-# téléphone). Voir DEPLOIEMENT.md pour la marche à suivre pas à pas.
-
-databases:
-  - name: lomoto-db
-    plan: free
-    databaseName: boulangerie_lomoto
-    user: lomoto
-    region: frankfurt
+# frontend compilé). La base PostgreSQL de production est hébergée sur Neon ;
+# sa chaîne de connexion est fournie à Render comme secret de service.
+# Aucun terminal requis : on connecte ce dépôt GitHub à Render depuis le
+# navigateur (même depuis un téléphone). Voir DEPLOIEMENT.md pour la marche à
+# suivre pas à pas.
 
 services:
   - type: web
@@ -41,11 +36,11 @@ services:
     startCommand: npm run start --workspace apps/api
     healthCheckPath: /api/health
     envVars:
-      # URL de connexion injectée automatiquement depuis la base ci-dessus.
+      # URL de connexion à PostgreSQL externe (Neon). La valeur est définie
+      # manuellement dans Render et préservée lors des synchronisations Blueprint.
+      # Ne jamais écrire la chaîne de connexion dans le dépôt.
       - key: DATABASE_URL
-        fromDatabase:
-          name: lomoto-db
-          property: connectionString
+        sync: false
       # Secret de signature des jetons JWT — généré et gardé secret par Render.
       - key: JWT_SECRET
         generateValue: true
