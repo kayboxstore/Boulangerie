@@ -103,6 +103,7 @@ const FICHE_DELIEE = {
 const FICHE_LIEE = { ...FICHE_DELIEE, utilisateurId: "u-target" };
 
 const COMPTE_CIBLE = { id: "u-target", nom: "Compte Cible", email: "cible@boulangerie-lomoto.com" };
+const COMPTE_REMPLACANT = { id: "u-remplacant", nom: "Compte Remplaçant", email: "remplacant@boulangerie-lomoto.com" };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -173,6 +174,31 @@ describe("PUT /api/travailleurs/:id — audit manuel transactionnel du rattachem
     const appelAudit = mocks.auditLogCreate.mock.calls[0][0].data;
     expect(appelAudit.avant.utilisateurId).toBe("u-target");
     expect(appelAudit.apres.utilisateurId).toBeNull();
+  });
+
+  it("remplacement autorisé (utilisateurId id A → id B directement, sans déliement intermédiaire) : un AuditLog MODIFICATION exact", async () => {
+    mocks.findUniqueTravailleur.mockResolvedValueOnce(FICHE_LIEE); // existant : déjà liée à u-target
+    mocks.findUniqueUtilisateur.mockResolvedValueOnce(COMPTE_REMPLACANT); // verifierCompteLie : le nouveau compte existe
+    mocks.findUniqueTravailleur.mockResolvedValueOnce(null); // verifierCompteLie : dejaLie (le nouveau compte n'est lié à personne)
+    mocks.updateMany.mockResolvedValueOnce({ count: 1 });
+    const apres = { ...FICHE_LIEE, utilisateurId: COMPTE_REMPLACANT.id };
+    mocks.findUniqueOrThrow.mockResolvedValueOnce(apres);
+    mocks.auditLogCreate.mockResolvedValueOnce({});
+
+    const res = await request(appTravailleurs())
+      .put("/api/travailleurs/t-1")
+      .send({ nom: FICHE_LIEE.nom, poste: FICHE_LIEE.poste, utilisateurId: COMPTE_REMPLACANT.id });
+
+    expect(res.status).toBe(200);
+    expect(mocks.updateMany).toHaveBeenCalledTimes(1);
+    // L'écriture reste conditionnée sur l'utilisateurId RÉELLEMENT observé
+    // (u-target), jamais un update inconditionnel — même garantie Round 2
+    // qu'une liaison depuis null.
+    expect(mocks.updateMany.mock.calls[0][0].where.utilisateurId).toBe("u-target");
+    expect(mocks.auditLogCreate).toHaveBeenCalledTimes(1);
+    const appelAudit = mocks.auditLogCreate.mock.calls[0][0].data;
+    expect(appelAudit.avant.utilisateurId).toBe("u-target");
+    expect(appelAudit.apres.utilisateurId).toBe(COMPTE_REMPLACANT.id);
   });
 
   it("rattachement modifié entre-temps (count !== 1) : 409, AUCUN AuditLog écrit", async () => {

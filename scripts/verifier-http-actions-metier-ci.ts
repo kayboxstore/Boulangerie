@@ -586,6 +586,34 @@ async function main() {
     }
     console.log("    ✓ AuditLog réel unique, avant/après COMPLETS (utilisateurId ET poste ET salaireMensuel), écriture combinée atomique.");
 
+    console.log("  → 10d : remplacement autorisé (utilisateurId compteB → compteE directement, sans déliement intermédiaire) — un AuditLog exact…");
+    const compteE = await prisma.utilisateur.create({
+      data: { nom: "Compte E S10", email: "compte-e-s10@test.local", roleId: roleAdmin.id, motDePasseHash: "x", actif: true },
+    });
+    const resRemplacement = await request(app)
+      .put(`/api/travailleurs/${fiche.id}`)
+      .set("Authorization", `Bearer ${jetonPrincipal}`)
+      .send({ utilisateurId: compteE.id });
+    if (resRemplacement.status !== 200) {
+      echouer(`scénario 10d : attendu 200, reçu ${resRemplacement.status} (corps : ${JSON.stringify(resRemplacement.body)})`);
+    }
+    {
+      const v = new PrismaClient();
+      let audits: Awaited<ReturnType<typeof v.auditLog.findMany>>;
+      try {
+        audits = await v.auditLog.findMany({ where: { typeEntite: "Travailleur", entiteId: fiche.id }, orderBy: { createdAt: "asc" } });
+      } finally {
+        await v.$disconnect();
+      }
+      if (audits.length !== 4) echouer(`scénario 10d : exactement 4 AuditLog cumulés attendus, trouvé ${audits.length}`);
+      const a = audits[3]!;
+      const avant = a.avant as { utilisateurId: string | null } | null;
+      const apres = a.apres as { utilisateurId: string | null } | null;
+      if (avant?.utilisateurId !== compteB.id) echouer(`scénario 10d : avant.utilisateurId réel attendu = compteB, trouvé ${avant?.utilisateurId}`);
+      if (apres?.utilisateurId !== compteE.id) echouer(`scénario 10d : apres.utilisateurId réel attendu = compteE, trouvé ${apres?.utilisateurId}`);
+    }
+    console.log("    ✓ AuditLog réel exact du remplacement direct (avant.utilisateurId=compteB → apres.utilisateurId=compteE), aucune double journalisation.");
+
     // Limites honnêtement documentées (même convention que le bloc R2-8 de
     // `verifier-concurrence-actions-metier-ci.ts`) :
     //
