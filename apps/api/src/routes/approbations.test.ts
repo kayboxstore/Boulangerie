@@ -7,16 +7,21 @@
  *    jamais une pré-lecture puis un `update` inconditionnel.
  *  - `POST /api/approbations/:id/approuver`, chemin des 4 AUTRES types
  *    d'action critique (`SUPPRIMER_UTILISATEUR`, `CREER_COMPTE_ADMIN`,
- *    `MODIFIER_TYPE_CLIENT`, `MODIFIER_TAUX_TAXE`) : la transition finale
- *    vers APPROUVEE doit elle aussi être conditionnelle, pour ne plus
- *    écraser un rejet concurrent déjà gagnant.
+ *    `MODIFIER_TYPE_CLIENT`, `MODIFIER_TAUX_TAXE`) — correctif ultérieur
+ *    (atomicité réservation+exécution+transition, voir
+ *    `services/actionsCritiques.ts`, `approuverEtExecuterActionCritique`) :
+ *    la route délègue désormais TOUT le mécanisme à ce service, comme elle
+ *    le fait déjà pour MODIFIER_PERMISSIONS_ROLE
+ *    (`approbations.permissionsRole.test.ts`) — ce fichier prouve seulement
+ *    le CÂBLAGE route → service et la traduction des erreurs en codes HTTP ;
+ *    l'atomicité elle-même (réservation, exécution DANS la transaction,
+ *    réessai P2034) est prouvée par `actionsCritiques.test.ts` (mocké) et
+ *    `scripts/verifier-atomicite-approbation-actions-critiques-ci.ts` (vraie
+ *    base PostgreSQL).
  *
- * Mocke `../lib/prisma.js` (client factice en mémoire, `demandeApprobation`
- * uniquement) et `../services/actionsCritiques.js` (`executerAction`) — mais
- * PAS `../services/demandeApprobation.js` : les fonctions génériques
- * atomiques (`rejeterDemandeApprobationAtomique`,
- * `marquerApprouveeSiEncoreEnAttente`, `enregistrerErreurSiEncoreEnAttente`)
- * tournent RÉELLEMENT contre le client factice, pour prouver le câblage
+ * `/rejeter` mocke `../lib/prisma.js` (client factice en mémoire) mais PAS
+ * `../services/demandeApprobation.js` : `rejeterDemandeApprobationAtomique`
+ * tourne RÉELLEMENT contre le client factice, pour prouver le câblage
  * complet route → mécanisme atomique, pas seulement la route isolée.
  */
 import express from "express";
@@ -39,7 +44,7 @@ interface DemandeState {
 }
 
 const mocks = vi.hoisted(() => ({
-  executerAction: vi.fn(),
+  approuverEtExecuterActionCritique: vi.fn(),
   // Conteneur pour le client Prisma factice courant : réaffecté au début de
   // chaque test (`creerPrismaFactice`). Indirection nécessaire car les
   // factories `vi.mock` sont hoistées au-dessus des déclarations normales du
@@ -55,7 +60,7 @@ vi.mock("../lib/prisma.js", () => ({
 }));
 
 vi.mock("../services/actionsCritiques.js", () => ({
-  executerAction: mocks.executerAction,
+  approuverEtExecuterActionCritique: mocks.approuverEtExecuterActionCritique,
   ErreurAction: class ErreurAction extends Error {
     status: number;
     constructor(status: number, message: string) {
@@ -71,6 +76,7 @@ vi.mock("../services/actionsCritiques.js", () => ({
 vi.mock("../services/permissionsRoleAudit.js", () => ({
   approuverEtAppliquerModificationPermissionsRole: vi.fn(),
   ErreurApprobationConcurrente: class ErreurApprobationConcurrente extends Error {},
+  ErreurConflitApprobationReessayable: class ErreurConflitApprobationReessayable extends Error {},
 }));
 
 const PRINCIPAL = { id: "u-principal", nom: "Aline (Admin Principal)" };
@@ -85,6 +91,7 @@ vi.mock("../middleware/auth.js", () => ({
 }));
 
 import { approbationsRouter } from "./approbations.js";
+import { ErreurConflitDecisionReessayable, ErreurDecisionConcurrente } from "../services/demandeApprobation.js";
 
 function appApprobations() {
   const app = express();
@@ -112,7 +119,7 @@ function creerPrismaFactice(demandesInitiales: DemandeState[]) {
   const findUnique = vi.fn(async (args: { where: { id: string }; select?: Record<string, true> }) => {
     const d = demandes.get(args.where.id);
     if (!d) return null;
-    if (!args.select) return avecRelationApprouvePar(d); // chemin ancien (4 autres types) : objet complet
+    if (!args.select) return avecRelationApprouvePar(d);
     const projection: Record<string, unknown> = {};
     for (const cle of Object.keys(args.select)) projection[cle] = (d as unknown as Record<string, unknown>)[cle];
     return projection;
@@ -202,61 +209,61 @@ describe("POST /api/approbations/:id/rejeter (Round 3, P1-01 — transition cond
   });
 });
 
-describe("POST /api/approbations/:id/approuver — chemin des 4 autres types (Round 3, P1-01 — transition finale conditionnelle)", () => {
-  it("exécution réussie : 200, APPROUVEE, message renvoyé", async () => {
+describe("POST /api/approbations/:id/approuver — chemin des 4 autres types (atomicité réservation+exécution+transition)", () => {
+  it("exécution réussie : 200, APPROUVEE, message renvoyé, service appelé avec l'id exact et l'identité exacte de l'approbateur", async () => {
     const { demandes } = creerPrismaFactice([demandeInitiale()]);
-    mocks.executerAction.mockResolvedValue({ message: "Taux de taxe mis à jour" });
+    mocks.approuverEtExecuterActionCritique.mockImplementation(async () => {
+      demandes.set(DEMANDE_ID, { ...demandes.get(DEMANDE_ID)!, statut: "APPROUVEE", approuveParId: PRINCIPAL.id });
+      return { message: "Taux de taxe mis à jour" };
+    });
     const res = await request(appApprobations()).post(`/api/approbations/${DEMANDE_ID}/approuver`).send({});
     expect(res.status).toBe(200);
     expect(res.body.message).toBe("Taux de taxe mis à jour");
     expect(res.body.demande.statut).toBe("APPROUVEE");
-    expect(demandes.get(DEMANDE_ID)!.approuveParId).toBe(PRINCIPAL.id);
+    expect(res.body.demande.approuvePar).toEqual(PRINCIPAL);
+    expect(mocks.approuverEtExecuterActionCritique).toHaveBeenCalledTimes(1);
+    expect(mocks.approuverEtExecuterActionCritique).toHaveBeenCalledWith(expect.anything(), DEMANDE_ID, PRINCIPAL);
   });
 
-  it("rejet concurrent gagnant PENDANT l'exécution de l'action : 409 honnête, action déjà exécutée mais transition perdue", async () => {
-    const { demandes } = creerPrismaFactice([demandeInitiale()]);
-    // Simule la course : au moment où `executerAction` s'exécute (donc APRÈS
-    // le pré-check EN_ATTENTE mais AVANT la transition finale), une requête
-    // concurrente de rejet gagne et fait passer la demande à REJETEE.
-    mocks.executerAction.mockImplementation(async () => {
-      demandes.set(DEMANDE_ID, { ...demandes.get(DEMANDE_ID)!, statut: "REJETEE", approuveParId: "u-autre" });
-      return { message: "Taux de taxe mis à jour" };
-    });
+  it("réservation perdue (décision concurrente déjà tranchée) : 409, aucune relecture DTO", async () => {
+    creerPrismaFactice([demandeInitiale()]);
+    mocks.approuverEtExecuterActionCritique.mockRejectedValue(new ErreurDecisionConcurrente());
     const res = await request(appApprobations()).post(`/api/approbations/${DEMANDE_ID}/approuver`).send({});
     expect(res.status).toBe(409);
-    expect(res.body.erreur).toMatch(/rejetée entre-temps/);
-    // La transition finale n'a JAMAIS écrasé le rejet déjà gagnant.
-    expect(demandes.get(DEMANDE_ID)!.statut).toBe("REJETEE");
-    expect(demandes.get(DEMANDE_ID)!.approuveParId).toBe("u-autre");
+    expect(res.body.erreur).toMatch(/déjà été traitée/);
   });
 
-  it("échec de l'action métier : erreur enregistrée UNIQUEMENT si la demande est encore EN_ATTENTE", async () => {
+  it("P2034 persistant, demande toujours EN_ATTENTE après épuisement : 503, message honnête, pas « déjà traitée »", async () => {
+    creerPrismaFactice([demandeInitiale()]);
+    mocks.approuverEtExecuterActionCritique.mockRejectedValue(new ErreurConflitDecisionReessayable());
+    const res = await request(appApprobations()).post(`/api/approbations/${DEMANDE_ID}/approuver`).send({});
+    expect(res.status).toBe(503);
+    expect(res.body.erreur).not.toMatch(/déjà été traitée/);
+    expect(res.body.erreur).toMatch(/réessay/i);
+  });
+
+  it("échec de l'action métier (transaction annulée, réservation comprise) : erreur enregistrée, demande reste EN_ATTENTE", async () => {
     const { demandes } = creerPrismaFactice([demandeInitiale()]);
     const ErreurActionMod = await import("../services/actionsCritiques.js");
-    mocks.executerAction.mockRejectedValue(new ErreurActionMod.ErreurAction(422, "Produit introuvable"));
+    mocks.approuverEtExecuterActionCritique.mockRejectedValue(new ErreurActionMod.ErreurAction(422, "Produit introuvable"));
     const res = await request(appApprobations()).post(`/api/approbations/${DEMANDE_ID}/approuver`).send({});
     expect(res.status).toBe(422);
     expect(demandes.get(DEMANDE_ID)!.erreur).toBe("Produit introuvable");
     expect(demandes.get(DEMANDE_ID)!.statut).toBe("EN_ATTENTE");
   });
 
-  it("échec de l'action métier APRÈS un rejet concurrent : le message d'erreur périmé n'est PAS écrit sur la décision terminale", async () => {
-    const { demandes } = creerPrismaFactice([demandeInitiale()]);
-    const ErreurActionMod = await import("../services/actionsCritiques.js");
-    mocks.executerAction.mockImplementation(async () => {
-      demandes.set(DEMANDE_ID, { ...demandes.get(DEMANDE_ID)!, statut: "REJETEE", approuveParId: "u-autre" });
-      throw new ErreurActionMod.ErreurAction(422, "Produit introuvable");
-    });
+  it("demande introuvable : 404, service jamais appelé", async () => {
+    creerPrismaFactice([]);
     const res = await request(appApprobations()).post(`/api/approbations/${DEMANDE_ID}/approuver`).send({});
-    expect(res.status).toBe(422);
-    expect(demandes.get(DEMANDE_ID)!.erreur).toBeNull(); // jamais écrit sur une demande déjà REJETEE
-    expect(demandes.get(DEMANDE_ID)!.statut).toBe("REJETEE");
+    expect(res.status).toBe(404);
+    expect(mocks.approuverEtExecuterActionCritique).not.toHaveBeenCalled();
   });
 
-  it("demande déjà décidée AVANT même l'exécution (pré-check) : 409, executerAction jamais appelée", async () => {
-    creerPrismaFactice([demandeInitiale({ statut: "REJETEE" })]);
+  it("acteur non Admin Principal : 403, service jamais appelé", async () => {
+    creerPrismaFactice([demandeInitiale()]);
+    utilisateurActuel = { ...DEMANDEUR, estAdminPrincipal: false };
     const res = await request(appApprobations()).post(`/api/approbations/${DEMANDE_ID}/approuver`).send({});
-    expect(res.status).toBe(409);
-    expect(mocks.executerAction).not.toHaveBeenCalled();
+    expect(res.status).toBe(403);
+    expect(mocks.approuverEtExecuterActionCritique).not.toHaveBeenCalled();
   });
 });

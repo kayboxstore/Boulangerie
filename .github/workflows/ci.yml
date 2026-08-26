@@ -131,6 +131,23 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-http-permissions-role-ci.ts
 
+      - name: Vérification PostgreSQL réelle de l'atomicité d'approbation des 4 exécuteurs d'action critique
+        # Additif, distinct des scripts ci-dessus : ceux-ci couvrent
+        # MODIFIER_PERMISSIONS_ROLE ; celui-ci prouve, contre une vraie base
+        # PostgreSQL (verrou de ligne réellement observé via
+        # pg_blocking_pids, rollback réel), l'atomicité
+        # réservation+exécution+transition des 4 AUTRES types d'action
+        # critique (SUPPRIMER_UTILISATEUR, CREER_COMPTE_ADMIN,
+        # MODIFIER_TYPE_CLIENT, MODIFIER_TAUX_TAXE) — jusqu'ici, l'exécution
+        # métier de ces 4 types et la transition d'état de la
+        # DemandeApprobation étaient deux écritures séparées, non
+        # transactionnelles entre elles. Même garde que les scripts
+        # précédents (hôte local + base exacte lomoto_ci + confirmation
+        # explicite).
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-atomicite-approbation-actions-critiques-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest
