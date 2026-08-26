@@ -13,6 +13,8 @@ services:
     runtime: node
     plan: free
     region: frankfurt
+    # Les déploiements de production restent manuels après validation explicite.
+    autoDeployTrigger: off
     # --include=dev : Render met NODE_ENV=production, or on a besoin des outils
     # de build (vite, prisma CLI) qui sont en devDependencies.
     # db:bootstrap:production (correctif P0-01) : ne crée QUE les rôles/permissions
