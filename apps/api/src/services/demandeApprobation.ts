@@ -16,22 +16,21 @@ import type { prisma as prismaApp, TxClient } from "../lib/prisma.js";
  *     RÉELLEMENT été exécutée et auditée. Résultat incohérent : demande
  *     affichée comme rejetée alors que les permissions ont été appliquées.
  *
- * Ce module protège UNIQUEMENT la TRANSITION D'ÉTAT de `DemandeApprobation`
- * elle-même (écriture conditionnelle `WHERE id + statut = 'EN_ATTENTE'`,
- * jamais une pré-lecture séparée) — il n'exécute et ne protège AUCUNE action
- * métier :
- *  - Pour `MODIFIER_PERMISSIONS_ROLE`, l'exécution ET la transition sont déjà
+ * Ce module protège la TRANSITION D'ÉTAT de `DemandeApprobation` elle-même
+ * (écriture conditionnelle `WHERE id + statut = 'EN_ATTENTE'`, jamais une
+ * pré-lecture séparée) :
+ *  - Pour `MODIFIER_PERMISSIONS_ROLE`, l'exécution ET la transition sont
  *    ENTIÈREMENT transactionnelles ensemble
  *    (`services/permissionsRoleAudit.ts`, `approuverEtAppliquerModificationPermissionsRole`).
  *  - Pour les 4 autres types d'action critique (`SUPPRIMER_UTILISATEUR`,
  *    `CREER_COMPTE_ADMIN`, `MODIFIER_TYPE_CLIENT`, `MODIFIER_TAUX_TAXE`),
- *    `marquerApprouveeSiEncoreEnAttente` protège seulement CETTE écriture
- *    finale contre un rejet concurrent déjà gagnant — l'exécution métier qui
- *    la précède dans `routes/approbations.ts` reste, elle, NON
- *    transactionnelle avec cette transition : dette documentée séparément
- *    (voir `permissionsRoleAudit.ts`), non traitée ici. Ne prétend PAS que
- *    tout le système générique d'approbation est corrigé — seule la
- *    transition d'état l'est, pour les 5 types.
+ *    même mécanisme désormais : `services/actionsCritiques.ts`,
+ *    `approuverEtExecuterActionCritique` réserve la demande PUIS exécute
+ *    l'action, dans la MÊME transaction Serializable — la dette documentée
+ *    dans les rounds précédents (exécution non transactionnelle avec la
+ *    transition) est corrigée. `ErreurConflitDecisionReessayable` ci-dessous
+ *    est l'équivalent générique d'`ErreurConflitApprobationReessayable`
+ *    (`permissionsRoleAudit.ts`), utilisé par ce nouveau chemin.
  *
  * Sérialisation : un simple `UPDATE ... WHERE id = ? AND statut = 'EN_ATTENTE'`
  * sur UNE SEULE ligne se sérialise déjà correctement sous le niveau
@@ -51,6 +50,22 @@ export class ErreurDecisionConcurrente extends Error {
     message = "Cette demande a déjà été traitée — approuvée, rejetée, ou décidée par une requête concurrente entre-temps.",
   ) {
     super(message);
+  }
+}
+
+/**
+ * Levée par `approuverEtExecuterActionCritique` (`actionsCritiques.ts`)
+ * quand les tentatives de réessai sur un P2034 (conflit de sérialisation
+ * PostgreSQL) sont épuisées ALORS QUE la demande, relue RÉELLEMENT hors de
+ * toute transaction avortée, est encore `EN_ATTENTE` — même distinction
+ * qu'`ErreurConflitApprobationReessayable` (`permissionsRoleAudit.ts`) :
+ * personne n'a gagné, c'est un conflit de sérialisation réel et persistant,
+ * pas une décision concurrente terminale. Mappée en 503 par l'appelant,
+ * jamais en 500 brut ni en 409 « déjà traitée ».
+ */
+export class ErreurConflitDecisionReessayable extends Error {
+  constructor() {
+    super("Conflit de sérialisation PostgreSQL persistant après plusieurs tentatives — la demande est toujours en attente, réessayez.");
   }
 }
 
@@ -111,23 +126,6 @@ export async function rejeterDemandeApprobationAtomique(
     if (count !== 1) throw new ErreurDecisionConcurrente();
     if (crochets?.apresReservationAvantCommit) await crochets.apresReservationAvantCommit(tx);
   });
-}
-
-/**
- * Transition conditionnelle vers `APPROUVEE`, pour le chemin NON
- * transactionnel des 4 exécuteurs métier restants (voir l'en-tête). Protège
- * seulement CETTE écriture contre un rejet concurrent déjà gagnant.
- */
-export async function marquerApprouveeSiEncoreEnAttente(
-  db: typeof prismaApp,
-  demandeApprobationId: string,
-  approbateur: IdentiteDecideur,
-): Promise<void> {
-  const { count } = await db.demandeApprobation.updateMany({
-    where: { id: demandeApprobationId, statut: "EN_ATTENTE" },
-    data: { statut: "APPROUVEE", approuveParId: approbateur.id, dateDecision: new Date(), erreur: null },
-  });
-  if (count !== 1) throw new ErreurDecisionConcurrente();
 }
 
 /**
