@@ -131,22 +131,41 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-http-permissions-role-ci.ts
 
-      - name: Vérification PostgreSQL réelle de l'atomicité d'approbation des 4 exécuteurs d'action critique
-        # Additif, distinct des scripts ci-dessus : ceux-ci couvrent
-        # MODIFIER_PERMISSIONS_ROLE ; celui-ci prouve, contre une vraie base
-        # PostgreSQL (verrou de ligne réellement observé via
-        # pg_blocking_pids, rollback réel), l'atomicité
-        # réservation+exécution+transition des 4 AUTRES types d'action
-        # critique (SUPPRIMER_UTILISATEUR, CREER_COMPTE_ADMIN,
-        # MODIFIER_TYPE_CLIENT, MODIFIER_TAUX_TAXE) — jusqu'ici, l'exécution
-        # métier de ces 4 types et la transition d'état de la
-        # DemandeApprobation étaient deux écritures séparées, non
-        # transactionnelles entre elles. Même garde que les scripts
-        # précédents (hôte local + base exacte lomoto_ci + confirmation
-        # explicite).
+      - name: Vérification HTTP réelle du correctif P1 — parcours complet des 4 autres actions critiques (mission « atomicité exécution métier », 25/08/2026)
+        # Additif, distinct des scripts ci-dessus : mêmes garanties que le
+        # script HTTP réel de MODIFIER_PERMISSIONS_ROLE, mais pour les 4
+        # AUTRES types d'action critique (SUPPRIMER_UTILISATEUR,
+        # CREER_COMPTE_ADMIN, MODIFIER_TYPE_CLIENT, MODIFIER_TAUX_TAXE) —
+        # VRAI routeur Express (equipeRouter, clients.ts/typeClientsRouter,
+        # produitsRouter, approbationsRouter), servi par supertest, VRAIE
+        # authentification JWT (aucun mock d'auth ni de Prisma), parcours
+        # direct ET parcours approbation pour chacun des 4 types, avec
+        # relecture Prisma indépendante après chaque appel HTTP. Même garde
+        # que les scripts précédents.
         env:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
-        run: npx tsx scripts/verifier-atomicite-approbation-actions-critiques-ci.ts
+        run: npx tsx scripts/verifier-http-actions-metier-ci.ts
+
+      - name: Vérification de concurrence PostgreSQL réelle du correctif P1 — atomicité des 4 autres actions critiques (mission « atomicité exécution métier », 25/08/2026)
+        # Additif, distinct des scripts ci-dessus : prouve, contre une VRAIE
+        # base PostgreSQL et avec la même méthodologie que
+        # verifier-audit-permissions-role-ci.ts (scénarios 10-13 — pid réel
+        # capturé DEPUIS chaque transaction via pg_backend_pid(), blocage
+        # RÉELLEMENT observé depuis une troisième connexion via
+        # pg_blocking_pids, jamais un délai comme preuve), que la réservation
+        # de la DemandeApprobation, l'exécution métier des 4 autres types
+        # d'action critique, ET la transition finale sont désormais
+        # ENSEMBLE, dans UNE SEULE transaction PostgreSQL Serializable :
+        # deux approbations concurrentes sur la même demande, approbation vs
+        # rejet concurrents (les deux issues), chacun rejoué 10 fois sans
+        # instabilité — PLUS trois preuves de ROLLBACK réel complet
+        # (SUPPRIMER_UTILISATEUR sur une violation de clé étrangère RÉELLE,
+        # CREER_COMPTE_ADMIN avec le rattachement Travailleur INCLUS,
+        # MODIFIER_TYPE_CLIENT et MODIFIER_TAUX_TAXE). Même garde que les
+        # scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-concurrence-actions-metier-ci.ts
 
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)

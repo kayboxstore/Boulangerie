@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   enregistrerErreurSiEncoreEnAttente,
   ErreurDecisionConcurrente,
+  marquerApprouveeSiEncoreEnAttente,
   rejeterDemandeApprobationAtomique,
   type IdentiteDecideur,
 } from "./demandeApprobation.js";
@@ -53,6 +54,7 @@ function creerClientFactice(demandesInitiales: DemandeState[]) {
 
 const DEMANDE_ID = "demande-1";
 const REJETEUR: IdentiteDecideur = { id: "u-principal", nom: "Aline (Admin Principal)" };
+const APPROBATEUR: IdentiteDecideur = { id: "u-principal", nom: "Aline (Admin Principal)" };
 
 function demandeInitiale(overrides: Partial<DemandeState> = {}): DemandeState {
   return { id: DEMANDE_ID, statut: "EN_ATTENTE", approuveParId: null, dateDecision: null, erreur: null, ...overrides };
@@ -105,6 +107,26 @@ describe("rejeterDemandeApprobationAtomique", () => {
       rejeterDemandeApprobationAtomique(client, DEMANDE_ID, REJETEUR, { apresReservationAvantCommit: crochet }),
     ).rejects.toThrow(ErreurDecisionConcurrente);
     expect(crochet).not.toHaveBeenCalled();
+  });
+});
+
+describe("marquerApprouveeSiEncoreEnAttente", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("demande EN_ATTENTE : passe à APPROUVEE avec l'identité exacte de l'approbateur", async () => {
+    const { client, demandes } = creerClientFactice([demandeInitiale()]);
+    await marquerApprouveeSiEncoreEnAttente(client, DEMANDE_ID, APPROBATEUR);
+    const d = demandes.get(DEMANDE_ID)!;
+    expect(d.statut).toBe("APPROUVEE");
+    expect(d.approuveParId).toBe(APPROBATEUR.id);
+  });
+
+  it("demande déjà REJETEE (rejet concurrent gagnant) : ErreurDecisionConcurrente, jamais écrasée en APPROUVEE", async () => {
+    const { client, demandes } = creerClientFactice([demandeInitiale({ statut: "REJETEE", approuveParId: "u-autre" })]);
+    await expect(marquerApprouveeSiEncoreEnAttente(client, DEMANDE_ID, APPROBATEUR)).rejects.toThrow(
+      ErreurDecisionConcurrente,
+    );
+    expect(demandes.get(DEMANDE_ID)!.statut).toBe("REJETEE");
   });
 });
 

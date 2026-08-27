@@ -30,6 +30,8 @@ import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { declencherEmailPro, verifierEmailPro } from "../services/emailPro.js";
 import { construirePdf, nomFichierPdf } from "../services/pdf.js";
 import { busEvenements } from "../lib/events.js";
+import { contexteRequete } from "../lib/contexteRequete.js";
+import { ErreurAction } from "../lib/erreurAction.js";
 
 export const travailleursRouter = Router();
 
@@ -65,6 +67,26 @@ export const versTravailleurDTO = (t: TravailleurAvecCompte): TravailleurDTO => 
   salaireMensuel: t.salaireMensuel,
   joursTravaillesParMois: t.joursTravaillesParMois,
 });
+
+/**
+ * Rend un enregistrement `Travailleur` sérialisable et sûr pour l'audit
+ * (Date → ISO ; toute relation imbriquée écartée). Même logique que
+ * `normaliser()` dans `lib/audit.ts` (fonction privée, non exportée) et que
+ * `normaliserPourAudit()` dans `services/actionsCritiquesMetier.ts` —
+ * reproduite ici à l'identique plutôt que partagée par une dépendance sur un
+ * détail d'implémentation interne d'un autre module (même convention déjà
+ * établie deux fois dans ce dépôt).
+ */
+function normaliserPourAudit(valeur: Record<string, unknown>): Record<string, unknown> {
+  const json = JSON.stringify(valeur);
+  const obj = JSON.parse(json) as Record<string, unknown>;
+  const propre: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== null && typeof v === "object") continue;
+    propre[k] = v;
+  }
+  return propre;
+}
 
 /**
  * Vérifie la cohérence département/groupe (3.18) : un groupe appartient
@@ -238,22 +260,104 @@ travailleursRouter.put("/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), as
     const depGroupe = await validerDepartementGroupe(departementFinal, groupeFinal);
     if ("erreur" in depGroupe) return res.status(depGroupe.status).json({ erreur: depGroupe.erreur });
 
-    const travailleur = await prisma.travailleur.update({
-      where: { id: existant.id },
-      data: {
-        nom,
-        telephone,
-        poste,
-        dateEmbauche: dateEmbauche ? new Date(dateEmbauche) : undefined,
-        // undefined = intact ; null = délier ; id = lier.
-        utilisateurId,
-        departementId: depGroupe.departementId,
-        groupeId: depGroupe.groupeId,
-        salaireMensuel,
-        joursTravaillesParMois,
-      },
-      include: INCLUDE_TRAVAILLEUR,
-    });
+    const donneesEcriture = {
+      nom,
+      telephone,
+      poste,
+      dateEmbauche: dateEmbauche ? new Date(dateEmbauche) : undefined,
+      // undefined = intact ; null = délier ; id = lier.
+      utilisateurId,
+      departementId: depGroupe.departementId,
+      groupeId: depGroupe.groupeId,
+      salaireMensuel,
+      joursTravaillesParMois,
+    };
+
+    let travailleur;
+    if (utilisateurId !== undefined) {
+      // Correctif P1 (Round 2, contre-revue Codex du 25/08/2026) : cette
+      // requête modifie EXPLICITEMENT le rattachement (lier ou délier) —
+      // `verifierCompteLie` ci-dessus n'est qu'une prélecture, dépassée dès
+      // qu'un autre chemin (ex. l'approbation d'une demande CREER_COMPTE_ADMIN)
+      // modifie `utilisateurId` entre-temps. L'écriture est donc conditionnée
+      // sur la valeur RÉELLEMENT observée (`existant.utilisateurId`) — jamais
+      // un `update` inconditionnel — pour ne jamais écraser silencieusement
+      // un rattachement changé entre la prélecture et cette écriture.
+      //
+      // Correctif P1 (Round 3, contre-revue Codex du 26/08/2026) : ce
+      // `updateMany` n'est JAMAIS intercepté par l'extension d'audit générale
+      // (`lib/audit.ts`), qui n'intercepte que `update`/`delete` SINGULIERS —
+      // utilisée ici précisément pour permettre l'écriture CONDITIONNELLE du
+      // Round 2. Sans correction, toute modification touchant
+      // `utilisateurId` (liaison, déliaison, ou combinée à un changement de
+      // salaire/poste/département/groupe dans la même requête) réussissait
+      // donc SANS produire le moindre `AuditLog`. Corrigé en écrivant
+      // manuellement UNE ligne `AuditLog` "MODIFICATION", DANS la même
+      // transaction que l'écriture conditionnelle (même principe déjà établi
+      // par `services/actionsCritiquesMetier.ts`/`auditerTx` et
+      // `services/permissionsRoleAudit.ts`) :
+      //  - conflit (`count !== 1`) → `ErreurAction(409, ...)` levée DANS la
+      //    transaction → PostgreSQL annule tout, y compris l'écriture
+      //    métier déjà tentée par ce `updateMany` — aucun audit n'est écrit ;
+      //  - succès → l'audit complet (avant/après, tous les champs modifiés
+      //    par cette requête) est écrit avec le client transactionnel `tx`,
+      //    jamais avec le client de base — un échec de CETTE écriture
+      //    d'audit (ex. contrainte violée) fait donc échouer et annuler
+      //    (rollback) la MODIFICATION elle-même plutôt que de laisser
+      //    l'écriture réussir silencieusement non tracée ;
+      //  - aucun double comptage possible : le `updateMany` n'est jamais
+      //    intercepté par l'extension automatique (elle n'écoute que
+      //    `update`/`delete`), donc une seule ligne `AuditLog` est produite
+      //    par cette branche, jamais deux.
+      try {
+        travailleur = await prisma.$transaction(async (tx) => {
+          const { count } = await tx.travailleur.updateMany({
+            where: { id: existant.id, utilisateurId: existant.utilisateurId },
+            data: donneesEcriture,
+          });
+          if (count !== 1) {
+            throw new ErreurAction(409, "Le rattachement de cette fiche a changé entre-temps — réessayez.");
+          }
+          const apres = await tx.travailleur.findUniqueOrThrow({ where: { id: existant.id }, include: INCLUDE_TRAVAILLEUR });
+
+          const acteur = contexteRequete.getStore();
+          if (!acteur) {
+            // Ne devrait jamais se produire : `requireAuth` (en tête de ce
+            // routeur) peuple systématiquement `contexteRequete` avant que
+            // cette route ne soit atteinte. Garde défensive plutôt qu'un
+            // audit silencieusement absent — fait échouer (rollback) la
+            // modification, remonte en 500 via le handler générique.
+            throw new Error(
+              "Modification du rattachement Travailleur refusée : aucun acteur authentifié dans le contexte de " +
+                "requête — impossible de produire une piste d'audit fiable.",
+            );
+          }
+          await tx.auditLog.create({
+            data: {
+              utilisateurId: acteur.id,
+              utilisateurNom: acteur.nom,
+              module: "TRAVAILLEURS",
+              typeEntite: "Travailleur",
+              entiteId: existant.id,
+              action: "MODIFICATION",
+              avant: normaliserPourAudit(existant) as unknown as Prisma.InputJsonValue,
+              apres: normaliserPourAudit(apres) as unknown as Prisma.InputJsonValue,
+            },
+          });
+
+          return apres;
+        });
+      } catch (e) {
+        if (e instanceof ErreurAction) return res.status(e.status).json({ erreur: e.message });
+        throw e;
+      }
+    } else {
+      travailleur = await prisma.travailleur.update({
+        where: { id: existant.id },
+        data: donneesEcriture,
+        include: INCLUDE_TRAVAILLEUR,
+      });
+    }
     res.json({ travailleur: versTravailleurDTO(travailleur) });
   } catch (e) {
     next(e);
