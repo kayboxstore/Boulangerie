@@ -158,6 +158,15 @@ stocksRouter.delete("/matieres/:id", requirePermission("STOCKS", "ECRITURE"), as
     await prisma.matierePremiere.delete({ where: { id: matiere.id } });
     res.status(204).end();
   } catch (e) {
+    // Contrainte de clé étrangère non couverte par le contrôle ci-dessus
+    // (ex. lien résiduel via IngredientRecette, cf. migration
+    // 20260827_purger_recettes_orphelines) : message clair plutôt qu'une
+    // erreur 500 générique, même idiome que typeClients.ts.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+      return res.status(409).json({
+        erreur: "Suppression impossible : cette matière est encore référencée ailleurs (ex. une recette)",
+      });
+    }
     next(e);
   }
 });
