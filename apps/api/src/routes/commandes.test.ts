@@ -35,18 +35,21 @@ vi.mock("../services/caisseAtomique.js", async () => {
   };
 });
 
+let executerEcritureIdempotenteMock: (
+  req: unknown,
+  portee: string,
+  donnees: unknown,
+  executer: (tx: unknown) => Promise<unknown>,
+  versReponse: (v: unknown) => unknown,
+) => Promise<unknown>;
+
 vi.mock("../lib/idempotence.js", async () => {
   const actual = await vi.importActual<typeof import("../lib/idempotence.js")>("../lib/idempotence.js");
   return {
     ...actual,
-    executerEcritureIdempotente: vi.fn(async (_req, _portee, _donnees, executer) => {
-      // Le verrou est vérifié en tout premier dans le callback — on veut
-      // seulement prouver qu'il l'empêche avant toute autre lecture, jamais
-      // dérouler la logique complète de création (hors périmètre ici).
-      const txFactice = { client: { findUnique: vi.fn().mockResolvedValue(null) } };
-      await executer(txFactice);
-      throw new Error("ne devrait jamais atteindre ce point si le verrou a levé");
-    }),
+    executerEcritureIdempotente: vi.fn((...args: Parameters<typeof executerEcritureIdempotenteMock>) =>
+      executerEcritureIdempotenteMock(...args),
+    ),
     ajouterEnteteRejeu: vi.fn(),
   };
 });
@@ -62,6 +65,15 @@ function app() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+beforeEach(() => {
+  // Comportement par défaut, équivalent à l'ancien mock fixe : exécute
+  // réellement le callback `executer` avec un tx factice minimal, pour que
+  // le verrou mocké (verrouillerSessionOuverte) s'exécute et puisse rejeter.
+  executerEcritureIdempotenteMock = async (_req, _portee, _donnees, executer) => {
+    return executer({});
+  };
 });
 
 describe("POST /api/commandes — session de caisse requise (P1-B)", () => {
@@ -84,5 +96,75 @@ describe("POST /api/commandes — session de caisse requise (P1-B)", () => {
       .post("/api/commandes")
       .send({ clientId: "c-1", quantiteBacs: 5, montantRecu: 0, strategie: "MODIFIER" });
     expect(res.status).toBe(409);
+  });
+});
+
+describe("POST /api/commandes — audit transactionnel de l'avance Client à la création (régression Passe B)", () => {
+  it("audite la mise à jour de l'avance du Client via updateMany + auditerCaisseTx, jamais un update() singulier non transactionnel", async () => {
+    mocks.verrouillerSessionOuverte.mockResolvedValue(undefined);
+    mocks.verifierAucuneSessionAnterieureOuverte.mockResolvedValue(undefined);
+
+    const client = {
+      id: "c-1",
+      nom: "Client Test",
+      avanceDisponible: 0,
+      typeClient: { nom: "Détail", prixParBac: 1000, commissionParBac: 50 },
+    };
+    const clientApresCreation = { ...client, avanceDisponible: 5000 };
+    const creee = {
+      id: "cmd-1",
+      numero: 1,
+      dateCreation: new Date(),
+      client: { id: "c-1", nom: "Client Test", typeClient: { nom: "Détail" } },
+      quantiteBacs: 5,
+      montantBrut: 5000,
+      avanceUtilisee: 0,
+      montantAPercevoir: 5000,
+      montantRecu: 10000,
+      dette: 0,
+      avanceGeneree: 5000,
+      nouvelleAvance: 5000,
+      creePar: { id: "u-1", nom: "Alice" },
+      reglements: [],
+    };
+
+    const txFactice = {
+      client: {
+        findUnique: vi.fn().mockResolvedValue(client),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(clientApresCreation),
+      },
+      commandeClient: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue(creee),
+      },
+    };
+
+    executerEcritureIdempotenteMock = async (_req, _portee, _donnees, executer, versReponse) => {
+      const valeur = await executer(txFactice);
+      const reponse = versReponse(valeur) as { statutHttp: number; corps: unknown };
+      return { rejoue: false, valeur, ...reponse };
+    };
+
+    const res = await request(app())
+      .post("/api/commandes")
+      .send({ clientId: "c-1", quantiteBacs: 5, montantRecu: 10000 });
+
+    expect(res.status).toBe(201);
+    expect(txFactice.client.updateMany).toHaveBeenCalledWith({
+      where: { id: "c-1" },
+      data: { avanceDisponible: 5000 },
+    });
+    expect(mocks.auditerCaisseTx).toHaveBeenCalledWith(
+      txFactice,
+      expect.objectContaining({
+        module: "COMMANDES",
+        typeEntite: "Client",
+        entiteId: "c-1",
+        action: "MODIFICATION",
+        avant: client,
+        apres: clientApresCreation,
+      }),
+    );
   });
 });

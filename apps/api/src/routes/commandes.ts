@@ -385,12 +385,29 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
               },
               include: INCLUDE_RELATIONS,
             });
-            // Création : ni CommandeClient ni Client ne sont audités ici — même
-            // convention que le reste du dépôt (lib/audit.ts) : les créations ne
-            // sont jamais journalisées, déjà tracées via creeParId/enregistrePar.
-            await tx.client.update({
+            // Création de CommandeClient : non auditée, même convention que le
+            // reste du dépôt (lib/audit.ts) — les créations ne sont jamais
+            // journalisées, déjà tracées via creeParId. Mais la mise à jour de
+            // l'avance du Client, elle, EST une modification d'une entité
+            // EXISTANTE : `Client` figure dans MODELE_MODULE (lib/audit.ts),
+            // donc un `update()` singulier serait intercepté par l'extension
+            // d'audit automatique — NON transactionnelle (voir
+            // services/caisseAtomique.ts) — exactement le défaut que ce lot
+            // corrige partout ailleurs. `updateMany` + audit manuel, comme la
+            // branche MODIFIER/REMPLACER ci-dessous (défaut trouvé en Passe B).
+            const clientAvantCreation = client;
+            await tx.client.updateMany({
               where: { id: client.id },
               data: { avanceDisponible: calcul.nouvelleAvance },
+            });
+            const clientApresCreation = await tx.client.findUniqueOrThrow({ where: { id: client.id } });
+            await auditerCaisseTx(tx, {
+              module: "COMMANDES",
+              typeEntite: "Client",
+              entiteId: client.id,
+              action: "MODIFICATION",
+              avant: clientAvantCreation,
+              apres: clientApresCreation,
             });
             return { type: "creee" as const, commande: creee };
           }
