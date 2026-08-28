@@ -1,0 +1,21 @@
+-- Purge des recettes orphelines (Recette / IngredientRecette).
+--
+-- Ces deux tables sont mortes depuis la refonte 3.3 de la Production
+-- (les ingrédients sont désormais consommés globalement à la production,
+-- sans nomenclature par produit) : aucune route, aucun service applicatif
+-- ne les lit ni ne les écrit (vérifié le 27/08/2026, cf. commentaire du
+-- modèle Recette dans schema.prisma). Elles ne contiennent plus que des
+-- lignes résiduelles d'avant cette refonte.
+--
+-- Symptôme constaté en production : ces lignes résiduelles référencent
+-- encore certaines matières premières (ex. Farine, Levure) via
+-- IngredientRecette.matierePremiereId, sans ON DELETE CASCADE côté
+-- MatierePremiere — ce qui bloque silencieusement (erreur 500 générique,
+-- corrigée séparément dans routes/stocks.ts) toute tentative de suppression
+-- de ces matières, y compris après une réinitialisation complète de la
+-- base (qui ne touchait pas ces deux tables).
+--
+-- La suppression des lignes de Recette entraîne, via la contrainte
+-- ON DELETE CASCADE définie sur IngredientRecette.recetteId, la
+-- suppression automatique des IngredientRecette associées.
+DELETE FROM "Recette";

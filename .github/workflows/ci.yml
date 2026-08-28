@@ -167,6 +167,42 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-concurrence-actions-metier-ci.ts
 
+      - name: Vérification PostgreSQL réelle du correctif « suppression de matière bloquée par une recette orpheline » (27/08/2026)
+        # Additif, distinct des scripts ci-dessus : constat de production
+        # (Farine/Levure impossibles à supprimer même après réinitialisation
+        # complète de la base) — prouve contre une VRAIE contrainte de clé
+        # étrangère PostgreSQL que la cause (IngredientRecette résiduelle,
+        # table morte depuis la refonte 3.3) bloque réellement la
+        # suppression, et que la purger (migration
+        # 20260827120333_purger_recettes_orphelines, et l'ajout correspondant
+        # dans reinitialiserBase()) débloque réellement la matière. Le test
+        # mocké routes/stocks.matieres.test.ts prouve séparément que la route
+        # HTTP traduit ce P2003 en 409 explicite plutôt qu'un 500 générique.
+        # Même garde que les scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-purge-recettes-orphelines-ci.ts
+
+      - name: Vérification PostgreSQL réelle de l'APPLICATION de la migration purge à des données pré-existantes (contre-revue Codex 28/08/2026)
+        # Additif, distinct du script ci-dessus : celui-ci prouve le mécanisme
+        # (CASCADE) en appelant directement recette.deleteMany() sur une base
+        # déjà entièrement migrée — il ne prouve pas que la VRAIE migration
+        # `20260827120333_purger_recettes_orphelines`, appliquée par
+        # `prisma migrate deploy` à une base qui la précède encore, purge
+        # réellement des données pré-existantes (le scénario réel de
+        # production). Ce script comble cet écart : schéma PostgreSQL isolé
+        # migré à l'état exact précédant le correctif (36 migrations),
+        # données « historiques » insérées, PUIS vraie exécution de
+        # `prisma migrate deploy` (processus enfant) pour la 37e — avec
+        # témoin de non-régression (une matière sans lien à Recette reste
+        # strictement intacte) et preuve explicite qu'aucune connexion
+        # PostgreSQL ne subsiste après coup, y compris en cas d'échec. Même
+        # garde que les scripts précédents (hôte local + base exacte
+        # lomoto_ci + confirmation explicite).
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-application-reelle-migration-purge-recettes-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest

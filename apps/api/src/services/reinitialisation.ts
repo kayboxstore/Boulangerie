@@ -13,8 +13,12 @@ import { ecrireSauvegardeLocale } from "./sauvegardeLocale.js";
  * 2. Efface toutes les données transactionnelles et tous les comptes ; garde
  *    la configuration structurelle (rôles/permissions, catalogue produits,
  *    matières premières — stock remis à 0 mais catalogue conservé pour ne pas
- *    casser la décrémentation auto en Production —, recettes, types de
- *    clients, paramètres boutique). Départements & Groupes (3.18) sont eux
+ *    casser la décrémentation auto en Production —, types de clients,
+ *    paramètres boutique). Recette/IngredientRecette (correctif 27/08/2026) :
+ *    mortes depuis la refonte 3.3, effacées comme le reste des données
+ *    transactionnelles — leurs lignes résiduelles bloquaient silencieusement
+ *    la suppression de matières premières (cf. migration
+ *    20260827120333_purger_recettes_orphelines). Départements & Groupes (3.18) sont eux
  *    aussi des données transactionnelles (organisation du personnel, pas de
  *    la config structurelle) : effacés avant Travailleur. Zones de dépôt
  *    (3.3 d) restent en revanche, comme MotifDon : un pur référentiel
@@ -110,7 +114,16 @@ export async function reinitialiserBase(raison: string | undefined): Promise<{ s
     prisma.ligneCommandeFournisseur.deleteMany(),
     prisma.commandeFournisseur.deleteMany(),
     prisma.fournisseur.deleteMany(),
-    // Stocks (mouvements seulement — le catalogue MatierePremiere est conservé)
+    // Stocks (mouvements seulement — le catalogue MatierePremiere est conservé).
+    // Recette/IngredientRecette (correctif 27/08/2026) : tables mortes depuis
+    // la refonte 3.3 de la Production (plus aucune route/service ne les lit
+    // ni ne les écrit), mais leurs lignes résiduelles d'avant cette refonte
+    // référencent encore certaines matières (IngredientRecette.matierePremiereId,
+    // sans ON DELETE CASCADE côté MatierePremiere) et bloquaient silencieusement
+    // la suppression de ces matières même après une réinitialisation complète —
+    // cette dernière ne les touchait pas jusqu'ici. Supprimer Recette entraîne
+    // via ON DELETE CASCADE la suppression des IngredientRecette associées.
+    prisma.recette.deleteMany(),
     prisma.mouvementStock.deleteMany(),
     // Production
     prisma.productionDon.deleteMany(),
