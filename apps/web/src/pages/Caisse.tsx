@@ -140,7 +140,16 @@ export function CaissePage() {
 
   const enregistrerTaux = useMutation({
     mutationFn: () =>
-      api("/api/caisse/taux", { method: "PUT", body: JSON.stringify({ date, valeur: Number(valeurTaux) }) }),
+      api("/api/caisse/taux", {
+        method: "PUT",
+        body: JSON.stringify({
+          date,
+          valeur: Number(valeurTaux),
+          // Version optimiste (P1-B) : le taux tel qu'affiché au moment de
+          // l'ouverture du dialogue — absent pour une première définition.
+          versionAttendue: registre?.taux?.updatedAt,
+        }),
+      }),
     onSuccess: () => {
       setDialogTaux(false);
       rafraichir();
@@ -271,7 +280,15 @@ export function CaissePage() {
     mutationFn: () =>
       api(`/api/caisse/sessions/${session!.id}/corriger`, {
         method: "POST",
-        body: JSON.stringify({ soldeCompteFermeture: Number(soldeCorrige), motif: motifCorrection.trim() }),
+        body: JSON.stringify({
+          soldeCompteFermeture: Number(soldeCorrige),
+          motif: motifCorrection.trim(),
+          // Version optimiste (P1-B) : l'updatedAt de la session tel
+          // qu'affiché au moment de l'ouverture du dialogue de correction —
+          // une correction concurrente entre-temps fait échouer celle-ci en
+          // 409 plutôt que d'écraser silencieusement l'autre.
+          versionAttendue: session!.updatedAt,
+        }),
       }),
     onSuccess: () => {
       setDialogCorrection(false);

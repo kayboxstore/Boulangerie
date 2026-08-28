@@ -1095,6 +1095,14 @@ enum OrigineDepense {
 // cocher : montant = [(33,5 × taux du jour) + 500] × sacs utilisés en production.
 // Le montant est FIGÉ à l'enregistrement ; tauxApplique et sacsUtilises gardent
 // les entrées du calcul pour qu'il reste vérifiable après coup.
+// Au plus une ligne d'origine FARINE par date est déjà garanti par un index
+// unique PARTIEL PostgreSQL (migration 20260813180500_c2_archivage_idempotence_caisse,
+// `DepenseCaisse_date_farinee_key`, `WHERE origine = 'FARINE'`) — non
+// représentable ici, Prisma ne supporte pas les index partiels dans le DSL.
+// P1-B (28/08/2026) : la contrainte existait déjà ; ce qui manquait, c'est que
+// `PUT /depenses/farine` (routes/caisse.ts) traduise la violation P2002
+// résultante en 409 métier au lieu de la laisser remonter en 500 brut — corrigé
+// dans ce lot. Les dépenses MANUELLE restent illimitées par jour.
 model DepenseCaisse {
   id              String         @id @default(cuid())
   date            DateTime       @db.Date

@@ -563,9 +563,14 @@ export function calculerDepenseFarine(taux: number, sacsUtilises: number): numbe
   return Math.round((FARINE_COEFFICIENT_TAUX * taux + FARINE_SUPPLEMENT_FC) * sacsUtilises);
 }
 
+// versionAttendue (P1-B) : ISO de l'`updatedAt` du taux tel qu'affiché au
+// client, requis pour MODIFIER un taux existant (contrat de concurrence
+// optimiste — voir TauxDuJourDTO.updatedAt) ; ignoré pour une première
+// définition (aucune ligne existante à comparer, l'unicité DB tranche seule).
 export const tauxDuJourSchema = z.object({
   date: dateISOSchema,
   valeur: z.number().finite("Le nombre doit être fini").positive("Le taux doit etre strictement positif").max(1_000_000),
+  versionAttendue: z.string().min(1).optional(),
 });
 export type TauxDuJourInput = z.infer<typeof tauxDuJourSchema>;
 
@@ -574,6 +579,8 @@ export interface TauxDuJourDTO {
   date: string;
   valeur: number;
   definiPar: { id: string; nom: string } | null;
+  /** ISO — à retransmettre en `versionAttendue` pour modifier ce taux (CAS optimiste). */
+  updatedAt: string;
 }
 
 export const ORIGINES_DEPENSE = ["MANUELLE", "FARINE"] as const;
@@ -615,13 +622,18 @@ export interface RegistreCaisseDTO {
   date: string;
   /** Argent recu a la CREATION des commandes du jour (hors reglements). */
   entrees: number;
-  /** Reglements dates du jour - jamais comptes dans les entrees. */
+  /**
+   * Reglements CONFIRME attribues a CETTE session (P1-B, 28/08/2026) : via
+   * remiseCaisse -> sessionCaisse, jamais selon la date de declaration du
+   * reglement — jamais comptes dans les entrees.
+   */
   dettesPayees: number;
   detailDettesPayees: {
     id: string;
     clientNom: string;
     commandeNumero: number;
     montant: number;
+    /** Date de CONFIRMATION (affichage) — jamais la date de declaration. */
     date: string;
   }[];
   depenses: DepenseCaisseDTO[];
@@ -669,10 +681,15 @@ export type SessionCaisseFermetureInput = z.infer<typeof sessionCaisseFermetureS
 // Correction post-clôture (droit spécial Admin Principal, section 3.1 point 9).
 // Le motif est toujours requis ici (contrairement à la clôture, où il ne l'est
 // que s'il y a écart) : corriger un chiffre déjà officiel exige toujours une
-// justification.
+// justification. versionAttendue (P1-B) : ISO de l'`updatedAt` de la session
+// tel qu'affiché au client — OBLIGATOIRE (contrairement à tauxDuJourSchema :
+// une correction cible toujours une session déjà existante, jamais une
+// création) ; garantit qu'une correction concurrente sur une vue périmée
+// échoue en 409 plutôt que d'écraser silencieusement une autre correction.
 export const sessionCaisseCorrectionSchema = z.object({
   soldeCompteFermeture: z.number().finite("Le nombre doit être fini").int("Montant en Fc entier").min(0),
   motif: z.string().trim().min(1, "Le motif est requis pour corriger une session clôturée").max(500),
+  versionAttendue: z.string().min(1, "Version attendue requise"),
 });
 export type SessionCaisseCorrectionInput = z.infer<typeof sessionCaisseCorrectionSchema>;
 
@@ -712,6 +729,8 @@ export interface SessionCaisseDTO {
   derniereCorrectionLe: string | null;
   derniereCorrectionPar: { id: string; nom: string } | null;
   motifCorrection: string | null;
+  /** ISO — à retransmettre en `versionAttendue` pour corriger cette session (CAS optimiste). */
+  updatedAt: string;
 }
 
 export interface RemiseCaisseDTO {

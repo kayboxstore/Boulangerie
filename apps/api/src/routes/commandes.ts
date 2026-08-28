@@ -28,6 +28,14 @@ import {
   dateSQLDepuisJourLomoto,
   jourLomoto,
 } from "../lib/temps.js";
+import { ErreurAction } from "../lib/erreurAction.js";
+import {
+  auditerCaisseTx,
+  ErreurEcritureCaisseReessayable,
+  executerAvecReessaiP2034,
+  verifierAucuneSessionAnterieureOuverte,
+  verrouillerSessionOuverte,
+} from "../services/caisseAtomique.js";
 
 export const commandesRouter = Router();
 
@@ -305,6 +313,15 @@ commandesRouter.get("/", requirePermission("COMMANDES", "LECTURE"), async (req, 
  *    propose le choix à l'utilisateur ;
  *  - avec `strategie` → UPDATE de la commande existante (même numéro) :
  *    MODIFIER additionne la saisie, REMPLACER l'écrase.
+ *
+ * P1-B (28/08/2026) : cette route modifie `montantRecu`, qui alimente
+ * directement le registre de caisse (`entrées`) — elle exige donc désormais
+ * une session de caisse OUVERTE pour aujourd'hui, verrou de ligne posé avant
+ * toute lecture pertinente, exactement comme les écritures de caisse.ts.
+ * Sans quoi une commande créée ou modifiée après la clôture du jour
+ * corromprait silencieusement un théorique déjà figé. La conversion C4
+ * (cycles-livraison.ts) reste hors périmètre : montantRecu = 0 à la
+ * création, aucun impact comptable démontré (voir cartographie P1-B).
  */
 commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
   try {
@@ -314,119 +331,148 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
     }
     const { clientId, quantiteBacs, montantRecu, strategie } = parsed.data;
 
-    const execution = await executerEcritureIdempotente<
-      ResultatCommandeEcriture,
-      CorpsCommandeEcriture
-    >(
-      req,
-      "POST:/api/commandes",
-      parsed.data,
-      async (tx) => {
-        const client = await tx.client.findUnique({
-          where: { id: clientId },
-          include: { typeClient: true },
-        });
-        if (!client) throw new ErreurClientInconnu();
+    const execution = await executerAvecReessaiP2034(() =>
+      executerEcritureIdempotente<ResultatCommandeEcriture, CorpsCommandeEcriture>(
+        req,
+        "POST:/api/commandes",
+        parsed.data,
+        async (tx) => {
+          const jour = jourLomoto();
+          await verrouillerSessionOuverte(tx, jour);
+          await verifierAucuneSessionAnterieureOuverte(tx, jour);
 
-        const dateOperationnelle = dateSQLDepuisJourLomoto(jourLomoto());
-        const [debut, fin] = bornesJourLomoto();
-        const existante = await tx.commandeClient.findFirst({
-          where: {
-            clientId: client.id,
-            OR: [
-              { dateOperationnelle },
-              { dateOperationnelle: null, dateCreation: { gte: debut, lte: fin } },
-            ],
-          },
-          include: INCLUDE_RELATIONS,
-          orderBy: { numero: "asc" },
-        });
-
-        if (!existante) {
-          const calcul = calculerCommande({
-            quantiteBacs,
-            prixParBac: client.typeClient.prixParBac,
-            avanceExistante: client.avanceDisponible,
-            montantRecu,
+          const client = await tx.client.findUnique({
+            where: { id: clientId },
+            include: { typeClient: true },
           });
-          const creee = await tx.commandeClient.create({
-            data: {
+          if (!client) throw new ErreurClientInconnu();
+
+          const dateOperationnelle = dateSQLDepuisJourLomoto(jour);
+          const [debut, fin] = bornesJourLomoto(jour);
+          const existante = await tx.commandeClient.findFirst({
+            where: {
               clientId: client.id,
+              OR: [
+                { dateOperationnelle },
+                { dateOperationnelle: null, dateCreation: { gte: debut, lte: fin } },
+              ],
+            },
+            include: INCLUDE_RELATIONS,
+            orderBy: { numero: "asc" },
+          });
+
+          if (!existante) {
+            const calcul = calculerCommande({
               quantiteBacs,
+              prixParBac: client.typeClient.prixParBac,
+              avanceExistante: client.avanceDisponible,
+              montantRecu,
+            });
+            const creee = await tx.commandeClient.create({
+              data: {
+                clientId: client.id,
+                quantiteBacs,
+                montantBrut: calcul.montantBrut,
+                commission: calculerCommission({ quantiteBacs, commissionParBac: client.typeClient.commissionParBac }),
+                avanceUtilisee: calcul.avanceUtilisee,
+                montantAPercevoir: calcul.montantAPercevoir,
+                montantRecu,
+                dette: calcul.dette,
+                avanceGeneree: calcul.avanceGeneree,
+                nouvelleAvance: calcul.nouvelleAvance,
+                creeParId: req.utilisateur!.id,
+                dateOperationnelle,
+              },
+              include: INCLUDE_RELATIONS,
+            });
+            // Création : ni CommandeClient ni Client ne sont audités ici — même
+            // convention que le reste du dépôt (lib/audit.ts) : les créations ne
+            // sont jamais journalisées, déjà tracées via creeParId/enregistrePar.
+            await tx.client.update({
+              where: { id: client.id },
+              data: { avanceDisponible: calcul.nouvelleAvance },
+            });
+            return { type: "creee" as const, commande: creee };
+          }
+
+          if (!strategie) return { type: "conflit" as const, existante };
+          // Une commande issue d'une acceptation C4 est immuable : les paiements
+          // restent permis, mais l'ancien flux manuel ne peut ni l'additionner ni
+          // la remplacer et donc altérer la quantité acceptée.
+          if (existante.cycleLivraison) return { type: "cycleImmuable" as const, existante };
+          if (strategie === "REMPLACER" && existante.reglements.length > 0) {
+            return { type: "reglementsPresents" as const, existante };
+          }
+
+          const totaux =
+            strategie === "MODIFIER"
+              ? {
+                  quantiteBacs: existante.quantiteBacs + quantiteBacs,
+                  montantRecu: existante.montantRecu + montantRecu,
+                }
+              : { quantiteBacs, montantRecu };
+
+          const avanceExistante = avanceAvantCommande({
+            avanceDisponibleClient: client.avanceDisponible,
+            avanceUtilisee: existante.avanceUtilisee,
+            avanceGeneree: existante.avanceGeneree,
+          });
+          const calcul = calculerCommande({
+            quantiteBacs: totaux.quantiteBacs,
+            prixParBac: client.typeClient.prixParBac,
+            avanceExistante,
+            montantRecu: totaux.montantRecu,
+          });
+
+          // MODIFIER/REMPLACER : mise à jour d'une commande EXISTANTE — donc
+          // auditée. `updateMany` (jamais `update` singulier) pour ne pas être
+          // intercepté par l'extension d'audit automatique, non transactionnelle
+          // (voir services/caisseAtomique.ts) ; audit manuel dans la même tx.
+          await tx.commandeClient.updateMany({
+            where: { id: existante.id },
+            data: {
+              quantiteBacs: totaux.quantiteBacs,
               montantBrut: calcul.montantBrut,
-              commission: calculerCommission({ quantiteBacs, commissionParBac: client.typeClient.commissionParBac }),
+              commission: calculerCommission({
+                quantiteBacs: totaux.quantiteBacs,
+                commissionParBac: client.typeClient.commissionParBac,
+              }),
               avanceUtilisee: calcul.avanceUtilisee,
               montantAPercevoir: calcul.montantAPercevoir,
-              montantRecu,
+              montantRecu: totaux.montantRecu,
               dette: calcul.dette,
               avanceGeneree: calcul.avanceGeneree,
               nouvelleAvance: calcul.nouvelleAvance,
-              creeParId: req.utilisateur!.id,
-              dateOperationnelle,
             },
-            include: INCLUDE_RELATIONS,
           });
-          await tx.client.update({
+          const maj = await tx.commandeClient.findUniqueOrThrow({ where: { id: existante.id }, include: INCLUDE_RELATIONS });
+          await auditerCaisseTx(tx, {
+            module: "COMMANDES",
+            typeEntite: "CommandeClient",
+            entiteId: existante.id,
+            action: "MODIFICATION",
+            avant: existante,
+            apres: maj,
+          });
+
+          const clientAvant = client;
+          await tx.client.updateMany({
             where: { id: client.id },
             data: { avanceDisponible: calcul.nouvelleAvance },
           });
-          return { type: "creee" as const, commande: creee };
-        }
+          const clientApres = await tx.client.findUniqueOrThrow({ where: { id: client.id } });
+          await auditerCaisseTx(tx, {
+            module: "COMMANDES",
+            typeEntite: "Client",
+            entiteId: client.id,
+            action: "MODIFICATION",
+            avant: clientAvant,
+            apres: clientApres,
+          });
 
-        if (!strategie) return { type: "conflit" as const, existante };
-        // Une commande issue d'une acceptation C4 est immuable : les paiements
-        // restent permis, mais l'ancien flux manuel ne peut ni l'additionner ni
-        // la remplacer et donc altérer la quantité acceptée.
-        if (existante.cycleLivraison) return { type: "cycleImmuable" as const, existante };
-        if (strategie === "REMPLACER" && existante.reglements.length > 0) {
-          return { type: "reglementsPresents" as const, existante };
-        }
-
-        const totaux =
-          strategie === "MODIFIER"
-            ? {
-                quantiteBacs: existante.quantiteBacs + quantiteBacs,
-                montantRecu: existante.montantRecu + montantRecu,
-              }
-            : { quantiteBacs, montantRecu };
-
-        const avanceExistante = avanceAvantCommande({
-          avanceDisponibleClient: client.avanceDisponible,
-          avanceUtilisee: existante.avanceUtilisee,
-          avanceGeneree: existante.avanceGeneree,
-        });
-        const calcul = calculerCommande({
-          quantiteBacs: totaux.quantiteBacs,
-          prixParBac: client.typeClient.prixParBac,
-          avanceExistante,
-          montantRecu: totaux.montantRecu,
-        });
-
-        const maj = await tx.commandeClient.update({
-          where: { id: existante.id },
-          data: {
-            quantiteBacs: totaux.quantiteBacs,
-            montantBrut: calcul.montantBrut,
-            commission: calculerCommission({
-              quantiteBacs: totaux.quantiteBacs,
-              commissionParBac: client.typeClient.commissionParBac,
-            }),
-            avanceUtilisee: calcul.avanceUtilisee,
-            montantAPercevoir: calcul.montantAPercevoir,
-            montantRecu: totaux.montantRecu,
-            dette: calcul.dette,
-            avanceGeneree: calcul.avanceGeneree,
-            nouvelleAvance: calcul.nouvelleAvance,
-          },
-          include: INCLUDE_RELATIONS,
-        });
-        await tx.client.update({
-          where: { id: client.id },
-          data: { avanceDisponible: calcul.nouvelleAvance },
-        });
-        return { type: "miseAJour" as const, commande: maj, strategie };
-      },
-      (resultat) => {
+          return { type: "miseAJour" as const, commande: maj, strategie };
+        },
+        (resultat) => {
         if (resultat.type === "conflit") {
           const existant = versCommandeDTO(resultat.existante);
           return {
@@ -467,6 +513,7 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
           corps: { commande: versCommandeDTO(resultat.commande) },
         };
       },
+      ),
     );
 
     ajouterEnteteRejeu(res, execution.rejoue);
@@ -508,6 +555,12 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
     }
     if (e instanceof ErreurIdempotence) {
       return res.status(e.statutHttp).json({ erreur: e.message, code: e.code });
+    }
+    if (e instanceof ErreurEcritureCaisseReessayable) {
+      return res.status(503).json({ erreur: e.message });
+    }
+    if (e instanceof ErreurAction) {
+      return res.status(e.status).json({ erreur: e.message });
     }
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return res.status(409).json({

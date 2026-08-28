@@ -224,6 +224,34 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-concurrence-premier-lancement-ci.ts
 
+      - name: Vérification de concurrence PostgreSQL réelle de l'atomicité de la caisse (P1-B, 28/08/2026)
+        # Toute écriture pouvant modifier ou sceller la journée financière
+        # (taux, dépense manuelle ou farine, remise, confirmation de
+        # règlement, commande manuelle, clôture, correction) exige désormais
+        # une SessionCaisse EXISTANTE et OUVERTE — verrou de ligne PostgreSQL
+        # réel (SELECT ... FOR UPDATE) sur cette session, jamais un verrou
+        # global ni une FK nouvelle. Ce script prouve, contre une VRAIE base
+        # PostgreSQL et avec la même méthodologie que les scripts voisins
+        # (pid réel capturé DEPUIS la transaction, blocage RÉELLEMENT
+        # observé via pg_blocking_pids, jamais un délai comme preuve) :
+        # clôture vs création de commande à montant reçu / confirmation de
+        # règlement (la clôture gagne, aucun enregistrement partiel après) ;
+        # attribution comptable correcte d'un règlement déclaré à J mais
+        # confirmé dans la session J+1 (J reste strictement inchangé) ; au
+        # plus une ligne de dépense farine par date sous double activation
+        # concurrente ; une seule définition de taux gagnante entre deux
+        # premières définitions concurrentes ; une seule correction gagnante
+        # entre deux corrections concurrentes d'une session déjà clôturée
+        # (jeton de version optimiste, jamais d'écrasement silencieux) ; et
+        # rollback COMPLET (y compris la transition déjà exécutée) sur un
+        # échec d'audit injecté. Les tests mockés (routes/caisse.test.ts,
+        # routes/commandes.test.ts, services/caisseAtomique.test.ts)
+        # prouvent séparément le câblage HTTP et le réessai borné. Même
+        # garde que les scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-concurrence-caisse-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest
