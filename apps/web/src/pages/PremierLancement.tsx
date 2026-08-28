@@ -12,13 +12,22 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const aujourdhui = () => new Date().toISOString().slice(0, 10);
+const EN_TETE_SECRET = "X-Secret-Premier-Lancement";
 
 /**
- * Assistant de premier lancement (section 3.7, nouveau) — remplace l'écran de
- * connexion quand la base ne contient aucun compte Utilisateur. Trois étapes :
- * fiche Travailleur du futur Admin Principal → email pro (composant partagé
- * avec la fiche Travailleur normale, PanneauEmailPro) → mot de passe puis
- * création automatique du compte. Rien n'est accessible avant la fin.
+ * Assistant de premier lancement (section 3.7, corrigé P1-A le 28/08/2026)
+ * — remplace l'écran de connexion quand la base ne contient aucun compte
+ * Utilisateur. Trois étapes : fiche Travailleur du futur Admin Principal →
+ * email pro (composant partagé avec la fiche Travailleur normale,
+ * PanneauEmailPro) → mot de passe puis création automatique du compte. Rien
+ * n'est accessible avant la fin.
+ *
+ * Un secret de bootstrap (généré hors dépôt, voir
+ * `scripts/generer-secret-premier-lancement.ts` côté serveur) est désormais
+ * requis dès la première étape — sans lui, le serveur refuse tout (401),
+ * même si la base est vide. Sans ce secret, n'importe quel visiteur
+ * découvrant l'écran avant l'administrateur légitime pouvait auparavant
+ * devenir Administrateur Principal.
  */
 export function PremierLancementPage() {
   const { t } = useTranslation();
@@ -26,6 +35,10 @@ export function PremierLancementPage() {
   const { toastErreur } = useFeedback();
 
   const [travailleur, setTravailleur] = useState<TravailleurDTO | null>(null);
+
+  // --- Secret de bootstrap, requis dès l'étape 1 --------------------------
+  const [secret, setSecret] = useState("");
+  const enTetesSecret = { [EN_TETE_SECRET]: secret };
 
   // --- Étape 1 : fiche Travailleur --------------------------------------
   const [nom, setNom] = useState("");
@@ -44,6 +57,7 @@ export function PremierLancementPage() {
           poste: poste.trim(),
           dateEmbauche,
         }),
+        headers: enTetesSecret,
       }),
     onSuccess: (r) => setTravailleur(r.travailleur),
     onError: (e) => setErreurFiche(e instanceof Error ? e.message : t("premierLancement.ficheError")),
@@ -60,6 +74,7 @@ export function PremierLancementPage() {
       return api("/api/premier-lancement/finaliser", {
         method: "POST",
         body: JSON.stringify({ travailleurId: travailleur.id, motDePasse }),
+        headers: enTetesSecret,
       });
     },
     onSuccess: async () => {
@@ -92,6 +107,17 @@ export function PremierLancementPage() {
               className="space-y-3"
             >
               <p className="text-sm text-muted-foreground">{t("premierLancement.step1Desc")}</p>
+              <div className="space-y-1.5">
+                <Label htmlFor="pl-secret">{t("premierLancement.secretLabel")}</Label>
+                <Input
+                  id="pl-secret"
+                  type="password"
+                  value={secret}
+                  onChange={(e) => setSecret(e.target.value)}
+                  autoComplete="off"
+                  required
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="pl-nom">{t("common.name")}</Label>
                 <Input id="pl-nom" value={nom} onChange={(e) => setNom(e.target.value)} required />
@@ -142,6 +168,7 @@ export function PremierLancementPage() {
                 emailProErreur={travailleur.emailProErreur}
                 basePath="/api/premier-lancement/travailleur"
                 onChange={(maj) => setTravailleur(maj)}
+                enTetesSupplementaires={enTetesSecret}
               />
               {travailleur.emailProStatut === "ACTIF" && (
                 <form

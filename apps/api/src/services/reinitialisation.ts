@@ -136,6 +136,12 @@ export async function reinitialiserBase(raison: string | undefined): Promise<{ s
     prisma.tauxDuJour.deleteMany(),
     prisma.depenseCaisse.deleteMany(),
     // Comptes — en dernier, référencé par (presque) tout ce qui précède.
+    // SecretPremierLancement (P1-A, 28/08/2026) : un secret généré avant la
+    // réinitialisation mais jamais consommé et pas encore expiré resterait
+    // sinon valide après coup, alors que la réinitialisation fait réapparaître
+    // l'Assistant de premier lancement — l'« ouverture explicite » du parcours
+    // doit être un acte volontaire et frais, jamais un reliquat.
+    prisma.secretPremierLancement.deleteMany(),
     prisma.utilisateur.deleteMany(),
     // Catalogue matières premières conservé ; seul le solde repart à 0.
     prisma.matierePremiere.updateMany({ data: { quantiteStock: 0 } }),

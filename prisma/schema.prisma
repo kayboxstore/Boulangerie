@@ -1202,6 +1202,29 @@ model ParametreBoutique {
   updatedAt DateTime @updatedAt
 }
 
+// Secret de bootstrap du premier lancement (P1-A, 28/08/2026) — remplace
+// l'absence de compte comme seule autorisation d'accès à
+// routes/premierLancement.ts. Généré hors dépôt (scripts/generer-secret-
+// premier-lancement.ts, exécuté manuellement par un administrateur ayant
+// déjà accès à l'infrastructure), jamais stocké ni journalisé en clair —
+// seul son empreinte SHA-256 est conservée (secret à haute entropie,
+// contrairement à un mot de passe humain : un hachage rapide et non salé
+// suffit, un lookup par égalité est nécessaire pour la consommation
+// atomique conditionnelle, bcrypt s'y prêterait mal). `expiresAt` et
+// `consommeLe` bornent la fenêtre d'utilisation et empêchent le rejeu —
+// la consommation elle-même est un `updateMany` conditionnel
+// (`consommeLe IS NULL AND expiresAt > now()`) dans la même transaction
+// Serializable que la création du compte Administrateur Principal.
+model SecretPremierLancement {
+  id         String    @id @default(cuid())
+  secretHash String    @unique
+  expiresAt  DateTime
+  consommeLe DateTime?
+  creeLe     DateTime  @default(now())
+
+  @@index([consommeLe, expiresAt])
+}
+
 // Type d'action journalisée (section 3.17). Uniquement les MODIFICATIONS et
 // SUPPRESSIONS réussies — les créations sont déjà tracées via créePar/
 // enregistrePar sur chaque entité, et les tentatives refusées (403) ne sont
