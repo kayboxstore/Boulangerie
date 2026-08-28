@@ -104,6 +104,42 @@ function restaurerMigrationCible(): void {
   }
 }
 
+/**
+ * Filet de sécurité (contre-revue indépendante, 28/08/2026) : `try`/`finally`
+ * ne peut structurellement pas intercepter un arrêt dur (SIGKILL, OOM,
+ * annulation forcée de job) survenant PENDANT que le dossier de migration
+ * est déplacé — testé et confirmé : le dossier reste alors durablement hors
+ * de `prisma/migrations/`, cassant toute exécution suivante de
+ * `prisma migrate deploy` dans ce dépôt (checkout persistant, local ou
+ * runner self-hosted — un runner GitHub-hosted éphémère n'est de toute
+ * façon jamais réutilisé). Cette fonction, appelée en tout premier avant
+ * toute autre action, détecte un holdout orphelin laissé par une exécution
+ * précédente interrompue de CE script (motif de nom stable, suffixe PID
+ * variable) et le restaure automatiquement avant de continuer — aucune
+ * intervention manuelle nécessaire au run suivant.
+ */
+function restaurerHoldoutOrphelinEventuel(): void {
+  if (fs.existsSync(DOSSIER_MIGRATION_CIBLE)) return; // rien à récupérer
+  const prefixe = `${NOM_SCHEMA_ISOLE}-holdout-`;
+  const candidats = fs
+    .readdirSync(os.tmpdir())
+    .filter((nom) => nom.startsWith(prefixe))
+    .map((nom) => path.join(os.tmpdir(), nom))
+    .filter((chemin) => fs.existsSync(path.join(chemin, "migration.sql")));
+  if (candidats.length === 0) {
+    echouer(
+      `dossier de migration introuvable (${DOSSIER_MIGRATION_CIBLE}) et aucun holdout orphelin trouvé dans ${os.tmpdir()} — ` +
+        "état incohérent qui dépasse ce que ce script peut réparer seul",
+    );
+  }
+  const [holdoutOrphelin, ...autres] = candidats;
+  if (autres.length > 0) {
+    echouer(`plusieurs holdouts orphelins trouvés (${candidats.join(", ")}) — récupération automatique ambiguë, à traiter manuellement`);
+  }
+  console.log(`⚠ holdout orphelin détecté (${holdoutOrphelin}) — restauration automatique avant de continuer`);
+  fs.renameSync(holdoutOrphelin, DOSSIER_MIGRATION_CIBLE);
+}
+
 function lancerMigrateDeploy(): void {
   execFileSync("npx", ["prisma", "migrate", "deploy"], {
     cwd: RACINE_DEPOT,
@@ -121,6 +157,11 @@ async function connexionsResiduelles(clientAdmin: PrismaClient): Promise<number>
 }
 
 async function main() {
+  // --- Filet de sécurité : récupérer un éventuel holdout orphelin d'une
+  //     exécution précédente interrompue par un arrêt dur, AVANT toute
+  //     autre action. ---
+  restaurerHoldoutOrphelinEventuel();
+
   // --- Préparation : schéma isolé propre, dossier de migration au repos. ---
   const clientAdminPublic = new PrismaClient({ datasourceUrl: process.env.DATABASE_URL });
   try {

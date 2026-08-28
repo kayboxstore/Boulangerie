@@ -160,7 +160,7 @@ stocksRouter.delete("/matieres/:id", requirePermission("STOCKS", "ECRITURE"), as
   } catch (e) {
     // Contrainte de clé étrangère non couverte par le contrôle ci-dessus
     // (ex. lien résiduel via IngredientRecette, cf. migration
-    // 20260827_purger_recettes_orphelines) : message clair plutôt qu'une
+    // 20260827120333_purger_recettes_orphelines) : message clair plutôt qu'une
     // erreur 500 générique, même idiome que typeClients.ts.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
       return res.status(409).json({
