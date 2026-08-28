@@ -265,6 +265,7 @@
   "premierLancement": {
     "title": "Bienvenue",
     "subtitle": "Aucun compte n'existe encore — configurons l'Administrateur principal.",
+    "secretLabel": "Secret de premier lancement (fourni par votre administrateur infrastructure)",
     "step1Desc": "D'abord, sa fiche Travailleur (comme n'importe quel employé de l'équipe).",
     "step1Button": "Continuer",
     "postPlaceholder": "Administrateur",

@@ -265,6 +265,7 @@
   "premierLancement": {
     "title": "Welcome",
     "subtitle": "No account exists yet — let's set up the Principal Administrator.",
+    "secretLabel": "First-launch secret (provided by your infrastructure administrator)",
     "step1Desc": "First, their Worker fiche (like any other team member).",
     "step1Button": "Continue",
     "postPlaceholder": "Administrator",

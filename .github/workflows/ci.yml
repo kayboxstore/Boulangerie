@@ -203,6 +203,27 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-application-reelle-migration-purge-recettes-ci.ts
 
+      - name: Vérification de concurrence PostgreSQL réelle du secret de bootstrap du premier lancement (P1-A, 28/08/2026)
+        # Additif, distinct des scripts ci-dessus : avant ce correctif,
+        # l'absence de compte Utilisateur était la SEULE autorisation
+        # d'accès à routes/premierLancement.ts — sur une base neuve ou
+        # réinitialisée, n'importe quel visiteur découvrant l'écran avant
+        # l'administrateur légitime pouvait devenir Administrateur
+        # Principal. Ce script prouve, contre une VRAIE base PostgreSQL et
+        # avec la même méthodologie que verifier-concurrence-equipe-ci.ts
+        # (pid réel capturé DEPUIS la transaction via
+        # tx.$queryRaw`SELECT pg_backend_pid()`, blocage RÉELLEMENT observé
+        # depuis une troisième connexion via pg_blocking_pids, jamais un
+        # délai comme preuve) que deux finalisations concurrentes — même
+        # secret, ou secrets différents — ne peuvent jamais toutes les deux
+        # réussir : jamais plus d'un Administrateur Principal créé. Les
+        # tests mockés (premierLancement.test.ts) prouvent séparément les 5
+        # scénarios applicatifs (absence de secret, mauvais secret,
+        # expiration, rejeu, course). Même garde que les scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-concurrence-premier-lancement-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest

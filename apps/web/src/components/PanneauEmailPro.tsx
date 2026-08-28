@@ -39,6 +39,11 @@ interface PanneauEmailProProps {
    *  le parent décide quoi en faire (invalider un cache, ou la garder telle quelle
    *  en état local, cas de l'Assistant de premier lancement qui n'a pas de cache). */
   onChange: (travailleur: TravailleurDTO) => void;
+  /** En-têtes HTTP supplémentaires à joindre aux deux appels ci-dessous —
+   *  utilisé uniquement par l'Assistant de premier lancement (P1-A) pour
+   *  transmettre le secret de bootstrap ; absent (donc sans effet) sur la
+   *  fiche Travailleur normale, déjà authentifiée par jeton. */
+  enTetesSupplementaires?: HeadersInit;
 }
 
 /** Panneau adresse email professionnelle (section 3.18) — utilisé sur la fiche
@@ -51,6 +56,7 @@ export function PanneauEmailPro({
   emailProErreur,
   basePath,
   onChange,
+  enTetesSupplementaires,
 }: PanneauEmailProProps) {
   const { t } = useTranslation();
   const { toastErreur } = useFeedback();
@@ -61,6 +67,7 @@ export function PanneauEmailPro({
       api<{ travailleur: TravailleurDTO }>(`${basePath}/${travailleurId}/email-pro`, {
         method: "POST",
         body: JSON.stringify({ emailDestination: emailDestinationSaisie.trim() }),
+        headers: enTetesSupplementaires,
       }),
     onSuccess: (r) => onChange(r.travailleur),
     onError: (e) => toastErreur(e instanceof Error ? e.message : t("travailleurs.emailProError")),
@@ -68,7 +75,10 @@ export function PanneauEmailPro({
 
   const verifierEmailPro = useMutation({
     mutationFn: () =>
-      api<{ travailleur: TravailleurDTO }>(`${basePath}/${travailleurId}/email-pro/verifier`, { method: "POST" }),
+      api<{ travailleur: TravailleurDTO }>(`${basePath}/${travailleurId}/email-pro/verifier`, {
+        method: "POST",
+        headers: enTetesSupplementaires,
+      }),
     onSuccess: (r) => onChange(r.travailleur),
     onError: (e) => toastErreur(e instanceof Error ? e.message : t("travailleurs.emailProError")),
   });

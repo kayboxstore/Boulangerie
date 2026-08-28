@@ -266,6 +266,7 @@
   "premierLancement": {
     "title": "Boyei malamu",
     "subtitle": "Kɔnti moko te ezali naino — tosala Administrateur mokonzi.",
+    "secretLabel": "Sekele ya ebandeli ya liboso (epesami na administrateur ya infrastructure)",
     "step1Desc": "Ya liboso, fiche na ye ya Mosali (lokola mosali nyonso ya ekipe).",
     "step1Button": "Kokoba",
     "postPlaceholder": "Administrateur",

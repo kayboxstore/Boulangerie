@@ -244,11 +244,17 @@ async function main() {
     }
     console.log("✓ la matière témoin (aucun lien avec Recette) reste strictement intacte — la migration n'a purgé que ce qu'elle devait");
 
-    // Les 37 migrations sont proprement terminées, aucune en échec.
+    // Toutes les migrations du dépôt sont proprement terminées, aucune en
+    // échec — comptage dynamique (jamais un nombre figé) : ce script
+    // survivra sans modification à chaque migration future ajoutée après
+    // celle-ci.
+    const nbMigrationsAttendu = fs.readdirSync(DOSSIER_MIGRATIONS).filter((nom) => nom !== "migration_lock.toml").length;
     const migrations = await clientApresMigration.$queryRawUnsafe<
       { migration_name: string; finished_at: Date | null; rolled_back_at: Date | null }[]
     >(`SELECT migration_name, finished_at, rolled_back_at FROM "_prisma_migrations" ORDER BY started_at ASC`);
-    if (migrations.length !== 37) echouer(`attendu 37 migrations appliquées dans le schéma isolé, trouvé ${migrations.length}`);
+    if (migrations.length !== nbMigrationsAttendu) {
+      echouer(`attendu ${nbMigrationsAttendu} migrations appliquées dans le schéma isolé (autant que de dossiers dans prisma/migrations/), trouvé ${migrations.length}`);
+    }
     const inachevees = migrations.filter((m) => m.finished_at === null || m.rolled_back_at !== null);
     if (inachevees.length > 0) {
       echouer(`migration(s) inachevée(s) ou annulée(s) dans _prisma_migrations : ${inachevees.map((m) => m.migration_name).join(", ")}`);
@@ -257,7 +263,9 @@ async function main() {
     if (derniere?.migration_name !== NOM_MIGRATION_CIBLE) {
       echouer(`la dernière migration appliquée devrait être ${NOM_MIGRATION_CIBLE}, trouvé ${derniere?.migration_name}`);
     }
-    console.log("✓ _prisma_migrations confirme les 37 migrations proprement terminées, sans rollback, se terminant par la migration cible");
+    console.log(
+      `✓ _prisma_migrations confirme les ${migrations.length} migrations proprement terminées, sans rollback, se terminant par la migration cible`,
+    );
   } finally {
     await clientApresMigration.$disconnect();
   }

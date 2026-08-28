@@ -266,6 +266,7 @@
   "premierLancement": {
     "title": "Karibu",
     "subtitle": "Hakuna akaunti iliyopo bado — hebu tuweke Msimamizi Mkuu.",
+    "secretLabel": "Siri ya uzinduzi wa kwanza (inayotolewa na msimamizi wa miundombinu)",
     "step1Desc": "Kwanza, fomu yake ya Mfanyakazi (kama mfanyakazi mwingine yeyote wa timu).",
     "step1Button": "Endelea",
     "postPlaceholder": "Msimamizi",

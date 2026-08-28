@@ -15,6 +15,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "db:bootstrap:production": "tsx prisma/bootstrap-production.ts",
+    "db:generer-secret-premier-lancement": "tsx scripts/generer-secret-premier-lancement.ts",
     "db:seed:demo": "node scripts/lancer-seed-demo.mjs",
     "test": "vitest run",
     "restore:backup": "tsx scripts/restaurer-sauvegarde.ts"

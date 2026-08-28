@@ -1,22 +1,32 @@
 import { Router, type Request, type Response } from "express";
-import bcrypt from "bcryptjs";
 import {
   emailProCreerSchema,
   premierLancementFinaliserSchema,
   premierLancementTravailleurSchema,
-  ROLE_ADMINISTRATEUR,
 } from "@lomoto/shared";
+import { ErreurAction } from "../lib/erreurAction.js";
 import { prisma } from "../lib/prisma.js";
 import { declencherEmailPro, verifierEmailPro } from "../services/emailPro.js";
+import {
+  ErreurFinalisationReessayable,
+  finaliserPremierLancementDirect,
+  secretPremierLancementValide,
+} from "../services/premierLancement.js";
 import { INCLUDE_TRAVAILLEUR, versTravailleurDTO } from "./travailleurs.js";
 
+const EN_TETE_SECRET = "x-secret-premier-lancement";
+
 /**
- * Assistant de premier lancement (section 3.7, nouveau) — quand la base ne
- * contient AUCUN compte Utilisateur, l'écran de connexion est remplacé par ce
- * parcours guidé. Public par nécessité (personne ne peut s'authentifier tant
- * qu'aucun compte n'existe), mais chaque appel revérifie ici que la base est
- * toujours vide : une fois le premier Admin créé, ce router se referme de
- * lui-même — plus aucune requête n'y passe la garde.
+ * Assistant de premier lancement (section 3.7, corrigé P1-A le 28/08/2026)
+ * — quand la base ne contient AUCUN compte Utilisateur, l'écran de
+ * connexion est remplacé par ce parcours guidé. Public par nécessité
+ * (personne ne peut s'authentifier tant qu'aucun compte n'existe), mais
+ * chaque appel revérifie ici que la base est toujours vide ET qu'un secret
+ * de bootstrap valide (généré hors dépôt, voir
+ * `services/premierLancement.ts`) est fourni dans l'en-tête
+ * `X-Secret-Premier-Lancement` — sans quoi n'importe quel visiteur pourrait
+ * devenir Administrateur Principal sur une base neuve ou réinitialisée
+ * avant l'administrateur légitime.
  */
 export const premierLancementRouter = Router();
 
@@ -28,6 +38,23 @@ async function exigerBaseVide(res: Response): Promise<boolean> {
   }
   return true;
 }
+
+// Aperçu léger, un rejet honnête et rapide — jamais la garantie de sécurité
+// réelle (celle-ci n'existe que dans la réservation atomique de
+// finaliserPremierLancementDirect). Appliqué aux 4 routes : sans lui, un
+// visiteur sans secret pourrait déjà créer des fiches Travailleur et
+// déclencher des envois d'email pro avant même d'atteindre /finaliser.
+premierLancementRouter.use(async (req, res, next) => {
+  try {
+    const secretFourni = req.get(EN_TETE_SECRET);
+    if (!(await secretPremierLancementValide(prisma, secretFourni))) {
+      return res.status(401).json({ erreur: "Secret de premier lancement requis, invalide, expiré ou déjà utilisé" });
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+});
 
 // Étape 1 : fiche Travailleur du futur Admin Principal.
 premierLancementRouter.post("/travailleur", async (req: Request, res, next) => {
@@ -95,42 +122,28 @@ premierLancementRouter.post("/travailleur/:id/email-pro/verifier", async (req, r
 // Étape 4 : email pro actif -> création automatique du compte Administrateur
 // principal. Le mot de passe est celui saisi par l'utilisateur dans
 // l'assistant ; le frontend enchaîne avec un login normal (pas de token
-// renvoyé ici, pour ne pas dupliquer la logique de connexion).
+// renvoyé ici, pour ne pas dupliquer la logique de connexion). Toute la
+// logique de réservation atomique du secret + revérification de la base
+// vide + création est dans services/premierLancement.ts — voir sa
+// documentation pour les garanties de concurrence.
 premierLancementRouter.post("/finaliser", async (req, res, next) => {
   try {
-    if (!(await exigerBaseVide(res))) return;
-
     const parsed = premierLancementFinaliserSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const { travailleurId, motDePasse } = parsed.data;
 
-    const travailleur = await prisma.travailleur.findUnique({ where: { id: travailleurId } });
-    if (!travailleur) return res.status(404).json({ erreur: "Fiche introuvable" });
-    if (travailleur.utilisateurId) {
-      return res.status(409).json({ erreur: "Cette fiche a déjà un compte de connexion" });
-    }
-    if (travailleur.emailProStatut !== "ACTIF" || !travailleur.emailProAdresse) {
-      return res.status(409).json({ erreur: "L'adresse email professionnelle n'est pas encore active" });
-    }
-
-    const role = await prisma.role.findUnique({ where: { nom: ROLE_ADMINISTRATEUR } });
-    if (!role) return res.status(500).json({ erreur: "Rôle Administrateur introuvable — configuration incomplète" });
-
-    const motDePasseHash = await bcrypt.hash(motDePasse, 10);
-    await prisma.$transaction(async (tx) => {
-      const compte = await tx.utilisateur.create({
-        data: {
-          nom: travailleur.nom,
-          email: travailleur.emailProAdresse!,
-          roleId: role.id,
-          motDePasseHash,
-          estAdminPrincipal: true,
-        },
+    try {
+      await finaliserPremierLancementDirect(prisma, {
+        secretFourni: req.get(EN_TETE_SECRET),
+        travailleurId: parsed.data.travailleurId,
+        motDePasse: parsed.data.motDePasse,
       });
-      await tx.travailleur.update({ where: { id: travailleur.id }, data: { utilisateurId: compte.id } });
-    });
+    } catch (e) {
+      if (e instanceof ErreurAction) return res.status(e.status).json({ erreur: e.message });
+      if (e instanceof ErreurFinalisationReessayable) return res.status(503).json({ erreur: e.message });
+      throw e;
+    }
 
     res.status(201).json({ ok: true });
   } catch (e) {
