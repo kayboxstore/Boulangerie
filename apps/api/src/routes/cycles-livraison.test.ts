@@ -144,20 +144,26 @@ describe("conversion C4 transactionnelle", () => {
         findUnique: vi.fn().mockResolvedValueOnce(avant).mockResolvedValueOnce(apres),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
-      cycleLivraisonLigne: { update: vi.fn().mockResolvedValue({}) },
+      cycleLivraisonLigne: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(apres.lignes[0]),
+      },
       commandeClient: { create: creerCommande },
       client: { update: vi.fn() },
       transitionCycleLivraison: { create: vi.fn().mockResolvedValue({}) },
+      auditLog: { create: vi.fn().mockResolvedValue({}) },
     };
-    const resultat = await appliquerTransition(
-      tx as unknown as TxClient,
-      "cycle-1",
-      {
-        action: "SIGNALER_DEPOT",
-        version: 6,
-        lignes: [{ produitId: "p1", quantite: 43 }],
-      },
-      "user-production",
+    const resultat = await avecActeur(() =>
+      appliquerTransition(
+        tx as unknown as TxClient,
+        "cycle-1",
+        {
+          action: "SIGNALER_DEPOT",
+          version: 6,
+          lignes: [{ produitId: "p1", quantite: 43 }],
+        },
+        "user-production",
+      ),
     );
     expect(creerCommande).not.toHaveBeenCalled();
     expect(tx.client.update).not.toHaveBeenCalled();

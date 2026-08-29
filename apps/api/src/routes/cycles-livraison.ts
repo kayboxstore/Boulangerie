@@ -215,10 +215,38 @@ async function appliquerLignesSimples(
       calculerQuantiteManquante(chargee, valeurs.get(ligne.produitId)!);
     }
   }
+  // updateMany + audit manuel dans `tx` (jamais update() singulier) :
+  // CycleLivraisonLigne est un modèle audité (lib/audit.ts, module
+  // PRODUCTION) — même correctif que CONFIRMER_ACCEPTATION, étendu ici aux
+  // cinq autres transitions qui partagent cette fonction (round correctif
+  // Codex, 29/08/2026 — signalé en Passe B round 2 comme hors périmètre du
+  // round précédent, corrigé maintenant).
   for (const [produitId, quantite] of valeurs) {
-    await tx.cycleLivraisonLigne.update({
-      where: { cycleId_produitId: { cycleId: cycle.id, produitId } },
+    const ligneAvant = cycle.lignes.find((ligne) => ligne.produitId === produitId)!;
+    const { count } = await tx.cycleLivraisonLigne.updateMany({
+      where: { id: ligneAvant.id },
       data: { [champ]: quantite },
+    });
+    // En pratique inatteignable : `ligneAvant` vient d'être lue dans CETTE
+    // transaction (chargerCycle, avant toute écriture) et sa ligne n'est
+    // ni supprimable ni réattribuable à un autre cycle — conservé par
+    // défense en profondeur, jamais un 500 générique.
+    if (count !== 1) {
+      throw new ErreurCycleLivraison(
+        "Le cycle a été modifié. Rechargez les données avant de réessayer.",
+        409,
+        "VERSION_OBSOLETE",
+        cycle.version,
+      );
+    }
+    const ligneApres = await tx.cycleLivraisonLigne.findUniqueOrThrow({ where: { id: ligneAvant.id } });
+    await auditerCaisseTx(tx, {
+      module: "PRODUCTION",
+      typeEntite: "CycleLivraisonLigne",
+      entiteId: ligneAvant.id,
+      action: "MODIFICATION",
+      avant: ligneAvant,
+      apres: ligneApres,
     });
   }
 }

@@ -329,7 +329,7 @@ describe("Parcours complet du cycle C4 — bout en bout (I5, vague 3)", () => {
     expect(appelsCommandeCreate).toHaveLength(0);
   }));
 
-  it("CONFIRMER_ACCEPTATION avant que le dépôt ne soit confirmé échoue, quel que soit l'ordre soumis", async () => {
+  it("CONFIRMER_ACCEPTATION avant que le dépôt ne soit confirmé échoue, quel que soit l'ordre soumis", () => avecActeur(async () => {
     const etat = creerEtatInitial();
     const { tx, appelsCommandeCreate } = creerTxEnMemoire(etat);
     // On s'arrête juste avant SIGNALER_DEPOT (statut CHARGEE puis EN_TOURNEE, jamais déposé).
@@ -348,5 +348,5 @@ describe("Parcours complet du cycle C4 — bout en bout (I5, vague 3)", () => {
       ),
     ).rejects.toMatchObject({ code: "TRANSITION_INTERDITE" });
     expect(appelsCommandeCreate).toHaveLength(0);
-  });
+  }));
 });
