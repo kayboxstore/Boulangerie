@@ -26,6 +26,7 @@ import {
 } from "../lib/idempotence.js";
 import { bornesJourLomoto } from "../lib/temps.js";
 import { busEvenements } from "../lib/events.js";
+import { auditerCaisseTx } from "../services/caisseAtomique.js";
 import {
   calculerQuantiteManquante,
   donneesTransitionPourJournal,
@@ -234,15 +235,31 @@ interface CorpsTransition {
   commande: CommandeCycleReponse | null;
 }
 
+/**
+ * Crochet de TEST UNIQUEMENT (jamais appelé par un chemin de production —
+ * aucun appelant réel n'en fournit) : même idiome que `CrochetsTestVerrouCaisse`
+ * (services/caisseAtomique.ts). Appelé juste après la lecture initiale du
+ * cycle (donc après que CETTE transaction a fixé son instantané PostgreSQL
+ * SERIALIZABLE), avant toute écriture — permet à un scénario de concurrence
+ * réel (scripts/verifier-integrite-c4-ci.ts) de garantir un entrelacement
+ * déterministe avec une transaction concurrente touchant le même Client
+ * (jamais un délai comme synchronisation).
+ */
+export interface CrochetsTestTransitionCycle {
+  apresLectureAvantEcriture?: () => Promise<void>;
+}
+
 export async function appliquerTransition(
   tx: TxClient,
   cycleId: string,
   input: TransitionCycleLivraisonInput,
   utilisateurId: string,
+  crochets?: CrochetsTestTransitionCycle,
 ): Promise<CorpsTransition> {
   const cycle = await chargerCycle(tx, cycleId);
   if (!cycle) throw new ErreurCycleLivraison("Cycle introuvable", 404, "CYCLE_INTROUVABLE");
   verifierVersionEtEtat(cycle, input);
+  await crochets?.apresLectureAvantEcriture?.();
 
   let statutSuivant: CycleComplet["statut"];
   let commande: CommandeCycleReponse | null = null;
@@ -274,10 +291,18 @@ export async function appliquerTransition(
         : {}),
     });
 
+    // `updateMany` + audit manuel dans `tx` (jamais `update()` singulier) :
+    // CycleLivraisonLigne est un modèle audité (lib/audit.ts, module
+    // PRODUCTION) — un `update()` ici serait intercepté par l'extension
+    // d'audit automatique, qui écrit via un client NON transactionnel
+    // (voir services/caisseAtomique.ts) et laisserait un AuditLog mensonger
+    // si la transaction C4 était annulée plus loin (round correctif Codex,
+    // 29/08/2026 — la conversion C4 modifie bien des données financières :
+    // avance/dette client, jamais les espèces ni le solde de caisse).
     for (const ligne of cycle.lignes) {
       const finale = valeurs.get(ligne.produitId)!;
-      await tx.cycleLivraisonLigne.update({
-        where: { cycleId_produitId: { cycleId: cycle.id, produitId: ligne.produitId } },
+      const { count } = await tx.cycleLivraisonLigne.updateMany({
+        where: { id: ligne.id },
         data: {
           quantiteAcceptee: finale.quantiteAcceptee,
           quantiteRetournee: finale.quantiteRetournee,
@@ -285,6 +310,27 @@ export async function appliquerTransition(
           // l'accepté ni du retourné, qui restent deux résultats parallèles.
           quantiteManquante: resultatFinal.manquants.get(ligne.produitId)!,
         },
+      });
+      // En pratique inatteignable : `ligne` vient d'être lue dans CETTE
+      // transaction (chargerCycle, avant toute écriture) et sa ligne
+      // n'est ni supprimable ni réattribuable à un autre cycle — conservé
+      // par défense en profondeur, jamais un 500 générique.
+      if (count !== 1) {
+        throw new ErreurCycleLivraison(
+          "Le cycle a été modifié. Rechargez les données avant de réessayer.",
+          409,
+          "VERSION_OBSOLETE",
+          cycle.version,
+        );
+      }
+      const ligneApres = await tx.cycleLivraisonLigne.findUniqueOrThrow({ where: { id: ligne.id } });
+      await auditerCaisseTx(tx, {
+        module: "PRODUCTION",
+        typeEntite: "CycleLivraisonLigne",
+        entiteId: ligne.id,
+        action: "MODIFICATION",
+        avant: ligne,
+        apres: ligneApres,
       });
     }
 
@@ -347,8 +393,53 @@ export async function appliquerTransition(
         },
         select: { id: true, numero: true, quantiteBacs: true, montantRecu: true },
       });
-      await tx.client.update({ where: { id: client.id }, data: { avanceDisponible: calcul.nouvelleAvance } });
-      await tx.cycleLivraison.update({ where: { id: cycle.id }, data: { commandeId: creee.id } });
+
+      // Client et CycleLivraison sont tous deux des modèles audités
+      // (COMMANDES / PRODUCTION) : mêmes raisons que ci-dessus,
+      // `updateMany` + audit manuel dans `tx`, jamais `update()` singulier.
+      // La conversion C4 elle-même reste neutre pour les espèces et le
+      // solde du registre de caisse (montantRecu = 0 à la création), mais
+      // modifie réellement l'avance et la dette du client — d'où l'audit.
+      const clientAvant = client;
+      const { count: countClient } = await tx.client.updateMany({
+        where: { id: client.id },
+        data: { avanceDisponible: calcul.nouvelleAvance },
+      });
+      if (countClient !== 1) {
+        throw new ErreurCycleLivraison("Client introuvable", 404, "CYCLE_INTROUVABLE");
+      }
+      const clientApres = await tx.client.findUniqueOrThrow({ where: { id: client.id } });
+      await auditerCaisseTx(tx, {
+        module: "COMMANDES",
+        typeEntite: "Client",
+        entiteId: client.id,
+        action: "MODIFICATION",
+        avant: clientAvant,
+        apres: clientApres,
+      });
+
+      const cycleAvantLien = await tx.cycleLivraison.findUniqueOrThrow({ where: { id: cycle.id } });
+      const { count: countCycle } = await tx.cycleLivraison.updateMany({
+        where: { id: cycle.id },
+        data: { commandeId: creee.id },
+      });
+      // En pratique inatteignable : le cycle vient d'être verrouillé par
+      // `reclamerVersion` (CAS optimiste par version) plus haut dans CETTE
+      // même transaction — conservé par défense en profondeur, jamais un
+      // 500 générique.
+      if (countCycle !== 1) {
+        throw new ErreurCycleLivraison("Cycle introuvable", 404, "CYCLE_INTROUVABLE");
+      }
+      const cycleApresLien = await tx.cycleLivraison.findUniqueOrThrow({ where: { id: cycle.id } });
+      await auditerCaisseTx(tx, {
+        module: "PRODUCTION",
+        typeEntite: "CycleLivraison",
+        entiteId: cycle.id,
+        action: "MODIFICATION",
+        avant: cycleAvantLien,
+        apres: cycleApresLien,
+      });
+
       commande = creee;
     }
   } else {

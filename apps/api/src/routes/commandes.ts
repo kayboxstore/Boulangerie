@@ -320,8 +320,14 @@ commandesRouter.get("/", requirePermission("COMMANDES", "LECTURE"), async (req, 
  * toute lecture pertinente, exactement comme les écritures de caisse.ts.
  * Sans quoi une commande créée ou modifiée après la clôture du jour
  * corromprait silencieusement un théorique déjà figé. La conversion C4
- * (cycles-livraison.ts) reste hors périmètre : montantRecu = 0 à la
- * création, aucun impact comptable démontré (voir cartographie P1-B).
+ * (cycles-livraison.ts) reste hors périmètre de CETTE exigence de session
+ * ouverte : montantRecu = 0 à la création, donc aucun mouvement d'espèces
+ * et aucun impact sur le solde du registre de caisse — mais elle modifie
+ * bien l'avance et la dette du client (round correctif Codex, 29/08/2026 ;
+ * voir services/caisseAtomique.ts et cycles-livraison.ts pour l'audit
+ * transactionnel de ce chemin). Imposer silencieusement une session
+ * ouverte à C4 changerait cette règle métier et exige une décision
+ * explicite d'Augustin — non prise ici.
  */
 commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
   try {

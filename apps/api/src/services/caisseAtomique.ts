@@ -166,11 +166,16 @@ export class ErreurActeurRequisPourAuditCaisse extends Error {
  * ET produiraient une double journalisation ou une trace non transactionnelle) —
  * et journalisent manuellement leur équivalent ici, avec le même acteur, la
  * même transaction, le même sort en cas de rollback que l'écriture métier.
+ *
+ * Réutilisé au-delà du seul module CAISSE (`module: "PRODUCTION"` pour la
+ * conversion C4 — CycleLivraison/CycleLivraisonLigne, apps/api/src/routes/cycles-livraison.ts) :
+ * le mécanisme (client `tx`, jamais `base`) est générique, seul le module
+ * d'affichage de l'AuditLog change.
  */
 export async function auditerCaisseTx(
   tx: TxClient,
   params: {
-    module: "CAISSE" | "COMMANDES";
+    module: "CAISSE" | "COMMANDES" | "PRODUCTION";
     typeEntite: string;
     entiteId: string;
     action: "MODIFICATION" | "SUPPRESSION";
