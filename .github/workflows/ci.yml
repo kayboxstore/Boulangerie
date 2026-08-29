@@ -277,6 +277,16 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-integrite-c4-ci.ts
 
+      - name: Vérification HTTP réelle de la confirmation des règlements (round final Codex)
+        # Les tests de caisse.test.ts exercent Express avec Prisma mocké. Ce
+        # script complète la preuve avec le vrai caisseRouter, un vrai JWT et
+        # PostgreSQL : succès + rejeu idempotent avec relecture indépendante
+        # de RemiseCaisse/CommandeClient/Client/PaiementCommande/3 AuditLog,
+        # puis lot mixte invalide sans aucune confirmation partielle.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-http-caisse-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest

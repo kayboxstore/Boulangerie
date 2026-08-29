@@ -45,6 +45,12 @@
  *     formulation corrigée : « aucun mouvement d'espèces et aucun impact sur
  *     le solde du registre de caisse, mais modification possible de
  *     l'avance et de la dette du client ».
+ *  4. Rollback complet d'une transition logistique simple
+ *     (`RETENIR_PRODUCTION`) si son audit échoue : statut/version du cycle,
+ *     valeur de ligne, journal de transition et AuditLog restent inchangés.
+ *     Ce scénario couvre le dernier usage préexistant de `update()` sur
+ *     `CycleLivraisonLigne`, désormais converti en `updateMany` + audit
+ *     manuel dans la transaction.
  *
  * SÉCURITÉ : même garde que les scripts d'intégration voisins — hôte local,
  * nom de base EXACT `lomoto_ci`, confirmation explicite. Voir
@@ -144,7 +150,7 @@ async function creerCyclePretPourAcceptation(clientId: string, produitId: string
 }
 
 async function main() {
-  console.log("→ Scénario 1/3 : échec d'audit injecté → rollback COMPLET de la conversion C4…");
+  console.log("→ Scénario 1/4 : échec d'audit injecté → rollback COMPLET de la conversion C4…");
   {
     await reinitialiserBase();
     // Volontairement AUCUN acteur créé/contexte défini : auditerCaisseTx doit
@@ -193,7 +199,7 @@ async function main() {
     console.log("  ✓ échec d'audit injecté : rollback COMPLET confirmé (cycle, ligne, avance client, commande, transition, audit — tous inchangés/absents).");
   }
 
-  console.log("→ Scénario 2/3 : conflit de sérialisation réel entre C4 et une autre écriture sur le MÊME client…");
+  console.log("→ Scénario 2/4 : conflit de sérialisation réel entre C4 et une autre écriture sur le MÊME client…");
   {
     await reinitialiserBase();
     await creerActeur();
@@ -261,7 +267,7 @@ async function main() {
     console.log("  ✓ conflit de sérialisation réel confirmé (P2034, jamais un 500 brut) : B gagne sans écrasement, A échoue proprement sans aucun état partiel.");
   }
 
-  console.log("→ Scénario 3/3 : conversion C4 (montantRecu=0) sur une caisse déjà figée — registre strictement inchangé…");
+  console.log("→ Scénario 3/4 : conversion C4 (montantRecu=0) sur une caisse déjà figée — registre strictement inchangé…");
   {
     await reinitialiserBase();
     await creerActeur();
@@ -355,7 +361,67 @@ async function main() {
     console.log("  ✓ neutralité comptable confirmée : registre et session déjà figés strictement inchangés ; avance/dette du client bien modifiées (jamais « aucun impact comptable »).");
   }
 
-  console.log("\n✅ Vérification d'intégrité CI « C4 » (round correctif Codex) : rollback complet, conflit de sérialisation propre, neutralité de caisse — dans les 3 scénarios.\n");
+  console.log("→ Scénario 4/4 : échec d'audit sur RETENIR_PRODUCTION → rollback COMPLET de la transition simple…");
+  {
+    await reinitialiserBase();
+    // Aucun acteur/contexte volontairement : reclamerVersion puis l'updateMany
+    // de ligne s'exécutent DANS la transaction, et le premier audit manuel
+    // échoue. PostgreSQL doit annuler les deux écritures déjà réalisées.
+    const type = await prisma.typeClient.create({
+      data: { nom: `Qualite-simple-${Date.now()}`, prixParBac: 4100, commissionParBac: 0 },
+    });
+    const client = await prisma.client.create({ data: { nom: "Dépôt transition simple", typeClientId: type.id } });
+    const produit = await creerProduit();
+    const schema = await prisma.schemaCommande.create({
+      data: {
+        date: dateSQLDepuisJourLomoto("2026-08-29"),
+        clientId: client.id,
+        lignes: { create: [{ produitId: produit.id, quantite: 50 }] },
+        cycle: {
+          create: {
+            statut: "PREVISION",
+            version: 1,
+            lignes: { create: [{ produitId: produit.id }] },
+          },
+        },
+      },
+      include: { cycle: { include: { lignes: true } } },
+    });
+    const cycle = schema.cycle!;
+
+    let erreur: unknown;
+    try {
+      await transactionSerializable(prisma as unknown as DbApp, (tx) =>
+        appliquerTransition(
+          tx,
+          cycle.id,
+          { action: "RETENIR_PRODUCTION", version: 1, lignes: [{ produitId: produit.id, quantite: 48 }] },
+          ACTEUR.id,
+        ),
+      );
+    } catch (e) {
+      erreur = e;
+    }
+
+    if (!(erreur instanceof ErreurActeurRequisPourAuditCaisse)) {
+      echouer(`scénario 4 : attendu ErreurActeurRequisPourAuditCaisse — reçu ${String(erreur)}`);
+    }
+    const cycleApres = await prisma.cycleLivraison.findUniqueOrThrow({ where: { id: cycle.id } });
+    if (cycleApres.statut !== "PREVISION" || cycleApres.version !== 1) {
+      echouer("scénario 4 : statut/version du cycle doivent rester PREVISION/1 après rollback");
+    }
+    const ligneApres = await prisma.cycleLivraisonLigne.findFirstOrThrow({ where: { cycleId: cycle.id } });
+    if (ligneApres.quantiteRetenueProduction !== null) {
+      echouer("scénario 4 : quantiteRetenueProduction doit rester nulle après rollback");
+    }
+    const nbTransitions = await prisma.transitionCycleLivraison.count({ where: { cycleId: cycle.id } });
+    if (nbTransitions !== 0) echouer(`scénario 4 : aucune transition ne doit survivre, trouvé ${nbTransitions}`);
+    const nbAudits = await prisma.auditLog.count({ where: { entiteId: ligneApres.id } });
+    if (nbAudits !== 0) echouer(`scénario 4 : aucun AuditLog ne doit survivre, trouvé ${nbAudits}`);
+    console.log("  ✓ transition simple annulée intégralement : cycle, ligne, TransitionCycleLivraison et AuditLog strictement inchangés/absents.");
+  }
+
+  console.log("\n✅ Vérification d'intégrité CI des cycles (round final Codex) : C4 et transitions simples couvertes par 4 scénarios PostgreSQL réels.\n");
 }
 
 main()

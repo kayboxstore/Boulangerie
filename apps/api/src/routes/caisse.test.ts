@@ -604,7 +604,7 @@ describe("POST /api/caisse/sessions/:id/confirmer-reglements", () => {
     );
   });
 
-  it("rollback complet (jamais un 500 Prisma brut, jamais de confirmation partielle) si l'audit CommandeClient échoue", async () => {
+  it("propage l'échec d'audit et n'exécute aucune écriture suivante dans ce harnais mocké", async () => {
     mocks.verrouillerSessionOuverteParId.mockResolvedValue(SESSION_OUVERTE);
     const { tx } = txConfirmerReglements();
     mocks.auditerCaisseTx.mockRejectedValueOnce(new Error("échec d'audit injecté"));
@@ -622,14 +622,14 @@ describe("POST /api/caisse/sessions/:id/confirmer-reglements", () => {
       const res = await request(app())
         .post("/api/caisse/sessions/s-1/confirmer-reglements")
         .send({ paiementCommandeIds: ["p-1"], remisParNom: "Jean" });
-      // Aucun gestionnaire d'erreur JSON monté dans ce harnais de test
-      // minimal (app() ci-dessus) — Express retombe sur son gestionnaire
-      // 500 par défaut. En production (app.ts), le même rejet atteint le
-      // gestionnaire générique qui répond 500 SANS détail Prisma brut
-      // (voir app.ts) — jamais 200/201.
+      // Ce harnais mocké prouve la propagation HTTP et l'arrêt du flux, pas
+      // un rollback PostgreSQL : la remise et l'update CommandeClient sont
+      // des mocks déjà appelés. La preuve de persistance réelle vit dans
+      // scripts/verifier-http-caisse-ci.ts.
       expect(res.status).toBe(500);
-      // L'échec de l'audit CommandeClient (1er des 3) empêche les écritures
-      // et audits suivants (Client, PaiementCommande) de s'exécuter.
+      expect(tx.remiseCaisse.create).toHaveBeenCalledTimes(1);
+      expect(tx.commandeClient.updateMany).toHaveBeenCalledTimes(1);
+      // L'échec du premier audit empêche les écritures suivantes.
       expect(mocks.auditerCaisseTx).toHaveBeenCalledTimes(1);
       expect(tx.client.updateMany).not.toHaveBeenCalled();
       expect(tx.paiementCommande.updateMany).not.toHaveBeenCalled();
