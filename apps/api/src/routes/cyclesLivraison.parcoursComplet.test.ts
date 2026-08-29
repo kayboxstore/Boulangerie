@@ -5,7 +5,7 @@ import { contexteRequete } from "../lib/contexteRequete.js";
 import { appliquerTransition } from "./cycles-livraison.js";
 
 const ACTEUR_E2E = { id: "user-e2e", nom: "Utilisateur E2E" };
-/** CONFIRMER_ACCEPTATION audite désormais Client/CycleLivraison/CycleLivraisonLigne dans `tx` (round correctif Codex, 29/08/2026) — exige un acteur de contexte de requête. */
+/** Toutes les transitions qui modifient une ligne auditent désormais dans `tx` — exige un acteur de contexte de requête, comme le vrai middleware HTTP. */
 const avecActeur = <T>(executer: () => Promise<T>) => contexteRequete.run(ACTEUR_E2E, executer);
 
 /**
@@ -124,20 +124,6 @@ function creerTxEnMemoire(etat: EtatCycle) {
       findUniqueOrThrow: async () => structuredClone(etat),
     },
     cycleLivraisonLigne: {
-      // update() singulier reste utilisé par appliquerLignesSimples, pour les
-      // transitions AUTRES que CONFIRMER_ACCEPTATION — hors périmètre de ce
-      // round correctif (voir cartographie du rapport final).
-      update: async ({
-        where,
-        data,
-      }: {
-        where: { cycleId_produitId: { produitId: string } };
-        data: Record<string, number>;
-      }) => {
-        const ligne = etat.lignes.find((l) => l.produitId === where.cycleId_produitId.produitId)!;
-        Object.assign(ligne, data);
-        return {};
-      },
       updateMany: async ({
         where,
         data,
@@ -329,7 +315,7 @@ describe("Parcours complet du cycle C4 — bout en bout (I5, vague 3)", () => {
     expect(appelsCommandeCreate).toHaveLength(0);
   }));
 
-  it("CONFIRMER_ACCEPTATION avant que le dépôt ne soit confirmé échoue, quel que soit l'ordre soumis", async () => {
+  it("CONFIRMER_ACCEPTATION avant que le dépôt ne soit confirmé échoue, quel que soit l'ordre soumis", () => avecActeur(async () => {
     const etat = creerEtatInitial();
     const { tx, appelsCommandeCreate } = creerTxEnMemoire(etat);
     // On s'arrête juste avant SIGNALER_DEPOT (statut CHARGEE puis EN_TOURNEE, jamais déposé).
@@ -348,5 +334,5 @@ describe("Parcours complet du cycle C4 — bout en bout (I5, vague 3)", () => {
       ),
     ).rejects.toMatchObject({ code: "TRANSITION_INTERDITE" });
     expect(appelsCommandeCreate).toHaveLength(0);
-  });
+  }));
 });

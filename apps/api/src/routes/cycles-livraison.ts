@@ -215,10 +215,33 @@ async function appliquerLignesSimples(
       calculerQuantiteManquante(chargee, valeurs.get(ligne.produitId)!);
     }
   }
+  // Même invariant transactionnel que CONFIRMER_ACCEPTATION : ce modèle est
+  // audité par l'extension Prisma centrale, dont l'écriture AuditLog utilise
+  // un client hors transaction. Un update() singulier ici pourrait donc
+  // laisser un audit mensonger si la transition échouait ensuite.
+  const lignesParProduit = new Map(cycle.lignes.map((ligne) => [ligne.produitId, ligne]));
   for (const [produitId, quantite] of valeurs) {
-    await tx.cycleLivraisonLigne.update({
-      where: { cycleId_produitId: { cycleId: cycle.id, produitId } },
+    const ligneAvant = lignesParProduit.get(produitId)!;
+    const { count } = await tx.cycleLivraisonLigne.updateMany({
+      where: { id: ligneAvant.id },
       data: { [champ]: quantite },
+    });
+    if (count !== 1) {
+      throw new ErreurCycleLivraison(
+        "Le cycle a été modifié. Rechargez les données avant de réessayer.",
+        409,
+        "VERSION_OBSOLETE",
+        cycle.version,
+      );
+    }
+    const ligneApres = await tx.cycleLivraisonLigne.findUniqueOrThrow({ where: { id: ligneAvant.id } });
+    await auditerCaisseTx(tx, {
+      module: "PRODUCTION",
+      typeEntite: "CycleLivraisonLigne",
+      entiteId: ligneAvant.id,
+      action: "MODIFICATION",
+      avant: ligneAvant,
+      apres: ligneApres,
     });
   }
 }

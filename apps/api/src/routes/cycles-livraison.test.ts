@@ -125,7 +125,7 @@ function txAcceptation(final: ReturnType<typeof cycleFinal>) {
 }
 
 describe("conversion C4 transactionnelle", () => {
-  it("atteint le dépôt sans créer de commande ni effet financier", async () => {
+  it("atteint le dépôt sans créer de commande ni effet financier, avec audit transactionnel exact de la ligne", async () => {
     const avant = {
       ...cycleInitial(),
       statut: "EN_TOURNEE",
@@ -144,23 +144,45 @@ describe("conversion C4 transactionnelle", () => {
         findUnique: vi.fn().mockResolvedValueOnce(avant).mockResolvedValueOnce(apres),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
-      cycleLivraisonLigne: { update: vi.fn().mockResolvedValue({}) },
-      commandeClient: { create: creerCommande },
-      client: { update: vi.fn() },
-      transitionCycleLivraison: { create: vi.fn().mockResolvedValue({}) },
-    };
-    const resultat = await appliquerTransition(
-      tx as unknown as TxClient,
-      "cycle-1",
-      {
-        action: "SIGNALER_DEPOT",
-        version: 6,
-        lignes: [{ produitId: "p1", quantite: 43 }],
+      cycleLivraisonLigne: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(apres.lignes[0]),
       },
-      "user-production",
+      commandeClient: { create: creerCommande },
+      client: { updateMany: vi.fn() },
+      transitionCycleLivraison: { create: vi.fn().mockResolvedValue({}) },
+      auditLog: { create: vi.fn().mockResolvedValue({}) },
+    };
+    const resultat = await avecActeur(() =>
+      appliquerTransition(
+        tx as unknown as TxClient,
+        "cycle-1",
+        {
+          action: "SIGNALER_DEPOT",
+          version: 6,
+          lignes: [{ produitId: "p1", quantite: 43 }],
+        },
+        "user-production",
+      ),
     );
     expect(creerCommande).not.toHaveBeenCalled();
-    expect(tx.client.update).not.toHaveBeenCalled();
+    expect(tx.client.updateMany).not.toHaveBeenCalled();
+    expect(tx.cycleLivraisonLigne.updateMany).toHaveBeenCalledWith({
+      where: { id: "cycle-line-1" },
+      data: { quantiteDeposee: 43 },
+    });
+    expect(tx.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          module: "PRODUCTION",
+          typeEntite: "CycleLivraisonLigne",
+          entiteId: "cycle-line-1",
+          action: "MODIFICATION",
+          avant: expect.objectContaining({ quantiteDeposee: null }),
+          apres: expect.objectContaining({ quantiteDeposee: 43 }),
+        }),
+      }),
+    );
     expect(resultat.cycle.statut).toBe("EN_ATTENTE_CONFIRMATION");
     expect(resultat.commande).toBeNull();
   });
