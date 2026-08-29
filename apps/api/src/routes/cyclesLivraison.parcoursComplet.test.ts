@@ -5,7 +5,7 @@ import { contexteRequete } from "../lib/contexteRequete.js";
 import { appliquerTransition } from "./cycles-livraison.js";
 
 const ACTEUR_E2E = { id: "user-e2e", nom: "Utilisateur E2E" };
-/** CONFIRMER_ACCEPTATION audite désormais Client/CycleLivraison/CycleLivraisonLigne dans `tx` (round correctif Codex, 29/08/2026) — exige un acteur de contexte de requête. */
+/** Toutes les transitions qui modifient une ligne auditent désormais dans `tx` — exige un acteur de contexte de requête, comme le vrai middleware HTTP. */
 const avecActeur = <T>(executer: () => Promise<T>) => contexteRequete.run(ACTEUR_E2E, executer);
 
 /**
@@ -124,20 +124,6 @@ function creerTxEnMemoire(etat: EtatCycle) {
       findUniqueOrThrow: async () => structuredClone(etat),
     },
     cycleLivraisonLigne: {
-      // update() singulier reste utilisé par appliquerLignesSimples, pour les
-      // transitions AUTRES que CONFIRMER_ACCEPTATION — hors périmètre de ce
-      // round correctif (voir cartographie du rapport final).
-      update: async ({
-        where,
-        data,
-      }: {
-        where: { cycleId_produitId: { produitId: string } };
-        data: Record<string, number>;
-      }) => {
-        const ligne = etat.lignes.find((l) => l.produitId === where.cycleId_produitId.produitId)!;
-        Object.assign(ligne, data);
-        return {};
-      },
       updateMany: async ({
         where,
         data,
