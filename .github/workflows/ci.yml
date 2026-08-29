@@ -252,6 +252,31 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-concurrence-caisse-ci.ts
 
+      - name: Vérification d'intégrité PostgreSQL réelle de la conversion C4 (round correctif Codex, 29/08/2026)
+        # La PR #38 affirmait à tort que la conversion C4
+        # (CONFIRMER_ACCEPTATION, cycles-livraison.ts) est « sans impact
+        # comptable » car sa commande porte montantRecu=0 — inexact : C4
+        # reste neutre pour les ESPÈCES et le SOLDE de caisse, mais modifie
+        # bien l'avance et la dette du CLIENT, via des update() autrefois
+        # singuliers sur des modèles audités (Client, CycleLivraison,
+        # CycleLivraisonLigne) interceptés par l'extension d'audit
+        # automatique NON transactionnelle. Ce script prouve, contre une
+        # VRAIE base PostgreSQL : rollback COMPLET sur un échec d'audit
+        # injecté (même méthodologie que verifier-concurrence-caisse-ci.ts,
+        # scénario 7) ; conflit de sérialisation RÉEL (P2034, jamais un 500
+        # brut, jamais d'écrasement silencieux) entre C4 et une autre
+        # écriture touchant le même Client, entrelacement déterministe via
+        # un crochet de test dédié (jamais un délai) ; et neutralité
+        # comptable exacte d'une conversion C4 sur une caisse déjà figée
+        # (registre et session inchangés, avance/dette du client bien
+        # modifiées). Les tests mockés (routes/cycles-livraison.test.ts,
+        # routes/cyclesLivraison.parcoursComplet.test.ts) prouvent
+        # séparément le contrat exact (avance positive, chiffres). Même
+        # garde que les scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-integrite-c4-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest

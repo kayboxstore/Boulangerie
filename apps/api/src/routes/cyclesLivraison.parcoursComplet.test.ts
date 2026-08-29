@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { TransitionCycleLivraisonInput } from "@lomoto/shared/cycles-livraison";
 import type { TxClient } from "../lib/prisma.js";
+import { contexteRequete } from "../lib/contexteRequete.js";
 import { appliquerTransition } from "./cycles-livraison.js";
+
+const ACTEUR_E2E = { id: "user-e2e", nom: "Utilisateur E2E" };
+/** CONFIRMER_ACCEPTATION audite désormais Client/CycleLivraison/CycleLivraisonLigne dans `tx` (round correctif Codex, 29/08/2026) — exige un acteur de contexte de requête. */
+const avecActeur = <T>(executer: () => Promise<T>) => contexteRequete.run(ACTEUR_E2E, executer);
 
 /**
  * Test d'intégration bout en bout du parcours réel du cycle C4 (I5, vague
@@ -96,26 +101,32 @@ function creerTxEnMemoire(etat: EtatCycle) {
   let prochainNumeroCommande = 900;
   const appelsCommandeCreate: Record<string, unknown>[] = [];
 
+  const auditLogs: Record<string, unknown>[] = [];
+
   const tx = {
     cycleLivraison: {
       findUnique: async () => structuredClone(etat),
-      updateMany: async ({ where, data }: { where: { version: number; statut: string }; data: Record<string, unknown> }) => {
-        if (etat.version !== where.version || etat.statut !== where.statut) return { count: 0 };
+      updateMany: async ({ where, data }: { where: { id: string; version?: number; statut?: string }; data: Record<string, unknown> }) => {
+        if (where.id !== etat.id) return { count: 0 };
+        if (where.version !== undefined && where.statut !== undefined) {
+          if (etat.version !== where.version || etat.statut !== where.statut) return { count: 0 };
+        }
         if (typeof data.statut === "string") etat.statut = data.statut;
         if (data.livrePar !== undefined) etat.livrePar = data.livrePar as string;
         if (data.bonRetourne !== undefined) etat.bonRetourne = data.bonRetourne as boolean;
         if (data.bonRetourneLe !== undefined) etat.bonRetourneLe = data.bonRetourneLe as Date;
         if (data.bonRetourneParId !== undefined) etat.bonRetourneParId = data.bonRetourneParId as string;
+        if (data.commandeId !== undefined) etat.commandeId = data.commandeId as string;
         const versionIncrement = data.version as { increment?: number } | undefined;
         if (versionIncrement?.increment) etat.version += versionIncrement.increment;
         return { count: 1 };
       },
-      update: async ({ data }: { data: { commandeId?: string } }) => {
-        if (data.commandeId !== undefined) etat.commandeId = data.commandeId;
-        return {};
-      },
+      findUniqueOrThrow: async () => structuredClone(etat),
     },
     cycleLivraisonLigne: {
+      // update() singulier reste utilisé par appliquerLignesSimples, pour les
+      // transitions AUTRES que CONFIRMER_ACCEPTATION — hors périmètre de ce
+      // round correctif (voir cartographie du rapport final).
       update: async ({
         where,
         data,
@@ -126,6 +137,21 @@ function creerTxEnMemoire(etat: EtatCycle) {
         const ligne = etat.lignes.find((l) => l.produitId === where.cycleId_produitId.produitId)!;
         Object.assign(ligne, data);
         return {};
+      },
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, number>;
+      }) => {
+        const ligne = etat.lignes.find((l) => l.id === where.id);
+        if (!ligne) return { count: 0 };
+        Object.assign(ligne, data);
+        return { count: 1 };
+      },
+      findUniqueOrThrow: async ({ where }: { where: { id: string } }) => {
+        return structuredClone(etat.lignes.find((l) => l.id === where.id)!);
       },
     },
     commandeClient: {
@@ -144,10 +170,12 @@ function creerTxEnMemoire(etat: EtatCycle) {
       },
     },
     client: {
-      update: async ({ data }: { data: { avanceDisponible?: number } }) => {
+      updateMany: async ({ where, data }: { where: { id: string }; data: { avanceDisponible?: number } }) => {
+        if (where.id !== etat.schemaCommande.client.id) return { count: 0 };
         if (data.avanceDisponible !== undefined) etat.schemaCommande.client.avanceDisponible = data.avanceDisponible;
-        return {};
+        return { count: 1 };
       },
+      findUniqueOrThrow: async () => structuredClone(etat.schemaCommande.client),
     },
     anomalieCycleLivraison: {
       create: async ({ data }: { data: { type: string } }) => {
@@ -161,9 +189,15 @@ function creerTxEnMemoire(etat: EtatCycle) {
         return {};
       },
     },
+    auditLog: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        auditLogs.push(data);
+        return data;
+      },
+    },
   };
 
-  return { tx: tx as unknown as TxClient, appelsCommandeCreate };
+  return { tx: tx as unknown as TxClient, appelsCommandeCreate, auditLogs };
 }
 
 const PARCOURS_PRODUCTION: { input: TransitionCycleLivraisonInput; statutAttendu: string; versionAttendue: number }[] = [
@@ -180,7 +214,7 @@ const PARCOURS_PRODUCTION: { input: TransitionCycleLivraisonInput; statutAttendu
 ];
 
 describe("Parcours complet du cycle C4 — bout en bout (I5, vague 3)", () => {
-  it("PREVISION → ... → PARTIELLEMENT_ACCEPTEE : chaque étape lit RÉELLEMENT l'état laissé par la précédente, la commande facturable est créée avec le bon montant", async () => {
+  it("PREVISION → ... → PARTIELLEMENT_ACCEPTEE : chaque étape lit RÉELLEMENT l'état laissé par la précédente, la commande facturable est créée avec le bon montant", () => avecActeur(async () => {
     const etat = creerEtatInitial();
     const { tx, appelsCommandeCreate } = creerTxEnMemoire(etat);
 
@@ -225,9 +259,9 @@ describe("Parcours complet du cycle C4 — bout en bout (I5, vague 3)", () => {
       dette: 40 * 4100,
       dateOperationnelle: new Date("2026-08-15"),
     });
-  });
+  }));
 
-  it("un retour total (accepté = 0) après tout le parcours ne crée jamais de commande", async () => {
+  it("un retour total (accepté = 0) après tout le parcours ne crée jamais de commande", () => avecActeur(async () => {
     const etat = creerEtatInitial();
     const { tx, appelsCommandeCreate } = creerTxEnMemoire(etat);
 
@@ -245,9 +279,9 @@ describe("Parcours complet du cycle C4 — bout en bout (I5, vague 3)", () => {
     expect(finale.commande).toBeNull();
     expect(finale.cycle.estFacturable).toBe(false);
     expect(appelsCommandeCreate).toHaveLength(0);
-  });
+  }));
 
-  it("acceptation intégrale (accepté = déposé) : statut ACCEPTEE, aucun retourné", async () => {
+  it("acceptation intégrale (accepté = déposé) : statut ACCEPTEE, aucun retourné", () => avecActeur(async () => {
     const etat = creerEtatInitial();
     const { tx, appelsCommandeCreate } = creerTxEnMemoire(etat);
 
@@ -265,7 +299,7 @@ describe("Parcours complet du cycle C4 — bout en bout (I5, vague 3)", () => {
     expect(finale.commande).not.toBeNull();
     expect(finale.commande!.quantiteBacs).toBe(43);
     expect(appelsCommandeCreate).toHaveLength(1);
-  });
+  }));
 
   it("une transition qui saute une étape (sans passer par la précédente) est rejetée par l'état réel, jamais simulée côté client", async () => {
     const etat = creerEtatInitial();
@@ -276,7 +310,7 @@ describe("Parcours complet du cycle C4 — bout en bout (I5, vague 3)", () => {
     ).rejects.toMatchObject({ code: "TRANSITION_INTERDITE" });
   });
 
-  it("CONFIRMER_ACCEPTATION avec une version déjà obsolète échoue et ne crée aucune commande — jamais d'écrasement silencieux", async () => {
+  it("CONFIRMER_ACCEPTATION avec une version déjà obsolète échoue et ne crée aucune commande — jamais d'écrasement silencieux", () => avecActeur(async () => {
     const etat = creerEtatInitial();
     const { tx, appelsCommandeCreate } = creerTxEnMemoire(etat);
 
@@ -293,7 +327,7 @@ describe("Parcours complet du cycle C4 — bout en bout (I5, vague 3)", () => {
       ),
     ).rejects.toMatchObject({ code: "VERSION_OBSOLETE", versionCourante: 7 });
     expect(appelsCommandeCreate).toHaveLength(0);
-  });
+  }));
 
   it("CONFIRMER_ACCEPTATION avant que le dépôt ne soit confirmé échoue, quel que soit l'ordre soumis", async () => {
     const etat = creerEtatInitial();

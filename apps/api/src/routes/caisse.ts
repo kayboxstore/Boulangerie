@@ -186,7 +186,7 @@ async function sacsUtilisesLe(db: TxClient, date: string): Promise<number> {
  *                   le théorique déjà figé de J n'est jamais réécrit
  *                   rétroactivement par une confirmation tardive.
  */
-async function construireRegistre(db: TxClient, date: string): Promise<RegistreCaisseDTO> {
+export async function construireRegistre(db: TxClient, date: string): Promise<RegistreCaisseDTO> {
   const [debut, fin] = bornesJourLomoto(date);
   const dateSQL = dateSQLDepuisJourLomoto(date);
 
