@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TxClient } from "../lib/prisma.js";
+import { contexteRequete } from "../lib/contexteRequete.js";
 import { appliquerTransition } from "./cycles-livraison.js";
+
+const ACTEUR = { id: "user-commandes", nom: "Bob Commandes" };
+/** CONFIRMER_ACCEPTATION audite désormais Client/CycleLivraisonLigne/CycleLivraison manuellement dans `tx` (round correctif Codex, 29/08/2026) — exige un acteur de contexte de requête, exactement comme une vraie requête HTTP authentifiée (middleware/auth.ts). */
+const avecActeur = <T>(executer: () => Promise<T>) => contexteRequete.run(ACTEUR, executer);
 
 function cycleInitial() {
   return {
@@ -99,21 +104,28 @@ function txAcceptation(final: ReturnType<typeof cycleFinal>) {
     cycleLivraison: {
       findUnique: vi.fn().mockResolvedValueOnce(cycleInitial()).mockResolvedValueOnce(final),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-      update: vi.fn().mockResolvedValue({}),
+      findUniqueOrThrow: vi.fn().mockResolvedValue({ ...cycleInitial(), commandeId: "commande-1" }),
     },
-    cycleLivraisonLigne: { update: vi.fn().mockResolvedValue({}) },
+    cycleLivraisonLigne: {
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      findUniqueOrThrow: vi.fn().mockResolvedValue(cycleInitial().lignes[0]),
+    },
     commandeClient: {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ id: "commande-1", numero: 123, quantiteBacs: 40, montantRecu: 0 }),
     },
-    client: { update: vi.fn().mockResolvedValue({}) },
+    client: {
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      findUniqueOrThrow: vi.fn().mockResolvedValue(cycleInitial().schemaCommande.client),
+    },
     anomalieCycleLivraison: { create: vi.fn().mockResolvedValue({ id: "anomalie-bon" }) },
     transitionCycleLivraison: { create: vi.fn().mockResolvedValue({}) },
+    auditLog: { create: vi.fn().mockResolvedValue({}) },
   };
 }
 
 describe("conversion C4 transactionnelle", () => {
-  it("atteint le dépôt sans créer de commande ni effet financier", async () => {
+  it("atteint le dépôt sans créer de commande ni effet financier, avec audit transactionnel exact de la ligne", async () => {
     const avant = {
       ...cycleInitial(),
       statut: "EN_TOURNEE",
@@ -132,39 +144,63 @@ describe("conversion C4 transactionnelle", () => {
         findUnique: vi.fn().mockResolvedValueOnce(avant).mockResolvedValueOnce(apres),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
-      cycleLivraisonLigne: { update: vi.fn().mockResolvedValue({}) },
-      commandeClient: { create: creerCommande },
-      client: { update: vi.fn() },
-      transitionCycleLivraison: { create: vi.fn().mockResolvedValue({}) },
-    };
-    const resultat = await appliquerTransition(
-      tx as unknown as TxClient,
-      "cycle-1",
-      {
-        action: "SIGNALER_DEPOT",
-        version: 6,
-        lignes: [{ produitId: "p1", quantite: 43 }],
+      cycleLivraisonLigne: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(apres.lignes[0]),
       },
-      "user-production",
+      commandeClient: { create: creerCommande },
+      client: { updateMany: vi.fn() },
+      transitionCycleLivraison: { create: vi.fn().mockResolvedValue({}) },
+      auditLog: { create: vi.fn().mockResolvedValue({}) },
+    };
+    const resultat = await avecActeur(() =>
+      appliquerTransition(
+        tx as unknown as TxClient,
+        "cycle-1",
+        {
+          action: "SIGNALER_DEPOT",
+          version: 6,
+          lignes: [{ produitId: "p1", quantite: 43 }],
+        },
+        "user-production",
+      ),
     );
     expect(creerCommande).not.toHaveBeenCalled();
-    expect(tx.client.update).not.toHaveBeenCalled();
+    expect(tx.client.updateMany).not.toHaveBeenCalled();
+    expect(tx.cycleLivraisonLigne.updateMany).toHaveBeenCalledWith({
+      where: { id: "cycle-line-1" },
+      data: { quantiteDeposee: 43 },
+    });
+    expect(tx.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          module: "PRODUCTION",
+          typeEntite: "CycleLivraisonLigne",
+          entiteId: "cycle-line-1",
+          action: "MODIFICATION",
+          avant: expect.objectContaining({ quantiteDeposee: null }),
+          apres: expect.objectContaining({ quantiteDeposee: 43 }),
+        }),
+      }),
+    );
     expect(resultat.cycle.statut).toBe("EN_ATTENTE_CONFIRMATION");
     expect(resultat.commande).toBeNull();
   });
 
-  it("crée exactement une commande de 40, reçue à 0, à la date de livraison", async () => {
+  it("crée exactement une commande de 40, reçue à 0, à la date de livraison, avec l'audit transactionnel Client/CycleLivraison/CycleLivraisonLigne", async () => {
     const brut = txAcceptation(cycleFinal("PARTIELLEMENT_ACCEPTEE"));
-    const resultat = await appliquerTransition(
-      brut as unknown as TxClient,
-      "cycle-1",
-      {
-        action: "CONFIRMER_ACCEPTATION",
-        version: 7,
-        lignes: [{ produitId: "p1", quantiteAcceptee: 40, quantiteRetournee: 3 }],
-        bonRetourne: false,
-      },
-      "user-commandes",
+    const resultat = await avecActeur(() =>
+      appliquerTransition(
+        brut as unknown as TxClient,
+        "cycle-1",
+        {
+          action: "CONFIRMER_ACCEPTATION",
+          version: 7,
+          lignes: [{ produitId: "p1", quantiteAcceptee: 40, quantiteRetournee: 3 }],
+          bonRetourne: false,
+        },
+        "user-commandes",
+      ),
     );
 
     expect(brut.commandeClient.create).toHaveBeenCalledTimes(1);
@@ -179,10 +215,35 @@ describe("conversion C4 transactionnelle", () => {
       }),
       select: { id: true, numero: true, quantiteBacs: true, montantRecu: true },
     });
-    expect(brut.cycleLivraison.update).toHaveBeenCalledWith({
+    // updateMany (jamais update() singulier, cf. lib/audit.ts) + audit manuel
+    // transactionnel — round correctif Codex, 29/08/2026.
+    expect(brut.cycleLivraison.updateMany).toHaveBeenCalledWith({
       where: { id: "cycle-1" },
       data: { commandeId: "commande-1" },
     });
+    expect(brut.client.updateMany).toHaveBeenCalledWith({
+      where: { id: "client-1" },
+      data: { avanceDisponible: expect.any(Number) },
+    });
+    expect(brut.cycleLivraisonLigne.updateMany).toHaveBeenCalledWith({
+      where: { id: "cycle-line-1" },
+      data: expect.objectContaining({ quantiteAcceptee: 40, quantiteRetournee: 3 }),
+    });
+    expect(brut.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ module: "COMMANDES", typeEntite: "Client", action: "MODIFICATION" }),
+      }),
+    );
+    expect(brut.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ module: "PRODUCTION", typeEntite: "CycleLivraison", action: "MODIFICATION" }),
+      }),
+    );
+    expect(brut.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ module: "PRODUCTION", typeEntite: "CycleLivraisonLigne", action: "MODIFICATION" }),
+      }),
+    );
     expect(brut.anomalieCycleLivraison.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ cycleId: "cycle-1", type: "BON_NON_RETOURNE" }),
     });
@@ -191,21 +252,100 @@ describe("conversion C4 transactionnelle", () => {
     expect(resultat.commande).toEqual({ id: "commande-1", numero: 123, quantiteBacs: 40, montantRecu: 0 });
   });
 
+  it("avec une avance client strictement positive : l'avance est réellement consommée, montant à percevoir/dette/nouvelle avance corrects, audit Client exact avant/après (P1 — round correctif Codex)", async () => {
+    // Avance initiale 3000, 40 bacs acceptés à 4100 Fc/bac : montantBrut
+    // 164 000, avanceUtilisee = min(3000, 164 000) = 3000 (intégralement
+    // consommée), montantAPercevoir = 161 000, montantRecu = 0 (C4),
+    // dette = 161 000, avanceGeneree = 0, nouvelleAvance = 3000 - 3000 + 0 = 0.
+    const clientAvecAvance = { ...cycleInitial().schemaCommande.client, avanceDisponible: 3000 };
+    const cycleAvecAvance = {
+      ...cycleInitial(),
+      schemaCommande: { ...cycleInitial().schemaCommande, client: clientAvecAvance },
+    };
+    const final = { ...cycleFinal("PARTIELLEMENT_ACCEPTEE"), schemaCommande: cycleAvecAvance.schemaCommande };
+    const brut = {
+      cycleLivraison: {
+        findUnique: vi.fn().mockResolvedValueOnce(cycleAvecAvance).mockResolvedValueOnce(final),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue({ ...cycleAvecAvance, commandeId: "commande-avance" }),
+      },
+      cycleLivraisonLigne: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(cycleInitial().lignes[0]),
+      },
+      commandeClient: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: "commande-avance", numero: 456, quantiteBacs: 40, montantRecu: 0 }),
+      },
+      client: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue({ ...clientAvecAvance, avanceDisponible: 0 }),
+      },
+      anomalieCycleLivraison: { create: vi.fn().mockResolvedValue({ id: "anomalie-avance" }) },
+      transitionCycleLivraison: { create: vi.fn().mockResolvedValue({}) },
+      auditLog: { create: vi.fn().mockResolvedValue({}) },
+    };
+
+    await avecActeur(() =>
+      appliquerTransition(
+        brut as unknown as TxClient,
+        "cycle-1",
+        {
+          action: "CONFIRMER_ACCEPTATION",
+          version: 7,
+          lignes: [{ produitId: "p1", quantiteAcceptee: 40, quantiteRetournee: 3 }],
+          bonRetourne: true,
+        },
+        "user-commandes",
+      ),
+    );
+
+    expect(brut.commandeClient.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        avanceUtilisee: 3000,
+        montantAPercevoir: 161_000,
+        montantRecu: 0,
+        dette: 161_000,
+        avanceGeneree: 0,
+        nouvelleAvance: 0,
+      }),
+      select: { id: true, numero: true, quantiteBacs: true, montantRecu: true },
+    });
+    expect(brut.client.updateMany).toHaveBeenCalledWith({
+      where: { id: "client-1" },
+      data: { avanceDisponible: 0 },
+    });
+    expect(brut.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          module: "COMMANDES",
+          typeEntite: "Client",
+          entiteId: "client-1",
+          action: "MODIFICATION",
+          avant: expect.objectContaining({ avanceDisponible: 3000 }),
+          apres: expect.objectContaining({ avanceDisponible: 0 }),
+        }),
+      }),
+    );
+  });
+
   it("n'écrit aucune commande lorsque le total accepté vaut zéro", async () => {
     const brut = txAcceptation(cycleFinal("RETOUR_TOTAL"));
-    const resultat = await appliquerTransition(
-      brut as unknown as TxClient,
-      "cycle-1",
-      {
-        action: "CONFIRMER_ACCEPTATION",
-        version: 7,
-        lignes: [{ produitId: "p1", quantiteAcceptee: 0, quantiteRetournee: 43 }],
-        bonRetourne: false,
-      },
-      "user-commandes",
+    const resultat = await avecActeur(() =>
+      appliquerTransition(
+        brut as unknown as TxClient,
+        "cycle-1",
+        {
+          action: "CONFIRMER_ACCEPTATION",
+          version: 7,
+          lignes: [{ produitId: "p1", quantiteAcceptee: 0, quantiteRetournee: 43 }],
+          bonRetourne: false,
+        },
+        "user-commandes",
+      ),
     );
     expect(brut.commandeClient.create).not.toHaveBeenCalled();
-    expect(brut.client.update).not.toHaveBeenCalled();
+    expect(brut.client.updateMany).not.toHaveBeenCalled();
     expect(resultat.commande).toBeNull();
     expect(resultat.cycle.statut).toBe("RETOUR_TOTAL");
   });
@@ -218,16 +358,18 @@ describe("conversion C4 transactionnelle", () => {
       .mockResolvedValueOnce(cycleInitial())
       .mockResolvedValueOnce({ version: 8 });
     await expect(
-      appliquerTransition(
-        brut as unknown as TxClient,
-        "cycle-1",
-        {
-          action: "CONFIRMER_ACCEPTATION",
-          version: 7,
-          lignes: [{ produitId: "p1", quantiteAcceptee: 40, quantiteRetournee: 3 }],
-          bonRetourne: false,
-        },
-        "user-commandes",
+      avecActeur(() =>
+        appliquerTransition(
+          brut as unknown as TxClient,
+          "cycle-1",
+          {
+            action: "CONFIRMER_ACCEPTATION",
+            version: 7,
+            lignes: [{ produitId: "p1", quantiteAcceptee: 40, quantiteRetournee: 3 }],
+            bonRetourne: false,
+          },
+          "user-commandes",
+        ),
       ),
     ).rejects.toMatchObject({ code: "VERSION_OBSOLETE", versionCourante: 8 });
     expect(brut.commandeClient.create).not.toHaveBeenCalled();
@@ -237,16 +379,18 @@ describe("conversion C4 transactionnelle", () => {
     const brut = txAcceptation(cycleFinal("PARTIELLEMENT_ACCEPTEE"));
     brut.commandeClient.findFirst.mockResolvedValueOnce({ id: "commande-manuelle" });
     await expect(
-      appliquerTransition(
-        brut as unknown as TxClient,
-        "cycle-1",
-        {
-          action: "CONFIRMER_ACCEPTATION",
-          version: 7,
-          lignes: [{ produitId: "p1", quantiteAcceptee: 40, quantiteRetournee: 3 }],
-          bonRetourne: false,
-        },
-        "user-commandes",
+      avecActeur(() =>
+        appliquerTransition(
+          brut as unknown as TxClient,
+          "cycle-1",
+          {
+            action: "CONFIRMER_ACCEPTATION",
+            version: 7,
+            lignes: [{ produitId: "p1", quantiteAcceptee: 40, quantiteRetournee: 3 }],
+            bonRetourne: false,
+          },
+          "user-commandes",
+        ),
       ),
     ).rejects.toMatchObject({ code: "COMMANDE_JOUR_EXISTANTE" });
     expect(brut.commandeClient.create).not.toHaveBeenCalled();

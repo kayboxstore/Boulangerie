@@ -23,7 +23,7 @@ import {
   type SessionCaisseDTO,
   type TauxDuJourDTO,
 } from "@lomoto/shared";
-import { prisma } from "../lib/prisma.js";
+import { prisma, type TxClient } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
 import {
@@ -36,6 +36,18 @@ import {
   dateSQLDepuisJourLomoto,
   jourLomoto,
 } from "../lib/temps.js";
+import { ErreurAction } from "../lib/erreurAction.js";
+import {
+  auditerCaisseTx,
+  estViolationContrainteUnique,
+  executerAvecReessaiP2034,
+  ErreurEcritureCaisseReessayable,
+  transactionSerializable,
+  verifierAucuneSessionAnterieureOuverte,
+  verrouillerSessionFermeeParId,
+  verrouillerSessionOuverte,
+  verrouillerSessionOuverteParId,
+} from "../services/caisseAtomique.js";
 
 export const caisseRouter = Router();
 
@@ -44,16 +56,29 @@ caisseRouter.use(requireAuth);
 const lecture = requirePermission("CAISSE", "LECTURE");
 const ecriture = requirePermission("CAISSE", "ECRITURE");
 
+/**
+ * Erreur locale (jamais partagée hors de ce fichier) : la clôture exige un
+ * motif dès que l'écart théorique/compté est non nul — code distinct de
+ * `ErreurAction` car le contrat HTTP porte un `code` en plus du message.
+ */
+class ErreurEcartNonMotive extends Error {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
 const versTauxDTO = (t: {
   id: string;
   date: Date;
   valeur: Prisma.Decimal;
   definiPar: { id: string; nom: string } | null;
+  updatedAt: Date;
 }): TauxDuJourDTO => ({
   id: t.id,
   date: jourLomoto(t.date),
   valeur: t.valeur.toNumber(),
   definiPar: t.definiPar,
+  updatedAt: t.updatedAt.toISOString(),
 });
 
 const versDepenseDTO = (d: {
@@ -106,6 +131,7 @@ const versSessionDTO = (s: SessionAvecRelations): SessionCaisseDTO => ({
   derniereCorrectionLe: s.derniereCorrectionLe ? s.derniereCorrectionLe.toISOString() : null,
   derniereCorrectionPar: s.derniereCorrectionPar,
   motifCorrection: s.motifCorrection,
+  updatedAt: s.updatedAt.toISOString(),
 });
 
 const versRemiseDTO = (
@@ -121,57 +147,10 @@ const versRemiseDTO = (
   dateRemise: r.dateRemise.toISOString(),
 });
 
-/**
- * Verrou OUVERTE -> FERMEE (Lot 6), même idiome que
- * chargerProductionOuverte (apps/api/src/routes/production.ts) : une fois
- * FERMEE, plus aucune modification n'est permise sur la session elle-même
- * (seule /corriger, réservée à l'Admin Principal, y déroge explicitement).
- */
-async function chargerSessionCaisseOuverte(id: string) {
-  const session = await prisma.sessionCaisse.findUnique({ where: { id }, include: INCLUDE_SESSION });
-  if (!session) return { erreur: { status: 404 as const, message: "Session de caisse introuvable" } };
-  if (session.statut === "FERMEE") {
-    return { erreur: { status: 409 as const, message: "Cette session est clôturée : plus aucune modification possible" } };
-  }
-  return { session };
-}
-
-/**
- * Garde P0-02 : une fois la session d'une date FERMEE, plus aucune écriture
- * n'est permise sur le registre de cette date (taux, dépenses) — c'est ce qui
- * rend soldeTheoriqueFermeture stable pour une éventuelle correction (droit
- * spécial Admin Principal, /sessions/:id/corriger).
- */
-async function sessionFermeePourDate(date: string): Promise<boolean> {
-  const session = await prisma.sessionCaisse.findUnique({ where: { date: dateSQLDepuisJourLomoto(date) } });
-  return session?.statut === "FERMEE";
-}
-
-/**
- * Discipline chronologique (correction bug terrain, section 3.1) : oublier de
- * clôturer la caisse un jour ne doit jamais permettre de continuer comme si
- * de rien n'était le jour suivant. Reprend le principe déjà appliqué à
- * l'ouverture d'une nouvelle session (« anterieureOuverte » plus bas) mais
- * l'étend à TOUTE écriture du module — taux, dépenses, remise, confirmation
- * de règlement — pas seulement à l'ouverture d'une session. Renvoie la date
- * de la session bloquante, ou null si la voie est libre.
- */
-async function sessionAnterieureOuverteAvant(date: string): Promise<string | null> {
-  const anterieure = await prisma.sessionCaisse.findFirst({
-    where: { statut: "OUVERTE", date: { lt: dateSQLDepuisJourLomoto(date) } },
-    orderBy: { date: "asc" },
-  });
-  return anterieure ? jourLomoto(anterieure.date) : null;
-}
-
-function erreurSessionAnterieure(date: string) {
-  return { erreur: `Clôturez d'abord la session de caisse du ${date} avant de continuer` };
-}
-
 /** Sacs de farine consommés en production sur la date donnée (source du calcul). */
-async function sacsUtilisesLe(date: string): Promise<number> {
+async function sacsUtilisesLe(db: TxClient, date: string): Promise<number> {
   const [debut, fin] = bornesJourLomoto(date);
-  const agg = await prisma.production.aggregate({
+  const agg = await db.production.aggregate({
     where: { date: { gte: debut, lte: fin } },
     _sum: { sacsUtilises: true },
   });
@@ -179,24 +158,45 @@ async function sacsUtilisesLe(date: string): Promise<number> {
 }
 
 /**
- * Registre journalier (section 3.1). Les deux postes automatiques sont DISJOINTS
- * par construction, pour qu'aucun franc ne soit compté deux fois :
+ * Registre journalier (section 3.1) — tx-aware (P1-B) : `db` est `prisma`
+ * (lecture seule, GET /registre) ou `tx` (à l'intérieur de la transaction de
+ * clôture, pour que le théorique figé reflète exactement l'état lu SOUS le
+ * verrou de ligne SessionCaisse, jamais un instantané pris avant).
+ *
+ * Les deux postes automatiques restent DISJOINTS par construction, pour
+ * qu'aucun franc ne soit compté deux fois :
  *  - Entrées      = argent reçu à la CRÉATION des commandes du jour, soit
  *                   `montantRecu − somme de ses règlements CONFIRME` (le
  *                   montant reçu porté par une commande inclut ses
- *                   règlements ultérieurs, une fois confirmés) ;
- *  - Dettes payées = règlements CONFIRME datés du jour, y compris ceux
- *                   portant sur une commande créée le même jour. Un règlement
- *                   DECLARE (Lot 6, P0-07) n'a pas encore été compté par la
- *                   Caisse : il n'entre dans aucun des deux postes tant qu'il
- *                   n'est pas confirmé — sinon le théorique de clôture
- *                   compterait de l'argent jamais vérifié.
+ *                   règlements ultérieurs, une fois confirmés), sélectionnées
+ *                   par `dateOperationnelle` (repli sur `dateCreation`
+ *                   uniquement pour les lignes historiques où elle est
+ *                   nulle) — jamais `dateCreation` seule, qui divergerait du
+ *                   jour métier réel pour une commande issue d'une
+ *                   acceptation C4 (dateOperationnelle = date de livraison,
+ *                   potentiellement close, alors que dateCreation = date
+ *                   d'acceptation).
+ *  - Dettes payées = règlements CONFIRME attribués à CETTE session via la
+ *                   relation `paiementCommande.remiseCaisse.sessionCaisse`
+ *                   (P1-B, 28/08/2026) — jamais selon `paiementCommande.date`
+ *                   (date de DÉCLARATION par le Chargé des commandes, qui
+ *                   peut précéder la confirmation par la Caisse de plusieurs
+ *                   jours). Une déclaration à J confirmée dans la session
+ *                   J+1 compte donc intégralement et exclusivement sur J+1 :
+ *                   le théorique déjà figé de J n'est jamais réécrit
+ *                   rétroactivement par une confirmation tardive.
  */
-async function construireRegistre(date: string): Promise<RegistreCaisseDTO> {
+export async function construireRegistre(db: TxClient, date: string): Promise<RegistreCaisseDTO> {
   const [debut, fin] = bornesJourLomoto(date);
+  const dateSQL = dateSQLDepuisJourLomoto(date);
 
-  const commandesDuJour = await prisma.commandeClient.findMany({
-    where: { dateCreation: { gte: debut, lte: fin } },
+  const commandesDuJour = await db.commandeClient.findMany({
+    where: {
+      OR: [
+        { dateOperationnelle: dateSQL },
+        { dateOperationnelle: null, dateCreation: { gte: debut, lte: fin } },
+      ],
+    },
     select: { montantRecu: true, reglements: { where: { statut: "CONFIRME" }, select: { montant: true } } },
   });
   const entrees = commandesDuJour.reduce((somme, c) => {
@@ -204,27 +204,27 @@ async function construireRegistre(date: string): Promise<RegistreCaisseDTO> {
     return somme + Math.max(0, verseALaCreation);
   }, 0);
 
-  const reglementsDuJour = await prisma.paiementCommande.findMany({
-    where: { date: { gte: debut, lte: fin }, statut: "CONFIRME" },
+  const reglementsDuJour = await db.paiementCommande.findMany({
+    where: { statut: "CONFIRME", remiseCaisse: { sessionCaisse: { date: dateSQL } } },
     include: {
       commandeClient: { select: { numero: true, client: { select: { nom: true } } } },
     },
-    orderBy: { date: "asc" },
+    orderBy: { confirmeLe: "asc" },
   });
   const dettesPayees = reglementsDuJour.reduce((s, r) => s + r.montant, 0);
 
-  const depenses = await prisma.depenseCaisse.findMany({
-    where: { date: dateSQLDepuisJourLomoto(date) },
+  const depenses = await db.depenseCaisse.findMany({
+    where: { date: dateSQL },
     include: INCLUDE_DEPENSE,
     orderBy: { createdAt: "asc" },
   });
   const totalDepenses = depenses.reduce((s, d) => s + d.montant, 0);
 
-  const taux = await prisma.tauxDuJour.findUnique({
-    where: { date: dateSQLDepuisJourLomoto(date) },
+  const taux = await db.tauxDuJour.findUnique({
+    where: { date: dateSQL },
     include: INCLUDE_TAUX,
   });
-  const sacsUtilisesJour = await sacsUtilisesLe(date);
+  const sacsUtilisesJour = await sacsUtilisesLe(db, date);
 
   // Case farine : indisponible tant qu'il manque le taux ou la production du
   // jour — on l'explique plutôt que de calculer sur une valeur absente ou un
@@ -242,7 +242,10 @@ async function construireRegistre(date: string): Promise<RegistreCaisseDTO> {
       clientNom: r.commandeClient.client.nom,
       commandeNumero: r.commandeClient.numero,
       montant: r.montant,
-      date: r.date.toISOString(),
+      // Date de CONFIRMATION (affichage) — jamais la date de déclaration :
+      // confirmeLe est toujours posé de pair avec statut=CONFIRME (invariant
+      // applicatif de confirmer-reglements ci-dessous).
+      date: (r.confirmeLe ?? r.date).toISOString(),
     })),
     depenses: depenses.map(versDepenseDTO),
     totalDepenses,
@@ -266,7 +269,7 @@ caisseRouter.get("/registre", lecture, async (req, res, next) => {
       return res.status(400).json({ erreur: "Date invalide (AAAA-MM-JJ)" });
     }
     const cible = date ?? jourLomoto();
-    res.json({ registre: await construireRegistre(cible) });
+    res.json({ registre: await construireRegistre(prisma, cible) });
   } catch (e) {
     next(e);
   }
@@ -277,43 +280,93 @@ caisseRouter.get("/registre", lecture, async (req, res, next) => {
 // l'écran plutôt qu'à la première écriture refusée.
 caisseRouter.get("/session-bloquante", lecture, async (_req, res, next) => {
   try {
-    res.json({ date: await sessionAnterieureOuverteAvant(jourLomoto()) });
+    const anterieure = await prisma.sessionCaisse.findFirst({
+      where: { statut: "OUVERTE", date: { lt: dateSQLDepuisJourLomoto(jourLomoto()) } },
+      orderBy: { date: "asc" },
+    });
+    res.json({ date: anterieure ? jourLomoto(anterieure.date) : null });
   } catch (e) {
     next(e);
   }
 });
 
+/** Traduit les erreurs communes à toutes les routes d'écriture de ce fichier. */
+function traduireErreurEcriture(e: unknown, res: import("express").Response, next: import("express").NextFunction): void {
+  if (e instanceof ErreurIdempotence) {
+    res.status(e.statutHttp).json({ erreur: e.message, code: e.code });
+    return;
+  }
+  if (e instanceof ErreurEcritureCaisseReessayable) {
+    res.status(503).json({ erreur: e.message });
+    return;
+  }
+  if (e instanceof ErreurEcartNonMotive) {
+    res.status(400).json({ code: "ECART_NON_MOTIVE", erreur: e.message });
+    return;
+  }
+  if (e instanceof ErreurAction) {
+    res.status(e.status).json({ erreur: e.message });
+    return;
+  }
+  next(e);
+}
+
 // --- Taux du jour -----------------------------------------------------------
 
 // Une valeur par date : un second envoi sur la même date met à jour la valeur
-// (l'UPDATE est tracé par le journal d'audit).
+// (audit manuel transactionnel — voir caisseAtomique.ts). Exige une session
+// OUVERTE pour la date (P1-B) : verrou de ligne posé avant toute lecture ou
+// écriture pertinente.
 caisseRouter.put("/taux", ecriture, async (req, res, next) => {
   try {
     const parsed = tauxDuJourSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const { date, valeur } = parsed.data;
-    if (await sessionFermeePourDate(date)) {
-      return res.status(409).json({ erreur: "La session de caisse de cette date est clôturée : plus aucune écriture possible" });
-    }
-    const anterieure = await sessionAnterieureOuverteAvant(date);
-    if (anterieure) return res.status(409).json(erreurSessionAnterieure(anterieure));
+    const { date, valeur, versionAttendue } = parsed.data;
 
-    const taux = await prisma.$transaction(async (tx) => {
-      const existant = await tx.tauxDuJour.findUnique({ where: { date: dateSQLDepuisJourLomoto(date) } });
-      if (existant) {
-        return tx.tauxDuJour.update({
-          where: { id: existant.id },
-          data: { valeur, definiParId: req.utilisateur!.id },
-          include: INCLUDE_TAUX,
-        });
-      }
-      return tx.tauxDuJour.create({
-        data: { date: dateSQLDepuisJourLomoto(date), valeur, definiParId: req.utilisateur!.id },
-        include: INCLUDE_TAUX,
-      });
-    });
+    const taux = await executerAvecReessaiP2034(() =>
+      transactionSerializable(prisma, async (tx) => {
+        await verrouillerSessionOuverte(tx, date);
+        await verifierAucuneSessionAnterieureOuverte(tx, date);
+
+        const existant = await tx.tauxDuJour.findUnique({ where: { date: dateSQLDepuisJourLomoto(date) } });
+        if (existant) {
+          if (!versionAttendue || existant.updatedAt.toISOString() !== versionAttendue) {
+            throw new ErreurAction(409, "Ce taux a été modifié entre-temps — rechargez avant de réessayer.");
+          }
+          const { count } = await tx.tauxDuJour.updateMany({
+            where: { id: existant.id, updatedAt: existant.updatedAt },
+            data: { valeur, definiParId: req.utilisateur!.id },
+          });
+          if (count === 0) {
+            throw new ErreurAction(409, "Ce taux a été modifié entre-temps — rechargez avant de réessayer.");
+          }
+          const maj = await tx.tauxDuJour.findUniqueOrThrow({ where: { id: existant.id }, include: INCLUDE_TAUX });
+          await auditerCaisseTx(tx, {
+            module: "CAISSE",
+            typeEntite: "TauxDuJour",
+            entiteId: existant.id,
+            action: "MODIFICATION",
+            avant: existant,
+            apres: maj,
+          });
+          return maj;
+        }
+
+        try {
+          return await tx.tauxDuJour.create({
+            data: { date: dateSQLDepuisJourLomoto(date), valeur, definiParId: req.utilisateur!.id },
+            include: INCLUDE_TAUX,
+          });
+        } catch (e) {
+          if (estViolationContrainteUnique(e)) {
+            throw new ErreurAction(409, "Un taux vient d'être défini pour cette date — rechargez la page.");
+          }
+          throw e;
+        }
+      }),
+    );
 
     const dto = versTauxDTO(taux);
     busEvenements.emettreEvenement({
@@ -327,7 +380,7 @@ caisseRouter.put("/taux", ecriture, async (req, res, next) => {
 
     res.json({ taux: dto });
   } catch (e) {
-    next(e);
+    traduireErreurEcriture(e, res, next);
   }
 });
 
@@ -340,28 +393,28 @@ caisseRouter.post("/depenses", ecriture, async (req, res, next) => {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
     const { date, motif, montant } = parsed.data;
-    if (await sessionFermeePourDate(date)) {
-      return res.status(409).json({ erreur: "La session de caisse de cette date est clôturée : plus aucune écriture possible" });
-    }
-    const anterieure = await sessionAnterieureOuverteAvant(date);
-    if (anterieure) return res.status(409).json(erreurSessionAnterieure(anterieure));
 
-    const execution = await executerEcritureIdempotente(
-      req,
-      "POST:/api/caisse/depenses",
-      parsed.data,
-      async (tx) =>
-        tx.depenseCaisse.create({
-          data: {
-            date: dateSQLDepuisJourLomoto(date),
-            motif,
-            montant,
-            origine: "MANUELLE",
-            enregistreParId: req.utilisateur!.id,
-          },
-          include: INCLUDE_DEPENSE,
-        }),
-      (depense) => ({ statutHttp: 201, corps: { depense: versDepenseDTO(depense) } }),
+    const execution = await executerAvecReessaiP2034(() =>
+      executerEcritureIdempotente(
+        req,
+        "POST:/api/caisse/depenses",
+        parsed.data,
+        async (tx) => {
+          await verrouillerSessionOuverte(tx, date);
+          await verifierAucuneSessionAnterieureOuverte(tx, date);
+          return tx.depenseCaisse.create({
+            data: {
+              date: dateSQLDepuisJourLomoto(date),
+              motif,
+              montant,
+              origine: "MANUELLE",
+              enregistreParId: req.utilisateur!.id,
+            },
+            include: INCLUDE_DEPENSE,
+          });
+        },
+        (depense) => ({ statutHttp: 201, corps: { depense: versDepenseDTO(depense) } }),
+      ),
     );
 
     ajouterEnteteRejeu(res, execution.rejoue);
@@ -379,35 +432,47 @@ caisseRouter.post("/depenses", ecriture, async (req, res, next) => {
 
     res.status(execution.statutHttp).json(execution.corps);
   } catch (e) {
-    if (e instanceof ErreurIdempotence) {
-      return res.status(e.statutHttp).json({ erreur: e.message, code: e.code });
-    }
-    next(e);
+    traduireErreurEcriture(e, res, next);
   }
 });
 
 caisseRouter.delete("/depenses/:id", ecriture, async (req, res, next) => {
   try {
-    const depense = await prisma.depenseCaisse.findUnique({ where: { id: req.params.id } });
-    if (!depense) return res.status(404).json({ erreur: "Dépense introuvable" });
-    if (await sessionFermeePourDate(jourLomoto(depense.date))) {
-      return res.status(409).json({ erreur: "La session de caisse de cette date est clôturée : plus aucune écriture possible" });
-    }
-    const anterieure = await sessionAnterieureOuverteAvant(jourLomoto(depense.date));
-    if (anterieure) return res.status(409).json(erreurSessionAnterieure(anterieure));
+    const apercu = await prisma.depenseCaisse.findUnique({ where: { id: req.params.id } });
+    if (!apercu) return res.status(404).json({ erreur: "Dépense introuvable" });
+    const date = jourLomoto(apercu.date);
 
-    await prisma.depenseCaisse.delete({ where: { id: depense.id } });
+    const supprimee = await executerAvecReessaiP2034(() =>
+      transactionSerializable(prisma, async (tx) => {
+        await verrouillerSessionOuverte(tx, date);
+        await verifierAucuneSessionAnterieureOuverte(tx, date);
+        const depense = await tx.depenseCaisse.findUnique({ where: { id: req.params.id } });
+        if (!depense) throw new ErreurAction(404, "Dépense introuvable");
+        const { count } = await tx.depenseCaisse.deleteMany({ where: { id: depense.id } });
+        if (count === 0) throw new ErreurAction(404, "Dépense introuvable");
+        await auditerCaisseTx(tx, {
+          module: "CAISSE",
+          typeEntite: "DepenseCaisse",
+          entiteId: depense.id,
+          action: "SUPPRESSION",
+          avant: depense,
+          apres: null,
+        });
+        return depense;
+      }),
+    );
+
     busEvenements.emettreEvenement({
       type: "REGISTRE_CAISSE",
       module: "CAISSE",
       emetteurId: req.utilisateur!.id,
-      evenementRef: depense.id,
-      message: `Dépense retirée du registre du ${jourLomoto(depense.date)} : ${depense.motif} — ${formatFc(depense.montant)}`,
-      donnees: { depenseId: depense.id },
+      evenementRef: supprimee.id,
+      message: `Dépense retirée du registre du ${date} : ${supprimee.motif} — ${formatFc(supprimee.montant)}`,
+      donnees: { depenseId: supprimee.id },
     });
     res.status(204).end();
   } catch (e) {
-    next(e);
+    traduireErreurEcriture(e, res, next);
   }
 });
 
@@ -415,6 +480,10 @@ caisseRouter.delete("/depenses/:id", ecriture, async (req, res, next) => {
  * Case à cocher « dépense farine » (section 3.1). Cocher ajoute la ligne
  * automatique au motif figé, décocher la retire. Le montant est figé à
  * l'enregistrement, avec le taux et les sacs utilisés pour rester vérifiable.
+ * Au plus une ligne FARINE par date est garantie par un index unique PARTIEL
+ * PostgreSQL déjà existant (`DepenseCaisse_date_farinee_key`, migration
+ * 20260813180500) — la violation P2002 qui en résulterait en cas de double
+ * activation concurrente est traduite ici en 409 métier.
  */
 caisseRouter.put("/depenses/farine", ecriture, async (req, res, next) => {
   try {
@@ -423,62 +492,91 @@ caisseRouter.put("/depenses/farine", ecriture, async (req, res, next) => {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
     const { date, active } = parsed.data;
-    if (await sessionFermeePourDate(date)) {
-      return res.status(409).json({ erreur: "La session de caisse de cette date est clôturée : plus aucune écriture possible" });
-    }
-    const anterieure = await sessionAnterieureOuverteAvant(date);
-    if (anterieure) return res.status(409).json(erreurSessionAnterieure(anterieure));
 
-    const existante = await prisma.depenseCaisse.findFirst({
-      where: { date: dateSQLDepuisJourLomoto(date), origine: "FARINE" },
-    });
+    type ResultatFarine =
+      | { type: "desactivee"; depense: { id: string; motif: string; montant: number } }
+      | { type: "aucun_changement" }
+      | { type: "activee"; depense: { id: string; motif: string; montant: number; sacs: number; taux: number } };
 
-    if (!active) {
-      if (existante) await prisma.depenseCaisse.delete({ where: { id: existante.id } });
-      return res.json({ registre: await construireRegistre(date) });
-    }
+    const resultat = await executerAvecReessaiP2034(() =>
+      transactionSerializable<ResultatFarine>(prisma, async (tx) => {
+        await verrouillerSessionOuverte(tx, date);
+        await verifierAucuneSessionAnterieureOuverte(tx, date);
 
-    if (existante) {
-      return res.status(409).json({ erreur: "La dépense farine est déjà enregistrée pour cette date" });
-    }
+        const existante = await tx.depenseCaisse.findFirst({
+          where: { date: dateSQLDepuisJourLomoto(date), origine: "FARINE" },
+        });
 
-    const taux = await prisma.tauxDuJour.findUnique({ where: { date: dateSQLDepuisJourLomoto(date) } });
-    if (!taux) {
-      return res.status(409).json({ erreur: "Définissez d'abord le taux du jour pour cette date" });
-    }
-    const sacs = await sacsUtilisesLe(date);
-    if (sacs <= 0) {
-      return res.status(409).json({
-        erreur: "Aucune production enregistrée pour cette date : le nombre de sacs utilisés est inconnu",
+        if (!active) {
+          if (!existante) return { type: "aucun_changement" as const };
+          const { count } = await tx.depenseCaisse.deleteMany({ where: { id: existante.id } });
+          if (count === 0) return { type: "aucun_changement" as const };
+          await auditerCaisseTx(tx, {
+            module: "CAISSE",
+            typeEntite: "DepenseCaisse",
+            entiteId: existante.id,
+            action: "SUPPRESSION",
+            avant: existante,
+            apres: null,
+          });
+          return { type: "desactivee" as const, depense: { id: existante.id, motif: existante.motif, montant: existante.montant } };
+        }
+
+        if (existante) {
+          throw new ErreurAction(409, "La dépense farine est déjà enregistrée pour cette date");
+        }
+
+        const taux = await tx.tauxDuJour.findUnique({ where: { date: dateSQLDepuisJourLomoto(date) } });
+        if (!taux) {
+          throw new ErreurAction(409, "Définissez d'abord le taux du jour pour cette date");
+        }
+        const sacs = await sacsUtilisesLe(tx, date);
+        if (sacs <= 0) {
+          throw new ErreurAction(
+            409,
+            "Aucune production enregistrée pour cette date : le nombre de sacs utilisés est inconnu",
+          );
+        }
+
+        const valeurTaux = taux.valeur.toNumber();
+        try {
+          const depense = await tx.depenseCaisse.create({
+            data: {
+              date: dateSQLDepuisJourLomoto(date),
+              motif: MOTIF_DEPENSE_FARINE,
+              montant: calculerDepenseFarine(valeurTaux, sacs),
+              origine: "FARINE",
+              tauxApplique: valeurTaux,
+              sacsUtilises: sacs,
+              enregistreParId: req.utilisateur!.id,
+            },
+          });
+          return { type: "activee" as const, depense: { id: depense.id, motif: depense.motif, montant: depense.montant, sacs, taux: valeurTaux } };
+        } catch (e) {
+          if (estViolationContrainteUnique(e)) {
+            throw new ErreurAction(409, "La dépense farine est déjà enregistrée pour cette date");
+          }
+          throw e;
+        }
+      }),
+    );
+
+    if (resultat.type === "activee") {
+      const { depense } = resultat;
+      busEvenements.emettreEvenement({
+        type: "REGISTRE_CAISSE",
+        module: "CAISSE",
+        emetteurId: req.utilisateur!.id,
+        evenementRef: depense.id,
+        message: `Dépense farine le ${date} : ${depense.sacs} sac(s) au taux ${depense.taux} — ${formatFc(depense.montant)}`,
+        donnees: { depenseId: depense.id, montant: depense.montant, sacs: depense.sacs, taux: depense.taux },
       });
     }
 
-    const valeurTaux = taux.valeur.toNumber();
-    const depense = await prisma.depenseCaisse.create({
-      data: {
-        date: dateSQLDepuisJourLomoto(date),
-        motif: MOTIF_DEPENSE_FARINE,
-        montant: calculerDepenseFarine(valeurTaux, sacs),
-        origine: "FARINE",
-        tauxApplique: valeurTaux,
-        sacsUtilises: sacs,
-        enregistreParId: req.utilisateur!.id,
-      },
-      include: INCLUDE_DEPENSE,
-    });
-
-    busEvenements.emettreEvenement({
-      type: "REGISTRE_CAISSE",
-      module: "CAISSE",
-      emetteurId: req.utilisateur!.id,
-      evenementRef: depense.id,
-      message: `Dépense farine le ${date} : ${sacs} sac(s) au taux ${valeurTaux} — ${formatFc(depense.montant)}`,
-      donnees: { depenseId: depense.id, montant: depense.montant, sacs, taux: valeurTaux },
-    });
-
-    res.status(201).json({ registre: await construireRegistre(date) });
+    const registre = await construireRegistre(prisma, date);
+    res.status(resultat.type === "activee" ? 201 : 200).json({ registre });
   } catch (e) {
-    next(e);
+    traduireErreurEcriture(e, res, next);
   }
 });
 
@@ -495,9 +593,10 @@ interface CorpsOuvertureSession {
 }
 
 // Une session par date (contrainte SQL). Refuse aussi d'ouvrir une nouvelle
-// date tant qu'une session antérieure reste OUVERTE — discipline
-// chronologique qui corrige l'esprit de P0-02 (« pas d'inclusion implicite
-// d'une autre session »).
+// date tant qu'une session antérieure reste OUVERTE. Non concernée par la
+// nouvelle exigence « session OUVERTE requise » (P1-B) : c'est justement
+// l'action qui en crée une — déjà atomique (existante/antérieure/création
+// dans la même transaction idempotente), inchangée par ce lot.
 caisseRouter.post("/sessions", ecriture, async (req, res, next) => {
   try {
     const parsed = sessionCaisseOuvertureSchema.safeParse(req.body);
@@ -596,38 +695,40 @@ caisseRouter.get("/sessions/:id/remises", lecture, async (req, res, next) => {
 // Remise contradictoire générale (section 3.1, point 3) — enregistre un
 // transfert d'espèces, deux parties (remisParNom en texte libre, recuPar
 // l'utilisateur connecté). Purement documentaire : n'affecte ni le registre
-// ni la dette (contrairement à /confirmer-reglements, ci-dessous).
+// ni la dette (contrairement à /confirmer-reglements, ci-dessous). Exige
+// néanmoins une session OUVERTE (P1-B) : l'intégrité de l'audit d'une
+// journée déjà close ne doit jamais accueillir une remise nouvelle.
 caisseRouter.post("/sessions/:id/remises", ecriture, async (req, res, next) => {
   try {
-    const { session, erreur } = await chargerSessionCaisseOuverte(req.params.id);
-    if (erreur) return res.status(erreur.status).json({ erreur: erreur.message });
-    const anterieure = await sessionAnterieureOuverteAvant(jourLomoto(session!.date));
-    if (anterieure) return res.status(409).json(erreurSessionAnterieure(anterieure));
-
     const parsed = remiseCaisseCreateSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
     const { montant, remisParNom, reference, observation } = parsed.data;
 
-    const execution = await executerEcritureIdempotente(
-      req,
-      `POST:/api/caisse/sessions/${req.params.id}/remises`,
-      parsed.data,
-      async (tx) =>
-        tx.remiseCaisse.create({
-          data: {
-            sessionCaisseId: session!.id,
-            montant,
-            remisParNom,
-            recuParId: req.utilisateur!.id,
-            enregistreParId: req.utilisateur!.id,
-            reference,
-            observation,
-          },
-          include: INCLUDE_REMISE,
-        }),
-      (remise) => ({ statutHttp: 201, corps: { remise: versRemiseDTO(remise) } }),
+    const execution = await executerAvecReessaiP2034(() =>
+      executerEcritureIdempotente(
+        req,
+        `POST:/api/caisse/sessions/${req.params.id}/remises`,
+        parsed.data,
+        async (tx) => {
+          const session = await verrouillerSessionOuverteParId(tx, req.params.id);
+          await verifierAucuneSessionAnterieureOuverte(tx, jourLomoto(session.date));
+          return tx.remiseCaisse.create({
+            data: {
+              sessionCaisseId: session.id,
+              montant,
+              remisParNom,
+              recuParId: req.utilisateur!.id,
+              enregistreParId: req.utilisateur!.id,
+              reference,
+              observation,
+            },
+            include: INCLUDE_REMISE,
+          });
+        },
+        (remise) => ({ statutHttp: 201, corps: { remise: versRemiseDTO(remise) } }),
+      ),
     );
 
     ajouterEnteteRejeu(res, execution.rejoue);
@@ -645,75 +746,90 @@ caisseRouter.post("/sessions/:id/remises", ecriture, async (req, res, next) => {
 
     res.status(execution.statutHttp).json(execution.corps);
   } catch (e) {
-    if (e instanceof ErreurIdempotence) {
-      return res.status(e.statutHttp).json({ erreur: e.message, code: e.code });
-    }
-    next(e);
+    traduireErreurEcriture(e, res, next);
   }
 });
 
 // Clôture (points 4, 6, 8) : le théorique est calculé côté serveur, jamais
 // fourni par le client. Un écart non nul exige un motif — sinon la clôture
-// perdrait toute valeur de comptage contradictoire.
+// perdrait toute valeur de comptage contradictoire. P1-B : verrouille la
+// session en premier, reconstruit le registre intégralement avec `tx`,
+// vérifie les sessions antérieures, ferme et audite — tout avant le commit.
 caisseRouter.post("/sessions/:id/cloturer", ecriture, async (req, res, next) => {
   try {
-    const { session, erreur } = await chargerSessionCaisseOuverte(req.params.id);
-    if (erreur) return res.status(erreur.status).json({ erreur: erreur.message });
-
     const parsed = sessionCaisseFermetureSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
     const { soldeCompteFermeture, motif } = parsed.data;
 
-    const dateStr = jourLomoto(session!.date);
-    const registre = await construireRegistre(dateStr);
-    const soldeTheoriqueFermeture = session!.soldeOuverture + registre.solde;
-    const ecartFermeture = soldeCompteFermeture - soldeTheoriqueFermeture;
-    if (ecartFermeture !== 0 && !motif) {
-      return res.status(400).json({
-        code: "ECART_NON_MOTIVE",
-        erreur: `Écart de ${formatFc(ecartFermeture)} entre théorique et compté : un motif est requis pour clôturer`,
-      });
-    }
+    const resultat = await executerAvecReessaiP2034(() =>
+      transactionSerializable(prisma, async (tx) => {
+        const session = await verrouillerSessionOuverteParId(tx, req.params.id);
+        const dateStr = jourLomoto(session.date);
+        await verifierAucuneSessionAnterieureOuverte(tx, dateStr);
 
-    // Verrou optimiste : deux clôtures concurrentes (deux onglets, double
-    // soumission) liraient toutes deux OUVERTE avant qu'aucune n'écrive — un
-    // `update` inconditionnel laisserait la seconde écraser silencieusement
-    // le théorique/compté/écart de la première. `updateMany` avec `statut`
-    // dans le WHERE ne réussit que pour celle qui gagne la course ; l'autre
-    // reçoit un 409 explicite plutôt qu'un écrasement silencieux.
-    const { count } = await prisma.sessionCaisse.updateMany({
-      where: { id: session!.id, statut: "OUVERTE" },
-      data: {
-        statut: "FERMEE",
-        soldeTheoriqueFermeture,
-        soldeCompteFermeture,
-        ecartFermeture,
-        motifEcart: ecartFermeture !== 0 ? motif : null,
-        fermeeLe: new Date(),
-        fermeeParId: req.utilisateur!.id,
-      },
-    });
-    if (count === 0) {
-      return res.status(409).json({ erreur: "Cette session vient d'être clôturée ailleurs — rechargez la page" });
-    }
+        const registre = await construireRegistre(tx, dateStr);
+        const soldeTheoriqueFermeture = session.soldeOuverture + registre.solde;
+        const ecartFermeture = soldeCompteFermeture - soldeTheoriqueFermeture;
+        if (ecartFermeture !== 0 && !motif) {
+          throw new ErreurEcartNonMotive(
+            `Écart de ${formatFc(ecartFermeture)} entre théorique et compté : un motif est requis pour clôturer`,
+          );
+        }
 
-    const fermee = await prisma.sessionCaisse.findUniqueOrThrow({ where: { id: session!.id }, include: INCLUDE_SESSION });
-    const dto = versSessionDTO(fermee);
+        const { count } = await tx.sessionCaisse.updateMany({
+          where: { id: session.id, statut: "OUVERTE" },
+          data: {
+            statut: "FERMEE",
+            soldeTheoriqueFermeture,
+            soldeCompteFermeture,
+            ecartFermeture,
+            motifEcart: ecartFermeture !== 0 ? motif : null,
+            fermeeLe: new Date(),
+            fermeeParId: req.utilisateur!.id,
+          },
+        });
+        // En pratique inatteignable : le verrou de ligne posé par
+        // verrouillerSessionOuverteParId empêche toute autre transaction de
+        // modifier `statut` entre la vérification et cet updateMany —
+        // conservé par défense en profondeur, jamais un 500 générique.
+        if (count === 0) {
+          throw new ErreurAction(409, "Cette session vient d'être clôturée ailleurs — rechargez la page");
+        }
+
+        const fermee = await tx.sessionCaisse.findUniqueOrThrow({ where: { id: session.id }, include: INCLUDE_SESSION });
+        await auditerCaisseTx(tx, {
+          module: "CAISSE",
+          typeEntite: "SessionCaisse",
+          entiteId: session.id,
+          action: "MODIFICATION",
+          avant: session,
+          apres: fermee,
+        });
+        return { fermee, soldeTheoriqueFermeture, soldeCompteFermeture, ecartFermeture };
+      }),
+    );
+
+    const dto = versSessionDTO(resultat.fermee);
     busEvenements.emettreEvenement({
       type: "SESSION_CAISSE_CLOTUREE",
       module: "CAISSE",
       emetteurId: req.utilisateur!.id,
       evenementRef: dto.id,
       message:
-        `Session de caisse du ${dto.date} clôturée — théorique ${formatFc(soldeTheoriqueFermeture)}, compté ${formatFc(soldeCompteFermeture)}` +
-        (ecartFermeture !== 0 ? `, écart ${formatFc(ecartFermeture)}` : ""),
-      donnees: { sessionId: dto.id, soldeTheoriqueFermeture, soldeCompteFermeture, ecartFermeture },
+        `Session de caisse du ${dto.date} clôturée — théorique ${formatFc(resultat.soldeTheoriqueFermeture)}, compté ${formatFc(resultat.soldeCompteFermeture)}` +
+        (resultat.ecartFermeture !== 0 ? `, écart ${formatFc(resultat.ecartFermeture)}` : ""),
+      donnees: {
+        sessionId: dto.id,
+        soldeTheoriqueFermeture: resultat.soldeTheoriqueFermeture,
+        soldeCompteFermeture: resultat.soldeCompteFermeture,
+        ecartFermeture: resultat.ecartFermeture,
+      },
     });
     res.json({ session: dto });
   } catch (e) {
-    next(e);
+    traduireErreurEcriture(e, res, next);
   }
 });
 
@@ -721,36 +837,56 @@ caisseRouter.post("/sessions/:id/cloturer", ecriture, async (req, res, next) => 
 // Principal, même garde que POST /approbations/:id/approuver. Le théorique
 // reste inchangé (stable, puisque la session FERMEE bloque toute nouvelle
 // écriture sur le registre de cette date) ; seul le compté peut être corrigé.
+// P1-B : verrou de ligne + jeton de concurrence optimiste transmis par le
+// client (`versionAttendue`, l'`updatedAt` affiché) — deux corrections
+// concurrentes ne peuvent jamais s'écraser silencieusement : la seconde,
+// lue après que la première a committé sous le même verrou, porte une
+// version devenue obsolète et échoue en 409.
 caisseRouter.post("/sessions/:id/corriger", ecriture, async (req, res, next) => {
   try {
     if (!req.utilisateur!.estAdminPrincipal) {
       return res.status(403).json({ erreur: "Seul l'Administrateur principal peut corriger une session déjà clôturée" });
     }
-    const session = await prisma.sessionCaisse.findUnique({ where: { id: req.params.id }, include: INCLUDE_SESSION });
-    if (!session) return res.status(404).json({ erreur: "Session de caisse introuvable" });
-    if (session.statut !== "FERMEE") {
-      return res.status(409).json({ erreur: "Seule une session déjà clôturée peut être corrigée" });
-    }
-
     const parsed = sessionCaisseCorrectionSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const { soldeCompteFermeture, motif } = parsed.data;
-    const ecartFermeture = soldeCompteFermeture - session.soldeTheoriqueFermeture!;
+    const { soldeCompteFermeture, motif, versionAttendue } = parsed.data;
 
-    const corrigee = await prisma.sessionCaisse.update({
-      where: { id: session.id },
-      data: {
-        soldeCompteFermeture,
-        ecartFermeture,
-        motifEcart: ecartFermeture !== 0 ? motif : null,
-        derniereCorrectionLe: new Date(),
-        derniereCorrectionParId: req.utilisateur!.id,
-        motifCorrection: motif,
-      },
-      include: INCLUDE_SESSION,
-    });
+    const corrigee = await executerAvecReessaiP2034(() =>
+      transactionSerializable(prisma, async (tx) => {
+        const session = await verrouillerSessionFermeeParId(tx, req.params.id);
+        if (session.updatedAt.toISOString() !== versionAttendue) {
+          throw new ErreurAction(409, "Cette session a été modifiée entre-temps — rechargez avant de corriger.");
+        }
+        const ecartFermeture = soldeCompteFermeture - session.soldeTheoriqueFermeture!;
+
+        const { count } = await tx.sessionCaisse.updateMany({
+          where: { id: session.id, updatedAt: session.updatedAt },
+          data: {
+            soldeCompteFermeture,
+            ecartFermeture,
+            motifEcart: ecartFermeture !== 0 ? motif : null,
+            derniereCorrectionLe: new Date(),
+            derniereCorrectionParId: req.utilisateur!.id,
+            motifCorrection: motif,
+          },
+        });
+        if (count === 0) {
+          throw new ErreurAction(409, "Cette session a été modifiée entre-temps — rechargez avant de corriger.");
+        }
+        const maj = await tx.sessionCaisse.findUniqueOrThrow({ where: { id: session.id }, include: INCLUDE_SESSION });
+        await auditerCaisseTx(tx, {
+          module: "CAISSE",
+          typeEntite: "SessionCaisse",
+          entiteId: session.id,
+          action: "MODIFICATION",
+          avant: session,
+          apres: maj,
+        });
+        return maj;
+      }),
+    );
 
     const dto = versSessionDTO(corrigee);
     busEvenements.emettreEvenement({
@@ -760,11 +896,11 @@ caisseRouter.post("/sessions/:id/corriger", ecriture, async (req, res, next) => 
       priorite: "HAUTE",
       evenementRef: dto.id,
       message: `Session de caisse du ${dto.date} corrigée par l'Admin Principal — nouveau compté ${formatFc(soldeCompteFermeture)} (${motif})`,
-      donnees: { sessionId: dto.id, soldeCompteFermeture, ecartFermeture },
+      donnees: { sessionId: dto.id, soldeCompteFermeture, ecartFermeture: dto.ecartFermeture },
     });
     res.json({ session: dto });
   } catch (e) {
-    next(e);
+    traduireErreurEcriture(e, res, next);
   }
 });
 
@@ -815,7 +951,10 @@ interface CorpsConfirmation {
 // règlement — la déclaration (POST /commandes/:id/reglements) ne le fait
 // jamais. Une remise contradictoire est créée pour matérialiser l'argent
 // physiquement reçu par la Caisse, qui confirme un ou plusieurs règlements
-// DECLARE d'un même mouvement.
+// DECLARE d'un même mouvement. P1-B : verrou de session + toutes les
+// écritures (PaiementCommande, CommandeClient, Client) en `updateMany` +
+// audit manuel transactionnel — plus de simple `update` singulier, qui
+// serait intercepté par l'extension d'audit NON transactionnelle.
 caisseRouter.post("/sessions/:id/confirmer-reglements", ecriture, async (req, res, next) => {
   try {
     const parsed = confirmerReglementsSchema.safeParse(req.body);
@@ -825,101 +964,145 @@ caisseRouter.post("/sessions/:id/confirmer-reglements", ecriture, async (req, re
     const { paiementCommandeIds, remisParNom, reference, observation } = parsed.data;
     const ids = [...new Set(paiementCommandeIds)];
 
-    const sessionInfo = await prisma.sessionCaisse.findUnique({ where: { id: req.params.id }, select: { date: true } });
-    if (sessionInfo) {
-      const anterieure = await sessionAnterieureOuverteAvant(jourLomoto(sessionInfo.date));
-      if (anterieure) return res.status(409).json(erreurSessionAnterieure(anterieure));
-    }
+    const execution = await executerAvecReessaiP2034(() =>
+      executerEcritureIdempotente<ResultatConfirmation, CorpsConfirmation>(
+        req,
+        `POST:/api/caisse/sessions/${req.params.id}/confirmer-reglements`,
+        parsed.data,
+        async (tx) => {
+          let session;
+          try {
+            session = await verrouillerSessionOuverteParId(tx, req.params.id);
+          } catch (e) {
+            if (e instanceof ErreurAction && e.status === 404) return { type: "sessionIntrouvable" as const };
+            if (e instanceof ErreurAction && e.status === 409) return { type: "sessionFermee" as const };
+            throw e;
+          }
+          await verifierAucuneSessionAnterieureOuverte(tx, jourLomoto(session.date));
 
-    const execution = await executerEcritureIdempotente<ResultatConfirmation, CorpsConfirmation>(
-      req,
-      `POST:/api/caisse/sessions/${req.params.id}/confirmer-reglements`,
-      parsed.data,
-      async (tx) => {
-        const session = await tx.sessionCaisse.findUnique({ where: { id: req.params.id } });
-        if (!session) return { type: "sessionIntrouvable" as const };
-        if (session.statut !== "OUVERTE") return { type: "sessionFermee" as const };
+          // Validation d'abord, sans écriture : une sélection invalide ne doit
+          // jamais confirmer partiellement les autres règlements du lot.
+          for (const id of ids) {
+            const p = await tx.paiementCommande.findUnique({ where: { id } });
+            if (!p || p.statut !== "DECLARE") return { type: "reglementInvalide" as const, id };
+          }
 
-        // Validation d'abord, sans écriture : une sélection invalide ne doit
-        // jamais confirmer partiellement les autres règlements du lot.
-        for (const id of ids) {
-          const p = await tx.paiementCommande.findUnique({ where: { id } });
-          if (!p || p.statut !== "DECLARE") return { type: "reglementInvalide" as const, id };
-        }
+          const declares = await tx.paiementCommande.findMany({ where: { id: { in: ids } }, select: { montant: true } });
+          const montantTotal = declares.reduce((s, p) => s + p.montant, 0);
 
-        const declares = await tx.paiementCommande.findMany({ where: { id: { in: ids } }, select: { montant: true } });
-        const montantTotal = declares.reduce((s, p) => s + p.montant, 0);
-
-        const remise = await tx.remiseCaisse.create({
-          data: {
-            sessionCaisseId: session.id,
-            montant: montantTotal,
-            remisParNom,
-            recuParId: req.utilisateur!.id,
-            enregistreParId: req.utilisateur!.id,
-            reference,
-            observation,
-          },
-          include: INCLUDE_REMISE,
-        });
-
-        const confirmes: { commandeId: string; numero: number; montant: number; detteRestante: number }[] = [];
-        for (const id of ids) {
-          const paiement = await tx.paiementCommande.findUniqueOrThrow({
-            where: { id },
-            include: { commandeClient: { include: { client: true } } },
-          });
-          const commande = paiement.commandeClient;
-          const calcul = calculerCommande({
-            quantiteBacs: commande.quantiteBacs,
-            prixParBac: commande.montantBrut / commande.quantiteBacs,
-            avanceExistante: commande.avanceUtilisee,
-            montantRecu: commande.montantRecu + paiement.montant,
-          });
-          const deltaAvance = calcul.avanceGeneree - commande.avanceGeneree;
-
-          await tx.commandeClient.update({
-            where: { id: commande.id },
+          const remise = await tx.remiseCaisse.create({
             data: {
-              montantRecu: commande.montantRecu + paiement.montant,
-              dette: calcul.dette,
-              avanceGeneree: calcul.avanceGeneree,
-              nouvelleAvance: commande.nouvelleAvance + deltaAvance,
+              sessionCaisseId: session.id,
+              montant: montantTotal,
+              remisParNom,
+              recuParId: req.utilisateur!.id,
+              enregistreParId: req.utilisateur!.id,
+              reference,
+              observation,
             },
+            include: INCLUDE_REMISE,
           });
-          await tx.client.update({
-            where: { id: commande.clientId },
-            data: { avanceDisponible: commande.client.avanceDisponible + deltaAvance },
-          });
-          await tx.paiementCommande.update({
-            where: { id },
-            data: {
-              statut: "CONFIRME",
-              confirmeLe: new Date(),
-              confirmeParId: req.utilisateur!.id,
-              remiseCaisseId: remise.id,
-            },
-          });
-          confirmes.push({ commandeId: commande.id, numero: commande.numero, montant: paiement.montant, detteRestante: calcul.dette });
-        }
 
-        return { type: "confirme" as const, remise, confirmes };
-      },
-      (resultat) => {
-        if (resultat.type === "sessionIntrouvable") {
-          return { statutHttp: 404, corps: { erreur: "Session de caisse introuvable" } };
-        }
-        if (resultat.type === "sessionFermee") {
-          return { statutHttp: 409, corps: { erreur: "Cette session est clôturée : impossible d'y confirmer un règlement" } };
-        }
-        if (resultat.type === "reglementInvalide") {
-          return {
-            statutHttp: 409,
-            corps: { erreur: "Un règlement sélectionné est introuvable ou déjà confirmé", code: "REGLEMENT_INVALIDE" },
-          };
-        }
-        return { statutHttp: 201, corps: { remise: versRemiseDTO(resultat.remise) } };
-      },
+          const confirmes: { commandeId: string; numero: number; montant: number; detteRestante: number }[] = [];
+          for (const id of ids) {
+            const paiementAvant = await tx.paiementCommande.findUniqueOrThrow({
+              where: { id },
+              include: { commandeClient: { include: { client: true } } },
+            });
+            const commande = paiementAvant.commandeClient;
+            const calcul = calculerCommande({
+              quantiteBacs: commande.quantiteBacs,
+              prixParBac: commande.montantBrut / commande.quantiteBacs,
+              avanceExistante: commande.avanceUtilisee,
+              montantRecu: commande.montantRecu + paiementAvant.montant,
+            });
+            const deltaAvance = calcul.avanceGeneree - commande.avanceGeneree;
+
+            const { count: countCommande } = await tx.commandeClient.updateMany({
+              where: { id: commande.id },
+              data: {
+                montantRecu: commande.montantRecu + paiementAvant.montant,
+                dette: calcul.dette,
+                avanceGeneree: calcul.avanceGeneree,
+                nouvelleAvance: commande.nouvelleAvance + deltaAvance,
+              },
+            });
+            // En pratique inatteignable : verrou de session posé plus haut +
+            // isolation Serializable — conservé par défense en profondeur,
+            // jamais un 500 générique (round correctif Codex, 29/08/2026).
+            if (countCommande !== 1) {
+              throw new ErreurAction(409, "La commande a été modifiée entre-temps — rechargez avant de réessayer.");
+            }
+            const commandeApres = await tx.commandeClient.findUniqueOrThrow({ where: { id: commande.id } });
+            await auditerCaisseTx(tx, {
+              module: "COMMANDES",
+              typeEntite: "CommandeClient",
+              entiteId: commande.id,
+              action: "MODIFICATION",
+              avant: commande,
+              apres: commandeApres,
+            });
+
+            const { count: countClient } = await tx.client.updateMany({
+              where: { id: commande.clientId },
+              data: { avanceDisponible: commande.client.avanceDisponible + deltaAvance },
+            });
+            if (countClient !== 1) {
+              throw new ErreurAction(409, "Le client a été modifié entre-temps — rechargez avant de réessayer.");
+            }
+            const clientApres = await tx.client.findUniqueOrThrow({ where: { id: commande.clientId } });
+            await auditerCaisseTx(tx, {
+              module: "COMMANDES",
+              typeEntite: "Client",
+              entiteId: commande.clientId,
+              action: "MODIFICATION",
+              avant: commande.client,
+              apres: clientApres,
+            });
+
+            const { count: countPaiement } = await tx.paiementCommande.updateMany({
+              where: { id },
+              data: {
+                statut: "CONFIRME",
+                confirmeLe: new Date(),
+                confirmeParId: req.utilisateur!.id,
+                remiseCaisseId: remise.id,
+              },
+            });
+            if (countPaiement !== 1) {
+              throw new ErreurAction(409, "Ce règlement a été modifié entre-temps — rechargez avant de réessayer.");
+            }
+            const paiementApres = await tx.paiementCommande.findUniqueOrThrow({ where: { id } });
+            await auditerCaisseTx(tx, {
+              module: "COMMANDES",
+              typeEntite: "PaiementCommande",
+              entiteId: id,
+              action: "MODIFICATION",
+              avant: paiementAvant,
+              apres: paiementApres,
+            });
+
+            confirmes.push({ commandeId: commande.id, numero: commande.numero, montant: paiementAvant.montant, detteRestante: calcul.dette });
+          }
+
+          return { type: "confirme" as const, remise, confirmes };
+        },
+        (resultat) => {
+          if (resultat.type === "sessionIntrouvable") {
+            return { statutHttp: 404, corps: { erreur: "Session de caisse introuvable" } };
+          }
+          if (resultat.type === "sessionFermee") {
+            return { statutHttp: 409, corps: { erreur: "Cette session est clôturée : impossible d'y confirmer un règlement" } };
+          }
+          if (resultat.type === "reglementInvalide") {
+            return {
+              statutHttp: 409,
+              corps: { erreur: "Un règlement sélectionné est introuvable ou déjà confirmé", code: "REGLEMENT_INVALIDE" },
+            };
+          }
+          return { statutHttp: 201, corps: { remise: versRemiseDTO(resultat.remise) } };
+        },
+      ),
     );
 
     ajouterEnteteRejeu(res, execution.rejoue);
@@ -950,9 +1133,6 @@ caisseRouter.post("/sessions/:id/confirmer-reglements", ecriture, async (req, re
 
     res.status(execution.statutHttp).json(execution.corps);
   } catch (e) {
-    if (e instanceof ErreurIdempotence) {
-      return res.status(e.statutHttp).json({ erreur: e.message, code: e.code });
-    }
-    next(e);
+    traduireErreurEcriture(e, res, next);
   }
 });

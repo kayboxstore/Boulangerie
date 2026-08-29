@@ -181,12 +181,25 @@ describe("sommeDeclarationsEnAttente (section 3.1 pt 4 — Lot 6, P0-07)", () =>
 
 describe("sessionCaisseCorrectionSchema (section 3.1 pt 5 — droit spécial Admin Principal)", () => {
   it("exige toujours un motif, même sans écart apparent", () => {
-    expect(sessionCaisseCorrectionSchema.safeParse({ soldeCompteFermeture: 10000 }).success).toBe(false);
+    expect(
+      sessionCaisseCorrectionSchema.safeParse({ soldeCompteFermeture: 10000, versionAttendue: "2026-01-01T00:00:00.000Z" })
+        .success,
+    ).toBe(false);
   });
 
-  it("valide avec motif", () => {
+  it("exige toujours une version attendue (P1-B — concurrence optimiste)", () => {
     expect(
       sessionCaisseCorrectionSchema.safeParse({ soldeCompteFermeture: 10000, motif: "Erreur de comptage" }).success,
+    ).toBe(false);
+  });
+
+  it("valide avec motif et version attendue", () => {
+    expect(
+      sessionCaisseCorrectionSchema.safeParse({
+        soldeCompteFermeture: 10000,
+        motif: "Erreur de comptage",
+        versionAttendue: "2026-01-01T00:00:00.000Z",
+      }).success,
     ).toBe(true);
   });
 });
