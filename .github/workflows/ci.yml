@@ -277,6 +277,22 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-integrite-c4-ci.ts
 
+      - name: Vérification HTTP + PostgreSQL réelle de POST /sessions/:id/confirmer-reglements (round correctif Codex, 29/08/2026, point 3)
+        # Les 12 tests mockés de routes/caisse.test.ts pour /remises et
+        # /confirmer-reglements exercent le VRAI routeur Express mais une
+        # transaction Prisma mockée — ils prouvent le câblage, pas la
+        # persistance réelle. Ce script exerce le VRAI routeur (caisseRouter),
+        # servi par supertest, avec une VRAIE authentification JWT et une
+        # VRAIE base PostgreSQL : confirmation réussie, rattachement à la
+        # RemiseCaisse de la session d'encaissement, écritures réelles de
+        # CommandeClient/Client/PaiementCommande, et les 3 AuditLog
+        # réellement persistés DANS la transaction avec l'acteur exact —
+        # relus depuis une connexion Prisma indépendante après la réponse
+        # HTTP. Même garde que les scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-http-confirmer-reglements-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest

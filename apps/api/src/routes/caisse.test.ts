@@ -343,6 +343,14 @@ describe("POST /api/caisse/sessions/:id/corriger", () => {
 // lib/idempotence.test.ts et lib/idempotence-execution.test.ts — ici, seul
 // le comportement PROPRE à la route (verrou avant écriture, aucun événement
 // sur rejeu, audit transactionnel exact) est vérifié.
+//
+// Limite explicite (contre-revue Codex, 29/08/2026, round suivant) : ces
+// tests mockent la transaction Prisma (services/caisseAtomique.js,
+// lib/idempotence.js) — ils prouvent le CÂBLAGE de la route, pas la
+// PERSISTANCE réelle. Le parcours HTTP + PostgreSQL entièrement réel de
+// /confirmer-reglements (confirmation, rattachement RemiseCaisse, écritures
+// CommandeClient/Client/PaiementCommande, 3 AuditLog exacts) est prouvé par
+// scripts/verifier-http-confirmer-reglements-ci.ts.
 
 const REMISE_FIXTURE = {
   id: "r-1",
@@ -604,7 +612,16 @@ describe("POST /api/caisse/sessions/:id/confirmer-reglements", () => {
     );
   });
 
-  it("rollback complet (jamais un 500 Prisma brut, jamais de confirmation partielle) si l'audit CommandeClient échoue", async () => {
+  // Ce test MOCKÉ prouve que la route PROPAGE un échec d'audit (n'écrit pas
+  // Client/PaiementCommande après l'échec, n'émet aucun événement) — il ne
+  // prouve PAS un vrai ROLLBACK PostgreSQL (aucune transaction Prisma réelle
+  // ici). Cette garantie-là vient du mécanisme partagé (transaction Prisma
+  // interactive + auditerCaisseTx, services/caisseAtomique.ts) — la MÊME
+  // route n'a pas de logique de commit/rollback qui lui soit propre —, déjà
+  // prouvée contre PostgreSQL réel par scripts/verifier-concurrence-caisse-ci.ts
+  // (scénario 7) et scripts/verifier-integrite-c4-ci.ts (scénarios 1 et 4).
+  // Round correctif Codex, 29/08/2026, point 3.
+  it("propage un échec d'audit CommandeClient sans écrire les entités suivantes ni émettre d'événement (jamais un 500 Prisma brut) — voir limite ci-dessus", async () => {
     mocks.verrouillerSessionOuverteParId.mockResolvedValue(SESSION_OUVERTE);
     const { tx } = txConfirmerReglements();
     mocks.auditerCaisseTx.mockRejectedValueOnce(new Error("échec d'audit injecté"));
