@@ -18,6 +18,7 @@ import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ErreurAction } from "../lib/erreurAction.js";
+import { busEvenements } from "../lib/events.js";
 
 let utilisateurCourant = { id: "u-1", nom: "Alice", estAdminPrincipal: false };
 
@@ -326,5 +327,324 @@ describe("POST /api/caisse/sessions/:id/corriger", () => {
       .post("/api/caisse/sessions/s-1/corriger")
       .send({ soldeCompteFermeture: 5100, motif: "correction", versionAttendue: "2026-08-28T08:00:00.000Z" });
     expect(res.status).toBe(409);
+  });
+});
+
+// --- Preuves complémentaires (round correctif Codex, 29/08/2026, P2) --------
+//
+// caisse.test.ts ne couvrait jusqu'ici aucune route parmi
+// POST /sessions/:id/remises et POST /sessions/:id/confirmer-reglements —
+// l'affirmation « contrat HTTP de toutes les routes réécrites » de la PR #38
+// n'était donc pas démontrée pour ces deux routes. Comblé ci-dessous, même
+// convention que le reste du fichier (mock du service caisseAtomique.js,
+// jamais Prisma directement) ; la persistance de l'empreinte d'idempotence
+// elle-même (rejeu détecté, clé réutilisée avec des données différentes) est
+// déjà prouvée génériquement, indépendamment de la route appelante, par
+// lib/idempotence.test.ts et lib/idempotence-execution.test.ts — ici, seul
+// le comportement PROPRE à la route (verrou avant écriture, aucun événement
+// sur rejeu, audit transactionnel exact) est vérifié.
+
+const REMISE_FIXTURE = {
+  id: "r-1",
+  sessionCaisseId: "s-1",
+  montant: 5000,
+  remisParNom: "Jean",
+  recuPar: { id: "u-1", nom: "Alice" },
+  enregistrePar: { id: "u-1", nom: "Alice" },
+  reference: null,
+  observation: null,
+  dateRemise: new Date("2026-08-28T09:00:00.000Z"),
+};
+
+describe("POST /api/caisse/sessions/:id/remises", () => {
+  it("404 quand la session est introuvable — aucune remise créée", async () => {
+    mocks.verrouillerSessionOuverteParId.mockRejectedValue(new ErreurAction(404, "Session de caisse introuvable"));
+    const res = await request(app()).post("/api/caisse/sessions/absente/remises").send({ montant: 5000, remisParNom: "Jean" });
+    expect(res.status).toBe(404);
+  });
+
+  it("409 quand la session est clôturée — aucune remise créée", async () => {
+    mocks.verrouillerSessionOuverteParId.mockRejectedValue(new ErreurAction(409, "La session de caisse du 2026-08-28 est clôturée"));
+    const res = await request(app()).post("/api/caisse/sessions/s-1/remises").send({ montant: 5000, remisParNom: "Jean" });
+    expect(res.status).toBe(409);
+  });
+
+  it("409 quand une session antérieure reste ouverte — aucun événement émis", async () => {
+    mocks.verrouillerSessionOuverteParId.mockResolvedValue(SESSION_OUVERTE);
+    mocks.verifierAucuneSessionAnterieureOuverte.mockRejectedValue(
+      new ErreurAction(409, "Clôturez d'abord la session de caisse du 2026-08-27 avant de continuer"),
+    );
+    const handler = vi.fn();
+    busEvenements.surEvenement(handler);
+    try {
+      const res = await request(app()).post("/api/caisse/sessions/s-1/remises").send({ montant: 5000, remisParNom: "Jean" });
+      expect(res.status).toBe(409);
+      expect(handler).not.toHaveBeenCalled();
+    } finally {
+      busEvenements.removeAllListeners("evenement");
+    }
+  });
+
+  it("201 sur session ouverte : la remise n'est créée qu'APRÈS l'acquisition et la validation du verrou", async () => {
+    mocks.verrouillerSessionOuverteParId.mockResolvedValue(SESSION_OUVERTE);
+    const creation = vi.fn().mockResolvedValue(REMISE_FIXTURE);
+    const { executerEcritureIdempotente } = await import("../lib/idempotence.js");
+    (executerEcritureIdempotente as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async (_req: unknown, _portee: unknown, _donnees: unknown, executer: (tx: unknown) => Promise<unknown>, versReponse: (v: unknown) => unknown) => {
+        const tx = txFactice({ remiseCaisse: { create: creation } });
+        const valeur = await executer(tx);
+        const reponse = versReponse(valeur) as { statutHttp: number; corps: unknown };
+        return { ...reponse, valeur, rejoue: false };
+      },
+    );
+
+    const res = await request(app())
+      .post("/api/caisse/sessions/s-1/remises")
+      .send({ montant: 5000, remisParNom: "Jean" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.remise).toMatchObject({ id: "r-1", montant: 5000, remisParNom: "Jean" });
+    expect(creation).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ sessionCaisseId: "s-1", montant: 5000, remisParNom: "Jean" }) }),
+    );
+    // Ordre d'appel réel : le verrou est acquis et validé AVANT toute écriture.
+    const ordreVerrou = mocks.verrouillerSessionOuverteParId.mock.invocationCallOrder[0]!;
+    const ordreCreation = creation.mock.invocationCallOrder[0]!;
+    expect(ordreVerrou).toBeLessThan(ordreCreation);
+  });
+
+  it("n'émet aucun événement lors d'un rejeu (Idempotency-Key déjà traitée)", async () => {
+    const { executerEcritureIdempotente } = await import("../lib/idempotence.js");
+    (executerEcritureIdempotente as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      statutHttp: 201,
+      corps: {
+        remise: {
+          id: "r-1",
+          sessionCaisseId: "s-1",
+          montant: 5000,
+          remisParNom: "Jean",
+          recuPar: { id: "u-1", nom: "Alice" },
+          reference: null,
+          observation: null,
+          dateRemise: "2026-08-28T09:00:00.000Z",
+        },
+      },
+      rejoue: true,
+    });
+    const handler = vi.fn();
+    busEvenements.surEvenement(handler);
+    try {
+      const res = await request(app())
+        .post("/api/caisse/sessions/s-1/remises")
+        .set("Idempotency-Key", "clef-test-remise-01")
+        .send({ montant: 5000, remisParNom: "Jean" });
+      expect(res.status).toBe(201);
+      expect(handler).not.toHaveBeenCalled();
+    } finally {
+      busEvenements.removeAllListeners("evenement");
+    }
+  });
+});
+
+function txConfirmerReglements(overrides: Record<string, unknown> = {}) {
+  const commandeAvant = {
+    id: "cmd-1",
+    numero: 10,
+    clientId: "c-1",
+    quantiteBacs: 5,
+    montantBrut: 20_500,
+    commission: 0,
+    avanceUtilisee: 0,
+    montantAPercevoir: 20_500,
+    montantRecu: 10_000,
+    dette: 10_500,
+    avanceGeneree: 0,
+    nouvelleAvance: 0,
+    client: { id: "c-1", avanceDisponible: 0 },
+  };
+  const paiementAvant = {
+    id: "p-1",
+    commandeClientId: "cmd-1",
+    montant: 500,
+    date: new Date("2026-08-27T10:00:00.000Z"),
+    enregistreParId: "u-2",
+    statut: "DECLARE" as const,
+    remiseCaisseId: null,
+    confirmeLe: null,
+    confirmeParId: null,
+    commandeClient: commandeAvant,
+  };
+  return {
+    tx: txFactice({
+      paiementCommande: {
+        findUnique: vi.fn().mockResolvedValue({ id: "p-1", statut: "DECLARE" }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(paiementAvant),
+        findMany: vi.fn().mockResolvedValue([{ montant: 500 }]),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      remiseCaisse: { create: vi.fn().mockResolvedValue(REMISE_FIXTURE) },
+      commandeClient: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue({ ...commandeAvant, montantRecu: 10_500, dette: 10_000 }),
+      },
+      client: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue({ id: "c-1", avanceDisponible: 0 }),
+      },
+      ...overrides,
+    }),
+    paiementAvant,
+  };
+}
+
+describe("POST /api/caisse/sessions/:id/confirmer-reglements", () => {
+  it("404 quand la session est introuvable", async () => {
+    mocks.verrouillerSessionOuverteParId.mockRejectedValue(new ErreurAction(404, "Session de caisse introuvable"));
+    const res = await request(app())
+      .post("/api/caisse/sessions/absente/confirmer-reglements")
+      .send({ paiementCommandeIds: ["p-1"], remisParNom: "Jean" });
+    expect(res.status).toBe(404);
+  });
+
+  it("409 quand la session est clôturée", async () => {
+    mocks.verrouillerSessionOuverteParId.mockRejectedValue(new ErreurAction(409, "clôturée"));
+    const res = await request(app())
+      .post("/api/caisse/sessions/s-1/confirmer-reglements")
+      .send({ paiementCommandeIds: ["p-1"], remisParNom: "Jean" });
+    expect(res.status).toBe(409);
+  });
+
+  it("409 REGLEMENT_INVALIDE quand un règlement est absent ou déjà confirmé", async () => {
+    mocks.verrouillerSessionOuverteParId.mockResolvedValue(SESSION_OUVERTE);
+    const { tx } = txConfirmerReglements({
+      paiementCommande: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        findUniqueOrThrow: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn(),
+      },
+    });
+    const { executerEcritureIdempotente } = await import("../lib/idempotence.js");
+    (executerEcritureIdempotente as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async (_req: unknown, _portee: unknown, _donnees: unknown, executer: (tx: unknown) => Promise<unknown>, versReponse: (v: unknown) => unknown) => {
+        const valeur = await executer(tx);
+        const reponse = versReponse(valeur) as { statutHttp: number; corps: unknown };
+        return { ...reponse, valeur, rejoue: false };
+      },
+    );
+    const res = await request(app())
+      .post("/api/caisse/sessions/s-1/confirmer-reglements")
+      .send({ paiementCommandeIds: ["p-absent"], remisParNom: "Jean" });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("REGLEMENT_INVALIDE");
+    expect(tx.remiseCaisse.create).not.toHaveBeenCalled();
+  });
+
+  it("valide TOUT le lot avant la première écriture — un seul règlement invalide dans un lot de deux bloque tout, aucune confirmation partielle", async () => {
+    mocks.verrouillerSessionOuverteParId.mockResolvedValue(SESSION_OUVERTE);
+    const findUnique = vi.fn(async ({ where }: { where: { id: string } }) =>
+      where.id === "p-1" ? { id: "p-1", statut: "DECLARE" } : null,
+    );
+    const { tx } = txConfirmerReglements({ paiementCommande: { findUnique, findUniqueOrThrow: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() } });
+    const { executerEcritureIdempotente } = await import("../lib/idempotence.js");
+    (executerEcritureIdempotente as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async (_req: unknown, _portee: unknown, _donnees: unknown, executer: (tx: unknown) => Promise<unknown>, versReponse: (v: unknown) => unknown) => {
+        const valeur = await executer(tx);
+        const reponse = versReponse(valeur) as { statutHttp: number; corps: unknown };
+        return { ...reponse, valeur, rejoue: false };
+      },
+    );
+    const res = await request(app())
+      .post("/api/caisse/sessions/s-1/confirmer-reglements")
+      .send({ paiementCommandeIds: ["p-1", "p-2-invalide"], remisParNom: "Jean" });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("REGLEMENT_INVALIDE");
+    // Les DEUX id ont été vérifiés avant toute écriture ; aucune remise ni
+    // aucune écriture sur le règlement valide (p-1) n'a été créée malgré sa
+    // validité individuelle — jamais de confirmation partielle.
+    expect(findUnique).toHaveBeenCalledTimes(2);
+    expect(tx.remiseCaisse.create).not.toHaveBeenCalled();
+    expect(tx.paiementCommande.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("201 : rattache le paiement à la RemiseCaisse de la session d'encaissement, écrit CommandeClient/Client/PaiementCommande via updateMany, et audite exactement les trois", async () => {
+    mocks.verrouillerSessionOuverteParId.mockResolvedValue(SESSION_OUVERTE);
+    const { tx } = txConfirmerReglements();
+    const { executerEcritureIdempotente } = await import("../lib/idempotence.js");
+    (executerEcritureIdempotente as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async (_req: unknown, _portee: unknown, _donnees: unknown, executer: (tx: unknown) => Promise<unknown>, versReponse: (v: unknown) => unknown) => {
+        const valeur = await executer(tx);
+        const reponse = versReponse(valeur) as { statutHttp: number; corps: unknown };
+        return { ...reponse, valeur, rejoue: false };
+      },
+    );
+
+    const res = await request(app())
+      .post("/api/caisse/sessions/s-1/confirmer-reglements")
+      .send({ paiementCommandeIds: ["p-1"], remisParNom: "Jean" });
+
+    expect(res.status).toBe(201);
+    expect(tx.paiementCommande.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "p-1" }, data: expect.objectContaining({ statut: "CONFIRME", remiseCaisseId: "r-1" }) }),
+    );
+    expect(tx.commandeClient.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "cmd-1" } }));
+    expect(tx.client.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "c-1" } }));
+    expect(mocks.auditerCaisseTx).toHaveBeenCalledTimes(3);
+    expect(mocks.auditerCaisseTx).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ module: "COMMANDES", typeEntite: "CommandeClient", action: "MODIFICATION" }),
+    );
+    expect(mocks.auditerCaisseTx).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ module: "COMMANDES", typeEntite: "Client", action: "MODIFICATION" }),
+    );
+    expect(mocks.auditerCaisseTx).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ module: "COMMANDES", typeEntite: "PaiementCommande", action: "MODIFICATION" }),
+    );
+  });
+
+  it("rollback complet (jamais un 500 Prisma brut, jamais de confirmation partielle) si l'audit CommandeClient échoue", async () => {
+    mocks.verrouillerSessionOuverteParId.mockResolvedValue(SESSION_OUVERTE);
+    const { tx } = txConfirmerReglements();
+    mocks.auditerCaisseTx.mockRejectedValueOnce(new Error("échec d'audit injecté"));
+    const { executerEcritureIdempotente } = await import("../lib/idempotence.js");
+    (executerEcritureIdempotente as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async (_req: unknown, _portee: unknown, _donnees: unknown, executer: (tx: unknown) => Promise<unknown>, versReponse: (v: unknown) => unknown) => {
+        const valeur = await executer(tx);
+        const reponse = versReponse(valeur) as { statutHttp: number; corps: unknown };
+        return { ...reponse, valeur, rejoue: false };
+      },
+    );
+    const handler = vi.fn();
+    busEvenements.surEvenement(handler);
+    try {
+      const res = await request(app())
+        .post("/api/caisse/sessions/s-1/confirmer-reglements")
+        .send({ paiementCommandeIds: ["p-1"], remisParNom: "Jean" });
+      // Aucun gestionnaire d'erreur JSON monté dans ce harnais de test
+      // minimal (app() ci-dessus) — Express retombe sur son gestionnaire
+      // 500 par défaut. En production (app.ts), le même rejet atteint le
+      // gestionnaire générique qui répond 500 SANS détail Prisma brut
+      // (voir app.ts) — jamais 200/201.
+      expect(res.status).toBe(500);
+      // L'échec de l'audit CommandeClient (1er des 3) empêche les écritures
+      // et audits suivants (Client, PaiementCommande) de s'exécuter.
+      expect(mocks.auditerCaisseTx).toHaveBeenCalledTimes(1);
+      expect(tx.client.updateMany).not.toHaveBeenCalled();
+      expect(tx.paiementCommande.updateMany).not.toHaveBeenCalled();
+      expect(handler).not.toHaveBeenCalled();
+    } finally {
+      busEvenements.removeAllListeners("evenement");
+    }
+  });
+
+  it("503 après épuisement des réessais P2034 — jamais un 500 brut", async () => {
+    const { ErreurEcritureCaisseReessayable, executerAvecReessaiP2034 } = await import("../services/caisseAtomique.js");
+    (executerAvecReessaiP2034 as ReturnType<typeof vi.fn>).mockRejectedValue(new ErreurEcritureCaisseReessayable());
+    const res = await request(app())
+      .post("/api/caisse/sessions/s-1/confirmer-reglements")
+      .send({ paiementCommandeIds: ["p-1"], remisParNom: "Jean" });
+    expect(res.status).toBe(503);
   });
 });
