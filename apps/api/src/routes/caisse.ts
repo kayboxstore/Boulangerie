@@ -1018,7 +1018,7 @@ caisseRouter.post("/sessions/:id/confirmer-reglements", ecriture, async (req, re
             });
             const deltaAvance = calcul.avanceGeneree - commande.avanceGeneree;
 
-            await tx.commandeClient.updateMany({
+            const { count: countCommande } = await tx.commandeClient.updateMany({
               where: { id: commande.id },
               data: {
                 montantRecu: commande.montantRecu + paiementAvant.montant,
@@ -1027,6 +1027,12 @@ caisseRouter.post("/sessions/:id/confirmer-reglements", ecriture, async (req, re
                 nouvelleAvance: commande.nouvelleAvance + deltaAvance,
               },
             });
+            // En pratique inatteignable : verrou de session posé plus haut +
+            // isolation Serializable — conservé par défense en profondeur,
+            // jamais un 500 générique (round correctif Codex, 29/08/2026).
+            if (countCommande !== 1) {
+              throw new ErreurAction(409, "La commande a été modifiée entre-temps — rechargez avant de réessayer.");
+            }
             const commandeApres = await tx.commandeClient.findUniqueOrThrow({ where: { id: commande.id } });
             await auditerCaisseTx(tx, {
               module: "COMMANDES",
@@ -1037,10 +1043,13 @@ caisseRouter.post("/sessions/:id/confirmer-reglements", ecriture, async (req, re
               apres: commandeApres,
             });
 
-            await tx.client.updateMany({
+            const { count: countClient } = await tx.client.updateMany({
               where: { id: commande.clientId },
               data: { avanceDisponible: commande.client.avanceDisponible + deltaAvance },
             });
+            if (countClient !== 1) {
+              throw new ErreurAction(409, "Le client a été modifié entre-temps — rechargez avant de réessayer.");
+            }
             const clientApres = await tx.client.findUniqueOrThrow({ where: { id: commande.clientId } });
             await auditerCaisseTx(tx, {
               module: "COMMANDES",
@@ -1051,7 +1060,7 @@ caisseRouter.post("/sessions/:id/confirmer-reglements", ecriture, async (req, re
               apres: clientApres,
             });
 
-            await tx.paiementCommande.updateMany({
+            const { count: countPaiement } = await tx.paiementCommande.updateMany({
               where: { id },
               data: {
                 statut: "CONFIRME",
@@ -1060,6 +1069,9 @@ caisseRouter.post("/sessions/:id/confirmer-reglements", ecriture, async (req, re
                 remiseCaisseId: remise.id,
               },
             });
+            if (countPaiement !== 1) {
+              throw new ErreurAction(409, "Ce règlement a été modifié entre-temps — rechargez avant de réessayer.");
+            }
             const paiementApres = await tx.paiementCommande.findUniqueOrThrow({ where: { id } });
             await auditerCaisseTx(tx, {
               module: "COMMANDES",
