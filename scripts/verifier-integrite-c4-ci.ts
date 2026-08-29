@@ -45,6 +45,14 @@
  *     formulation corrigée : « aucun mouvement d'espèces et aucun impact sur
  *     le solde du registre de caisse, mais modification possible de
  *     l'avance et de la dette du client ».
+ *  4. Rollback complet d'un échec d'audit injecté APRÈS une écriture de
+ *     `appliquerLignesSimples` (RETENIR_PRODUCTION) — la fonction partagée
+ *     par les cinq transitions autres que CONFIRMER_ACCEPTATION, qui gardait
+ *     le même défaut d'audit non transactionnel sur `CycleLivraisonLigne`
+ *     (deuxième défaut trouvé en Passe B round 2, hors périmètre du round
+ *     précédent) : statut/version du cycle, valeurs de ligne,
+ *     `TransitionCycleLivraison` et `AuditLog` tous strictement inchangés/
+ *     absents après le rollback.
  *
  * SÉCURITÉ : même garde que les scripts d'intégration voisins — hôte local,
  * nom de base EXACT `lomoto_ci`, confirmation explicite. Voir
@@ -143,8 +151,32 @@ async function creerCyclePretPourAcceptation(clientId: string, produitId: string
   return { cycle: schema.cycle! };
 }
 
+/**
+ * Construit un cycle PREVISION prêt pour RETENIR_PRODUCTION (première des
+ * cinq transitions qui partagent `appliquerLignesSimples` — round correctif
+ * Codex, 29/08/2026, deuxième défaut trouvé en Passe B round 2).
+ */
+async function creerCycleEnPrevision(clientId: string, produitId: string, date: string) {
+  const schema = await prisma.schemaCommande.create({
+    data: {
+      date: dateSQLDepuisJourLomoto(date),
+      clientId,
+      lignes: { create: [{ produitId, quantite: 50 }] },
+      cycle: {
+        create: {
+          statut: "PREVISION",
+          version: 1,
+          lignes: { create: [{ produitId }] },
+        },
+      },
+    },
+    include: { cycle: { include: { lignes: true } } },
+  });
+  return { cycle: schema.cycle! };
+}
+
 async function main() {
-  console.log("→ Scénario 1/3 : échec d'audit injecté → rollback COMPLET de la conversion C4…");
+  console.log("→ Scénario 1/4 : échec d'audit injecté → rollback COMPLET de la conversion C4…");
   {
     await reinitialiserBase();
     // Volontairement AUCUN acteur créé/contexte défini : auditerCaisseTx doit
@@ -193,7 +225,7 @@ async function main() {
     console.log("  ✓ échec d'audit injecté : rollback COMPLET confirmé (cycle, ligne, avance client, commande, transition, audit — tous inchangés/absents).");
   }
 
-  console.log("→ Scénario 2/3 : conflit de sérialisation réel entre C4 et une autre écriture sur le MÊME client…");
+  console.log("→ Scénario 2/4 : conflit de sérialisation réel entre C4 et une autre écriture sur le MÊME client…");
   {
     await reinitialiserBase();
     await creerActeur();
@@ -261,7 +293,7 @@ async function main() {
     console.log("  ✓ conflit de sérialisation réel confirmé (P2034, jamais un 500 brut) : B gagne sans écrasement, A échoue proprement sans aucun état partiel.");
   }
 
-  console.log("→ Scénario 3/3 : conversion C4 (montantRecu=0) sur une caisse déjà figée — registre strictement inchangé…");
+  console.log("→ Scénario 3/4 : conversion C4 (montantRecu=0) sur une caisse déjà figée — registre strictement inchangé…");
   {
     await reinitialiserBase();
     await creerActeur();
@@ -355,7 +387,55 @@ async function main() {
     console.log("  ✓ neutralité comptable confirmée : registre et session déjà figés strictement inchangés ; avance/dette du client bien modifiées (jamais « aucun impact comptable »).");
   }
 
-  console.log("\n✅ Vérification d'intégrité CI « C4 » (round correctif Codex) : rollback complet, conflit de sérialisation propre, neutralité de caisse — dans les 3 scénarios.\n");
+  console.log("→ Scénario 4/4 : échec d'audit injecté après une écriture de appliquerLignesSimples (RETENIR_PRODUCTION) → rollback COMPLET…");
+  {
+    await reinitialiserBase();
+    // Deuxième défaut trouvé en Passe B round 2 (hors périmètre du round
+    // précédent) : appliquerLignesSimples, partagée par RETENIR_PRODUCTION,
+    // CONFIRMER_PREPARATION, CONFIRMER_REMISE_MAGASIN, CONFIRMER_CHARGEMENT
+    // et SIGNALER_DEPOT, gardait un update() singulier sur CycleLivraisonLigne
+    // — même défaut que CONFIRMER_ACCEPTATION, corrigé ici en updateMany +
+    // auditerCaisseTx. Même méthodologie que le scénario 1 : acteur absent,
+    // l'audit de la ligne lève ErreurActeurRequisPourAuditCaisse APRÈS que
+    // reclamerVersion (statut/version du cycle) ET l'updateMany de la ligne
+    // ont déjà réussi dans cette même transaction.
+    const client = await creerClient(0);
+    const produit = await creerProduit();
+    const { cycle } = await creerCycleEnPrevision(client.id, produit.id, "2026-08-28");
+
+    let erreur: unknown;
+    try {
+      await transactionSerializable(prisma as unknown as DbApp, (tx) =>
+        appliquerTransition(
+          tx,
+          cycle.id,
+          { action: "RETENIR_PRODUCTION", version: 1, lignes: [{ produitId: produit.id, quantite: 48 }] },
+          ACTEUR.id,
+        ),
+      );
+    } catch (e) {
+      erreur = e;
+    }
+
+    if (!(erreur instanceof ErreurActeurRequisPourAuditCaisse)) {
+      echouer(`scénario 4 : attendu ErreurActeurRequisPourAuditCaisse — reçu ${String(erreur)}`);
+    }
+    const cycleApres = await prisma.cycleLivraison.findUniqueOrThrow({ where: { id: cycle.id } });
+    if (cycleApres.statut !== "PREVISION" || cycleApres.version !== 1) {
+      echouer("scénario 4 : le cycle doit rester strictement inchangé (statut, version) après le rollback — reclamerVersion aussi doit être annulée");
+    }
+    const ligneApres = await prisma.cycleLivraisonLigne.findFirstOrThrow({ where: { cycleId: cycle.id } });
+    if (ligneApres.quantiteRetenueProduction !== null) {
+      echouer("scénario 4 : la ligne du cycle ne doit porter aucune trace de la rétention annulée");
+    }
+    const nbTransitions = await prisma.transitionCycleLivraison.count();
+    if (nbTransitions !== 0) echouer(`scénario 4 : aucune transition ne doit être journalisée après le rollback, trouvé ${nbTransitions}`);
+    const nbAudit = await prisma.auditLog.count();
+    if (nbAudit !== 0) echouer(`scénario 4 : aucune ligne AuditLog ne doit survivre au rollback, trouvé ${nbAudit}`);
+    console.log("  ✓ échec d'audit injecté après appliquerLignesSimples : rollback COMPLET confirmé (statut/version du cycle, valeurs de ligne, transition, audit — tous inchangés/absents).");
+  }
+
+  console.log("\n✅ Vérification d'intégrité CI « C4 » (round correctif Codex) : rollback complet (CONFIRMER_ACCEPTATION et appliquerLignesSimples), conflit de sérialisation propre, neutralité de caisse — dans les 4 scénarios.\n");
 }
 
 main()
