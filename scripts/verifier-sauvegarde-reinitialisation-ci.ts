@@ -10,8 +10,9 @@
  *  1. Sauvegarde réelle d'une base contenant des données STRUCTURELLES
  *     (Role/RolePermission/TypeClient/Produit/MatierePremiere) ET
  *     TRANSACTIONNELLES (Utilisateur/Client/CommandeClient).
- *  2. L'archive produite est lisible et valide (`pg_restore --list` sur la
- *     VRAIE archive, via `validerDump`).
+ *  2. L'archive produite est lisible et valide en deux passes réelles :
+ *     table des matières (`pg_restore --list`) puis parcours intégral de tous
+ *     les blocs (`pg_restore --file=-`, sans connexion à une base).
  *  3+4+5. Réinitialisation réelle : données transactionnelles supprimées,
  *     rôles/permissions/catalogue/référentiels conservés, stock remis à 0.
  *  6. Échec RÉEL de pg_dump (faux binaire, code de sortie non nul) : aucune
@@ -243,7 +244,7 @@ async function main() {
   if (dump1.length === 0) echouer("scénario 1/15 : pg_dump a produit une archive vide");
   await validerDump(dump1); // lève si invalide
   console.log("✅ 1/15 — Sauvegarde réelle produite (structurel + transactionnel), non vide.");
-  console.log("✅ 2/15 — Archive validée par pg_restore --list (table des matières lisible).");
+  console.log("✅ 2/15 — Archive validée par pg_restore réel : table des matières ET parcours intégral des blocs.");
 
   // Un buffer manifestement non-PostgreSQL doit être rejeté par la MÊME
   // fonction de validation que celle utilisée en production — preuve directe
@@ -255,6 +256,53 @@ async function main() {
   } catch (e) {
     if (!(e instanceof ErreurSauvegarde)) throw e;
   }
+
+
+  // Bonus intégrité — fabriquer une archive dont la table des matières reste
+  // lisible par le VRAI pg_restore --list, mais dont un bloc de données final
+  // est tronqué. La première passe seule doit donc réussir, tandis que
+  // validerDump doit rejeter l'archive lors du parcours intégral.
+  let corruptionDonneesProuvee = false;
+  const retraits = [...new Set([
+    1,
+    8,
+    32,
+    128,
+    512,
+    2_048,
+    Math.floor(dump1.length * 0.01),
+    Math.floor(dump1.length * 0.05),
+    Math.floor(dump1.length * 0.1),
+  ])]
+    .filter((n) => n > 0 && n < dump1.length / 2)
+    .sort((a, b) => a - b);
+  for (const retrait of retraits) {
+    const archiveTronquee = dump1.subarray(0, dump1.length - retrait);
+    const cheminTronque = path.join(os.tmpdir(), `lomoto-ci-toc-ok-data-ko-${process.pid}-${retrait}.dump`);
+    await fs.writeFile(cheminTronque, archiveTronquee);
+    try {
+      await execFileAsync(process.env.PG_RESTORE_PATH ?? "pg_restore", ["--list", cheminTronque], {
+        maxBuffer: 1024 * 1024 * 16,
+      });
+      try {
+        await validerDump(archiveTronquee);
+      } catch (e) {
+        if (e instanceof ErreurSauvegarde && e.message.includes("parcours complet du flux a échoué")) {
+          corruptionDonneesProuvee = true;
+          break;
+        }
+      }
+    } catch {
+      // Cette troncature a déjà atteint le TOC : ce n'est pas le cas précis
+      // recherché. On essaie la taille suivante.
+    } finally {
+      await fs.unlink(cheminTronque).catch(() => {});
+    }
+  }
+  if (!corruptionDonneesProuvee) {
+    echouer("aucune troncature n'a permis de prouver TOC lisible + bloc de données corrompu");
+  }
+  console.log("✅ bonus — Archive au TOC réellement lisible mais bloc de données tronqué : rejetée par le parcours intégral réel.");
 
   // ---------------------------------------------------------------------
   // Désactivation en production, puis activation contrôlée explicite
@@ -775,7 +823,7 @@ async function main() {
   }
 
   await reinitialiserBaseDeTest();
-  console.log("\n🎉 15/15 scénarios PostgreSQL réels du Lot P0 (sauvegarde/réinitialisation/restauration) — succès.\n");
+  console.log("\n🎉 15/15 scénarios numérotés + preuves PostgreSQL/OS réelles bonus du Lot P0 — succès.\n");
 }
 
 main()
