@@ -60,6 +60,7 @@ import { PrismaClient } from "@prisma/client";
 import express from "express";
 import request from "supertest";
 import { execFile } from "node:child_process";
+import { createServer } from "node:http";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -141,6 +142,7 @@ interface JeuDeDonnees {
   matierePremiereId: string;
   clientId: string;
   commandeId: string;
+  sessionId: string;
 }
 
 /** Seed structurel ET transactionnel — sert de fixture à la majorité des scénarios. */
@@ -151,6 +153,7 @@ async function semerDonnees(): Promise<JeuDeDonnees> {
       permissions: { create: [{ module: "CAISSE", niveauAcces: "ECRITURE" }] },
     },
   });
+  const sessionId = `session-ci-sauvegarde-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const utilisateur = await prisma.utilisateur.create({
     data: {
       nom: "Admin CI Sauvegarde",
@@ -158,6 +161,7 @@ async function semerDonnees(): Promise<JeuDeDonnees> {
       motDePasseHash: "hash-factice-ci",
       roleId: role.id,
       estAdminPrincipal: true,
+      sessionActuelleId: sessionId,
     },
   });
   const produit = await prisma.produit.create({
@@ -195,6 +199,7 @@ async function semerDonnees(): Promise<JeuDeDonnees> {
     matierePremiereId: matierePremiere.id,
     clientId: client.id,
     commandeId: commande.id,
+    sessionId,
   };
 }
 
@@ -216,6 +221,9 @@ async function main() {
     ErreurReinitialisation,
     VARIABLE_AUTORISATION_PRODUCTION,
   } = await import("../apps/api/src/services/reinitialisation.js");
+  const { createApp } = await import("../apps/api/src/app.js");
+  const { signToken } = await import("../apps/api/src/lib/jwt.js");
+  const { initRealtime } = await import("../apps/api/src/lib/realtime.js");
   const {
     gardeBarriereEcriture,
     executerTacheDeFondSuivie,
@@ -290,6 +298,37 @@ async function main() {
   const apres6 = await prisma.commandeClient.findUnique({ where: { id: jeu.commandeId } });
   if (!apres6) echouer("scénario 6/15 : la commande a disparu malgré l'échec injecté de pg_dump");
   console.log("✅ 6/15 — Échec réel de pg_dump injecté (faux binaire, code≠0) : aucune donnée effacée.");
+
+  // Bonus P0 — le VRAI processus pg_dump factice ignore SIGTERM. Le service
+  // doit forcer SIGKILL après le délai de grâce, libérer la barrière et ne
+  // toucher à aucune donnée. Ce scénario exerce le chemin OS réel, pas un mock.
+  const timeoutOriginal = process.env.PG_DUMP_TIMEOUT_MS;
+  const graceOriginal = process.env.PG_PROCESS_KILL_GRACE_MS;
+  const fauxPgDumpBloque = await creerFauxBinaire("#!/bin/sh\ntrap '' TERM\nwhile :; do :; done\n");
+  process.env.PG_DUMP_PATH = fauxPgDumpBloque;
+  process.env.PG_DUMP_TIMEOUT_MS = "100";
+  process.env.PG_PROCESS_KILL_GRACE_MS = "100";
+  const debutTimeout = Date.now();
+  try {
+    await reinitialiserBase("bonus — pg_dump bloqué qui ignore SIGTERM");
+    echouer("le pg_dump bloqué aurait dû être interrompu puis tué");
+  } catch (e) {
+    if (!(e instanceof ErreurReinitialisation) || e.status !== 503) throw e;
+  } finally {
+    if (pgDumpOriginal === undefined) delete process.env.PG_DUMP_PATH;
+    else process.env.PG_DUMP_PATH = pgDumpOriginal;
+    if (timeoutOriginal === undefined) delete process.env.PG_DUMP_TIMEOUT_MS;
+    else process.env.PG_DUMP_TIMEOUT_MS = timeoutOriginal;
+    if (graceOriginal === undefined) delete process.env.PG_PROCESS_KILL_GRACE_MS;
+    else process.env.PG_PROCESS_KILL_GRACE_MS = graceOriginal;
+    await fs.unlink(fauxPgDumpBloque).catch(() => {});
+  }
+  if (Date.now() - debutTimeout > 5_000) echouer("le pg_dump bloqué n'a pas été arrêté dans une durée bornée");
+  if (barriereReinitialisationActive()) echouer("la barrière est restée active après le SIGKILL de pg_dump");
+  if (!(await prisma.commandeClient.findUnique({ where: { id: jeu.commandeId } }))) {
+    echouer("la commande a disparu malgré le timeout réel de pg_dump");
+  }
+  console.log("✅ bonus — pg_dump RÉELLEMENT bloqué et ignorant SIGTERM : SIGKILL de secours, barrière libérée, aucune donnée effacée.");
 
   // ---------------------------------------------------------------------
   // 8 — pg_dump « réussit » mais produit une archive invalide : rien effacé
@@ -413,13 +452,31 @@ async function main() {
   jeu = await semerDonnees();
 
   // ---------------------------------------------------------------------
-  // 3+4+5 — Réinitialisation réelle et complète, activation contrôlée
+  // 3+4+5 — Réinitialisation complète par la VRAIE route HTTP + PostgreSQL
   // ---------------------------------------------------------------------
+  // createApp() monte le middleware global, l'auth réelle, les permissions et
+  // le routeur réel. Socket.io est initialisé sur un serveur isolé afin que la
+  // route exerce aussi l'invalidation finale des sessions.
   process.env.NODE_ENV = "production";
   process.env[VARIABLE_AUTORISATION_PRODUCTION] = "true"; // activation EXPLICITE, environnement contrôlé (CI)
-  const resultat = await reinitialiserBase("scénario 3+4+5 — reset complet CI");
+  const jetonReset = signToken({ sub: jeu.utilisateurId, roleId: jeu.roleId, sid: jeu.sessionId });
+  const serveurRealtime = createServer();
+  const ioReset = initRealtime(serveurRealtime);
+  const reponseReset = await request(createApp())
+    // Variante casse+slash final : Express l'accepte ; le marqueur de la
+    // requête initiatrice doit suivre exactement le même matcher.
+    .post("/API/ETAT-SYSTEME/REINITIALISER/")
+    .set("Authorization", `Bearer ${jetonReset}`)
+    .send({ motConfirmation: "LOMOTO", raison: "scénario 3+4+5 — reset complet HTTP+PG CI" });
+  await new Promise<void>((resolve) => ioReset.close(() => resolve()));
   process.env.NODE_ENV = nodeEnvOriginal;
   delete process.env[VARIABLE_AUTORISATION_PRODUCTION];
+  if (reponseReset.status !== 200 || reponseReset.body.ok !== true || !reponseReset.body.sauvegardeId) {
+    echouer(
+      `scénario 3+4+5 : la vraie route HTTP aurait dû répondre 200/ok ; reçu ${reponseReset.status} ${JSON.stringify(reponseReset.body)}`,
+    );
+  }
+  const resultat = { sauvegardeId: reponseReset.body.sauvegardeId as string };
 
   if (barriereReinitialisationActive()) echouer("la barrière est restée active après un reset réussi");
   if (ecrituresEnVol() !== 0) echouer(`le compteur d'écritures en vol n'est pas retombé à 0 (${ecrituresEnVol()})`);
@@ -591,47 +648,105 @@ async function main() {
       );
       await supprimerBaseTemporaire(baseSucces);
 
-      // 14 — échec injecté APRÈS le début RÉEL de la restauration : rollback
-      // complet garanti par --single-transaction, cible strictement
-      // inchangée. Entrelacement déterministe : on attend que le VRAI
-      // sous-processus pg_restore apparaisse dans pg_stat_activity (preuve
-      // qu'il exécute réellement des instructions contre la cible), puis on
-      // coupe sa connexion via pg_terminate_backend — jamais un délai qui
-      // « espère » un chevauchement, même idiome que la preuve de verrou
-      // via pg_locks/pg_stat_activity utilisée ailleurs dans ce dépôt
-      // (services/actionsCritiquesMetier.ts).
+      // 14 — rollback destructif sur une cible PRÉREMPLIE. On restaure
+      // d'abord le dump, puis on modifie volontairement la cible pour définir
+      // un état préalable différent. Une transaction séparée garde un verrou
+      // ACCESS SHARE sur Client : le vrai pg_restore --clean atteint alors un
+      // DROP/ALTER destructif et attend un verrou ACCESS EXCLUSIVE. La présence
+      // de notre PID dans pg_blocking_pids prouve que la phase destructive a
+      // réellement commencé. On tue ensuite le backend : --single-transaction
+      // doit rendre exactement l'état préalable (tables ET données).
       const baseEchec = await creerBaseTemporaire("lomoto_ci_restaure_echec_injecte");
       const identifiantEchec = `${urlBase.hostname}:${urlBase.port || "5432"}/${baseEchec}`;
+      const rPreparation = await lancerScript([cheminDumpTemp, `--confirmer=${identifiantEchec}`], urlPour(baseEchec));
+      if (rPreparation.code !== 0) {
+        echouer(`scénario 14/15 : impossible de préremplir la cible du rollback destructif\n${rPreparation.stderr}`);
+      }
+
+      const clientCible = new PrismaClient({ datasources: { db: { url: urlPour(baseEchec) } } });
+      const nomEtatPrealable = "ETAT-CIBLE-AVANT-ROLLBACK-DESTRUCTIF";
+      await clientCible.client.update({ where: { id: jeuRestauration.clientId }, data: { nom: nomEtatPrealable } });
+      await clientCible.matierePremiere.update({
+        where: { id: jeuRestauration.matierePremiereId },
+        data: { quantiteStock: 777 },
+      });
+      const tablesAvantEchec = await compterTablesPubliques(baseEchec);
+      const commandesAvantEchec = await clientCible.commandeClient.count();
+
+      let libererVerrou!: () => void;
+      const porteVerrou = new Promise<void>((resolve) => {
+        libererVerrou = resolve;
+      });
+      let signalerVerrouPris!: (pid: number) => void;
+      const verrouPris = new Promise<number>((resolve) => {
+        signalerVerrouPris = resolve;
+      });
+      const pVerrou = clientCible.$transaction(
+        async (tx) => {
+          const [{ pid }] = await tx.$queryRawUnsafe<{ pid: number }[]>(`SELECT pg_backend_pid() AS pid`);
+          await tx.$executeRawUnsafe(`LOCK TABLE "Client" IN ACCESS SHARE MODE`);
+          signalerVerrouPris(pid);
+          await porteVerrou;
+        },
+        { timeout: 30_000 },
+      );
+      const pidBloqueur = await verrouPris;
+
       const pRestaurationEchec = execFileAsync(
         "npx",
         ["tsx", cheminScriptRestauration, cheminDumpTemp, `--confirmer=${identifiantEchec}`],
         { env: { ...process.env, DATABASE_URL: urlPour(baseEchec) }, maxBuffer: 1024 * 1024 * 64 },
       );
       let pidBackend: number | null = null;
-      const debutAttente = Date.now();
-      while (Date.now() - debutAttente < 10_000 && pidBackend === null) {
-        const lignes = await prisma.$queryRawUnsafe<{ pid: number }[]>(
-          `SELECT pid FROM pg_stat_activity WHERE datname = $1 AND application_name = 'pg_restore'`,
-          baseEchec,
-        );
-        if (lignes.length > 0) pidBackend = lignes[0].pid;
-        else await attendre(5);
+      try {
+        const debutAttente = Date.now();
+        while (Date.now() - debutAttente < 15_000 && pidBackend === null) {
+          const lignes = await prisma.$queryRawUnsafe<{ pid: number; bloqueurs: number[] }[]>(
+            `SELECT pid, pg_blocking_pids(pid) AS bloqueurs
+             FROM pg_stat_activity
+             WHERE datname = $1
+               AND application_name = 'pg_restore'
+               AND wait_event_type = 'Lock'`,
+            baseEchec,
+          );
+          const ligneBloquee = lignes.find((ligne) => ligne.bloqueurs.includes(pidBloqueur));
+          if (ligneBloquee) pidBackend = ligneBloquee.pid;
+          else await attendre(5);
+        }
+        if (pidBackend === null) {
+          echouer(
+            "scénario 14/15 : pg_restore n'a jamais été observé bloqué par le verrou sur Client — la phase destructive --clean n'est pas prouvée",
+          );
+        }
+        await prisma.$queryRawUnsafe(`SELECT pg_terminate_backend($1::int)`, pidBackend);
+      } finally {
+        libererVerrou();
+        await pVerrou;
       }
-      if (pidBackend === null) {
-        echouer("scénario 14/15 : aucun backend pg_restore réel n'a été observé dans pg_stat_activity — impossible d'injecter l'échec");
-      }
-      await prisma.$queryRawUnsafe(`SELECT pg_terminate_backend($1::int)`, pidBackend);
+
       const resultatEchec = await pRestaurationEchec.catch((e) => e as { code?: number; stderr?: string });
       const codeEchec = (resultatEchec as { code?: number }).code ?? 0;
-      if (codeEchec === 0) echouer("scénario 14/15 : la restauration aurait dû échouer après la coupure injectée du backend en cours de route");
-      const tablesApresEchec = await compterTablesPubliques(baseEchec);
-      if (tablesApresEchec !== 0) {
+      if (codeEchec === 0) echouer("scénario 14/15 : la restauration aurait dû échouer après la coupure injectée");
+
+      const [tablesApresEchec, clientApresEchec, matiereApresEchec, commandesApresEchec] = await Promise.all([
+        compterTablesPubliques(baseEchec),
+        clientCible.client.findUnique({ where: { id: jeuRestauration.clientId } }),
+        clientCible.matierePremiere.findUnique({ where: { id: jeuRestauration.matierePremiereId } }),
+        clientCible.commandeClient.count(),
+      ]);
+      if (
+        tablesApresEchec !== tablesAvantEchec ||
+        clientApresEchec?.nom !== nomEtatPrealable ||
+        Number(matiereApresEchec?.quantiteStock) !== 777 ||
+        commandesApresEchec !== commandesAvantEchec
+      ) {
         echouer(
-          `scénario 14/15 : --single-transaction n'a PAS protégé la cible — ${tablesApresEchec} table(s) subsistent après un échec en cours de restauration (rollback incomplet)`,
+          `scénario 14/15 : rollback destructif incomplet — tables ${tablesAvantEchec}→${tablesApresEchec}, client=${clientApresEchec?.nom}, stock=${matiereApresEchec?.quantiteStock}, commandes ${commandesAvantEchec}→${commandesApresEchec}`,
         );
       }
+      await clientCible.$disconnect();
       console.log(
-        "✅ 14/15 — Échec injecté APRÈS le début réel de la restauration (backend pg_restore réellement en cours, coupé via pg_terminate_backend) : --single-transaction a bien tout annulé, cible strictement inchangée (0 table).",
+        "✅ 14/15 — Cible PRÉREMPLIE, phase --clean destructive observée via pg_blocking_pids, backend tué : état préalable exact intégralement restauré par --single-transaction.",
       );
       await supprimerBaseTemporaire(baseEchec);
 
