@@ -1,5 +1,9 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 const execFileAsync = promisify(execFile);
 
@@ -22,8 +26,20 @@ export class ErreurSauvegarde extends Error {
   }
 }
 
-/** Chemin de l'exécutable pg_dump ; surchargeable si l'hôte le range ailleurs. */
-const PG_DUMP = process.env.PG_DUMP_PATH ?? "pg_dump";
+/**
+ * Chemin des exécutables pg_dump/pg_restore ; surchargeables si l'hôte les
+ * range ailleurs. Lus à CHAQUE appel (pas figés dans une constante au
+ * chargement du module) : une variable d'environnement modifiée après coup
+ * (ex. par un script de vérification qui injecte un binaire défaillant pour
+ * prouver un échec) doit être immédiatement prise en compte, sans avoir à
+ * relancer le process.
+ */
+function cheminPgDump(): string {
+  return process.env.PG_DUMP_PATH ?? "pg_dump";
+}
+function cheminPgRestore(): string {
+  return process.env.PG_RESTORE_PATH ?? "pg_restore";
+}
 
 /**
  * Coordonnées de la base SANS aucun secret — c'est ce que l'écran État système
@@ -54,7 +70,7 @@ export function coordonneesBase(): { hote: string | null; port: number | null; b
  */
 export async function outilSauvegardeDisponible(): Promise<{ disponible: boolean; version: string | null }> {
   try {
-    const { stdout } = await execFileAsync(PG_DUMP, ["--version"], { timeout: 10_000 });
+    const { stdout } = await execFileAsync(cheminPgDump(), ["--version"], { timeout: 10_000 });
     return { disponible: true, version: stdout.trim() || null };
   } catch {
     return { disponible: false, version: null };
@@ -103,7 +119,7 @@ export function construireDump(): Promise<Buffer> {
     ];
     if (cible.username) args.push("--username", decodeURIComponent(cible.username));
 
-    const proc = spawn(PG_DUMP, args, {
+    const proc = spawn(cheminPgDump(), args, {
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
@@ -130,7 +146,7 @@ export function construireDump(): Promise<Buffer> {
         new ErreurSauvegarde(
           503,
           absent
-            ? `L'outil pg_dump est introuvable sur ce serveur (${PG_DUMP}). Installe le client PostgreSQL ou renseigne PG_DUMP_PATH.`
+            ? `L'outil pg_dump est introuvable sur ce serveur (${cheminPgDump()}). Installe le client PostgreSQL ou renseigne PG_DUMP_PATH.`
             : `Échec du lancement de pg_dump : ${e.message}`,
         ),
       );
@@ -152,4 +168,50 @@ export function construireDump(): Promise<Buffer> {
       resolve(dump);
     });
   });
+}
+
+/**
+ * Valide RÉELLEMENT une archive (P0, section 3.15) : un dump non vide n'est
+ * pas la même chose qu'un dump restaurable. `pg_dump` peut réussir (code 0)
+ * tout en produisant un fichier tronqué si le process est interrompu APRÈS le
+ * dernier octet écrit sur stdout mais avant la fin propre — ce test lit la
+ * table des matières de l'archive avec `pg_restore --list`, qui échoue sur
+ * une archive corrompue ou incomplète sans jamais se connecter à une base ni
+ * rien restaurer.
+ *
+ * Écrit l'archive dans un fichier temporaire (pg_restore ne peut pas lire le
+ * format personnalisé -Fc de façon fiable depuis un pipe stdin pour un simple
+ * `--list`), le supprime systématiquement ensuite (`finally`).
+ */
+export async function validerDump(dump: Buffer): Promise<void> {
+  if (dump.length === 0) {
+    throw new ErreurSauvegarde(500, "L'archive de sauvegarde est vide.");
+  }
+  const fichierTemporaire = path.join(os.tmpdir(), `lomoto-validation-${randomUUID()}.dump`);
+  await fs.writeFile(fichierTemporaire, dump);
+  try {
+    const { stdout } = await execFileAsync(cheminPgRestore(), ["--list", fichierTemporaire], {
+      timeout: 30_000,
+      maxBuffer: 1024 * 1024 * 16,
+    });
+    const entrees = stdout.split("\n").filter((ligne) => ligne.trim().length > 0);
+    if (entrees.length === 0) {
+      throw new ErreurSauvegarde(500, "L'archive de sauvegarde ne contient aucune entrée exploitable (table des matières vide).");
+    }
+  } catch (e) {
+    if (e instanceof ErreurSauvegarde) throw e;
+    const err = e as NodeJS.ErrnoException & { stderr?: string };
+    if (err.code === "ENOENT") {
+      throw new ErreurSauvegarde(
+        503,
+        `L'outil pg_restore est introuvable sur ce serveur (${cheminPgRestore()}). Installe le client PostgreSQL ou renseigne PG_RESTORE_PATH.`,
+      );
+    }
+    throw new ErreurSauvegarde(
+      500,
+      `L'archive de sauvegarde est invalide ou corrompue (pg_restore --list a échoué) : ${err.stderr?.trim() || err.message}`,
+    );
+  } finally {
+    await fs.unlink(fichierTemporaire).catch(() => {});
+  }
 }
