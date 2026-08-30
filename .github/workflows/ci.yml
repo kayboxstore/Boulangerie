@@ -293,6 +293,40 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-http-confirmer-reglements-ci.ts
 
+      - name: Installer le client PostgreSQL (pg_dump/pg_restore/psql/createdb/dropdb — Lot P0 sauvegarde)
+        # Ubuntu 24.04 (image ubuntu-latest à la date de ce lot) fournit par
+        # défaut la version 16 du paquet postgresql-client, qui correspond
+        # exactement au service postgres:16-alpine ci-dessus — nécessaire à
+        # la vérification qui suit (le dépôt ne parlait jusqu'ici avec
+        # PostgreSQL qu'à travers Prisma, jamais via ces outils en ligne de
+        # commande).
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Vérification PostgreSQL réelle du Lot P0 — sauvegarde, réinitialisation, restauration (30/08/2026, constat conjoint Codex/Claude)
+        # Constat corrigé : les sauvegardes automatiques vivaient sur le
+        # disque éphémère de Render, sans stockage externe durable, avec un
+        # Neon gratuit dont la fenêtre d'historique n'est que de 6 heures ;
+        # reinitialiserBase() produisait son dump AVANT la transaction
+        # d'effacement sans empêcher aucune écriture concurrente entre les
+        # deux (perte silencieuse possible) ; aucune validation réelle de
+        # l'archive ; restaurer-sauvegarde.ts utilisait --clean --if-exists
+        # sans valider le dump ni confirmation liée à la cible ; et aucun
+        # test PostgreSQL réel ne prouvait rien de tout cela. Ce script
+        # prouve, contre une VRAIE base : sauvegarde réelle (structurel +
+        # transactionnel), archive validée par pg_restore --list, échecs
+        # RÉELLEMENT injectés de pg_dump/écriture locale/archive invalide
+        # sans aucun effacement, désactivation par défaut en production et
+        # activation contrôlée explicite, écriture concurrente HTTP rejetée
+        # si nouvelle et drainée sans perte si déjà en vol (entrelacement
+        # déterministe, jamais un délai), réinitialisation réelle complète
+        # (transactionnel effacé, structurel conservé, stock à zéro), et
+        # restauration réelle dans une base temporaire séparée avec relecture
+        # indépendante puis nettoyage garanti. Même garde que les scripts
+        # précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-sauvegarde-reinitialisation-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest
