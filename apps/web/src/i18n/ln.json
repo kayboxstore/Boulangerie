@@ -1247,6 +1247,7 @@
     "resetTitle": "Bobandi lisusu base ya mikanda",
     "resetDesc": "Elongolaka mikanda nyonso mpe ba-kɔnti nyonso mpo na kobanda lisusu na zéro — ekoki kozongisama te. Bobongisi (mikumba/ndingisa, catalogue ya biloko, matières premières, ba-recette, mikakatano ya baklient, ba-paramètre ya magazini) ebombami.",
     "resetButton": "Kobanda lisusu base",
+    "resetUnavailable": "Kobanda lisusu ekangami na environnement oyo — serveur akoboya yango.",
     "resetDialogTitle": "Kobanda lisusu base ?",
     "resetDialogDesc": "Bobateli ya libateli esalemaka na yango moko liboso na kolongolama nyonso. Ekoki kozongisama te.",
     "resetWarning": "Mikanda nyonso ya mosala mpe ba-kɔnti nyonso (ata oyo na yo) ekolongolama. Application ekobanda lisusu na lisungi ya ebandeli ya liboso.",

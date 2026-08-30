@@ -1246,6 +1246,7 @@
     "resetTitle": "Database reset",
     "resetDesc": "Erases all data and all accounts to start fresh — irreversible. Configuration (roles/permissions, product catalog, raw materials, recipes, client types, shop settings) is kept.",
     "resetButton": "Reset the database",
+    "resetUnavailable": "Reset is disabled on this environment — the server would refuse it.",
     "resetDialogTitle": "Reset the database?",
     "resetDialogDesc": "A safety backup is created automatically before anything is erased. This action is irreversible.",
     "resetWarning": "All business data and all accounts (including yours) will be erased. The app will restart on the first-launch assistant.",

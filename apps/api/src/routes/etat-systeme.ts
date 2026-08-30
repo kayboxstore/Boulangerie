@@ -27,7 +27,12 @@ import {
   prochaineSauvegarde,
   TAILLE_HISTORIQUE,
 } from "../services/planificateurSauvegarde.js";
-import { ErreurReinitialisation, reinitialiserBase } from "../services/reinitialisation.js";
+import {
+  ErreurReinitialisation,
+  MESSAGE_REINITIALISATION_DESACTIVEE_PRODUCTION,
+  reinitialiserBase,
+  reinitialisationAutoriseeIci,
+} from "../services/reinitialisation.js";
 import { getIo } from "../lib/realtime.js";
 
 export const etatSystemeRouter = Router();
@@ -113,6 +118,15 @@ etatSystemeRouter.get("/", async (_req, res, next) => {
       },
       // Section 3.19 : reflète simplement ASSISTANT_IA_ACTIF, sans appeler Gemini.
       assistantIaActif: process.env.ASSISTANT_IA_ACTIF === "true",
+      // P0 (30/08/2026) : reflète honnêtement l'état RÉEL côté serveur — la
+      // route POST /reinitialiser applique exactement la même condition
+      // (reinitialisationAutoriseeIci) et refuserait de toute façon avec un
+      // 403 explicite. L'écran ne doit jamais laisser croire que le bouton
+      // marche quand il ne le peut pas, ni l'inverse.
+      reinitialisation: {
+        autorisee: reinitialisationAutoriseeIci(),
+        motifIndisponibilite: reinitialisationAutoriseeIci() ? null : MESSAGE_REINITIALISATION_DESACTIVEE_PRODUCTION,
+      },
       horodatage: new Date().toISOString(),
     };
     res.json({ etat });
@@ -234,6 +248,16 @@ etatSystemeRouter.post("/reinitialiser", async (req, res, next) => {
   if (!req.utilisateur!.estAdminPrincipal) {
     return res.status(403).json({ erreur: "Seul l'Administrateur principal peut réinitialiser la base" });
   }
+  // Désactivation sûre en production (P0, section 3.15) : revérifiée ici,
+  // AVANT même de parser le corps de la requête, pour un refus rapide et
+  // explicite — la garde qui compte reste celle, identique, dans
+  // reinitialiserBase() elle-même (jamais seulement côté route).
+  if (!reinitialisationAutoriseeIci()) {
+    return res.status(403).json({
+      erreur: MESSAGE_REINITIALISATION_DESACTIVEE_PRODUCTION,
+      code: "REINITIALISATION_DESACTIVEE_PRODUCTION",
+    });
+  }
   try {
     const parsed = reinitialisationSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -248,7 +272,7 @@ etatSystemeRouter.post("/reinitialiser", async (req, res, next) => {
 
     res.json({ ok: true, sauvegardeId: resultat.sauvegardeId });
   } catch (e) {
-    if (e instanceof ErreurReinitialisation) return res.status(e.status).json({ erreur: e.message });
+    if (e instanceof ErreurReinitialisation) return res.status(e.status).json({ erreur: e.message, code: e.code });
     next(e);
   }
 });

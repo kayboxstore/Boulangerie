@@ -2069,6 +2069,17 @@ export interface EtatSystemeDTO {
    * la variable d'environnement ASSISTANT_IA_ACTIF.
    */
   assistantIaActif: boolean;
+  /**
+   * Réinitialisation de la base (P0, section 3.15) : reflète honnêtement si
+   * l'action est réellement autorisée côté serveur — jamais une simple
+   * désactivation visuelle d'un bouton. Désactivée par défaut en production,
+   * sauf variable d'environnement REINITIALISATION_PRODUCTION_AUTORISEE=true
+   * explicite.
+   */
+  reinitialisation: {
+    autorisee: boolean;
+    motifIndisponibilite: string | null;
+  };
   horodatage: string;
 }
 
