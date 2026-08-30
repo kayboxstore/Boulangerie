@@ -85,6 +85,28 @@ Dans les deux cas, le fichier obtenu est à copier sur une clé USB ou un disque
 externe. L'écran affiche aussi le statut de chaque tentative automatique
 (succès/échec) dans son historique.
 
+### Décision d'infrastructure restante — stockage durable externe
+
+**Non traité par ce lot** (hors périmètre : aucun stockage externe, aucun
+service Neon/Render/Cloudflare n'a été configuré ou modifié) — à trancher par
+Augustin avant le pilote réel si le risque est jugé insuffisamment couvert :
+
+- Le projet Neon réel utilisé en production est actuellement sur l'offre
+  **gratuite**, dont la fenêtre d'historique (point-in-time recovery) n'est
+  que de **21 600 secondes (6 heures)**. Au-delà, seule la dernière
+  sauvegarde locale (disque éphémère Render) ou téléchargée à la main fait
+  foi.
+- Le disque local du service Render n'est **pas garanti persistant** (voir
+  ci-dessus) : sans téléchargement régulier vers un support externe, une
+  sauvegarde peut disparaître à un redéploiement avant d'avoir jamais quitté
+  le serveur.
+- Options à évaluer (coût et mise en place à décider, non engagées ici) :
+  passer le projet Neon sur une offre payante avec une fenêtre de PITR plus
+  longue ; ajouter un envoi automatique des sauvegardes locales vers un
+  stockage objet externe (ex. Cloudflare R2, déjà utilisé pour l'email pro) ;
+  ou formaliser une routine humaine de téléchargement régulier via le bouton
+  déjà existant.
+
 ### Variables facultatives
 
 | Variable | Rôle | Défaut |
@@ -107,12 +129,58 @@ PostgreSQL n'est pas installé sur l'hôte (variable `PG_DUMP_PATH` si l'outil e
 installé ailleurs que dans le `PATH`). Dans ce cas, s'appuyer en attendant sur les
 sauvegardes de la base managée fournies par l'hébergeur.
 
+### Intégrité et cohérence garanties (Lot P0, 30/08/2026)
+
+Avant d'être considérée réussie, toute sauvegarde (automatique, manuelle ou de
+sûreté avant réinitialisation) est **validée réellement** — `pg_dump` doit
+réussir, l'archive ne doit pas être vide, et sa table des matières doit être
+lisible par `pg_restore --list` — et écrite sur disque de façon **atomique**
+(fichier temporaire puis renommage) : aucune archive tronquée ou partielle
+n'est jamais annoncée comme une sauvegarde réussie.
+
+La **réinitialisation de la base** (irréversible) active en outre une
+**barrière d'écriture** avant de produire son dump : plus aucune écriture
+(HTTP ou tâche de fond) ne peut commencer, et celles déjà engagées sont
+laissées se terminer avant que le dump ne démarre — le dump et l'état effacé
+juste après représentent ainsi strictement la même frontière logique, sans
+risque qu'une écriture arrivée entre les deux soit perdue. Cette barrière est
+un mécanisme **en mémoire du process**, valable pour la configuration Render
+actuelle à **une seule instance** ; un passage futur à plusieurs instances
+exigerait de la remplacer par une coordination distribuée réelle (verrou
+consultatif PostgreSQL `pg_advisory_lock`) — voir le commentaire de tête de
+`apps/api/src/lib/barriereEcriture.ts`.
+
+**Réinitialisation désactivée par défaut en production** : si `NODE_ENV=production`,
+la route `POST /api/etat-systeme/reinitialiser` (et le service sous-jacent)
+refusent systématiquement avec un `403` explicite, sauf si la variable
+d'environnement `REINITIALISATION_PRODUCTION_AUTORISEE` vaut **exactement**
+`true` — jamais activée via `render.yaml` ni aucun script npm, à définir
+uniquement à la main, temporairement, pour l'opération elle-même. L'écran
+*État système* reflète cet état honnêtement (bouton désactivé avec le motif
+exact renvoyé par le serveur), mais la garde qui compte est côté serveur.
+
+Toutes ces garanties (validation d'archive, écriture atomique, barrière,
+désactivation en production, écriture concurrente jamais perdue,
+réinitialisation réelle avec conservation du référentiel/mise à zéro du
+stock, restauration dans une base temporaire séparée) sont prouvées contre
+une **vraie base PostgreSQL** par `scripts/verifier-sauvegarde-reinitialisation-ci.ts`,
+exécuté à chaque CI.
+
 ### Restaurer une sauvegarde
 
 Une sauvegarde ne sert à rien si elle n'a jamais été restaurée avec succès —
-la procédure ci-dessous a été **testée réellement** (dump produit avec les
-mêmes options que l'application, restauré sur une base PostgreSQL vide,
-comptages et contenu vérifiés identiques à la source).
+la procédure ci-dessous est **prouvée automatiquement à chaque CI** contre une
+vraie base PostgreSQL (dump produit avec les mêmes options que l'application,
+restauré dans une base temporaire séparée, comptages et contenu relus de
+façon indépendante et vérifiés identiques à la source, base temporaire
+nettoyée même en cas d'échec) — voir
+`scripts/verifier-sauvegarde-reinitialisation-ci.ts`.
+
+**Obligatoire avant toute restauration en production** : répéter d'abord
+cette même procédure avec succès contre une base ou branche **isolée** (une
+base Neon de développement/staging distincte, ou une instance PostgreSQL
+locale jetable) — jamais la toute première exécution d'une restauration
+directement sur les données réelles de l'entreprise.
 
 Volontairement **un script à lancer à la main, jamais un bouton dans
 l'application** : une restauration remplace le contenu de la base cible, un
@@ -120,20 +188,28 @@ clic malheureux sur une page web serait bien trop facile sur les données
 réelles de l'entreprise. Nécessite un accès à l'environnement où tourne
 l'API (mêmes prérequis que `npx prisma migrate deploy`).
 
+Durci le 30/08/2026 (Lot P0) : la confirmation n'est plus un simple
+`--confirmer` — elle exige désormais de **répéter le nom exact** de la base
+cible (affiché par le script), pour empêcher de confirmer par réflexe une
+commande recopiée d'un terminal à l'autre sans relire la cible. L'archive est
+en outre validée (`pg_restore --list`) **avant** tout appel à `--clean`.
+
 ```bash
 # 1. Récupérer un fichier .dump (bouton "Télécharger..." de l'écran État
 #    système, ou un fichier déjà copié sur un support externe)
 
 # 2. Se placer à la racine du dépôt, avec DATABASE_URL pointant vers la base
-#    À RESTAURER (jamais la production, sauf sinistre confirmé) :
+#    À RESTAURER (une base ISOLÉE d'abord — jamais la production directement) :
 export DATABASE_URL="postgresql://utilisateur:motdepasse@hote:5432/base"
 
-# 3. Vérification à blanc — affiche la base ciblée sans toucher à rien :
+# 3. Vérification à blanc — valide l'archive et affiche la base ciblée SANS
+#    toucher à rien (ne restaure jamais sans --confirmer=<nomBase>) :
 npm run restore:backup -- chemin/vers/fichier.dump
 
-# 4. Restauration réelle (ATTENTION : --clean --if-exists supprime les
-#    tables existantes de la base ciblée avant d'y recharger le dump) :
-npm run restore:backup -- chemin/vers/fichier.dump --confirmer
+# 4. Restauration réelle — <nomBase> DOIT être exactement le nom affiché à
+#    l'étape 3 (ATTENTION : --clean --if-exists supprime les tables
+#    existantes de la base ciblée avant d'y recharger le dump) :
+npm run restore:backup -- chemin/vers/fichier.dump --confirmer=<nomBase>
 
 # 5. Vérifier après coup (obligatoire) : se connecter à l'application ou
 #    interroger la base pour confirmer que les données attendues sont bien

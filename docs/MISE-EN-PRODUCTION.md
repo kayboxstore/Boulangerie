@@ -8,6 +8,14 @@
 >
 > **Ce document n'est pas réécrit rétroactivement** : ses observations restent la trace fidèle de ce qui a été constaté en direct à cette date. Elles ne doivent plus être lues comme décrivant l'état actuel du déploiement. Si ce déploiement particulier (`boulangerie-lomoto.com`) n'a pas été assaini depuis, les comptes génériques constatés ici peuvent encore exister réellement — voir la procédure manuelle d'assainissement post-incident (document séparé, jamais automatisée) pour les traiter en toute sécurité.
 
+> ## ⚠️ Erratum daté — architecture de base de données (Lot P0, 30/08/2026)
+>
+> **Le § « Obligatoire — expiration de la base PostgreSQL gratuite » ci-dessous décrit une architecture ABANDONNÉE depuis.** À la date de ce document (2026-08-06), `render.yaml` déclarait effectivement un service PostgreSQL géré par Render nommé `lomoto-db`. Ce n'est plus le cas : `render.yaml` ne déclare aujourd'hui plus qu'un seul service (`web`) ; `DATABASE_URL` pointe vers un projet **Neon** externe, fourni à Render comme secret manuel (`sync: false`), hors du Blueprint Render — voir `DEPLOIEMENT.md` § Sauvegarde quotidienne et le commentaire en tête de `render.yaml`.
+>
+> **Le risque réel actuel n'est donc plus une expiration Render à 30 jours, mais la fenêtre de rétention de l'offre gratuite Neon** : à la rédaction de ce correctif, le projet Neon réel n'a qu'**21 600 secondes (6 heures)** d'historique point-in-time. Au-delà, seule une sauvegarde locale téléchargée à la main fait foi. Ce point (décision d'infrastructure à trancher — passer sur une offre Neon payante, ou formaliser un envoi vers un stockage externe) reste documenté comme condition restante dans `DEPLOIEMENT.md` § « Décision d'infrastructure restante ».
+>
+> Le reste de ce § (disque du service web éphémère sur l'offre gratuite, absence de sauvegarde gérée automatiquement par la base elle-même) reste globalement exact et pertinent, à ceci près qu'il s'applique à Neon plutôt qu'à un Postgres géré par Render.
+
 Légende : 🔴 Obligatoire · 🟡 Recommandé · ⚪ Optionnel
 
 ---
