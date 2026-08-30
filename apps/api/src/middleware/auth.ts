@@ -8,6 +8,7 @@ import { dateSQLDepuisJourLomoto, jourLomoto } from "../lib/temps.js";
 import { contexteRequete } from "../lib/contexteRequete.js";
 import { logger } from "../lib/logger.js";
 import { estHorsPerimetreAdmin, notifierInterventionAdmin } from "../services/interventionsAdmin.js";
+import { executerTacheDeFondSuivie } from "../lib/barriereEcriture.js";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -149,6 +150,17 @@ export function requirePermission(module: Module, niveau: Exclude<NiveauAcces, "
     // périmètre d'origine → le rôle propriétaire du module et le DG sont
     // notifiés. On attend la fin de la réponse pour n'alerter que sur une
     // action RÉELLEMENT aboutie (une validation refusée ne notifie personne).
+    //
+    // P0 (correctif Codex round 2, 30/08/2026) : cette écriture démarre APRÈS
+    // `finish` — donc APRÈS que la requête d'origine ait déjà été décomptée
+    // par la barrière (`gardeBarriereEcriture`, montée plus en amont, dont le
+    // propre listener `finish` s'exécute avant celui-ci). Sans
+    // `executerTacheDeFondSuivie` ICI, à l'appel, il existe une fenêtre entre
+    // ce décompte et la ré-incrémentation (bien plus tardive, après les deux
+    // lectures Prisma internes à `notifierInterventionAdmin`) où le compteur
+    // pourrait lire zéro et laisser un drainage se résoudre trop tôt.
+    // Envelopper ICI, à l'appel, ferme cette fenêtre : l'incrémentation
+    // devient synchrone dès le déclenchement de `finish`.
     const auteur = req.utilisateur;
     if (
       auteur?.estAdminPrincipal &&
@@ -158,13 +170,15 @@ export function requirePermission(module: Module, niveau: Exclude<NiveauAcces, "
     ) {
       res.once("finish", () => {
         if (res.statusCode >= 400) return;
-        notifierInterventionAdmin({
-          module,
-          auteurId: auteur.id,
-          auteurNom: auteur.nom,
-          methode: req.method,
-          chemin: req.originalUrl,
-        }).catch((e) => logger.error("Échec de notification d'intervention Admin", { erreur: e }));
+        executerTacheDeFondSuivie(() =>
+          notifierInterventionAdmin({
+            module,
+            auteurId: auteur.id,
+            auteurNom: auteur.nom,
+            methode: req.method,
+            chemin: req.originalUrl,
+          }),
+        ).catch((e) => logger.error("Échec de notification d'intervention Admin", { erreur: e }));
       });
     }
 

@@ -1247,6 +1247,7 @@
     "resetTitle": "Kuweka upya hifadhidata",
     "resetDesc": "Inafuta data zote na akaunti zote ili kuanza upya — haiwezi kutenduliwa. Mipangilio (majukumu/ruhusa, orodha ya bidhaa, malighafi, mapishi, aina za wateja, mipangilio ya duka) inahifadhiwa.",
     "resetButton": "Weka upya hifadhidata",
+    "resetUnavailable": "Kuweka upya kumezimwa kwenye mazingira haya — seva ingekataa ombi hili.",
     "resetDialogTitle": "Weka upya hifadhidata ?",
     "resetDialogDesc": "Nakala ya usalama inatengenezwa kiotomatiki kabla ya kufuta chochote. Kitendo hiki hakiwezi kutenduliwa.",
     "resetWarning": "Data zote za biashara na akaunti zote (ikiwemo yako) zitafutwa. Programu itaanza upya kwenye msaidizi wa uzinduzi wa kwanza.",

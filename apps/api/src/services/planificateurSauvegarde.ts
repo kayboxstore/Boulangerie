@@ -1,8 +1,9 @@
 import cron from "node-cron";
 import { prisma } from "../lib/prisma.js";
 import { logger } from "../lib/logger.js";
-import { construireDump, nomFichierSauvegarde } from "./sauvegarde.js";
+import { construireDump, nomFichierSauvegarde, validerDump } from "./sauvegarde.js";
 import { ecrireSauvegardeLocale } from "./sauvegardeLocale.js";
+import { executerTacheDeFondSuivie } from "../lib/barriereEcriture.js";
 
 /**
  * Sauvegarde quotidienne automatique (section 3.15). Portée par node-cron dans
@@ -38,6 +39,10 @@ export async function executerSauvegardeAutomatique(): Promise<void> {
   let dump: Buffer;
   try {
     dump = await construireDump();
+    // Intégrité (P0, section 3.15) : un dump non vide n'est pas la même
+    // chose qu'un dump VALIDE — voir sauvegarde.ts. Une archive corrompue ou
+    // partielle ne doit jamais être annoncée comme une sauvegarde réussie.
+    await validerDump(dump);
   } catch (e) {
     await journaliserEchec(nomFichier, e, Date.now() - t0, null);
     return;
@@ -98,7 +103,10 @@ export function initPlanificateurSauvegarde(): void {
   }
   // noOverlap : si un dump prend anormalement longtemps, la planification du
   // lendemain ne lance pas une seconde sauvegarde par-dessus.
-  tache = cron.schedule(EXPRESSION, () => executerSauvegardeAutomatique(), {
+  // Suivi par la barrière d'écriture (P0, lib/barriereEcriture.ts) : ne
+  // démarre pas si une réinitialisation est en cours de préparation, et
+  // compte cette sauvegarde comme « en vol » jusqu'à sa fin.
+  tache = cron.schedule(EXPRESSION, () => executerTacheDeFondSuivie(() => executerSauvegardeAutomatique()), {
     timezone: FUSEAU,
     noOverlap: true,
     name: "sauvegarde-quotidienne",

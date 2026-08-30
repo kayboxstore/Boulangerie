@@ -488,10 +488,24 @@ export function EtatSystemePage() {
             </CardTitle>
             <CardDescription>{t("etatSysteme.resetDesc")}</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            {/* P0 (30/08/2026) : état RÉEL renvoyé par le serveur, jamais une
+                supposition côté écran — une simple désactivation visuelle du
+                bouton ne remplacerait pas la garde serveur, mais elle ne doit
+                pas non plus la CONTREDIRE en laissant croire que l'action est
+                possible alors qu'elle serait refusée. */}
+            {etat && !etat.reinitialisation.autorisee && (
+              <p
+                role="status"
+                className="rounded-md border border-terracotta/40 bg-terracotta/10 px-3 py-2 text-sm text-terracotta"
+              >
+                {etat.reinitialisation.motifIndisponibilite ?? t("etatSysteme.resetUnavailable")}
+              </p>
+            )}
             <Button
               variant="outline"
               className="border-terracotta text-terracotta hover:bg-terracotta/10 hover:text-terracotta"
+              disabled={!etat || !etat.reinitialisation.autorisee}
               onClick={() => {
                 setMotReinit("");
                 setRaisonReinit("");

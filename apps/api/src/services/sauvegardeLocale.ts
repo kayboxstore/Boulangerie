@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 
 /**
  * Stockage LOCAL des sauvegardes automatiques (section 3.15).
@@ -52,11 +53,29 @@ async function assurerRepertoire(): Promise<string> {
   return dossier;
 }
 
-/** Écrit le dump sur disque et purge les sauvegardes au-delà de la rétention. */
+/**
+ * Écrit le dump sur disque de façon ATOMIQUE (P0, section 3.15) et purge les
+ * sauvegardes au-delà de la rétention. Écrire directement sur le chemin final
+ * laisserait, en cas de panne/redémarrage EN COURS d'écriture (disque plein,
+ * process tué), un fichier tronqué portant déjà le nom attendu — indissociable
+ * d'une sauvegarde réussie pour qui la lirait ensuite. On écrit d'abord dans
+ * un fichier temporaire du MÊME répertoire (obligatoire pour que le
+ * renommage soit atomique — `fs.rename` n'est atomique que sur un même
+ * système de fichiers), puis on le renomme vers le nom final : `rename()` est
+ * une opération atomique du système de fichiers, il n'existe aucun état
+ * intermédiaire où le fichier final existerait à moitié écrit.
+ */
 export async function ecrireSauvegardeLocale(nomFichier: string, contenu: Buffer): Promise<string> {
   const dossier = await assurerRepertoire();
   const chemin = path.join(dossier, nomFichier);
-  await fs.writeFile(chemin, contenu);
+  const cheminTemporaire = path.join(dossier, `.tmp-${randomUUID()}-${nomFichier}`);
+  try {
+    await fs.writeFile(cheminTemporaire, contenu);
+    await fs.rename(cheminTemporaire, chemin);
+  } catch (e) {
+    await fs.unlink(cheminTemporaire).catch(() => {});
+    throw e;
+  }
   await purgerAnciennes();
   return chemin;
 }
@@ -67,9 +86,15 @@ export async function ecrireSauvegardeLocale(nomFichier: string, contenu: Buffer
  */
 async function purgerAnciennes(): Promise<void> {
   const dossier = repertoire();
-  const fichiers = (await fs.readdir(dossier))
-    .filter((f) => f.startsWith(PREFIXE) && f.endsWith(SUFFIXE))
-    .sort();
+  const tousLesFichiers = await fs.readdir(dossier);
+
+  // Reliquat éventuel d'une écriture atomique interrompue (process tué entre
+  // le writeFile et le rename) : jamais un fichier final valide, toujours
+  // sans risque à supprimer.
+  const tmpOrphelins = tousLesFichiers.filter((f) => f.startsWith(".tmp-"));
+  await Promise.all(tmpOrphelins.map((f) => fs.unlink(path.join(dossier, f)).catch(() => {})));
+
+  const fichiers = tousLesFichiers.filter((f) => f.startsWith(PREFIXE) && f.endsWith(SUFFIXE)).sort();
   const excedent = fichiers.slice(0, Math.max(0, fichiers.length - RETENTION));
   await Promise.all(excedent.map((f) => fs.unlink(path.join(dossier, f)).catch(() => {})));
 }

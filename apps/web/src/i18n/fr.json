@@ -1246,6 +1246,7 @@
     "resetTitle": "Réinitialisation de la base",
     "resetDesc": "Efface toutes les données et tous les comptes pour repartir de zéro — irréversible. La configuration (rôles/permissions, catalogue produits, matières premières, recettes, types de clients, paramètres boutique) est conservée.",
     "resetButton": "Réinitialiser la base",
+    "resetUnavailable": "La réinitialisation est désactivée sur cet environnement — le serveur la refuserait.",
     "resetDialogTitle": "Réinitialiser la base ?",
     "resetDialogDesc": "Une sauvegarde de sûreté est créée automatiquement avant tout effacement. Cette action est irréversible.",
     "resetWarning": "Toutes les données métier et tous les comptes (y compris le vôtre) seront effacés. L'application redémarrera sur l'assistant de premier lancement.",

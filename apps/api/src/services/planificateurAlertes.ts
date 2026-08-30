@@ -3,6 +3,7 @@ import { logger } from "../lib/logger.js";
 import { verifierAlertesDette } from "../routes/commandes.js";
 import { verifierAlertesAbsenceEnAttente } from "../routes/travailleurs.js";
 import { verifierAlertesSeuilStock } from "./stocks.js";
+import { executerTacheDeFondSuivie } from "../lib/barriereEcriture.js";
 
 /**
  * Balayage périodique des alertes paresseuses (section 3.2/3.4/3.18, Lot 7
@@ -52,7 +53,11 @@ export function initPlanificateurAlertes(): void {
     });
     return;
   }
-  tache = cron.schedule(EXPRESSION, () => executerBalayageAlertes(), {
+  // Suivi par la barrière d'écriture (P0, lib/barriereEcriture.ts) : si une
+  // réinitialisation de base est en cours de préparation, ce balayage ne
+  // démarre simplement pas (il sera rejoué à son prochain déclenchement) ;
+  // sinon il est compté « en vol » jusqu'à sa fin, comme une requête HTTP.
+  tache = cron.schedule(EXPRESSION, () => executerTacheDeFondSuivie(() => executerBalayageAlertes()), {
     timezone: FUSEAU,
     noOverlap: true,
     name: "balayage-alertes",
