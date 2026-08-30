@@ -841,16 +841,6 @@ productionRouter.put("/productions/:id/pertes", ecriture, async (req, res, next)
     const complete = await prisma.$transaction(
       async (tx) => {
         const production = await verrouillerProductionOuverte(tx, req.params.id);
-        for (const ancienne of production.pertes) {
-          await auditerCaisseTx(tx, {
-            module: "PRODUCTION",
-            typeEntite: "ProductionPerte",
-            entiteId: ancienne.id,
-            action: "SUPPRESSION",
-            avant: { ...ancienne },
-            apres: null,
-          });
-        }
         await tx.productionPerte.deleteMany({ where: { productionId: production.id } });
         if (pertes.length > 0) {
           await tx.productionPerte.createMany({
@@ -859,6 +849,18 @@ productionRouter.put("/productions/:id/pertes", ecriture, async (req, res, next)
               motifPerteId: l.motifPerteId,
               nombreBacs: l.nombreBacs,
             })),
+          });
+        }
+        // L'audit vient volontairement après les écritures : son échec doit
+        // exercer (et prouver en PostgreSQL réel) le rollback du remplacement.
+        for (const ancienne of production.pertes) {
+          await auditerCaisseTx(tx, {
+            module: "PRODUCTION",
+            typeEntite: "ProductionPerte",
+            entiteId: ancienne.id,
+            action: "SUPPRESSION",
+            avant: { ...ancienne },
+            apres: null,
           });
         }
         return tx.production.findUniqueOrThrow({ where: { id: production.id }, include: INCLUDE_PRODUCTION });
