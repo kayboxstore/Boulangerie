@@ -7,6 +7,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { DOMAINE_A_REDIRIGER, DOMAINE_CANONIQUE, verifierOrigine } from "./lib/origines.js";
+import { gardeBarriereEcriture } from "./lib/barriereEcriture.js";
 import { logger } from "./lib/logger.js";
 import { authRouter } from "./routes/auth.js";
 import { produitsRouter } from "./routes/produits.js";
@@ -76,6 +77,14 @@ export function createApp() {
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", app: "Boulangerie Lomoto API" });
   });
+
+  // Barrière d'écriture (P0, section 3.15) : bloque toute requête (sauf le
+  // health check ci-dessus) pendant la fenêtre dump→effacement d'une
+  // réinitialisation de base, pour que la sauvegarde de sûreté et l'état
+  // effacé juste après représentent la même frontière logique. Voir
+  // lib/barriereEcriture.ts pour le détail du mécanisme et sa limite
+  // mono-instance.
+  app.use(gardeBarriereEcriture);
 
   const reponseLimitee = (_req: express.Request, res: express.Response) =>
     res.status(429).json({
