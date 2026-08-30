@@ -25,10 +25,24 @@
  *     l'activation est laissée se terminer et son résultat est bien présent
  *     en base — jamais perdue. Entrelacement déterministe via une porte
  *     manuelle (jamais un délai qui « espère » un chevauchement).
- *  10+11+12. Restauration réelle dans une base PostgreSQL temporaire
- *     séparée, relecture indépendante confirmant l'exactitude des données
- *     restaurées, puis nettoyage complet de la base temporaire — y compris
- *     si une étape précédente a échoué.
+ *  10-15. Restauration atomique RÉELLE via le VRAI `scripts/restaurer-sauvegarde.ts`
+ *     (correctif Codex round 2, 30/08/2026 — jamais une réimplémentation
+ *     ad hoc de l'appel pg_restore, mais le binaire exact qu'un opérateur
+ *     lancerait en production, exécuté en sous-processus contre PostgreSQL
+ *     réel) : (10) sans confirmation, mode non destructif, zéro
+ *     modification ; (11) confirmation fausse, refusée, zéro modification ;
+ *     (12) même nom de base mais hôte différent (texte), refusé, zéro
+ *     modification — protection directe contre plusieurs environnements
+ *     Neon partageant le nom par défaut « neondb » ; (13) confirmation
+ *     exacte hôte+port+base, restauration réelle réussie, données relues
+ *     indépendamment ; (14) échec injecté APRÈS le début réel de la
+ *     restauration (le vrai backend pg_restore est observé en train de
+ *     travailler via `pg_stat_activity`, puis coupé via
+ *     `pg_terminate_backend` — entrelacement déterministe, jamais un délai
+ *     qui espère) : `--single-transaction` annule tout, cible strictement
+ *     inchangée ; (15) nettoyage systématique de toutes les bases
+ *     temporaires créées par ces scénarios, y compris en cas d'échec d'une
+ *     étape précédente (`finally`).
  *
  * Couvre aussi, en bonus, la désactivation par défaut en production
  * (NODE_ENV=production) et l'activation explicite contrôlée
@@ -218,10 +232,10 @@ async function main() {
   // ---------------------------------------------------------------------
   let jeu = await semerDonnees();
   const dump1 = await construireDump();
-  if (dump1.length === 0) echouer("scénario 1/12 : pg_dump a produit une archive vide");
+  if (dump1.length === 0) echouer("scénario 1/15 : pg_dump a produit une archive vide");
   await validerDump(dump1); // lève si invalide
-  console.log("✅ 1/12 — Sauvegarde réelle produite (structurel + transactionnel), non vide.");
-  console.log("✅ 2/12 — Archive validée par pg_restore --list (table des matières lisible).");
+  console.log("✅ 1/15 — Sauvegarde réelle produite (structurel + transactionnel), non vide.");
+  console.log("✅ 2/15 — Archive validée par pg_restore --list (table des matières lisible).");
 
   // Un buffer manifestement non-PostgreSQL doit être rejeté par la MÊME
   // fonction de validation que celle utilisée en production — preuve directe
@@ -274,8 +288,8 @@ async function main() {
   }
   if (barriereReinitialisationActive()) echouer("la barrière est restée active après l'échec pg_dump");
   const apres6 = await prisma.commandeClient.findUnique({ where: { id: jeu.commandeId } });
-  if (!apres6) echouer("scénario 6/12 : la commande a disparu malgré l'échec injecté de pg_dump");
-  console.log("✅ 6/12 — Échec réel de pg_dump injecté (faux binaire, code≠0) : aucune donnée effacée.");
+  if (!apres6) echouer("scénario 6/15 : la commande a disparu malgré l'échec injecté de pg_dump");
+  console.log("✅ 6/15 — Échec réel de pg_dump injecté (faux binaire, code≠0) : aucune donnée effacée.");
 
   // ---------------------------------------------------------------------
   // 8 — pg_dump « réussit » mais produit une archive invalide : rien effacé
@@ -294,8 +308,8 @@ async function main() {
   }
   if (barriereReinitialisationActive()) echouer("la barrière est restée active après l'archive invalide");
   const apres8 = await prisma.commandeClient.findUnique({ where: { id: jeu.commandeId } });
-  if (!apres8) echouer("scénario 8/12 : la commande a disparu malgré l'archive invalide injectée");
-  console.log("✅ 8/12 — Archive invalide (pg_dump réussit mais flux non-PostgreSQL) : rejetée AVANT tout effacement.");
+  if (!apres8) echouer("scénario 8/15 : la commande a disparu malgré l'archive invalide injectée");
+  console.log("✅ 8/15 — Archive invalide (pg_dump réussit mais flux non-PostgreSQL) : rejetée AVANT tout effacement.");
 
   // ---------------------------------------------------------------------
   // 7 — Échec RÉEL d'écriture locale (répertoire cible bloqué) : rien effacé
@@ -316,8 +330,8 @@ async function main() {
   }
   if (barriereReinitialisationActive()) echouer("la barrière est restée active après l'échec d'écriture locale");
   const apres7 = await prisma.commandeClient.findUnique({ where: { id: jeu.commandeId } });
-  if (!apres7) echouer("scénario 7/12 : la commande a disparu malgré l'échec injecté d'écriture locale");
-  console.log("✅ 7/12 — Échec réel d'écriture locale (répertoire bloqué par un fichier) : aucune donnée effacée.");
+  if (!apres7) echouer("scénario 7/15 : la commande a disparu malgré l'échec injecté d'écriture locale");
+  console.log("✅ 7/15 — Échec réel d'écriture locale (répertoire bloqué par un fichier) : aucune donnée effacée.");
 
   // ---------------------------------------------------------------------
   // 9 — Écriture concurrente : rejetée si nouvelle, drainée si déjà en vol
@@ -335,12 +349,12 @@ async function main() {
     await activerBarriereEtAttendreDrainage(); // compteur à 0 : résout immédiatement
     const reponseBloquee = await request(app).post("/ecriture-test").send({});
     if (reponseBloquee.status !== 503 || reponseBloquee.body.code !== "REINITIALISATION_EN_COURS") {
-      echouer(`scénario 9a/12 : attendu 503/REINITIALISATION_EN_COURS, reçu ${reponseBloquee.status}/${reponseBloquee.body.code}`);
+      echouer(`scénario 9a/15 : attendu 503/REINITIALISATION_EN_COURS, reçu ${reponseBloquee.status}/${reponseBloquee.body.code}`);
     }
     const reponseHealth = await request(app).get("/api/health");
-    if (reponseHealth.status !== 200) echouer("scénario 9a/12 : /api/health aurait dû rester accessible pendant la barrière");
+    if (reponseHealth.status !== 200) echouer("scénario 9a/15 : /api/health aurait dû rester accessible pendant la barrière");
     abaisserBarriere();
-    console.log("✅ 9a/12 — Nouvelle écriture HTTP REJETÉE (503) dès l'activation de la barrière ; /api/health reste accessible.");
+    console.log("✅ 9a/15 — Nouvelle écriture HTTP REJETÉE (503) dès l'activation de la barrière ; /api/health reste accessible.");
 
     // 9b : une écriture DÉJÀ EN VOL au moment de l'activation doit se
     // terminer — jamais rejetée, jamais perdue — avant que l'attente de
@@ -362,20 +376,20 @@ async function main() {
     // l'écriture a déjà incrémenté le compteur — c'est exactement ce qui
     // permet à `activerBarriereEtAttendreDrainage` de savoir qu'il doit
     // attendre plutôt que de démarrer le dump immédiatement.
-    if (ecrituresEnVol() !== 1) echouer(`scénario 9b/12 : attendu 1 écriture en vol, trouvé ${ecrituresEnVol()}`);
+    if (ecrituresEnVol() !== 1) echouer(`scénario 9b/15 : attendu 1 écriture en vol, trouvé ${ecrituresEnVol()}`);
 
     const pBarriere = activerBarriereEtAttendreDrainage();
     // La barrière doit être active, mais pas encore résolue : le drainage
     // attend la fin de l'écriture en vol.
     await attendre(20);
-    if (!barriereReinitialisationActive()) echouer("scénario 9b/12 : la barrière aurait dû être active pendant le drainage");
+    if (!barriereReinitialisationActive()) echouer("scénario 9b/15 : la barrière aurait dû être active pendant le drainage");
     const etatEnCoursDeDrainage = await Promise.race([pBarriere.then(() => "resolue"), attendre(10).then(() => "en-attente")]);
     if (etatEnCoursDeDrainage !== "en-attente") {
-      echouer("scénario 9b/12 : la barrière s'est résolue AVANT que l'écriture en vol ne se termine — frontière non garantie");
+      echouer("scénario 9b/15 : la barrière s'est résolue AVANT que l'écriture en vol ne se termine — frontière non garantie");
     }
     const valeurPendantAttente = (await prisma.matierePremiere.findUniqueOrThrow({ where: { id: jeu.matierePremiereId } })).quantiteStock;
     if (Number(valeurPendantAttente) !== Number(valeurAvant)) {
-      echouer("scénario 9b/12 : l'écriture en vol a modifié la base AVANT d'avoir été laissée se terminer normalement");
+      echouer("scénario 9b/15 : l'écriture en vol a modifié la base AVANT d'avoir été laissée se terminer normalement");
     }
 
     debloquerEcriture();
@@ -385,10 +399,10 @@ async function main() {
 
     const valeurApres = (await prisma.matierePremiere.findUniqueOrThrow({ where: { id: jeu.matierePremiereId } })).quantiteStock;
     if (Number(valeurApres) !== valeurEnVol) {
-      echouer("scénario 9b/12 : l'écriture en vol a été PERDUE — sa valeur n'est pas présente en base après le drainage");
+      echouer("scénario 9b/15 : l'écriture en vol a été PERDUE — sa valeur n'est pas présente en base après le drainage");
     }
     console.log(
-      "✅ 9b/12 — Écriture déjà en vol au moment de l'activation : laissée se terminer, jamais perdue, drainage résolu APRÈS sa fin.",
+      "✅ 9b/15 — Écriture déjà en vol au moment de l'activation : laissée se terminer, jamais perdue, drainage résolu APRÈS sa fin.",
     );
   }
 
@@ -422,19 +436,19 @@ async function main() {
     ]);
 
   if (utilisateurApres || clientApres || commandeApres) {
-    echouer("scénario 3/12 : des données transactionnelles ont survécu à la réinitialisation");
+    echouer("scénario 3/15 : des données transactionnelles ont survécu à la réinitialisation");
   }
-  console.log("✅ 3/12 — Données transactionnelles (comptes, clients, commandes) réellement supprimées.");
+  console.log("✅ 3/15 — Données transactionnelles (comptes, clients, commandes) réellement supprimées.");
 
   if (!roleApres || roleApres.permissions.length === 0 || !produitApres || !typeClientApres) {
-    echouer("scénario 4/12 : rôles/permissions/catalogue/référentiels attendus n'ont pas survécu");
+    echouer("scénario 4/15 : rôles/permissions/catalogue/référentiels attendus n'ont pas survécu");
   }
-  console.log("✅ 4/12 — Rôles, permissions, catalogue produits et référentiels conservés.");
+  console.log("✅ 4/15 — Rôles, permissions, catalogue produits et référentiels conservés.");
 
   if (!matiereApres || Number(matiereApres.quantiteStock) !== 0) {
-    echouer(`scénario 5/12 : le stock n'a pas été remis à zéro (trouvé ${matiereApres?.quantiteStock})`);
+    echouer(`scénario 5/15 : le stock n'a pas été remis à zéro (trouvé ${matiereApres?.quantiteStock})`);
   }
-  console.log("✅ 5/12 — Stock des matières premières remis à zéro (catalogue conservé).");
+  console.log("✅ 5/15 — Stock des matières premières remis à zéro (catalogue conservé).");
   console.log("✅ bonus — Activation contrôlée explicite en environnement de production simulé (CI) : acceptée.");
 
   const sauvegardeReset = await prisma.sauvegardeBase.findUnique({ where: { id: resultat.sauvegardeId } });
@@ -443,7 +457,14 @@ async function main() {
   }
 
   // ---------------------------------------------------------------------
-  // 10+11+12 — Restauration réelle dans une base temporaire séparée
+  // 10-15 — Restauration atomique RÉELLE via le VRAI scripts/restaurer-sauvegarde.ts
+  //
+  // Correctif Codex round 2 (30/08/2026) : ce bloc n'appelle plus jamais
+  // `pg_restore` directement (ce serait retester une réimplémentation, pas le
+  // script réel) — c'est EXACTEMENT le binaire qu'un opérateur humain
+  // lancerait en production, `npx tsx scripts/restaurer-sauvegarde.ts ...`,
+  // qui est exécuté ici en sous-processus, contre PostgreSQL réel, pour
+  // chacun des 6 sous-scénarios exigés.
   // ---------------------------------------------------------------------
   await reinitialiserBaseDeTest();
   const jeuRestauration = await semerDonnees();
@@ -451,57 +472,195 @@ async function main() {
   await validerDump(dumpRestauration);
 
   const urlBase = new URL(process.env.DATABASE_URL!);
-  const nomBaseTmp = `lomoto_ci_restauration_${Date.now()}`;
   const envPg = {
     ...process.env,
     PGPASSWORD: urlBase.password ? decodeURIComponent(urlBase.password) : "",
   };
   const argsConnexionBase = ["--host", urlBase.hostname, "--port", urlBase.port || "5432", "--username", decodeURIComponent(urlBase.username)];
 
-  let clientTmp: PrismaClient | null = null;
-  const cheminDumpRestauration = path.join(os.tmpdir(), `lomoto-ci-restauration-${Date.now()}.dump`);
-  try {
-    await execFileAsync("psql", [...argsConnexionBase, "--dbname", "postgres", "-c", `CREATE DATABASE ${nomBaseTmp};`], {
-      env: envPg,
-    });
+  {
+    const cheminScriptRestauration = path.join(process.cwd(), "scripts", "restaurer-sauvegarde.ts");
+    const nomsBasesTemporaires: string[] = [];
 
-    await fs.writeFile(cheminDumpRestauration, dumpRestauration);
-    await execFileAsync(
-      "pg_restore",
-      [...argsConnexionBase, "--dbname", nomBaseTmp, "--no-owner", "--no-privileges", "--clean", "--if-exists", cheminDumpRestauration],
-      { env: { ...envPg, LC_ALL: "C" }, maxBuffer: 1024 * 1024 * 64 },
-    );
-    console.log("✅ 10/12 — Restauration réelle exécutée dans une base PostgreSQL temporaire séparée.");
-
-    const urlTmp = new URL(process.env.DATABASE_URL!);
-    urlTmp.pathname = `/${nomBaseTmp}`;
-    clientTmp = new PrismaClient({ datasources: { db: { url: urlTmp.toString() } } });
-
-    const clientRestaure = await clientTmp.client.findUnique({ where: { id: jeuRestauration.clientId } });
-    const commandeRestauree = await clientTmp.commandeClient.findUnique({ where: { id: jeuRestauration.commandeId } });
-    const matiereRestauree = await clientTmp.matierePremiere.findUnique({ where: { id: jeuRestauration.matierePremiereId } });
-
-    if (!clientRestaure || clientRestaure.nom !== "Client CI Sauvegarde") {
-      echouer("scénario 11/12 : le client restauré ne correspond pas exactement au dump");
+    async function creerBaseTemporaire(prefixe: string): Promise<string> {
+      const nom = `${prefixe}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      nomsBasesTemporaires.push(nom);
+      await execFileAsync("psql", [...argsConnexionBase, "--dbname", "postgres", "-c", `CREATE DATABASE ${nom};`], { env: envPg });
+      return nom;
     }
-    if (!commandeRestauree || commandeRestauree.quantiteBacs !== 10 || commandeRestauree.montantRecu !== 41000) {
-      echouer("scénario 11/12 : la commande restaurée ne correspond pas exactement au dump");
+    async function supprimerBaseTemporaire(nom: string): Promise<void> {
+      await execFileAsync("dropdb", [...argsConnexionBase, "--if-exists", nom], { env: envPg }).catch((e) => {
+        console.error(`⚠️  Nettoyage de la base temporaire ${nom} : ${e instanceof Error ? e.message : e}`);
+      });
     }
-    if (!matiereRestauree || Number(matiereRestauree.quantiteStock) !== 42) {
-      echouer("scénario 11/12 : la matière première restaurée ne correspond pas exactement au dump");
+    async function compterTablesPubliques(nomBase: string): Promise<number> {
+      const { stdout } = await execFileAsync(
+        "psql",
+        [...argsConnexionBase, "--dbname", nomBase, "-tAc", "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'"],
+        { env: envPg },
+      );
+      return Number(stdout.trim());
     }
-    console.log("✅ 11/12 — Relecture indépendante : les données restaurées correspondent EXACTEMENT à celles du dump.");
-  } finally {
-    await fs.unlink(cheminDumpRestauration).catch(() => {});
-    await clientTmp?.$disconnect().catch(() => {});
-    await execFileAsync("dropdb", [...argsConnexionBase, "--if-exists", nomBaseTmp], { env: envPg }).catch((e) => {
-      console.error(`⚠️  Nettoyage de la base temporaire ${nomBaseTmp} : ${e instanceof Error ? e.message : e}`);
-    });
-    console.log("✅ 12/12 — Base temporaire de restauration nettoyée (même chemin en cas d'échec, via finally).");
+    function urlPour(nomBase: string): string {
+      const u = new URL(process.env.DATABASE_URL!);
+      u.pathname = `/${nomBase}`;
+      return u.toString();
+    }
+    interface ResultatScript {
+      code: number;
+      stdout: string;
+      stderr: string;
+    }
+    async function lancerScript(args: string[], databaseUrl: string): Promise<ResultatScript> {
+      try {
+        const { stdout, stderr } = await execFileAsync("npx", ["tsx", cheminScriptRestauration, ...args], {
+          env: { ...process.env, DATABASE_URL: databaseUrl },
+          maxBuffer: 1024 * 1024 * 64,
+        });
+        return { code: 0, stdout, stderr };
+      } catch (e) {
+        const err = e as { code?: number; stdout?: string; stderr?: string };
+        return { code: err.code ?? 1, stdout: err.stdout ?? "", stderr: err.stderr ?? "" };
+      }
+    }
+
+    const cheminDumpTemp = path.join(os.tmpdir(), `lomoto-ci-restaurer-script-${Date.now()}.dump`);
+    await fs.writeFile(cheminDumpTemp, dumpRestauration);
+
+    try {
+      // 10 — sans --confirmer : mode non destructif, ZÉRO modification.
+      const baseRefus = await creerBaseTemporaire("lomoto_ci_restaure_refus");
+      const avant10 = await compterTablesPubliques(baseRefus);
+      const r10 = await lancerScript([cheminDumpTemp], urlPour(baseRefus));
+      if (r10.code !== 0) echouer(`scénario 10/15 : le mode sans confirmation n'aurait jamais dû échouer (code ${r10.code})\n${r10.stderr}`);
+      const apres10 = await compterTablesPubliques(baseRefus);
+      if (apres10 !== avant10) echouer(`scénario 10/15 : le mode sans confirmation a modifié la cible (${avant10} → ${apres10} tables)`);
+      console.log("✅ 10/15 — Sans --confirmer (VRAI script) : mode non destructif confirmé, ZÉRO modification de la cible.");
+
+      // 11 — --confirmer avec une valeur FAUSSE : refusé, ZÉRO modification.
+      const r11 = await lancerScript([cheminDumpTemp, "--confirmer=ceci-ne-correspond-a-rien"], urlPour(baseRefus));
+      if (r11.code === 0) echouer("scénario 11/15 : une confirmation manifestement fausse aurait dû être refusée");
+      const apres11 = await compterTablesPubliques(baseRefus);
+      if (apres11 !== avant10) echouer(`scénario 11/15 : une confirmation fausse a pourtant modifié la cible (${avant10} → ${apres11} tables)`);
+      console.log("✅ 11/15 — --confirmer avec une valeur fausse (VRAI script) : refusé, ZÉRO modification.");
+
+      // 12 — même NOM DE BASE, hôte différent (texte) : refusé, ZÉRO
+      // modification. Preuve directe du correctif Codex : plusieurs
+      // environnements Neon partagent souvent le même nom de base par défaut
+      // (« neondb ») — la confirmation doit donc comparer l'identifiant
+      // COMPLET (hôte+port+base) en texte exact, jamais le nom de base seul.
+      const identifiantMemeBaseAutreHote = `127.0.0.1:${urlBase.port || "5432"}/${baseRefus}`;
+      if (identifiantMemeBaseAutreHote === `${urlBase.hostname}:${urlBase.port || "5432"}/${baseRefus}`) {
+        echouer("scénario 12/15 : le montage du test est invalide — l'hôte de comparaison est identique à l'hôte réel");
+      }
+      const r12 = await lancerScript([cheminDumpTemp, `--confirmer=${identifiantMemeBaseAutreHote}`], urlPour(baseRefus));
+      if (r12.code === 0) echouer("scénario 12/15 : un identifiant de même NOM DE BASE mais d'hôte différent aurait dû être refusé");
+      const apres12 = await compterTablesPubliques(baseRefus);
+      if (apres12 !== avant10) echouer(`scénario 12/15 : un identifiant d'hôte différent a pourtant modifié la cible (${avant10} → ${apres12} tables)`);
+      console.log(
+        "✅ 12/15 — Même nom de base, hôte différent (texte, VRAI script) : refusé, ZÉRO modification (protection contre plusieurs Neon nommés « neondb »).",
+      );
+      await supprimerBaseTemporaire(baseRefus);
+
+      // 13 — --confirmer exact (hôte+port+base) : restauration RÉELLE
+      // réussie via le vrai script, données relues indépendamment.
+      const baseSucces = await creerBaseTemporaire("lomoto_ci_restaure_succes");
+      const identifiantExact = `${urlBase.hostname}:${urlBase.port || "5432"}/${baseSucces}`;
+      const r13 = await lancerScript([cheminDumpTemp, `--confirmer=${identifiantExact}`], urlPour(baseSucces));
+      if (r13.code !== 0) echouer(`scénario 13/15 : la restauration avec confirmation exacte aurait dû réussir (code ${r13.code})\n${r13.stderr}`);
+      let clientTmp: PrismaClient | null = null;
+      try {
+        clientTmp = new PrismaClient({ datasources: { db: { url: urlPour(baseSucces) } } });
+        const clientRestaure = await clientTmp.client.findUnique({ where: { id: jeuRestauration.clientId } });
+        const commandeRestauree = await clientTmp.commandeClient.findUnique({ where: { id: jeuRestauration.commandeId } });
+        const matiereRestauree = await clientTmp.matierePremiere.findUnique({ where: { id: jeuRestauration.matierePremiereId } });
+        if (!clientRestaure || clientRestaure.nom !== "Client CI Sauvegarde") {
+          echouer("scénario 13/15 : le client restauré via le VRAI script ne correspond pas exactement au dump");
+        }
+        if (!commandeRestauree || commandeRestauree.quantiteBacs !== 10 || commandeRestauree.montantRecu !== 41000) {
+          echouer("scénario 13/15 : la commande restaurée via le VRAI script ne correspond pas exactement au dump");
+        }
+        if (!matiereRestauree || Number(matiereRestauree.quantiteStock) !== 42) {
+          echouer("scénario 13/15 : la matière première restaurée via le VRAI script ne correspond pas exactement au dump");
+        }
+      } finally {
+        await clientTmp?.$disconnect().catch(() => {});
+      }
+      console.log(
+        "✅ 13/15 — --confirmer exact (hôte+port+base, VRAI script) : restauration RÉELLE réussie, données relues indépendamment et exactes.",
+      );
+      await supprimerBaseTemporaire(baseSucces);
+
+      // 14 — échec injecté APRÈS le début RÉEL de la restauration : rollback
+      // complet garanti par --single-transaction, cible strictement
+      // inchangée. Entrelacement déterministe : on attend que le VRAI
+      // sous-processus pg_restore apparaisse dans pg_stat_activity (preuve
+      // qu'il exécute réellement des instructions contre la cible), puis on
+      // coupe sa connexion via pg_terminate_backend — jamais un délai qui
+      // « espère » un chevauchement, même idiome que la preuve de verrou
+      // via pg_locks/pg_stat_activity utilisée ailleurs dans ce dépôt
+      // (services/actionsCritiquesMetier.ts).
+      const baseEchec = await creerBaseTemporaire("lomoto_ci_restaure_echec_injecte");
+      const identifiantEchec = `${urlBase.hostname}:${urlBase.port || "5432"}/${baseEchec}`;
+      const pRestaurationEchec = execFileAsync(
+        "npx",
+        ["tsx", cheminScriptRestauration, cheminDumpTemp, `--confirmer=${identifiantEchec}`],
+        { env: { ...process.env, DATABASE_URL: urlPour(baseEchec) }, maxBuffer: 1024 * 1024 * 64 },
+      );
+      let pidBackend: number | null = null;
+      const debutAttente = Date.now();
+      while (Date.now() - debutAttente < 10_000 && pidBackend === null) {
+        const lignes = await prisma.$queryRawUnsafe<{ pid: number }[]>(
+          `SELECT pid FROM pg_stat_activity WHERE datname = $1 AND application_name = 'pg_restore'`,
+          baseEchec,
+        );
+        if (lignes.length > 0) pidBackend = lignes[0].pid;
+        else await attendre(5);
+      }
+      if (pidBackend === null) {
+        echouer("scénario 14/15 : aucun backend pg_restore réel n'a été observé dans pg_stat_activity — impossible d'injecter l'échec");
+      }
+      await prisma.$queryRawUnsafe(`SELECT pg_terminate_backend($1::int)`, pidBackend);
+      const resultatEchec = await pRestaurationEchec.catch((e) => e as { code?: number; stderr?: string });
+      const codeEchec = (resultatEchec as { code?: number }).code ?? 0;
+      if (codeEchec === 0) echouer("scénario 14/15 : la restauration aurait dû échouer après la coupure injectée du backend en cours de route");
+      const tablesApresEchec = await compterTablesPubliques(baseEchec);
+      if (tablesApresEchec !== 0) {
+        echouer(
+          `scénario 14/15 : --single-transaction n'a PAS protégé la cible — ${tablesApresEchec} table(s) subsistent après un échec en cours de restauration (rollback incomplet)`,
+        );
+      }
+      console.log(
+        "✅ 14/15 — Échec injecté APRÈS le début réel de la restauration (backend pg_restore réellement en cours, coupé via pg_terminate_backend) : --single-transaction a bien tout annulé, cible strictement inchangée (0 table).",
+      );
+      await supprimerBaseTemporaire(baseEchec);
+
+      // 15 — nettoyage systématique : aucune base temporaire de ces
+      // scénarios ne doit subsister, y compris celles déjà supprimées
+      // individuellement ci-dessus (dropdb --if-exists est idempotent) — la
+      // preuve porte sur l'ENSEMBLE des bases créées durant ce bloc.
+      for (const nom of nomsBasesTemporaires) await supprimerBaseTemporaire(nom);
+      const encoreLa = await prisma.$queryRawUnsafe<{ datname: string }[]>(
+        `SELECT datname FROM pg_database WHERE datname = ANY($1::text[])`,
+        nomsBasesTemporaires,
+      );
+      if (encoreLa.length > 0) {
+        echouer(`scénario 15/15 : des bases temporaires n'ont pas été nettoyées : ${encoreLa.map((r) => r.datname).join(", ")}`);
+      }
+      console.log(
+        `✅ 15/15 — Nettoyage systématique vérifié : les ${nomsBasesTemporaires.length} base(s) temporaire(s) créées par ces scénarios ont bien toutes disparu.`,
+      );
+    } finally {
+      // Filet de sécurité final — même chemin en cas d'échec d'une
+      // assertion ci-dessus (`finally` s'exécute toujours) : jamais de base
+      // temporaire orpheline, quoi qu'il arrive dans le bloc précédent.
+      for (const nom of nomsBasesTemporaires) await supprimerBaseTemporaire(nom);
+      await fs.unlink(cheminDumpTemp).catch(() => {});
+    }
   }
 
   await reinitialiserBaseDeTest();
-  console.log("\n🎉 12/12 scénarios PostgreSQL réels du Lot P0 (sauvegarde/réinitialisation/restauration) — succès.\n");
+  console.log("\n🎉 15/15 scénarios PostgreSQL réels du Lot P0 (sauvegarde/réinitialisation/restauration) — succès.\n");
 }
 
 main()
