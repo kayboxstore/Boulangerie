@@ -7,7 +7,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { DOMAINE_A_REDIRIGER, DOMAINE_CANONIQUE, verifierOrigine } from "./lib/origines.js";
-import { gardeBarriereEcriture } from "./lib/barriereEcriture.js";
+import { gardeBarriereEcriture, marquerRequeteReinitialisation } from "./lib/barriereEcriture.js";
 import { logger } from "./lib/logger.js";
 import { authRouter } from "./routes/auth.js";
 import { produitsRouter } from "./routes/produits.js";
@@ -77,6 +77,14 @@ export function createApp() {
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", app: "Boulangerie Lomoto API" });
   });
+
+  // Le marqueur utilise le VRAI routeur Express avant la barrière : les
+  // variantes que la route accepte réellement (casse/barre finale selon la
+  // configuration Express) sont reconnues de la même façon, sans comparaison
+  // artisanale de req.path. La barrière reste prioritaire si elle est déjà
+  // active ; le marqueur évite seulement que la requête initiatrice se compte
+  // elle-même puis attende sa propre fin.
+  app.post("/api/etat-systeme/reinitialiser", marquerRequeteReinitialisation);
 
   // Barrière d'écriture (P0, section 3.15) : bloque toute requête (sauf le
   // health check ci-dessus) pendant la fenêtre dump→effacement d'une
