@@ -6,7 +6,10 @@
  * `POST /api/etat-systeme/reinitialiser` comme écriture « en vol » ; la
  * requête appelait ensuite `reinitialiserBase()`, qui activait la barrière
  * et attendait que ce MÊME compteur retombe à zéro — auto-blocage garanti,
- * résolu seulement après le timeout de drainage (503).
+ * résolu seulement après le timeout de drainage (503). Le round suivant
+ * couvre aussi les formes équivalentes réellement acceptées par Express
+ * (barre finale et casse différente), que l'ancienne égalité sur req.path
+ * comptait encore par erreur.
  *
  * Utilise délibérément `createApp()` (le VRAI app.ts, avec le VRAI
  * `gardeBarriereEcriture` monté en middleware global, le VRAI `requireAuth`/
@@ -127,6 +130,43 @@ describe("POST /api/etat-systeme/reinitialiser via createApp() — plus d'auto-b
     expect(barriereReinitialisationActive()).toBe(false);
     expect(ecrituresEnVol()).toBe(0);
   }, 10_000);
+
+  it.each([
+    "/api/etat-systeme/reinitialiser/",
+    "/API/ETAT-SYSTEME/REINITIALISER",
+  ])("reconnaît la variante Express %s sans auto-blocage", async (chemin) => {
+    const app = createApp();
+    const t0 = Date.now();
+    const reponse = await request(app)
+      .post(chemin)
+      .set("Authorization", `Bearer ${jetonAdmin()}`)
+      .send({ motConfirmation: "LOMOTO" });
+
+    expect(reponse.status).toBe(200);
+    expect(Date.now() - t0).toBeLessThan(2_000);
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(barriereReinitialisationActive()).toBe(false);
+    expect(ecrituresEnVol()).toBe(0);
+  }, 10_000);
+
+  it("n'exempte pas une autre méthode sur le même chemin", async () => {
+    const app = createApp();
+    const { crochetsTestBarriere } = await import("./lib/barriereEcriture.js");
+    let increments = 0;
+    crochetsTestBarriere.apresIncrementAvantExecution = () => {
+      increments++;
+    };
+
+    const reponse = await request(app)
+      .put("/api/etat-systeme/reinitialiser")
+      .set("Authorization", `Bearer ${jetonAdmin()}`)
+      .send({ motConfirmation: "LOMOTO" });
+
+    expect(reponse.status).toBe(404);
+    expect(increments).toBe(1);
+    expect(ecrituresEnVol()).toBe(0);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
 
   it("deux réinitialisations simultanées : au plus une exécution, l'autre refusée proprement (entrelacement déterministe, pas un espoir de chevauchement)", async () => {
     const app = createApp();
