@@ -29,13 +29,14 @@ interface FauxProcessus extends EventEmitter {
  * timeout resterait bloqué indéfiniment (le code sous test attend `close`
  * pour savoir que le process a bien terminé après le signal).
  */
-function creerFauxProcessus(): FauxProcessus {
+function creerFauxProcessus(options: { ignorerSigterm?: boolean } = {}): FauxProcessus {
   const proc = new EventEmitter() as FauxProcessus;
   const stdout = new EventEmitter() as EventEmitter & { resume: () => void };
   stdout.resume = vi.fn();
   proc.stdout = stdout;
   proc.stderr = new EventEmitter();
   proc.kill = vi.fn((signal?: string) => {
+    if (signal === "SIGTERM" && options.ignorerSigterm) return;
     queueMicrotask(() => proc.emit("close", null, signal ?? "SIGTERM"));
   });
   return proc;
@@ -68,11 +69,14 @@ vi.mock("node:child_process", () => {
 
 const { validerDump, construireDump, ErreurSauvegarde } = await import("./sauvegarde.js");
 
-/** Configure spawnImpl pour que le PROCHAIN appel réussisse immédiatement (code 0, aucune sortie). */
-function armerSpawnSucces() {
+/** Configure spawnImpl pour que le PROCHAIN appel réussisse immédiatement. */
+function armerSpawnSucces(stdout = "") {
   mocks.spawnImpl.mockImplementationOnce(() => {
     const proc = creerFauxProcessus();
-    queueMicrotask(() => proc.emit("close", 0, null));
+    queueMicrotask(() => {
+      if (stdout) proc.stdout.emit("data", Buffer.from(stdout));
+      proc.emit("close", 0, null);
+    });
     return proc;
   });
 }
@@ -83,70 +87,90 @@ afterEach(() => {
   delete process.env.PG_DUMP_PATH;
   delete process.env.PG_RESTORE_VALIDATION_TIMEOUT_MS;
   delete process.env.PG_DUMP_TIMEOUT_MS;
+  delete process.env.PG_PROCESS_KILL_GRACE_MS;
   delete process.env.DATABASE_URL;
 });
 
 describe("validerDump — table des matières (pg_restore --list)", () => {
   it("rejette immédiatement une archive vide, sans même appeler pg_restore", async () => {
     await expect(validerDump(Buffer.alloc(0))).rejects.toBeInstanceOf(ErreurSauvegarde);
-    expect(mocks.execFileImpl).not.toHaveBeenCalled();
     expect(mocks.spawnImpl).not.toHaveBeenCalled();
   });
 
-  it("rejette quand pg_restore --list renvoie une table des matières vide (archive tronquée)", async () => {
-    mocks.execFileImpl.mockResolvedValue({ stdout: "   \n  \n", stderr: "" });
+  it("rejette quand pg_restore --list renvoie une table des matières vide", async () => {
+    armerSpawnSucces("   \n  \n");
     await expect(validerDump(Buffer.from("archive-tronquee"))).rejects.toBeInstanceOf(ErreurSauvegarde);
-    expect(mocks.spawnImpl).not.toHaveBeenCalled(); // n'atteint jamais la 2e passe
+    expect(mocks.spawnImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("rejette avec un message actionnable quand pg_restore signale une archive corrompue (code non nul)", async () => {
-    const erreur = Object.assign(new Error("pg_restore: error: input file appears to be a text format dump"), {
-      stderr: "pg_restore: error: input file appears to be a text format dump",
+  it("rejette avec un message actionnable quand pg_restore signale une archive corrompue", async () => {
+    mocks.spawnImpl.mockImplementationOnce(() => {
+      const proc = creerFauxProcessus();
+      queueMicrotask(() => {
+        proc.stderr.emit("data", Buffer.from("pg_restore: error: input file is invalid"));
+        proc.emit("close", 1, null);
+      });
+      return proc;
     });
-    mocks.execFileImpl.mockRejectedValue(erreur);
     await expect(validerDump(Buffer.from("garbage"))).rejects.toMatchObject({
       message: expect.stringContaining("invalide ou corrompue"),
     });
   });
 
   it("distingue un pg_restore introuvable (ENOENT) et pointe vers PG_RESTORE_PATH", async () => {
-    const erreur = Object.assign(new Error("introuvable"), { code: "ENOENT" });
-    mocks.execFileImpl.mockRejectedValue(erreur);
+    mocks.spawnImpl.mockImplementationOnce(() => {
+      const proc = creerFauxProcessus();
+      queueMicrotask(() => proc.emit("error", Object.assign(new Error("introuvable"), { code: "ENOENT" })));
+      return proc;
+    });
     await expect(validerDump(Buffer.from("archive"))).rejects.toMatchObject({
       status: 503,
       message: expect.stringContaining("PG_RESTORE_PATH"),
     });
   });
 
-  it("distingue un délai dépassé (killed/signal) d'une vraie corruption", async () => {
-    const erreur = Object.assign(new Error("timeout"), { killed: true, signal: "SIGTERM" });
-    mocks.execFileImpl.mockRejectedValue(erreur);
+  it("tue par SIGTERM et rejette quand la lecture de la table reste bloquée", async () => {
+    process.env.PG_RESTORE_VALIDATION_TIMEOUT_MS = "30";
+    let procCapture: FauxProcessus | undefined;
+    mocks.spawnImpl.mockImplementationOnce(() => {
+      procCapture = creerFauxProcessus();
+      return procCapture;
+    });
     await expect(validerDump(Buffer.from("archive"))).rejects.toMatchObject({
       status: 504,
       message: expect.stringContaining("interrompue"),
     });
+    expect(procCapture?.kill).toHaveBeenCalledWith("SIGTERM");
+  });
+
+  it("force SIGKILL si pg_restore --list ignore SIGTERM", async () => {
+    process.env.PG_RESTORE_VALIDATION_TIMEOUT_MS = "20";
+    process.env.PG_PROCESS_KILL_GRACE_MS = "20";
+    let procCapture: FauxProcessus | undefined;
+    mocks.spawnImpl.mockImplementationOnce(() => {
+      procCapture = creerFauxProcessus({ ignorerSigterm: true });
+      return procCapture;
+    });
+    await expect(validerDump(Buffer.from("archive"))).rejects.toMatchObject({ status: 504 });
+    expect(procCapture?.kill).toHaveBeenNthCalledWith(1, "SIGTERM");
+    expect(procCapture?.kill).toHaveBeenNthCalledWith(2, "SIGKILL");
   });
 });
 
 describe("validerDump — parcours complet du contenu (2e passe)", () => {
   it("résout quand les deux passes réussissent (table des matières + parcours complet)", async () => {
-    mocks.execFileImpl.mockResolvedValue({ stdout: "1234; 5678 TABLE public CommandeClient lomoto\n", stderr: "" });
+    armerSpawnSucces("1234; 5678 TABLE public CommandeClient lomoto\n");
     armerSpawnSucces();
     await expect(validerDump(Buffer.from("archive-valide"))).resolves.toBeUndefined();
-    expect(mocks.execFileImpl).toHaveBeenCalledTimes(1);
-    expect(mocks.spawnImpl).toHaveBeenCalledTimes(1);
-    const [fichierRestore, argsRestore] = mocks.spawnImpl.mock.calls[0];
+    expect(mocks.spawnImpl).toHaveBeenCalledTimes(2);
+    const [fichierRestore, argsRestore] = mocks.spawnImpl.mock.calls[1];
     expect(fichierRestore).toBe("pg_restore");
-    // Jamais --dbname (aucune connexion à une base) ; --file=- EST requis
-    // par pg_restore (16.x refuse de démarrer sans --dbname NI --file) — il
-    // fait alors écrire le flux SQL reconstruit sur STDOUT plutôt que de
-    // l'exécuter contre une cible.
     expect(argsRestore).not.toContain("--dbname");
     expect(argsRestore).toEqual(expect.arrayContaining(["--file", "-"]));
   });
 
-  it("détecte un bloc de DONNÉES corrompu même si la table des matières reste lisible (le TOC seul ne suffit pas)", async () => {
-    mocks.execFileImpl.mockResolvedValue({ stdout: "1234; 5678 TABLE public CommandeClient lomoto\n", stderr: "" });
+  it("détecte un bloc de DONNÉES corrompu même si la table des matières reste lisible", async () => {
+    armerSpawnSucces("1234; 5678 TABLE public CommandeClient lomoto\n");
     mocks.spawnImpl.mockImplementationOnce(() => {
       const proc = creerFauxProcessus();
       queueMicrotask(() => {
@@ -160,8 +184,8 @@ describe("validerDump — parcours complet du contenu (2e passe)", () => {
     });
   });
 
-  it("jette le flux stdout reconstruit sans le bufferiser (resume() appelé, jamais collecté)", async () => {
-    mocks.execFileImpl.mockResolvedValue({ stdout: "une-entree\n", stderr: "" });
+  it("jette le flux stdout reconstruit sans le bufferiser", async () => {
+    armerSpawnSucces("une-entree\n");
     let procCapture: FauxProcessus | undefined;
     mocks.spawnImpl.mockImplementationOnce(() => {
       const proc = creerFauxProcessus();
@@ -173,13 +197,13 @@ describe("validerDump — parcours complet du contenu (2e passe)", () => {
     expect(procCapture?.stdout.resume).toHaveBeenCalled();
   });
 
-  it("tue proprement le processus et rejette si la validation complète reste bloquée (timeout)", async () => {
-    mocks.execFileImpl.mockResolvedValue({ stdout: "une-entree\n", stderr: "" });
+  it("tue proprement le processus si la validation complète reste bloquée", async () => {
+    armerSpawnSucces("une-entree\n");
     process.env.PG_RESTORE_VALIDATION_TIMEOUT_MS = "30";
     let procCapture: FauxProcessus | undefined;
     mocks.spawnImpl.mockImplementationOnce(() => {
       const proc = creerFauxProcessus();
-      procCapture = proc; // ne termine jamais tout seul — simule un pg_restore bloqué
+      procCapture = proc;
       return proc;
     });
     await expect(validerDump(Buffer.from("archive"))).rejects.toMatchObject({
@@ -205,6 +229,20 @@ describe("construireDump — timeout d'un pg_dump bloqué", () => {
       message: expect.stringContaining("interrompu"),
     });
     expect(procCapture?.kill).toHaveBeenCalledWith("SIGTERM");
+  });
+
+  it("force SIGKILL si pg_dump ignore SIGTERM", async () => {
+    process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/lomoto_test";
+    process.env.PG_DUMP_TIMEOUT_MS = "20";
+    process.env.PG_PROCESS_KILL_GRACE_MS = "20";
+    let procCapture: FauxProcessus | undefined;
+    mocks.spawnImpl.mockImplementationOnce(() => {
+      procCapture = creerFauxProcessus({ ignorerSigterm: true });
+      return procCapture;
+    });
+    await expect(construireDump()).rejects.toMatchObject({ status: 504 });
+    expect(procCapture?.kill).toHaveBeenNthCalledWith(1, "SIGTERM");
+    expect(procCapture?.kill).toHaveBeenNthCalledWith(2, "SIGKILL");
   });
 
   it("réussit normalement quand pg_dump se termine avant le délai", async () => {
