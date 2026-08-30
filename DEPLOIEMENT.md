@@ -141,8 +141,10 @@ DONNÉES corrompu que la seule table des matières laisserait passer) — puis
 écrite sur disque de façon **atomique** (fichier temporaire puis renommage) :
 aucune archive tronquée ou partielle n'est jamais annoncée comme une
 sauvegarde réussie. Les deux binaires (`pg_dump`, `pg_restore`) sont soumis à
-un délai maximal : un processus resté bloqué est tué proprement plutôt que de
-suspendre indéfiniment l'opération.
+un délai maximal : un processus resté bloqué reçoit d'abord `SIGTERM`, puis
+`SIGKILL` après un délai de grâce s'il refuse de s'arrêter, plutôt que de
+suspendre indéfiniment l'opération. Cette borne couvre `pg_dump`, la lecture
+du TOC et le parcours intégral par `pg_restore`.
 
 **Limite assumée et documentée, jamais présentée comme plus qu'elle n'est** :
 même ces deux passes ne sont PAS une preuve complète de restaurabilité —
@@ -184,7 +186,10 @@ notifications asynchrones suivies par la même barrière, réinitialisation
 réelle avec conservation du référentiel/mise à zéro du stock, restauration
 atomique via le vrai script `restaurer-sauvegarde.ts`) sont prouvées contre
 une **vraie base PostgreSQL** par `scripts/verifier-sauvegarde-reinitialisation-ci.ts`,
-exécuté à chaque CI — 15 scénarios réels, listés en tête de ce script.
+exécuté à chaque CI — 15 scénarios numérotés, complétés par des preuves OS/PG
+réelles : `pg_dump` ignorant `SIGTERM` puis tué par `SIGKILL`, archive au
+TOC lisible mais au bloc de données tronqué, et réinitialisation traversant la
+vraie route HTTP `createApp()` avec auth et PostgreSQL réels.
 
 ### Restaurer une sauvegarde
 
@@ -196,9 +201,11 @@ sans confirmation (zéro modification), avec une confirmation fausse (refusé,
 zéro modification), avec un nom de base identique mais un hôte différent
 (refusé, zéro modification), avec la confirmation exacte (restauration
 réelle réussie, données relues indépendamment), avec un échec injecté APRÈS
-le début réel de la restauration (le vrai `pg_restore` est observé en train
-de travailler puis sa connexion est coupée — `--single-transaction` annule
-alors tout, la cible reste strictement inchangée), et un nettoyage
+le début réel de la restauration sur une cible **préremplie et volontairement
+différente du dump** (le vrai `pg_restore --clean` est observé bloqué sur un
+verrou destructif via `pg_blocking_pids`, puis sa connexion est coupée —
+`--single-transaction` restaure exactement les tables et données préalables),
+et un nettoyage
 systématique des bases temporaires même en cas d'échec — voir
 `scripts/verifier-sauvegarde-reinitialisation-ci.ts`.
 
