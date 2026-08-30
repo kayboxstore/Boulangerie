@@ -58,6 +58,9 @@ function delaiMaxPgDumpMs(): number {
 function delaiMaxValidationMs(): number {
   return Number(process.env.PG_RESTORE_VALIDATION_TIMEOUT_MS) || 60_000;
 }
+function delaiGraceArretMs(): number {
+  return Number(process.env.PG_PROCESS_KILL_GRACE_MS) || 2_000;
+}
 
 /**
  * Coordonnées de la base SANS aucun secret — c'est ce que l'écran État système
@@ -166,7 +169,7 @@ export function construireDump(): Promise<Buffer> {
     const delaiMax = delaiMaxPgDumpMs();
     const minuteur = setTimeout(() => {
       proc.kill("SIGTERM");
-      setTimeout(() => proc.kill("SIGKILL"), 2_000).unref();
+      setTimeout(() => proc.kill("SIGKILL"), delaiGraceArretMs()).unref();
     }, delaiMax);
     minuteur.unref();
 
@@ -256,7 +259,7 @@ function validerContenuComplet(fichier: string): Promise<void> {
     const delaiMax = delaiMaxValidationMs();
     const minuteur = setTimeout(() => {
       proc.kill("SIGTERM");
-      setTimeout(() => proc.kill("SIGKILL"), 2_000).unref();
+      setTimeout(() => proc.kill("SIGKILL"), delaiGraceArretMs()).unref();
     }, delaiMax);
     minuteur.unref();
 
@@ -306,6 +309,97 @@ function validerContenuComplet(fichier: string): Promise<void> {
 }
 
 /**
+ * Lit la table des matières avec le même contrat de terminaison bornée que la
+ * passe complète. L'ancien execFile({ timeout }) n'offrait pas de SIGKILL de
+ * secours vérifiable : un binaire qui ignore SIGTERM pouvait conserver la
+ * promesse en attente. Ici, le processus reçoit SIGTERM puis SIGKILL après un
+ * délai de grâce court, et la sortie reste plafonnée à 16 Mio comme avant.
+ */
+function listerArchive(fichier: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cheminPgRestore(), ["--list", fichier], { stdio: ["ignore", "pipe", "pipe"] });
+    const sorties: Buffer[] = [];
+    let tailleSortie = 0;
+    let erreurs = "";
+    let regle = false;
+    let arretPourTaille = false;
+    const limiteSortie = 16 * 1024 * 1024;
+
+    proc.stdout.on("data", (c: Buffer) => {
+      tailleSortie += c.length;
+      if (tailleSortie > limiteSortie) {
+        arretPourTaille = true;
+        proc.kill("SIGTERM");
+        setTimeout(() => proc.kill("SIGKILL"), delaiGraceArretMs()).unref();
+        return;
+      }
+      sorties.push(c);
+    });
+    proc.stderr.on("data", (c: Buffer) => {
+      erreurs += c.toString();
+    });
+
+    const delaiMax = delaiMaxValidationMs();
+    const minuteur = setTimeout(() => {
+      proc.kill("SIGTERM");
+      setTimeout(() => proc.kill("SIGKILL"), delaiGraceArretMs()).unref();
+    }, delaiMax);
+    minuteur.unref();
+
+    function regler(fn: () => void) {
+      if (regle) return;
+      regle = true;
+      clearTimeout(minuteur);
+      fn();
+    }
+
+    proc.on("error", (e) => {
+      const absent = (e as NodeJS.ErrnoException).code === "ENOENT";
+      regler(() =>
+        reject(
+          new ErreurSauvegarde(
+            503,
+            absent
+              ? `L'outil pg_restore est introuvable sur ce serveur (${cheminPgRestore()}). Installe le client PostgreSQL ou renseigne PG_RESTORE_PATH.`
+              : `Échec du lancement de pg_restore : ${e.message}`,
+          ),
+        ),
+      );
+    });
+
+    proc.on("close", (code, signal) => {
+      regler(() => {
+        if (arretPourTaille) {
+          return reject(
+            new ErreurSauvegarde(
+              500,
+              "La table des matières de l'archive dépasse la limite de sécurité de 16 Mio — sauvegarde rejetée.",
+            ),
+          );
+        }
+        if (signal === "SIGTERM" || signal === "SIGKILL") {
+          return reject(
+            new ErreurSauvegarde(
+              504,
+              `Lecture de la table des matières interrompue après ${delaiMax} ms (pg_restore bloqué, SIGTERM puis SIGKILL de secours) — sauvegarde rejetée.`,
+            ),
+          );
+        }
+        if (code !== 0) {
+          return reject(
+            new ErreurSauvegarde(
+              500,
+              `L'archive de sauvegarde est invalide ou corrompue (pg_restore --list a échoué) : ${erreurs.trim() || `code ${code}`}`,
+            ),
+          );
+        }
+        resolve(Buffer.concat(sorties).toString());
+      });
+    });
+  });
+}
+
+/**
  * Valide RÉELLEMENT une archive (P0, section 3.15) : un dump non vide n'est
  * pas la même chose qu'un dump restaurable. `pg_dump` peut réussir (code 0)
  * tout en produisant un fichier tronqué si le process est interrompu APRÈS le
@@ -336,34 +430,10 @@ export async function validerDump(dump: Buffer): Promise<void> {
   const fichierTemporaire = path.join(os.tmpdir(), `lomoto-validation-${randomUUID()}.dump`);
   await fs.writeFile(fichierTemporaire, dump);
   try {
-    try {
-      const { stdout } = await execFileAsync(cheminPgRestore(), ["--list", fichierTemporaire], {
-        timeout: delaiMaxValidationMs(),
-        maxBuffer: 1024 * 1024 * 16,
-      });
-      const entrees = stdout.split("\n").filter((ligne) => ligne.trim().length > 0);
-      if (entrees.length === 0) {
-        throw new ErreurSauvegarde(500, "L'archive de sauvegarde ne contient aucune entrée exploitable (table des matières vide).");
-      }
-    } catch (e) {
-      if (e instanceof ErreurSauvegarde) throw e;
-      const err = e as NodeJS.ErrnoException & { stderr?: string; killed?: boolean; signal?: string | null };
-      if (err.code === "ENOENT") {
-        throw new ErreurSauvegarde(
-          503,
-          `L'outil pg_restore est introuvable sur ce serveur (${cheminPgRestore()}). Installe le client PostgreSQL ou renseigne PG_RESTORE_PATH.`,
-        );
-      }
-      if (err.killed || err.signal) {
-        throw new ErreurSauvegarde(
-          504,
-          `Lecture de la table des matières interrompue après ${delaiMaxValidationMs()} ms (pg_restore bloqué, tué proprement) — sauvegarde rejetée.`,
-        );
-      }
-      throw new ErreurSauvegarde(
-        500,
-        `L'archive de sauvegarde est invalide ou corrompue (pg_restore --list a échoué) : ${err.stderr?.trim() || err.message}`,
-      );
+    const stdout = await listerArchive(fichierTemporaire);
+    const entrees = stdout.split("\n").filter((ligne) => ligne.trim().length > 0);
+    if (entrees.length === 0) {
+      throw new ErreurSauvegarde(500, "L'archive de sauvegarde ne contient aucune entrée exploitable (table des matières vide).");
     }
 
     await validerContenuComplet(fichierTemporaire);
