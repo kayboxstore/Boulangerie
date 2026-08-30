@@ -51,9 +51,10 @@
  *     elle-même comme écriture en vol avant même d'appeler
  *     `activerBarriereEtAttendreDrainage()`, qui attendait alors sa PROPRE
  *     fin pour se drainer — blocage garanti, résolu seulement par le
- *     timeout de drainage. Corrigé par `estRequeteReinitialisation()` :
- *     exception hardcodée, UNIQUEMENT cette route, jamais une liste
- *     extensible.
+ *     timeout de drainage. Corrigé par un marqueur posé avec le routeur
+ *     Express lui-même (voir `marquerRequeteReinitialisation` et app.ts) :
+ *     toutes les formes que la vraie route accepte sont reconnues, sans
+ *     dupliquer manuellement les règles de casse/barre finale d'Express.
  *  2. Décompte prématuré : le compteur décomptait aussi sur l'événement
  *     `close` de la réponse, qui peut se déclencher quand le CLIENT se
  *     déconnecte alors que le handler Express continue réellement d'écrire
@@ -81,26 +82,22 @@ let compteurEnVol = 0;
 const abonnesDrain: Array<() => void> = [];
 
 /**
- * SEULE exception au comptage — la route qui active elle-même la barrière et
- * attend le drainage (`services/reinitialisation.ts`). Sans elle, cette
- * requête se compterait comme « en vol » avant même d'appeler
- * `activerBarriereEtAttendreDrainage()`, puis attendrait indéfiniment sa
- * PROPRE fin pour se drainer elle-même — auto-blocage garanti (correctif
- * Codex, round 2, 30/08/2026). Hardcodée en dur (méthode + chemin EXACTS),
- * jamais une liste extensible : aucune autre route ne doit jamais en
- * bénéficier. Elle reste pleinement protégée par le refus 503 ci-dessous si
- * la barrière est DÉJÀ active, et par le garde-fou anti-double-activation de
- * `activerBarriereEtAttendreDrainage()` (ErreurBarriereActive) si deux
- * requêtes de réinitialisation arrivent à la suite l'une de l'autre avant
- * que la première n'ait eu le temps d'activer la barrière : Node.js étant
- * mono-thread et cette vérification synchrone (aucun `await` avant elle),
- * la première à l'atteindre gagne — au plus une exécution, jamais deux.
+ * Marque la SEULE requête autorisée à ne pas se compter elle-même : la route
+ * qui active ensuite la barrière et attend son drainage.
+ *
+ * Ce middleware doit être monté dans app.ts avec app.post() sur le chemin
+ * réel, juste AVANT gardeBarriereEcriture. C'est délibéré : Express applique
+ * ainsi lui-même ses règles de correspondance (casse et barre oblique finale)
+ * au marqueur comme à la route métier. Une comparaison artisanale de req.path
+ * avait laissé passer /reinitialiser/ et les variantes de casse vers la route
+ * métier tout en les comptant encore, réintroduisant l'auto-blocage.
+ *
+ * La marque n'ouvre aucun passage quand la barrière est déjà active :
+ * gardeBarriereEcriture vérifie toujours barriereActive AVANT de la consulter.
  */
-const METHODE_REINITIALISATION = "POST";
-const CHEMIN_REINITIALISATION = "/api/etat-systeme/reinitialiser";
-
-function estRequeteReinitialisation(req: Request): boolean {
-  return req.method === METHODE_REINITIALISATION && req.path === CHEMIN_REINITIALISATION;
+export function marquerRequeteReinitialisation(_req: Request, res: Response, next: NextFunction): void {
+  res.locals.requeteInitiatriceReinitialisation = true;
+  next();
 }
 
 /**
@@ -167,11 +164,11 @@ export function gardeBarriereEcriture(req: Request, res: Response, next: NextFun
     });
     return;
   }
-  if (estRequeteReinitialisation(req)) {
-    // Voir le commentaire au-dessus de `estRequeteReinitialisation` : seule
-    // exception au comptage, pour ne pas s'auto-bloquer en attendant son
-    // propre drainage. Reste protégée par le refus 503 ci-dessus et par
-    // `activerBarriereEtAttendreDrainage()` en cas de double requête.
+  if (res.locals.requeteInitiatriceReinitialisation === true) {
+    // Marque posée par le routeur Express lui-même dans app.ts : seule la
+    // vraie route POST de réinitialisation, avec exactement les variantes
+    // qu'Express accepte, évite de se compter elle-même. Le refus 503
+    // ci-dessus reste prioritaire quand une barrière est déjà active.
     next();
     return;
   }
