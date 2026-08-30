@@ -25,11 +25,12 @@ import {
   type SchemaCommandeClientDTO,
   type SchemaCommandeJourDTO,
 } from "@lomoto/shared";
-import { prisma } from "../lib/prisma.js";
+import { prisma, type TxClient } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
 import { construirePdfBonsLivraison, nomFichierPdf } from "../services/pdf.js";
 import { appliquerMouvement, emettreAlerteSeuil, ErreurStock } from "../services/stocks.js";
+import { auditerCaisseTx } from "../services/caisseAtomique.js";
 import {
   ErreurCycleLivraison,
   synchroniserPrevisionsCycles,
@@ -760,22 +761,62 @@ productionRouter.post("/productions", ecriture, async (req, res, next) => {
 // clôture verrouille définitivement l'ensemble (aucune modification possible
 // ensuite, y compris des champs déjà immuables comme bacsProduits).
 
-async function chargerProductionOuverte(id: string) {
-  const production = await prisma.production.findUnique({ where: { id }, include: INCLUDE_PRODUCTION });
-  if (!production) return { erreur: { status: 404 as const, message: "Production introuvable" } };
-  if (production.statut === "CLOTUREE") {
-    return { erreur: { status: 409 as const, message: "Cette production est clôturée : plus aucune modification possible" } };
+class ErreurMutationProduction extends Error {
+  constructor(
+    readonly status: 404 | 409,
+    readonly code: "PRODUCTION_INTROUVABLE" | "PRODUCTION_CLOTUREE",
+    message: string,
+  ) {
+    super(message);
   }
-  return { production };
 }
 
-// Remplace intégralement la répartition des pertes — même idiome que les dons
-// et que le Schéma de commande (plus simple et plus sûr qu'un diff ligne à ligne).
+/**
+ * Toute modification d'une Production OUVERTE commence par ce verrou de ligne
+ * PostgreSQL, dans la même transaction que les écritures et leur AuditLog.
+ * La relecture après FOR UPDATE fait seule foi : une vérification effectuée
+ * avant la transaction laisserait une course avec la clôture.
+ */
+async function verrouillerProductionOuverte(tx: TxClient, id: string): Promise<ProductionAvecRelations> {
+  const lignes = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "Production" WHERE id = ${id} FOR UPDATE
+  `;
+  if (!lignes[0]) {
+    throw new ErreurMutationProduction(404, "PRODUCTION_INTROUVABLE", "Production introuvable");
+  }
+  const production = await tx.production.findUniqueOrThrow({ where: { id }, include: INCLUDE_PRODUCTION });
+  if (production.statut === "CLOTUREE") {
+    throw new ErreurMutationProduction(
+      409,
+      "PRODUCTION_CLOTUREE",
+      "Cette production est clôturée : plus aucune modification possible",
+    );
+  }
+  return production;
+}
+
+function estConflitProduction(e: unknown): boolean {
+  if (!(e instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  return e.code === "P2034" || (e.code === "P2010" && (e.meta as { code?: string } | undefined)?.code === "40001");
+}
+
+function repondreErreurMutationProduction(e: unknown, res: Response, next: NextFunction) {
+  if (e instanceof ErreurMutationProduction) {
+    return res.status(e.status).json({ code: e.code, erreur: e.message });
+  }
+  if (estConflitProduction(e)) {
+    return res.status(503).json({
+      code: "PRODUCTION_CONFLIT_CONCURRENCE",
+      erreur: "Une autre modification de cette production est en cours — réessayez. Rien n'a été enregistré.",
+    });
+  }
+  return next(e);
+}
+
+// Remplace intégralement la répartition des pertes. Les suppressions sont
+// auditées dans la même transaction : si l'audit échoue, l'ancien détail reste.
 productionRouter.put("/productions/:id/pertes", ecriture, async (req, res, next) => {
   try {
-    const { production, erreur } = await chargerProductionOuverte(req.params.id);
-    if (erreur) return res.status(erreur.status).json({ erreur: erreur.message });
-
     const parsed = productionPertesSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
@@ -793,28 +834,45 @@ productionRouter.put("/productions/:id/pertes", ecriture, async (req, res, next)
       }
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.productionPerte.deleteMany({ where: { productionId: production!.id } });
-      if (pertes.length > 0) {
-        await tx.productionPerte.createMany({
-          data: pertes.map((l) => ({ productionId: production!.id, motifPerteId: l.motifPerteId, nombreBacs: l.nombreBacs })),
-        });
-      }
-    });
+    const complete = await prisma.$transaction(
+      async (tx) => {
+        const production = await verrouillerProductionOuverte(tx, req.params.id);
+        for (const ancienne of production.pertes) {
+          await auditerCaisseTx(tx, {
+            module: "PRODUCTION",
+            typeEntite: "ProductionPerte",
+            entiteId: ancienne.id,
+            action: "SUPPRESSION",
+            avant: { ...ancienne },
+            apres: null,
+          });
+        }
+        await tx.productionPerte.deleteMany({ where: { productionId: production.id } });
+        if (pertes.length > 0) {
+          await tx.productionPerte.createMany({
+            data: pertes.map((l) => ({
+              productionId: production.id,
+              motifPerteId: l.motifPerteId,
+              nombreBacs: l.nombreBacs,
+            })),
+          });
+        }
+        return tx.production.findUniqueOrThrow({ where: { id: production.id }, include: INCLUDE_PRODUCTION });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
 
-    const complete = await prisma.production.findUniqueOrThrow({ where: { id: production!.id }, include: INCLUDE_PRODUCTION });
     res.json({ production: versProductionDTO(complete) });
   } catch (e) {
-    next(e);
+    return repondreErreurMutationProduction(e, res, next);
   }
 });
 
-// Un seul contrôle qualité par Production — upsert.
+// Un seul contrôle qualité par Production. Une création reste couverte par la
+// politique centrale (pas d'AuditLog de création) ; une correction est écrite
+// via updateMany puis auditée manuellement dans la transaction.
 productionRouter.put("/productions/:id/controle-qualite", ecriture, async (req, res, next) => {
   try {
-    const { production, erreur } = await chargerProductionOuverte(req.params.id);
-    if (erreur) return res.status(erreur.status).json({ erreur: erreur.message });
-
     const parsed = controleQualiteSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
@@ -826,48 +884,97 @@ productionRouter.put("/productions/:id/controle-qualite", ecriture, async (req, 
       if (!connu) return res.status(400).json({ erreur: "Motif de non-conformité inconnu" });
     }
 
-    await prisma.controleQualite.upsert({
-      where: { productionId: production!.id },
-      update: { verdict, motifId: motifId ?? null, observations: observations ?? null, controleParId: req.utilisateur!.id },
-      create: {
-        productionId: production!.id,
-        verdict,
-        motifId: motifId ?? null,
-        observations: observations ?? null,
-        controleParId: req.utilisateur!.id,
-      },
-    });
+    const complete = await prisma.$transaction(
+      async (tx) => {
+        const production = await verrouillerProductionOuverte(tx, req.params.id);
+        const donnees = {
+          verdict,
+          motifId: motifId ?? null,
+          observations: observations ?? null,
+          controleParId: req.utilisateur!.id,
+        };
 
-    const complete = await prisma.production.findUniqueOrThrow({ where: { id: production!.id }, include: INCLUDE_PRODUCTION });
+        if (production.controleQualite) {
+          const resultat = await tx.controleQualite.updateMany({
+            where: { id: production.controleQualite.id },
+            data: donnees,
+          });
+          if (resultat.count !== 1) {
+            throw new ErreurMutationProduction(409, "PRODUCTION_CLOTUREE", "Le contrôle qualité a été modifié simultanément");
+          }
+          const modifie = await tx.controleQualite.findUniqueOrThrow({
+            where: { id: production.controleQualite.id },
+          });
+          await auditerCaisseTx(tx, {
+            module: "PRODUCTION",
+            typeEntite: "ControleQualite",
+            entiteId: modifie.id,
+            action: "MODIFICATION",
+            avant: { ...production.controleQualite },
+            apres: { ...modifie },
+          });
+        } else {
+          await tx.controleQualite.create({
+            data: { productionId: production.id, ...donnees },
+          });
+        }
+
+        return tx.production.findUniqueOrThrow({ where: { id: production.id }, include: INCLUDE_PRODUCTION });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
     res.json({ production: versProductionDTO(complete) });
   } catch (e) {
-    next(e);
+    return repondreErreurMutationProduction(e, res, next);
   }
 });
 
-// Verrou définitif : exige un contrôle qualité enregistré et, si bacsFoutus >
-// 0, des lignes de perte dont la somme égale exactement bacsFoutus.
+// Verrou définitif : les préconditions sont relues sous le même verrou que la
+// modification et son audit. Une perte ou un contrôle concurrent ne peut donc
+// jamais se glisser après la clôture.
 productionRouter.post("/productions/:id/cloturer", ecriture, async (req, res, next) => {
   try {
-    const { production, erreur } = await chargerProductionOuverte(req.params.id);
-    if (erreur) return res.status(erreur.status).json({ erreur: erreur.message });
+    const cloturee = await prisma.$transaction(
+      async (tx) => {
+        const production = await verrouillerProductionOuverte(tx, req.params.id);
 
-    if (!production!.controleQualite) {
-      return res.status(400).json({ code: "CONTROLE_QUALITE_MANQUANT", erreur: "Le contrôle qualité doit être enregistré avant la clôture" });
-    }
-    const totalPertes = production!.pertes.reduce((s, l) => s + l.nombreBacs, 0);
-    if (!pertesJustifiees({ bacsFoutus: production!.bacsFoutus, pertes: production!.pertes })) {
-      return res.status(400).json({
-        code: "PERTES_NON_JUSTIFIEES",
-        erreur: `Les pertes ne sont pas entièrement motivées : ${totalPertes} bac(s) motivé(s) pour ${production!.bacsFoutus} bac(s) foutu(s)`,
-      });
-    }
+        if (!production.controleQualite) {
+          throw new ErreurMutationProduction(
+            409,
+            "PRODUCTION_CLOTUREE",
+            "Le contrôle qualité doit être enregistré avant la clôture",
+          );
+        }
+        const totalPertes = production.pertes.reduce((s, l) => s + l.nombreBacs, 0);
+        if (!pertesJustifiees({ bacsFoutus: production.bacsFoutus, pertes: production.pertes })) {
+          throw new ErreurMutationProduction(
+            409,
+            "PRODUCTION_CLOTUREE",
+            `Les pertes ne sont pas entièrement motivées : ${totalPertes} bac(s) motivé(s) pour ${production.bacsFoutus} bac(s) foutu(s)`,
+          );
+        }
 
-    const cloturee = await prisma.production.update({
-      where: { id: production!.id },
-      data: { statut: "CLOTUREE", clotureeLe: new Date(), clotureeParId: req.utilisateur!.id },
-      include: INCLUDE_PRODUCTION,
-    });
+        const resultat = await tx.production.updateMany({
+          where: { id: production.id, statut: "OUVERTE" },
+          data: { statut: "CLOTUREE", clotureeLe: new Date(), clotureeParId: req.utilisateur!.id },
+        });
+        if (resultat.count !== 1) {
+          throw new ErreurMutationProduction(409, "PRODUCTION_CLOTUREE", "Cette production vient d'être clôturée");
+        }
+        const apres = await tx.production.findUniqueOrThrow({ where: { id: production.id }, include: INCLUDE_PRODUCTION });
+        await auditerCaisseTx(tx, {
+          module: "PRODUCTION",
+          typeEntite: "Production",
+          entiteId: production.id,
+          action: "MODIFICATION",
+          avant: { ...production },
+          apres: { ...apres },
+        });
+        return apres;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
 
     const dto = versProductionDTO(cloturee);
     busEvenements.emettreEvenement({
@@ -880,7 +987,7 @@ productionRouter.post("/productions/:id/cloturer", ecriture, async (req, res, ne
     });
     res.json({ production: dto });
   } catch (e) {
-    next(e);
+    return repondreErreurMutationProduction(e, res, next);
   }
 });
 
