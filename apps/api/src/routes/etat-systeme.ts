@@ -19,6 +19,7 @@ import {
   ErreurSauvegarde,
   nomFichierSauvegarde,
   outilSauvegardeDisponible,
+  validerDump,
 } from "../services/sauvegarde.js";
 import { lireSauvegardeLocale, repertoireLocal, retentionLocale } from "../services/sauvegardeLocale.js";
 import {
@@ -151,6 +152,11 @@ etatSystemeRouter.post("/sauvegarde", async (req, res, next) => {
   const nomFichier = nomFichierSauvegarde();
   try {
     const dump = await construireDump();
+    // P0 (correctif Codex round 2, 30/08/2026) : la sauvegarde manuelle
+    // n'échappe plus à la validation — un dump non vide n'est pas la même
+    // chose qu'un dump restaurable (voir validerDump). Ni journalisée en
+    // SUCCES, ni un seul octet envoyé au navigateur avant cette validation.
+    await validerDump(dump);
     // Journalisée comme les automatiques : l'historique doit dire qui a
     // téléchargé une copie de la base, et quand.
     await prisma.sauvegardeBase.create({

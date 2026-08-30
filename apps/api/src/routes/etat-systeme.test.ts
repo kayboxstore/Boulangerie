@@ -33,6 +33,9 @@ const mocks = vi.hoisted(() => ({
   utilisateurCount: vi.fn().mockResolvedValue(0),
   sauvegardeBaseFindMany: vi.fn().mockResolvedValue([]),
   sauvegardeBaseFindFirst: vi.fn().mockResolvedValue(null),
+  sauvegardeBaseCreate: vi.fn().mockResolvedValue({ id: "sauv-manuelle-1" }),
+  construireDump: vi.fn(),
+  validerDump: vi.fn(),
 }));
 
 vi.mock("../services/reinitialisation.js", async (importOriginal) => {
@@ -45,7 +48,8 @@ vi.mock("../services/reinitialisation.js", async (importOriginal) => {
 });
 
 vi.mock("../services/sauvegarde.js", () => ({
-  construireDump: vi.fn(),
+  construireDump: mocks.construireDump,
+  validerDump: mocks.validerDump,
   ErreurSauvegarde: class ErreurSauvegarde extends Error {
     status: number;
     constructor(status: number, message: string) {
@@ -75,7 +79,11 @@ vi.mock("../lib/prisma.js", () => ({
   prisma: {
     $queryRaw: mocks.queryRaw,
     utilisateur: { count: mocks.utilisateurCount },
-    sauvegardeBase: { findMany: mocks.sauvegardeBaseFindMany, findFirst: mocks.sauvegardeBaseFindFirst },
+    sauvegardeBase: {
+      findMany: mocks.sauvegardeBaseFindMany,
+      findFirst: mocks.sauvegardeBaseFindFirst,
+      create: mocks.sauvegardeBaseCreate,
+    },
   },
 }));
 
@@ -85,6 +93,7 @@ vi.mock("../lib/realtime.js", () => ({
 
 const { etatSystemeRouter } = await import("./etat-systeme.js");
 const { ErreurReinitialisation } = await import("../services/reinitialisation.js");
+const { ErreurSauvegarde } = await import("../services/sauvegarde.js");
 
 function creerApp() {
   const app = express();
@@ -96,6 +105,8 @@ function creerApp() {
 beforeEach(() => {
   utilisateurCourant = { id: "u-1", estAdminPrincipal: true };
   mocks.reinitialisationAutoriseeIci.mockReturnValue(true);
+  mocks.construireDump.mockResolvedValue(Buffer.from("dump-factice"));
+  mocks.validerDump.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -156,6 +167,48 @@ describe("POST /api/etat-systeme/reinitialiser — succès", () => {
     expect(mocks.reinitialiserBase).toHaveBeenCalledWith("test");
     expect(mocks.disconnectSockets).toHaveBeenCalledWith(true);
     expect(mocks.emit).toHaveBeenCalledWith("sessionInvalidee", expect.any(Object));
+  });
+});
+
+describe("POST /api/etat-systeme/sauvegarde — validation obligatoire AVANT tout téléchargement (correctif Codex round 2, 30/08/2026)", () => {
+  it("dump valide : validerDump est appelé, la sauvegarde est journalisée SUCCES, et le fichier part au téléchargement", async () => {
+    const reponse = await request(creerApp()).post("/api/etat-systeme/sauvegarde");
+    expect(reponse.status).toBe(200);
+    expect(mocks.validerDump).toHaveBeenCalledTimes(1);
+    expect(mocks.sauvegardeBaseCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.sauvegardeBaseCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ statut: "SUCCES", type: "MANUELLE" }) }),
+    );
+    expect(reponse.body.toString()).toBe("dump-factice");
+  });
+
+  it("dump construit mais INVALIDE (validerDump rejette) : jamais téléchargé, jamais SUCCES — journalisé ECHEC avec un message clair", async () => {
+    mocks.validerDump.mockRejectedValue(new ErreurSauvegarde(500, "Archive invalide ou corrompue"));
+    const reponse = await request(creerApp()).post("/api/etat-systeme/sauvegarde");
+
+    expect(reponse.status).toBe(500);
+    expect(reponse.body.erreur).toMatch(/invalide ou corrompue/);
+    // Le corps de la réponse est une erreur JSON, jamais l'octet du dump.
+    expect(reponse.headers["content-type"]).toMatch(/json/);
+
+    expect(mocks.sauvegardeBaseCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.sauvegardeBaseCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ statut: "ECHEC", type: "MANUELLE", erreur: expect.stringContaining("invalide") }),
+      }),
+    );
+    // Jamais journalisé SUCCES pour ce même appel.
+    expect(mocks.sauvegardeBaseCreate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ statut: "SUCCES" }) }),
+    );
+  });
+
+  it("403 si l'appelant n'est pas l'Administrateur principal — validerDump n'est même pas atteint", async () => {
+    utilisateurCourant = { id: "u-2", estAdminPrincipal: false };
+    const reponse = await request(creerApp()).post("/api/etat-systeme/sauvegarde");
+    expect(reponse.status).toBe(403);
+    expect(mocks.construireDump).not.toHaveBeenCalled();
+    expect(mocks.validerDump).not.toHaveBeenCalled();
   });
 });
 
