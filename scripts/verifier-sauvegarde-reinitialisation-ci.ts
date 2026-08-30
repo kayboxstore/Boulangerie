@@ -508,9 +508,16 @@ async function main() {
   process.env.NODE_ENV = "production";
   process.env[VARIABLE_AUTORISATION_PRODUCTION] = "true"; // activation EXPLICITE, environnement contrôlé (CI)
   const jetonReset = signToken({ sub: jeu.utilisateurId, roleId: jeu.roleId, sid: jeu.sessionId });
-  const serveurRealtime = createServer();
+  const serveurRealtime = createServer(createApp());
   const ioReset = initRealtime(serveurRealtime);
-  const reponseReset = await request(createApp())
+  await new Promise<void>((resolve, reject) => {
+    serveurRealtime.once("error", reject);
+    serveurRealtime.listen(0, "127.0.0.1", () => {
+      serveurRealtime.off("error", reject);
+      resolve();
+    });
+  });
+  const reponseReset = await request(serveurRealtime)
     // Variante casse+slash final : Express l'accepte ; le marqueur de la
     // requête initiatrice doit suivre exactement le même matcher.
     .post("/API/ETAT-SYSTEME/REINITIALISER/")
