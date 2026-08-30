@@ -763,8 +763,12 @@ productionRouter.post("/productions", ecriture, async (req, res, next) => {
 
 class ErreurMutationProduction extends Error {
   constructor(
-    readonly status: 404 | 409,
-    readonly code: "PRODUCTION_INTROUVABLE" | "PRODUCTION_CLOTUREE",
+    readonly status: 400 | 404 | 409,
+    readonly code:
+      | "PRODUCTION_INTROUVABLE"
+      | "PRODUCTION_CLOTUREE"
+      | "CONTROLE_QUALITE_MANQUANT"
+      | "PERTES_NON_JUSTIFIEES",
     message: string,
   ) {
     super(message);
@@ -941,16 +945,16 @@ productionRouter.post("/productions/:id/cloturer", ecriture, async (req, res, ne
 
         if (!production.controleQualite) {
           throw new ErreurMutationProduction(
-            409,
-            "PRODUCTION_CLOTUREE",
+            400,
+            "CONTROLE_QUALITE_MANQUANT",
             "Le contrôle qualité doit être enregistré avant la clôture",
           );
         }
         const totalPertes = production.pertes.reduce((s, l) => s + l.nombreBacs, 0);
         if (!pertesJustifiees({ bacsFoutus: production.bacsFoutus, pertes: production.pertes })) {
           throw new ErreurMutationProduction(
-            409,
-            "PRODUCTION_CLOTUREE",
+            400,
+            "PERTES_NON_JUSTIFIEES",
             `Les pertes ne sont pas entièrement motivées : ${totalPertes} bac(s) motivé(s) pour ${production.bacsFoutus} bac(s) foutu(s)`,
           );
         }
