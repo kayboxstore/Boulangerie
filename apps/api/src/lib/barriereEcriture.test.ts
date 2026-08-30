@@ -8,9 +8,11 @@
  * est apportée séparément par
  * `scripts/verifier-sauvegarde-reinitialisation-ci.ts`.
  */
+import type { AddressInfo } from "node:net";
+import net from "node:net";
 import express from "express";
 import request from "supertest";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   abaisserBarriere,
   activerBarriereEtAttendreDrainage,
@@ -167,5 +169,85 @@ describe("activerBarriereEtAttendreDrainage / abaisserBarriere", () => {
     await activerBarriereEtAttendreDrainage();
     await expect(activerBarriereEtAttendreDrainage()).rejects.toThrow();
     abaisserBarriere();
+  });
+});
+
+describe("gardeBarriereEcriture — close ≠ finish (correctif Codex round 2)", () => {
+  it("ne décompte PAS quand le CLIENT se déconnecte pendant qu'un handler continue réellement d'écrire — seul `finish` (fin RÉELLEMENT prouvée) décompte", async () => {
+    // Vrai serveur HTTP + vrai socket TCP brut (pas supertest, qui attend
+    // toujours la réponse) : seul un socket manipulé à la main permet de
+    // simuler un CLIENT qui part en cours de route, sans jamais toucher au
+    // handler Express lui-même, qui continue de tourner côté serveur.
+    const app = express();
+    app.use(gardeBarriereEcriture);
+    let handlerTermine = false;
+    let debloquerHandler!: () => void;
+    const porteHandler = new Promise<void>((resolve) => {
+      debloquerHandler = resolve;
+    });
+    app.post("/ecriture-lente", async (_req, res) => {
+      // Simule une écriture PostgreSQL encore en cours au moment où le
+      // client se déconnecte — le handler Express n'est PAS annulé par la
+      // déconnexion du client, il continue jusqu'à sa propre fin.
+      await porteHandler;
+      handlerTermine = true;
+      res.status(201).json({ ok: true });
+    });
+
+    const serveur = app.listen(0);
+    try {
+      const port = (serveur.address() as AddressInfo).port;
+      const socket = net.connect(port, "127.0.0.1");
+      await new Promise<void>((resolve, reject) => {
+        socket.once("connect", resolve);
+        socket.once("error", reject);
+      });
+      socket.write(
+        "POST /ecriture-lente HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+      );
+
+      // Attend que le serveur ait bien reçu la requête et compté l'écriture
+      // « en vol » — entrelacement déterministe, jamais un délai qui espère.
+      await vi.waitFor(() => {
+        if (ecrituresEnVol() !== 1) throw new Error("écriture pas encore comptée");
+      });
+
+      // Le CLIENT se déconnecte MAINTENANT, pendant que le handler attend
+      // toujours `porteHandler` (écriture toujours en cours côté serveur).
+      // Un court délai réel ici ne sert qu'à laisser l'event loop propager la
+      // fermeture TCP côté serveur — la preuve elle-même ne repose PAS sur ce
+      // délai : `gardeBarriereEcriture` n'écoute plus DU TOUT `close` (voir
+      // le code), donc aucune décrémentation ne peut survenir de toute façon,
+      // que ce délai soit court ou long.
+      socket.destroy();
+      await new Promise((r) => setTimeout(r, 20));
+
+      // Le `close` a eu lieu côté serveur, mais le handler n'a PAS terminé :
+      // le compteur ne doit surtout pas avoir été décompté prématurément.
+      expect(handlerTermine).toBe(false);
+      expect(ecrituresEnVol()).toBe(1);
+
+      // Le handler termine enfin son écriture — `res.json()` tente d'écrire
+      // sur un socket déjà fermé côté client. Selon le comportement Node
+      // (le socket peut être détruit avant même que `res.json()` ne soit
+      // appelé), `finish` peut se déclencher ou non : dans TOUS les cas, le
+      // compteur ne redescend JAMAIS tant que `finish` n'a pas été observé —
+      // c'est exactement la règle conservatrice documentée dans
+      // `gardeBarriereEcriture` : préférer un drainage qui échoue sur
+      // timeout à un drainage qui ment.
+      debloquerHandler();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(handlerTermine).toBe(true);
+      // Si `finish` ne s'est jamais déclenché (socket déjà détruit), le
+      // compteur reste à 1 pour toujours — c'est le comportement assumé.
+      // S'il s'est déclenché (Node livre parfois `finish` même après un
+      // socket détruit, la donnée étant simplement perdue), il redescend à
+      // 0. Les deux issues sont sûres ; la seule interdite est une
+      // décrémentation AVANT que le handler n'ait fini, déjà prouvée
+      // ci-dessus.
+      expect(ecrituresEnVol()).toBeLessThanOrEqual(1);
+    } finally {
+      serveur.close();
+    }
   });
 });

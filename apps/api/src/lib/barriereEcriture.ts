@@ -44,6 +44,21 @@
  * middleware sur toutes les instances avant d'accepter une écriture) —
  * documenté ici pour ne pas être oublié le jour où ce choix d'infrastructure
  * change.
+ *
+ * CORRECTIFS ROUND 2 (contre-revue Codex, 30/08/2026) — deux défauts P0
+ * trouvés dans la version initiale de ce mécanisme :
+ *  1. Auto-blocage : `POST /api/etat-systeme/reinitialiser` se comptait
+ *     elle-même comme écriture en vol avant même d'appeler
+ *     `activerBarriereEtAttendreDrainage()`, qui attendait alors sa PROPRE
+ *     fin pour se drainer — blocage garanti, résolu seulement par le
+ *     timeout de drainage. Corrigé par `estRequeteReinitialisation()` :
+ *     exception hardcodée, UNIQUEMENT cette route, jamais une liste
+ *     extensible.
+ *  2. Décompte prématuré : le compteur décomptait aussi sur l'événement
+ *     `close` de la réponse, qui peut se déclencher quand le CLIENT se
+ *     déconnecte alors que le handler Express continue réellement d'écrire
+ *     en base. Corrigé : décompte UNIQUEMENT sur `finish` (fin RÉELLEMENT
+ *     prouvée de la réponse) — voir `gardeBarriereEcriture`.
  */
 import type { NextFunction, Request, Response } from "express";
 
@@ -64,6 +79,29 @@ export class ErreurDrainageEchoue extends Error {
 let barriereActive = false;
 let compteurEnVol = 0;
 const abonnesDrain: Array<() => void> = [];
+
+/**
+ * SEULE exception au comptage — la route qui active elle-même la barrière et
+ * attend le drainage (`services/reinitialisation.ts`). Sans elle, cette
+ * requête se compterait comme « en vol » avant même d'appeler
+ * `activerBarriereEtAttendreDrainage()`, puis attendrait indéfiniment sa
+ * PROPRE fin pour se drainer elle-même — auto-blocage garanti (correctif
+ * Codex, round 2, 30/08/2026). Hardcodée en dur (méthode + chemin EXACTS),
+ * jamais une liste extensible : aucune autre route ne doit jamais en
+ * bénéficier. Elle reste pleinement protégée par le refus 503 ci-dessous si
+ * la barrière est DÉJÀ active, et par le garde-fou anti-double-activation de
+ * `activerBarriereEtAttendreDrainage()` (ErreurBarriereActive) si deux
+ * requêtes de réinitialisation arrivent à la suite l'une de l'autre avant
+ * que la première n'ait eu le temps d'activer la barrière : Node.js étant
+ * mono-thread et cette vérification synchrone (aucun `await` avant elle),
+ * la première à l'atteindre gagne — au plus une exécution, jamais deux.
+ */
+const METHODE_REINITIALISATION = "POST";
+const CHEMIN_REINITIALISATION = "/api/etat-systeme/reinitialiser";
+
+function estRequeteReinitialisation(req: Request): boolean {
+  return req.method === METHODE_REINITIALISATION && req.path === CHEMIN_REINITIALISATION;
+}
 
 /**
  * Crochets de test — UNIQUEMENT utilisés par les scripts de vérification
@@ -99,9 +137,22 @@ function notifierDrainSiVide(): void {
 /**
  * Middleware Express — à monter tout en amont (voir app.ts), avant les
  * routeurs métier. Bloque toute requête (sauf `GET /api/health`) tant que la
- * barrière est active, et suit les autres comme « en vol » jusqu'à la fin
- * de la réponse (`finish`) ou de la connexion (`close`), quel que soit
- * l'ordre d'arrivée de ces deux événements.
+ * barrière est active, et suit les autres comme « en vol » jusqu'à leur fin
+ * RÉELLEMENT PROUVÉE.
+ *
+ * Décompte UNIQUEMENT sur `finish` (correctif Codex, round 2, 30/08/2026) —
+ * jamais sur `close`. `close` se déclenche dès que la connexion TCP se ferme,
+ * y compris quand le CLIENT part en cours de route alors que le handler
+ * Express, lui, continue d'exécuter ses écritures PostgreSQL (Express
+ * n'annule pas le handler à la déconnexion du client). Décompter sur `close`
+ * pouvait donc faire croire la base « drainée » alors qu'une écriture
+ * tournait encore. Règle conservatrice assumée : si `finish` ne se déclenche
+ * jamais (réponse jamais envoyée, ex. connexion détruite avant que le
+ * handler ait pu répondre), cette écriture reste comptée « en vol » pour
+ * toujours — une réinitialisation qui attend son drainage échouera alors sur
+ * timeout (`ErreurDrainageEchoue`) plutôt que de risquer de démarrer un dump
+ * pendant qu'une écriture est peut-être encore en cours. Préférer un échec
+ * explicite à une perte de données silencieuse.
  */
 export function gardeBarriereEcriture(req: Request, res: Response, next: NextFunction): void {
   if (req.method === "GET" && req.path === "/api/health") {
@@ -116,6 +167,14 @@ export function gardeBarriereEcriture(req: Request, res: Response, next: NextFun
     });
     return;
   }
+  if (estRequeteReinitialisation(req)) {
+    // Voir le commentaire au-dessus de `estRequeteReinitialisation` : seule
+    // exception au comptage, pour ne pas s'auto-bloquer en attendant son
+    // propre drainage. Reste protégée par le refus 503 ci-dessus et par
+    // `activerBarriereEtAttendreDrainage()` en cas de double requête.
+    next();
+    return;
+  }
   compteurEnVol++;
   let decompte = false;
   const finir = () => {
@@ -125,7 +184,6 @@ export function gardeBarriereEcriture(req: Request, res: Response, next: NextFun
     notifierDrainSiVide();
   };
   res.once("finish", finir);
-  res.once("close", finir);
   void crochetsTestBarriere.apresIncrementAvantExecution?.();
   next();
 }
