@@ -129,22 +129,41 @@ PostgreSQL n'est pas installé sur l'hôte (variable `PG_DUMP_PATH` si l'outil e
 installé ailleurs que dans le `PATH`). Dans ce cas, s'appuyer en attendant sur les
 sauvegardes de la base managée fournies par l'hébergeur.
 
-### Intégrité et cohérence garanties (Lot P0, 30/08/2026)
+### Intégrité et cohérence garanties (Lot P0, 30/08/2026 — durci round 2 le 30/08/2026)
 
 Avant d'être considérée réussie, toute sauvegarde (automatique, manuelle ou de
-sûreté avant réinitialisation) est **validée réellement** — `pg_dump` doit
-réussir, l'archive ne doit pas être vide, et sa table des matières doit être
-lisible par `pg_restore --list` — et écrite sur disque de façon **atomique**
-(fichier temporaire puis renommage) : aucune archive tronquée ou partielle
-n'est jamais annoncée comme une sauvegarde réussie.
+sûreté avant réinitialisation) est **validée réellement** en DEUX passes —
+`pg_dump` doit réussir, l'archive ne doit pas être vide, sa table des
+matières doit être lisible par `pg_restore --list`, **et** son contenu
+complet doit pouvoir être intégralement redécodé (`pg_restore` reconstruit le
+flux SQL entier sans se connecter à aucune base, ce qui détecte un bloc de
+DONNÉES corrompu que la seule table des matières laisserait passer) — puis
+écrite sur disque de façon **atomique** (fichier temporaire puis renommage) :
+aucune archive tronquée ou partielle n'est jamais annoncée comme une
+sauvegarde réussie. Les deux binaires (`pg_dump`, `pg_restore`) sont soumis à
+un délai maximal : un processus resté bloqué est tué proprement plutôt que de
+suspendre indéfiniment l'opération.
+
+**Limite assumée et documentée, jamais présentée comme plus qu'elle n'est** :
+même ces deux passes ne sont PAS une preuve complète de restaurabilité —
+elles éliminent les archives tronquées/corrompues détectables sans rien
+écrire nulle part, mais seule une restauration réelle réussie (voir
+« Restaurer une sauvegarde » ci-dessous) le prouve vraiment. `pg_restore
+--list`, en particulier, ne lit que l'en-tête de l'archive et ne doit jamais
+être présenté comme une preuve de restaurabilité.
 
 La **réinitialisation de la base** (irréversible) active en outre une
 **barrière d'écriture** avant de produire son dump : plus aucune écriture
 (HTTP ou tâche de fond) ne peut commencer, et celles déjà engagées sont
 laissées se terminer avant que le dump ne démarre — le dump et l'état effacé
 juste après représentent ainsi strictement la même frontière logique, sans
-risque qu'une écriture arrivée entre les deux soit perdue. Cette barrière est
-un mécanisme **en mémoire du process**, valable pour la configuration Render
+risque qu'une écriture arrivée entre les deux soit perdue. Le décompte d'une
+écriture suivie ne se fait que sur la fin RÉELLEMENT prouvée de sa réponse
+(`finish`), jamais sur une simple déconnexion réseau du client (`close`), qui
+peut survenir alors qu'un handler continue réellement d'écrire en base —
+règle conservatrice assumée : en cas de doute, la barrière échoue par
+timeout plutôt que de risquer un drainage prématuré. Cette barrière est un
+mécanisme **en mémoire du process**, valable pour la configuration Render
 actuelle à **une seule instance** ; un passage futur à plusieurs instances
 exigerait de la remplacer par une coordination distribuée réelle (verrou
 consultatif PostgreSQL `pg_advisory_lock`) — voir le commentaire de tête de
@@ -159,21 +178,28 @@ uniquement à la main, temporairement, pour l'opération elle-même. L'écran
 *État système* reflète cet état honnêtement (bouton désactivé avec le motif
 exact renvoyé par le serveur), mais la garde qui compte est côté serveur.
 
-Toutes ces garanties (validation d'archive, écriture atomique, barrière,
-désactivation en production, écriture concurrente jamais perdue,
-réinitialisation réelle avec conservation du référentiel/mise à zéro du
-stock, restauration dans une base temporaire séparée) sont prouvées contre
+Toutes ces garanties (validation d'archive en deux passes, écriture atomique,
+barrière, désactivation en production, écriture concurrente jamais perdue,
+notifications asynchrones suivies par la même barrière, réinitialisation
+réelle avec conservation du référentiel/mise à zéro du stock, restauration
+atomique via le vrai script `restaurer-sauvegarde.ts`) sont prouvées contre
 une **vraie base PostgreSQL** par `scripts/verifier-sauvegarde-reinitialisation-ci.ts`,
-exécuté à chaque CI.
+exécuté à chaque CI — 15 scénarios réels, listés en tête de ce script.
 
 ### Restaurer une sauvegarde
 
 Une sauvegarde ne sert à rien si elle n'a jamais été restaurée avec succès —
-la procédure ci-dessous est **prouvée automatiquement à chaque CI** contre une
-vraie base PostgreSQL (dump produit avec les mêmes options que l'application,
-restauré dans une base temporaire séparée, comptages et contenu relus de
-façon indépendante et vérifiés identiques à la source, base temporaire
-nettoyée même en cas d'échec) — voir
+la procédure ci-dessous est **prouvée automatiquement à chaque CI**, en
+appelant le VRAI `scripts/restaurer-sauvegarde.ts` (jamais une
+réimplémentation de l'appel `pg_restore`) contre une vraie base PostgreSQL :
+sans confirmation (zéro modification), avec une confirmation fausse (refusé,
+zéro modification), avec un nom de base identique mais un hôte différent
+(refusé, zéro modification), avec la confirmation exacte (restauration
+réelle réussie, données relues indépendamment), avec un échec injecté APRÈS
+le début réel de la restauration (le vrai `pg_restore` est observé en train
+de travailler puis sa connexion est coupée — `--single-transaction` annule
+alors tout, la cible reste strictement inchangée), et un nettoyage
+systématique des bases temporaires même en cas d'échec — voir
 `scripts/verifier-sauvegarde-reinitialisation-ci.ts`.
 
 **Obligatoire avant toute restauration en production** : répéter d'abord
@@ -188,11 +214,20 @@ clic malheureux sur une page web serait bien trop facile sur les données
 réelles de l'entreprise. Nécessite un accès à l'environnement où tourne
 l'API (mêmes prérequis que `npx prisma migrate deploy`).
 
-Durci le 30/08/2026 (Lot P0) : la confirmation n'est plus un simple
-`--confirmer` — elle exige désormais de **répéter le nom exact** de la base
-cible (affiché par le script), pour empêcher de confirmer par réflexe une
-commande recopiée d'un terminal à l'autre sans relire la cible. L'archive est
-en outre validée (`pg_restore --list`) **avant** tout appel à `--clean`.
+**Durci round 2 (correctif Codex, 30/08/2026)** : la confirmation n'est plus
+liée au seul **nom** de la base — plusieurs environnements Neon distincts
+portent couramment le même nom par défaut (`neondb`), ce qui ne protégeait en
+rien contre une confirmation valide mais pointant vers le **mauvais
+serveur**. Elle exige désormais un identifiant complet **hôte + port + base**
+(`--confirmer=<hote>:<port>/<base>`, affiché par le script, à recopier
+exactement — jamais l'utilisateur ni le mot de passe). La restauration
+elle-même est en outre réellement **atomique** : `--single-transaction`
+(complété par `--exit-on-error`) enveloppe tout le flux dans une seule
+transaction — toute erreur en cours de route annule tout au `COMMIT` final,
+la cible reste alors strictement inchangée, jamais à moitié effacée. L'archive
+est validée en deux passes **avant** tout appel à `--clean` — voir la limite
+assumée ci-dessus (une validation lisible n'est pas une preuve complète de
+restaurabilité).
 
 ```bash
 # 1. Récupérer un fichier .dump (bouton "Télécharger..." de l'écran État
@@ -202,14 +237,15 @@ en outre validée (`pg_restore --list`) **avant** tout appel à `--clean`.
 #    À RESTAURER (une base ISOLÉE d'abord — jamais la production directement) :
 export DATABASE_URL="postgresql://utilisateur:motdepasse@hote:5432/base"
 
-# 3. Vérification à blanc — valide l'archive et affiche la base ciblée SANS
-#    toucher à rien (ne restaure jamais sans --confirmer=<nomBase>) :
+# 3. Vérification à blanc — valide l'archive et affiche l'identifiant complet
+#    de la cible SANS toucher à rien (ne restaure jamais sans --confirmer) :
 npm run restore:backup -- chemin/vers/fichier.dump
 
-# 4. Restauration réelle — <nomBase> DOIT être exactement le nom affiché à
-#    l'étape 3 (ATTENTION : --clean --if-exists supprime les tables
-#    existantes de la base ciblée avant d'y recharger le dump) :
-npm run restore:backup -- chemin/vers/fichier.dump --confirmer=<nomBase>
+# 4. Restauration réelle — <hote>:<port>/<base> DOIT être exactement
+#    l'identifiant affiché à l'étape 3 (ATTENTION : --clean --if-exists
+#    supprime les tables existantes de la base ciblée avant d'y recharger
+#    le dump ; en cas d'erreur en cours de route, tout est annulé) :
+npm run restore:backup -- chemin/vers/fichier.dump --confirmer=<hote>:<port>/<base>
 
 # 5. Vérifier après coup (obligatoire) : se connecter à l'application ou
 #    interroger la base pour confirmer que les données attendues sont bien
