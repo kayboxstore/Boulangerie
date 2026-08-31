@@ -129,14 +129,49 @@ productionRouter.post("/planning", ecriture, async (req, res, next) => {
     const donnees = { ...previsions, nombreBacsCommandes: parsed.data.nombreBacsCommandes, observations: observations ?? null };
 
     const planning = await prisma.$transaction(async (tx) => {
-      const existant = await tx.planningProduction.findUnique({ where: { datePrevue: date } });
+      const existant = await tx.planningProduction.findUnique({
+        where: { datePrevue: date },
+        include: INCLUDE_PLANNING,
+      });
       if (existant) {
+        // Le remplacement complet reste atomique avec ses AuditLog : aucun
+        // update() singulier intercepté par l'extension non transactionnelle.
         await tx.planningLigneProduit.deleteMany({ where: { planningId: existant.id } });
-        return tx.planningProduction.update({
+        const resultat = await tx.planningProduction.updateMany({
           where: { id: existant.id },
-          data: { ...donnees, lignes: { create: lignes } },
+          data: donnees,
+        });
+        if (resultat.count !== 1) {
+          throw new ErreurMutationProduction(409, "PRODUCTION_CLOTUREE", "La planification a été modifiée simultanément");
+        }
+        if (lignes.length > 0) {
+          await tx.planningLigneProduit.createMany({
+            data: lignes.map((ligne) => ({ ...ligne, planningId: existant.id })),
+          });
+        }
+        const modifie = await tx.planningProduction.findUniqueOrThrow({
+          where: { id: existant.id },
           include: INCLUDE_PLANNING,
         });
+        for (const ancienneLigne of existant.lignes) {
+          await auditerCaisseTx(tx, {
+            module: "PRODUCTION",
+            typeEntite: "PlanningLigneProduit",
+            entiteId: ancienneLigne.id,
+            action: "SUPPRESSION",
+            avant: { ...ancienneLigne },
+            apres: null,
+          });
+        }
+        await auditerCaisseTx(tx, {
+          module: "PRODUCTION",
+          typeEntite: "PlanningProduction",
+          entiteId: existant.id,
+          action: "MODIFICATION",
+          avant: { ...existant },
+          apres: { ...modifie },
+        });
+        return modifie;
       }
       return tx.planningProduction.create({
         data: { ...donnees, datePrevue: date, creeParId: req.utilisateur!.id, lignes: { create: lignes } },
