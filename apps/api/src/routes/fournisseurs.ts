@@ -10,10 +10,11 @@ import {
   type FournisseurDTO,
   type StatutCommandeFournisseur,
 } from "@lomoto/shared";
-import { prisma } from "../lib/prisma.js";
+import { prisma, type TxClient } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
 import { appliquerMouvement, ErreurStock } from "../services/stocks.js";
+import { auditerCaisseTx } from "../services/caisseAtomique.js";
 
 export const fournisseursRouter = Router();
 
@@ -46,6 +47,66 @@ const INCLUDE_COMMANDE = {
   recuePar: { select: { id: true, nom: true } },
   lignes: { include: { matierePremiere: { select: { id: true, nom: true, unite: true } } } },
 } as const;
+
+
+class ErreurFournisseur extends Error {
+  constructor(readonly status: 400 | 404 | 409, message: string) {
+    super(message);
+  }
+}
+
+class ErreurConflitFournisseur extends Error {
+  constructor() {
+    super("Conflit de concurrence persistant — réessayez. Rien n’a été enregistré.");
+  }
+}
+
+function estConflitSerialisation(e: unknown): boolean {
+  if (!(e instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  return e.code === "P2034" || (e.code === "P2010" && (e.meta as { code?: string } | undefined)?.code === "40001");
+}
+
+async function avecReessaiSerializable<T>(operation: () => Promise<T>): Promise<T> {
+  for (let tentative = 1; tentative <= 3; tentative++) {
+    try {
+      return await operation();
+    } catch (e) {
+      if (!estConflitSerialisation(e)) throw e;
+      if (tentative === 3) throw new ErreurConflitFournisseur();
+    }
+  }
+  throw new ErreurConflitFournisseur();
+}
+
+async function verrouillerFournisseur(tx: TxClient, id: string) {
+  const ids = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "Fournisseur" WHERE id = ${id} FOR UPDATE
+  `;
+  if (!ids[0]) throw new ErreurFournisseur(404, "Fournisseur introuvable");
+  return tx.fournisseur.findUniqueOrThrow({
+    where: { id },
+    include: { _count: { select: { commandes: true } } },
+  });
+}
+
+async function verrouillerCommande(tx: TxClient, id: string): Promise<CommandeAvecRelations> {
+  const ids = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "CommandeFournisseur" WHERE id = ${id} FOR UPDATE
+  `;
+  if (!ids[0]) throw new ErreurFournisseur(404, "Commande introuvable");
+  return tx.commandeFournisseur.findUniqueOrThrow({ where: { id }, include: INCLUDE_COMMANDE });
+}
+
+function repondreErreurFournisseur(e: unknown, res: import("express").Response, next: import("express").NextFunction) {
+  if (e instanceof ErreurFournisseur) return res.status(e.status).json({ erreur: e.message });
+  if (e instanceof ErreurConflitFournisseur) {
+    return res.status(503).json({ code: "FOURNISSEUR_CONFLIT_CONCURRENCE", erreur: e.message });
+  }
+  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+    return res.status(409).json({ erreur: "Une donnée Fournisseur identique existe déjà" });
+  }
+  return next(e);
+}
 
 const versCommandeDTO = (c: CommandeAvecRelations): CommandeFournisseurDTO => {
   const lignes = c.lignes.map((l) => {
@@ -101,7 +162,7 @@ fournisseursRouter.post("/", requirePermission("FOURNISSEURS", "ECRITURE"), asyn
     });
     res.status(201).json({ fournisseur: versFournisseurDTO(fournisseur) });
   } catch (e) {
-    next(e);
+    return repondreErreurFournisseur(e, res, next);
   }
 });
 
@@ -111,35 +172,56 @@ fournisseursRouter.put("/:id", requirePermission("FOURNISSEURS", "ECRITURE"), as
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const existant = await prisma.fournisseur.findUnique({ where: { id: req.params.id } });
-    if (!existant) return res.status(404).json({ erreur: "Fournisseur introuvable" });
-
-    const fournisseur = await prisma.fournisseur.update({
-      where: { id: existant.id },
-      data: parsed.data,
-      include: { _count: { select: { commandes: true } } },
-    });
+    const fournisseur = await avecReessaiSerializable(() =>
+      prisma.$transaction(async (tx) => {
+        const avant = await verrouillerFournisseur(tx, req.params.id);
+        const resultat = await tx.fournisseur.updateMany({ where: { id: avant.id }, data: parsed.data });
+        if (resultat.count !== 1) throw new ErreurFournisseur(409, "Le fournisseur vient d’être modifié");
+        const apres = await tx.fournisseur.findUniqueOrThrow({
+          where: { id: avant.id },
+          include: { _count: { select: { commandes: true } } },
+        });
+        await auditerCaisseTx(tx, {
+          module: "FOURNISSEURS",
+          typeEntite: "Fournisseur",
+          entiteId: avant.id,
+          action: "MODIFICATION",
+          avant: { ...avant },
+          apres: { ...apres },
+        });
+        return apres;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    );
     res.json({ fournisseur: versFournisseurDTO(fournisseur) });
   } catch (e) {
-    next(e);
+    return repondreErreurFournisseur(e, res, next);
   }
 });
 
 // Suppression bloquée si le fournisseur a des commandes (historique conservé).
 fournisseursRouter.delete("/:id", requirePermission("FOURNISSEURS", "ECRITURE"), async (req, res, next) => {
   try {
-    const fournisseur = await prisma.fournisseur.findUnique({
-      where: { id: req.params.id },
-      include: { _count: { select: { commandes: true } } },
-    });
-    if (!fournisseur) return res.status(404).json({ erreur: "Fournisseur introuvable" });
-    if (fournisseur._count.commandes > 0) {
-      return res.status(409).json({ erreur: "Suppression impossible : ce fournisseur a des commandes enregistrées" });
-    }
-    await prisma.fournisseur.delete({ where: { id: fournisseur.id } });
+    await avecReessaiSerializable(() =>
+      prisma.$transaction(async (tx) => {
+        const fournisseur = await verrouillerFournisseur(tx, req.params.id);
+        if (fournisseur._count.commandes > 0) {
+          throw new ErreurFournisseur(409, "Suppression impossible : ce fournisseur a des commandes enregistrées");
+        }
+        const resultat = await tx.fournisseur.deleteMany({ where: { id: fournisseur.id } });
+        if (resultat.count !== 1) throw new ErreurFournisseur(409, "Le fournisseur vient d’être modifié");
+        await auditerCaisseTx(tx, {
+          module: "FOURNISSEURS",
+          typeEntite: "Fournisseur",
+          entiteId: fournisseur.id,
+          action: "SUPPRESSION",
+          avant: { ...fournisseur },
+          apres: null,
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    );
     res.status(204).end();
   } catch (e) {
-    next(e);
+    return repondreErreurFournisseur(e, res, next);
   }
 });
 
@@ -168,44 +250,82 @@ fournisseursRouter.post("/commandes", requirePermission("FOURNISSEURS", "ECRITUR
     }
     const { fournisseurId, lignes } = parsed.data;
 
-    const fournisseur = await prisma.fournisseur.findUnique({ where: { id: fournisseurId } });
-    if (!fournisseur) return res.status(404).json({ erreur: "Fournisseur introuvable" });
-
     const matiereIds = lignes.map((l) => l.matierePremiereId);
     if (new Set(matiereIds).size !== matiereIds.length) {
       return res.status(400).json({ erreur: "Une matière première apparaît deux fois dans la commande" });
     }
-    const matieres = await prisma.matierePremiere.count({ where: { id: { in: matiereIds } } });
-    if (matieres !== matiereIds.length) {
-      return res.status(400).json({ erreur: "Matière première inconnue dans la commande" });
-    }
 
-    const commande = await prisma.commandeFournisseur.create({
-      data: {
-        fournisseurId,
-        creeParId: req.utilisateur!.id,
-        lignes: { create: lignes },
-      },
-      include: INCLUDE_COMMANDE,
-    });
+    const commande = await avecReessaiSerializable(() =>
+      prisma.$transaction(async (tx) => {
+        // Le verrou du fournisseur empêche sa suppression entre la validation
+        // et la création de la commande.
+        await verrouillerFournisseur(tx, fournisseurId);
+
+        // FOR KEY SHARE protège les références contre une suppression
+        // concurrente sans bloquer les mouvements ordinaires de stock.
+        const idsTries = [...matiereIds].sort();
+        const matieres = await tx.$queryRaw<{ id: string }[]>(
+          Prisma.sql`SELECT id FROM "MatierePremiere"
+            WHERE id IN (${Prisma.join(idsTries)})
+            ORDER BY id
+            FOR KEY SHARE`,
+        );
+        if (matieres.length !== idsTries.length) {
+          throw new ErreurFournisseur(400, "Matière première inconnue dans la commande");
+        }
+
+        return tx.commandeFournisseur.create({
+          data: {
+            fournisseurId,
+            creeParId: req.utilisateur!.id,
+            lignes: { create: lignes },
+          },
+          include: INCLUDE_COMMANDE,
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    );
     res.status(201).json({ commande: versCommandeDTO(commande) });
   } catch (e) {
-    next(e);
+    return repondreErreurFournisseur(e, res, next);
   }
 });
 
 // Annulation d'un bon encore en attente (une commande reçue est de l'historique).
 fournisseursRouter.delete("/commandes/:id", requirePermission("FOURNISSEURS", "ECRITURE"), async (req, res, next) => {
   try {
-    const commande = await prisma.commandeFournisseur.findUnique({ where: { id: req.params.id } });
-    if (!commande) return res.status(404).json({ erreur: "Commande introuvable" });
-    if (commande.statut !== "EN_ATTENTE") {
-      return res.status(409).json({ erreur: "Cette commande a déjà été reçue" });
-    }
-    await prisma.commandeFournisseur.delete({ where: { id: commande.id } }); // lignes en cascade
+    await avecReessaiSerializable(() =>
+      prisma.$transaction(async (tx) => {
+        const commande = await verrouillerCommande(tx, req.params.id);
+        if (commande.statut !== "EN_ATTENTE") {
+          throw new ErreurFournisseur(409, "Cette commande a déjà été reçue");
+        }
+        const resultat = await tx.commandeFournisseur.deleteMany({
+          where: { id: commande.id, statut: "EN_ATTENTE" },
+        });
+        if (resultat.count !== 1) throw new ErreurFournisseur(409, "La commande vient d’être modifiée");
+        for (const ligne of commande.lignes) {
+          await auditerCaisseTx(tx, {
+            module: "FOURNISSEURS",
+            typeEntite: "LigneCommandeFournisseur",
+            entiteId: ligne.id,
+            action: "SUPPRESSION",
+            avant: { ...ligne },
+            apres: null,
+          });
+        }
+        await auditerCaisseTx(tx, {
+          module: "FOURNISSEURS",
+          typeEntite: "CommandeFournisseur",
+          entiteId: commande.id,
+          action: "SUPPRESSION",
+          avant: { ...commande },
+          apres: null,
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    );
     res.status(204).end();
   } catch (e) {
-    next(e);
+    return repondreErreurFournisseur(e, res, next);
   }
 });
 
@@ -215,23 +335,19 @@ fournisseursRouter.delete("/commandes/:id", requirePermission("FOURNISSEURS", "E
 // décrémentation de production (Phase 5), en sens inverse.
 fournisseursRouter.post("/commandes/:id/reception", requirePermission("FOURNISSEURS", "ECRITURE"), async (req, res, next) => {
   try {
-    const commande = await prisma.commandeFournisseur.findUnique({
-      where: { id: req.params.id },
-      include: INCLUDE_COMMANDE,
-    });
-    if (!commande) return res.status(404).json({ erreur: "Commande introuvable" });
+    const recue = await avecReessaiSerializable(() =>
+      prisma.$transaction(async (tx) => {
+        const commande = await verrouillerCommande(tx, req.params.id);
+        if (commande.statut !== "EN_ATTENTE") {
+          throw new ErreurFournisseur(409, "Cette commande a déjà été reçue");
+        }
 
-    const recue = await prisma.$transaction(
-      async (tx) => {
-        // Verrou logique : seule une commande encore EN_ATTENTE est réceptionnée
-        // (l'updateMany conditionnel évite une double réception concurrente).
-        const passage = await tx.commandeFournisseur.updateMany({
-          where: { id: commande.id, statut: "EN_ATTENTE" },
-          data: { statut: "RECUE", dateReception: new Date(), recueParId: req.utilisateur!.id },
-        });
-        if (passage.count === 0) throw new ErreurStock(409, "Cette commande a déjà été reçue");
-
-        for (const ligne of commande.lignes) {
+        // Ordre global stable : deux réceptions touchant les mêmes matières
+        // acquièrent toujours les verrous de stock dans le même ordre.
+        const lignes = [...commande.lignes].sort((a, b) =>
+          a.matierePremiereId.localeCompare(b.matierePremiereId),
+        );
+        for (const ligne of lignes) {
           await appliquerMouvement(tx, {
             matierePremiereId: ligne.matierePremiereId,
             type: "ENTREE",
@@ -242,12 +358,25 @@ fournisseursRouter.post("/commandes/:id/reception", requirePermission("FOURNISSE
           });
         }
 
-        return tx.commandeFournisseur.findUniqueOrThrow({
+        const passage = await tx.commandeFournisseur.updateMany({
+          where: { id: commande.id, statut: "EN_ATTENTE" },
+          data: { statut: "RECUE", dateReception: new Date(), recueParId: req.utilisateur!.id },
+        });
+        if (passage.count !== 1) throw new ErreurFournisseur(409, "La commande vient d’être réceptionnée");
+        const apres = await tx.commandeFournisseur.findUniqueOrThrow({
           where: { id: commande.id },
           include: INCLUDE_COMMANDE,
         });
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        await auditerCaisseTx(tx, {
+          module: "FOURNISSEURS",
+          typeEntite: "CommandeFournisseur",
+          entiteId: commande.id,
+          action: "MODIFICATION",
+          avant: { ...commande },
+          apres: { ...apres },
+        });
+        return apres;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
     );
 
     const dto = versCommandeDTO(recue);
@@ -266,6 +395,6 @@ fournisseursRouter.post("/commandes/:id/reception", requirePermission("FOURNISSE
     res.json({ commande: dto });
   } catch (e) {
     if (e instanceof ErreurStock) return res.status(e.status).json({ erreur: e.message });
-    next(e);
+    return repondreErreurFournisseur(e, res, next);
   }
 });

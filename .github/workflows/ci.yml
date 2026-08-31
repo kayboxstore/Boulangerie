@@ -342,6 +342,15 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-production-ci.ts
 
+      - name: Vérification HTTP + PostgreSQL réelle du Lot Fournisseurs (P1, 31/08/2026)
+        # Huit scénarios sans mock : réception et audits exacts, seconde
+        # réception sans effet, vraie concurrence observée par pg_blocking_pids,
+        # puis rollbacks réels de réception, annulation et CRUD Fournisseur
+        # après échec injecté de l'AuditLog, plus verrou référentiel de création.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-fournisseurs-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest
