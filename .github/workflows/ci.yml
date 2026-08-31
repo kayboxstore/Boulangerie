@@ -328,14 +328,16 @@ jobs:
         run: npx tsx scripts/verifier-sauvegarde-reinitialisation-ci.ts
 
       - name: Vérification HTTP + PostgreSQL réelle du Lot Production (P1, 31/08/2026)
-        # Complète les tests HTTP mockés de routes/production.test.ts par six
+        # Complète les tests HTTP mockés de routes/production.test.ts par sept
         # scénarios sans mock : quatre décrémentations de stock liées à la
-        # Production, rollback sur stock insuffisant, audits transactionnels
+        # Production, rollback métier ET audit après une première matière,
+        # audits transactionnels
         # exacts des pertes/qualité/clôture, verrou définitif post-clôture,
         # quatre rollbacks injectés APRÈS une écriture réelle (planning,
         # pertes, qualité, clôture) via un trigger AuditLog, et blocage
-        # FOR UPDATE réellement observé par
-        # pg_blocking_pids. Même garde locale stricte que les scripts voisins.
+        # FOR UPDATE réellement observé par pg_blocking_pids sur Production et
+        # Planning avant toute suppression. Même garde locale stricte que les
+        # scripts voisins.
         env:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-production-ci.ts
