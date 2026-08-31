@@ -241,7 +241,7 @@ async function main() {
   if (p409.status !== 409 || q409.status !== 409) ko(`attendu 409/409 après clôture, reçu ${p409.status}/${q409.status}`);
   console.log("  ✓ pertes et qualité sont définitivement figées.");
 
-  console.log("→ 5/6 échec d'audit après écriture : trois rollbacks réels…");
+  console.log("→ 5/6 échec d'audit après écriture : quatre rollbacks réels…");
   const pp = await nouvelleProduction(user.id, motifA.id);
   const pq = await nouvelleProduction(user.id, undefined, true, 0);
   const pc = await nouvelleProduction(user.id, motifA.id, true);
