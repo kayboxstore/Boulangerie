@@ -168,14 +168,15 @@ export class ErreurActeurRequisPourAuditCaisse extends Error {
  * même transaction, le même sort en cas de rollback que l'écriture métier.
  *
  * Réutilisé au-delà du seul module CAISSE (`PRODUCTION` pour C4 et les
- * clôtures, `STOCKS` pour les mouvements atomiques de matière) : le mécanisme
+ * clôtures, `STOCKS` pour les mouvements atomiques de matière,
+ * `FOURNISSEURS` pour les réceptions et suppressions atomiques) : le mécanisme
  * (client `tx`, jamais `base`) est générique, seul le module d’affichage de
  * l’AuditLog change.
  */
 export async function auditerCaisseTx(
   tx: TxClient,
   params: {
-    module: "CAISSE" | "COMMANDES" | "PRODUCTION" | "STOCKS";
+    module: "CAISSE" | "COMMANDES" | "PRODUCTION" | "STOCKS" | "FOURNISSEURS";
     typeEntite: string;
     entiteId: string;
     action: "MODIFICATION" | "SUPPRESSION";
