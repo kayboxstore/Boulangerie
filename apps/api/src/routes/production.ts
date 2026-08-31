@@ -56,6 +56,15 @@ const jour = (d: Date) => d.toISOString().slice(0, 10);
 
 class ErreurPlanningConcurrent extends Error {}
 
+function estConflitPlanning(e: unknown): boolean {
+  if (!(e instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  return (
+    e.code === "P2002" ||
+    e.code === "P2034" ||
+    (e.code === "P2010" && (e.meta as { code?: string } | undefined)?.code === "40001")
+  );
+}
+
 // --- Planning de production (section 3.3 a) ---------------------------------
 
 type PlanningAvecRelations = Prisma.PlanningProductionGetPayload<{
@@ -69,6 +78,23 @@ const INCLUDE_PLANNING = {
   lignes: { include: { produit: { select: { id: true, nom: true } } } },
   creePar: { select: { id: true, nom: true } },
 } as const;
+
+/**
+ * Sérialise les remplacements d'un Planning existant. Le verrou précède toute
+ * suppression de ligne ; la relecture faite ensuite fournit donc l'instantané
+ * exact à modifier et à auditer. Une création concurrente (aucune ligne encore
+ * verrouillable) est arbitrée par SERIALIZABLE + l'unicité de datePrevue.
+ */
+async function verrouillerPlanningParDate(tx: TxClient, datePrevue: Date): Promise<PlanningAvecRelations | null> {
+  const ids = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "PlanningProduction" WHERE "datePrevue" = ${datePrevue} FOR UPDATE
+  `;
+  if (!ids[0]) return null;
+  return tx.planningProduction.findUniqueOrThrow({
+    where: { id: ids[0].id },
+    include: INCLUDE_PLANNING,
+  });
+}
 
 const versPlanningDTO = (p: PlanningAvecRelations): PlanningProductionDTO => ({
   id: p.id,
@@ -131,10 +157,7 @@ productionRouter.post("/planning", ecriture, async (req, res, next) => {
     const donnees = { ...previsions, nombreBacsCommandes: parsed.data.nombreBacsCommandes, observations: observations ?? null };
 
     const planning = await prisma.$transaction(async (tx) => {
-      const existant = await tx.planningProduction.findUnique({
-        where: { datePrevue: date },
-        include: INCLUDE_PLANNING,
-      });
+      const existant = await verrouillerPlanningParDate(tx, date);
       if (existant) {
         // Le remplacement complet reste atomique avec ses AuditLog : aucun
         // update() singulier intercepté par l'extension non transactionnelle.
@@ -179,12 +202,17 @@ productionRouter.post("/planning", ecriture, async (req, res, next) => {
         data: { ...donnees, datePrevue: date, creeParId: req.utilisateur!.id, lignes: { create: lignes } },
         include: INCLUDE_PLANNING,
       });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     res.status(201).json({ planning: versPlanningDTO(planning) });
   } catch (e) {
-    if (e instanceof ErreurPlanningConcurrent) {
-      return res.status(409).json({ code: "PREVISION_VERROUILLEE", erreur: e.message });
+    if (e instanceof ErreurPlanningConcurrent || estConflitPlanning(e)) {
+      return res.status(409).json({
+        code: "PREVISION_VERROUILLEE",
+        erreur: e instanceof ErreurPlanningConcurrent
+          ? e.message
+          : "La prévision a été modifiée simultanément. Rechargez les données avant de réessayer.",
+      });
     }
     return next(e);
   }
@@ -328,10 +356,7 @@ productionRouter.put("/schema-commande", ecriturePrevision, async (req, res, nex
       }));
       const nombreBacsCommandes = lignesPlanning.reduce((s, l) => s + l.quantitePrevue, 0);
 
-      const planningExistant = await tx.planningProduction.findUnique({
-        where: { datePrevue: dateObj },
-        include: INCLUDE_PLANNING,
-      });
+      const planningExistant = await verrouillerPlanningParDate(tx, dateObj);
       if (planningExistant) {
         await tx.planningLigneProduit.deleteMany({ where: { planningId: planningExistant.id } });
         const resultat = await tx.planningProduction.updateMany({
@@ -404,7 +429,7 @@ productionRouter.put("/schema-commande", ecriturePrevision, async (req, res, nex
         erreur: e.message,
       });
     }
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034") {
+    if (estConflitPlanning(e)) {
       return res.status(409).json({
         code: "PREVISION_VERROUILLEE",
         erreur: "La prévision a été modifiée simultanément. Rechargez les données avant de réessayer.",
@@ -829,7 +854,7 @@ productionRouter.post("/productions", ecriture, async (req, res, next) => {
     res.status(201).json({ production: dto, avertissements });
   } catch (e) {
     if (e instanceof ErreurStock) return res.status(e.status).json({ erreur: e.message });
-    next(e);
+    return repondreErreurMutationProduction(e, res, next);
   }
 });
 
