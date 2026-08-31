@@ -162,7 +162,7 @@ fournisseursRouter.post("/", requirePermission("FOURNISSEURS", "ECRITURE"), asyn
     });
     res.status(201).json({ fournisseur: versFournisseurDTO(fournisseur) });
   } catch (e) {
-    next(e);
+    return repondreErreurFournisseur(e, res, next);
   }
 });
 
@@ -250,29 +250,43 @@ fournisseursRouter.post("/commandes", requirePermission("FOURNISSEURS", "ECRITUR
     }
     const { fournisseurId, lignes } = parsed.data;
 
-    const fournisseur = await prisma.fournisseur.findUnique({ where: { id: fournisseurId } });
-    if (!fournisseur) return res.status(404).json({ erreur: "Fournisseur introuvable" });
-
     const matiereIds = lignes.map((l) => l.matierePremiereId);
     if (new Set(matiereIds).size !== matiereIds.length) {
       return res.status(400).json({ erreur: "Une matière première apparaît deux fois dans la commande" });
     }
-    const matieres = await prisma.matierePremiere.count({ where: { id: { in: matiereIds } } });
-    if (matieres !== matiereIds.length) {
-      return res.status(400).json({ erreur: "Matière première inconnue dans la commande" });
-    }
 
-    const commande = await prisma.commandeFournisseur.create({
-      data: {
-        fournisseurId,
-        creeParId: req.utilisateur!.id,
-        lignes: { create: lignes },
-      },
-      include: INCLUDE_COMMANDE,
-    });
+    const commande = await avecReessaiSerializable(() =>
+      prisma.$transaction(async (tx) => {
+        // Le verrou du fournisseur empêche sa suppression entre la validation
+        // et la création de la commande.
+        await verrouillerFournisseur(tx, fournisseurId);
+
+        // FOR KEY SHARE protège les références contre une suppression
+        // concurrente sans bloquer les mouvements ordinaires de stock.
+        const idsTries = [...matiereIds].sort();
+        const matieres = await tx.$queryRaw<{ id: string }[]>(
+          Prisma.sql`SELECT id FROM "MatierePremiere"
+            WHERE id IN (${Prisma.join(idsTries)})
+            ORDER BY id
+            FOR KEY SHARE`,
+        );
+        if (matieres.length !== idsTries.length) {
+          throw new ErreurFournisseur(400, "Matière première inconnue dans la commande");
+        }
+
+        return tx.commandeFournisseur.create({
+          data: {
+            fournisseurId,
+            creeParId: req.utilisateur!.id,
+            lignes: { create: lignes },
+          },
+          include: INCLUDE_COMMANDE,
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    );
     res.status(201).json({ commande: versCommandeDTO(commande) });
   } catch (e) {
-    next(e);
+    return repondreErreurFournisseur(e, res, next);
   }
 });
 
