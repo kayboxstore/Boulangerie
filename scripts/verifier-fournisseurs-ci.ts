@@ -65,7 +65,7 @@ async function stocks() {
   });
   return new Map(lignes.map((m) => [m.id, m.quantiteStock]));
 }
-async function attendreBlocageCommande(id: string) {
+async function attendreBlocageCommande() {
   const debut = Date.now();
   while (Date.now() - debut < 5000) {
     const lignes = await db.$queryRaw<{ bloqueurs: number[] }[]>`
@@ -196,7 +196,7 @@ async function main() {
     await pris;
     const a = request(app).post(`/api/fournisseurs/commandes/${concurrente.id}/reception`).set(auth).then((x) => x);
     const b = request(app).post(`/api/fournisseurs/commandes/${concurrente.id}/reception`).set(auth).then((x) => x);
-    await attendreBlocageCommande(concurrente.id);
+    await attendreBlocageCommande();
     liberer();
     await txn;
     const codes = [(await a).status, (await b).status].sort((x, y) => x - y);
