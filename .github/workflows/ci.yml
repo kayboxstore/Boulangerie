@@ -332,8 +332,9 @@ jobs:
         # scénarios sans mock : quatre décrémentations de stock liées à la
         # Production, rollback sur stock insuffisant, audits transactionnels
         # exacts des pertes/qualité/clôture, verrou définitif post-clôture,
-        # trois rollbacks injectés APRÈS une écriture réelle via un trigger
-        # AuditLog, et blocage FOR UPDATE réellement observé par
+        # quatre rollbacks injectés APRÈS une écriture réelle (planning,
+        # pertes, qualité, clôture) via un trigger AuditLog, et blocage
+        # FOR UPDATE réellement observé par
         # pg_blocking_pids. Même garde locale stricte que les scripts voisins.
         env:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
