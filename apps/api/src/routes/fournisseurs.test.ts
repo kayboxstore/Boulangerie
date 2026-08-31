@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => {
     },
     commandeFournisseur: {
       findUniqueOrThrow: vi.fn(),
+      create: vi.fn(),
       updateMany: vi.fn(),
       deleteMany: vi.fn(),
     },
@@ -182,6 +183,47 @@ describe("Fournisseur — mutations auditables", () => {
       mocks.tx,
       expect.objectContaining({ typeEntite: "Fournisseur", action: "SUPPRESSION" }),
     );
+  });
+});
+
+describe("Commande fournisseur — création référentielle", () => {
+  it("verrouille fournisseur et matières avant de créer", async () => {
+    const creee = commande();
+    mocks.tx.$queryRaw
+      .mockResolvedValueOnce([{ id: "fournisseur-1" }])
+      .mockResolvedValueOnce([{ id: "matiere-a" }, { id: "matiere-z" }]);
+    mocks.tx.fournisseur.findUniqueOrThrow.mockResolvedValue(fournisseur());
+    mocks.tx.commandeFournisseur.create.mockResolvedValue(creee);
+
+    const res = await request(app()).post("/api/fournisseurs/commandes").send({
+      fournisseurId: "fournisseur-1",
+      lignes: [
+        { matierePremiereId: "matiere-z", quantite: 2, prixUnitaire: 1000 },
+        { matierePremiereId: "matiere-a", quantite: 3, prixUnitaire: 2000 },
+      ],
+    });
+
+    expect(res.status).toBe(201);
+    expect(mocks.tx.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(mocks.tx.$queryRaw).toHaveBeenCalledBefore(mocks.tx.commandeFournisseur.create);
+  });
+
+  it("refuse une matière disparue sous verrou avant toute création", async () => {
+    mocks.tx.$queryRaw
+      .mockResolvedValueOnce([{ id: "fournisseur-1" }])
+      .mockResolvedValueOnce([{ id: "matiere-a" }]);
+    mocks.tx.fournisseur.findUniqueOrThrow.mockResolvedValue(fournisseur());
+
+    const res = await request(app()).post("/api/fournisseurs/commandes").send({
+      fournisseurId: "fournisseur-1",
+      lignes: [
+        { matierePremiereId: "matiere-a", quantite: 2, prixUnitaire: 1000 },
+        { matierePremiereId: "matiere-z", quantite: 3, prixUnitaire: 2000 },
+      ],
+    });
+
+    expect(res.status).toBe(400);
+    expect(mocks.tx.commandeFournisseur.create).not.toHaveBeenCalled();
   });
 });
 
