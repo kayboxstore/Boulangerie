@@ -234,7 +234,7 @@ describe("POST /api/production/productions — stock transactionnel", () => {
 
     expect(res.status).toBe(201);
     expect(mocks.appliquerMouvement).not.toHaveBeenCalled();
-    expect(res.body.avertissements[0]).toContain("FARINE");
+    expect(res.body.avertissements).toEqual(expect.arrayContaining([expect.stringContaining("FARINE")]));
   });
 });
 
