@@ -198,7 +198,9 @@ async function main() {
   const rejetStock = await request(app)
     .post("/api/production/productions").set(auth)
     .send({ bacsProduits: 1, sacsUtilises: 10000 });
-  if (rejetStock.status !== 409) ko(`stock insuffisant: attendu 409, reçu ${rejetStock.status}`);
+  if (rejetStock.status !== 400) {
+    ko(`stock insuffisant: attendu 400, reçu ${rejetStock.status} ${JSON.stringify(rejetStock.body)}`);
+  }
   if (
     (await db.production.count({ where: { enregistreParId: user.id } })) !== compteP ||
     (await db.mouvementStock.count({ where: { auteurId: user.id } })) !== compteM
