@@ -10,7 +10,21 @@ import { verifierEnvironnementIntegrationCI } from "./garde-integration-ci.js";
 verifierEnvironnementIntegrationCI(process.env, "scripts/verifier-production-ci.ts");
 const db = new PrismaClient();
 const tag = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-const traces = { role: "", user: "", produit: "", matieres: [] as string[], pertes: [] as string[], nc: "" };
+const traces = {
+  role: "",
+  user: "",
+  produit: "",
+  matieres: [] as string[],
+  matieresCreees: [] as string[],
+  matieresAvant: [] as {
+    id: string;
+    quantiteStock: Prisma.Decimal;
+    seuilAlerte: Prisma.Decimal;
+    alerteSeuilEnvoyeeLe: Date | null;
+  }[],
+  pertes: [] as string[],
+  nc: "",
+};
 
 function ko(message: string): never {
   process.exitCode = 1;
@@ -75,8 +89,20 @@ async function nettoyer() {
     await db.planningProduction.deleteMany({ where: { creeParId: traces.user } });
     await db.utilisateur.deleteMany({ where: { id: traces.user } });
   }
+  for (const avant of traces.matieresAvant) {
+    await db.matierePremiere.update({
+      where: { id: avant.id },
+      data: {
+        quantiteStock: avant.quantiteStock,
+        seuilAlerte: avant.seuilAlerte,
+        alerteSeuilEnvoyeeLe: avant.alerteSeuilEnvoyeeLe,
+      },
+    });
+  }
   if (traces.produit) await db.produit.deleteMany({ where: { id: traces.produit } });
-  if (traces.matieres.length) await db.matierePremiere.deleteMany({ where: { id: { in: traces.matieres } } });
+  if (traces.matieresCreees.length) {
+    await db.matierePremiere.deleteMany({ where: { id: { in: traces.matieresCreees } } });
+  }
   if (traces.pertes.length) await db.motifPerte.deleteMany({ where: { id: { in: traces.pertes } } });
   if (traces.nc) await db.motifNonConformite.deleteMany({ where: { id: traces.nc } });
   if (traces.role) await db.role.deleteMany({ where: { id: traces.role } });
@@ -118,8 +144,24 @@ async function main() {
     { nom: `Huile ${tag}`, code: "HUILE" as const, unite: "L", quantiteStock: 100, seuilAlerte: 10 },
   ];
   for (const data of matieres) {
-    const m = await db.matierePremiere.create({ data });
-    traces.matieres.push(m.id);
+    const existante = await db.matierePremiere.findUnique({ where: { code: data.code } });
+    if (existante) {
+      traces.matieresAvant.push({
+        id: existante.id,
+        quantiteStock: existante.quantiteStock,
+        seuilAlerte: existante.seuilAlerte,
+        alerteSeuilEnvoyeeLe: existante.alerteSeuilEnvoyeeLe,
+      });
+      await db.matierePremiere.update({
+        where: { id: existante.id },
+        data: { quantiteStock: 100, seuilAlerte: 10, alerteSeuilEnvoyeeLe: null },
+      });
+      traces.matieres.push(existante.id);
+    } else {
+      const creee = await db.matierePremiere.create({ data });
+      traces.matieres.push(creee.id);
+      traces.matieresCreees.push(creee.id);
+    }
   }
   const produit = await db.produit.create({
     data: { nom: `Carré Production CI ${tag}`, prixVente: 1500, categorie: "Pain" },
