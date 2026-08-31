@@ -474,7 +474,7 @@ describe("PUT /api/production/productions/:id/controle-qualite", () => {
 
   it("corrige via updateMany, relit puis audite exactement dans la transaction", async () => {
     const existant = controle("NON_CONFORME");
-    const modifie = { ...existant, verdict: "CONFORME", motifId: null, updatedAt: new Date("2026-08-30T12:00:00.000Z") };
+    const modifie = { ...existant, verdict: "CONFORME" as const, motifId: null, updatedAt: new Date("2026-08-30T12:00:00.000Z") };
     mocks.tx.production.findUniqueOrThrow
       .mockResolvedValueOnce(production({ controleQualite: existant }))
       .mockResolvedValueOnce(production({ controleQualite: { ...controle(), ...modifie } }));
