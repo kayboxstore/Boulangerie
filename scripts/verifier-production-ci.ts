@@ -173,7 +173,7 @@ async function main() {
   const motifNC = await db.motifNonConformite.create({ data: { nom: `Cuisson ${tag}` } });
   traces.nc = motifNC.id;
 
-  console.log("→ 1/6 création Production + quatre sorties de stock…");
+  console.log("→ 1/7 création Production + quatre sorties de stock…");
   const creee = await request(app)
     .post("/api/production/productions").set(auth)
     .send({
@@ -191,7 +191,7 @@ async function main() {
   }
   console.log("  ✓ Production, stocks et mouvements réellement persistés.");
 
-  console.log("→ 2/6 stock insuffisant : rollback total…");
+  console.log("→ 2/7 stock insuffisant : rollback total…");
   const compteP = await db.production.count({ where: { enregistreParId: user.id } });
   const compteM = await db.mouvementStock.count({ where: { auteurId: user.id } });
   const farineAvant = await db.matierePremiere.findUniqueOrThrow({ where: { code: "FARINE" } });
@@ -216,7 +216,7 @@ async function main() {
   eqDecimal(levureApres.quantiteStock, levureAvant.quantiteStock.toNumber(), "levure après rollback");
   console.log("  ✓ Production, mouvement, stocks et AuditLog partiels tous annulés.");
 
-  console.log("→ 3/6 pertes, qualité, clôture et audits exacts…");
+  console.log("→ 3/7 pertes, qualité, clôture et audits exacts…");
   let r = await request(app).put(`/api/production/productions/${productionId}/pertes`).set(auth)
     .send({ pertes: [{ motifPerteId: motifA.id, nombreBacs: 2 }] });
   if (r.status !== 200) ko(`création pertes: ${r.status}`);
@@ -241,14 +241,14 @@ async function main() {
   }
   console.log("  ✓ trois AuditLog transactionnels avec l'acteur HTTP exact.");
 
-  console.log("→ 4/6 verrou définitif après clôture…");
+  console.log("→ 4/7 verrou définitif après clôture…");
   const p409 = await request(app).put(`/api/production/productions/${productionId}/pertes`).set(auth).send({ pertes: [] });
   const q409 = await request(app).put(`/api/production/productions/${productionId}/controle-qualite`).set(auth)
     .send({ verdict: "CONFORME" });
   if (p409.status !== 409 || q409.status !== 409) ko(`attendu 409/409 après clôture, reçu ${p409.status}/${q409.status}`);
   console.log("  ✓ pertes et qualité sont définitivement figées.");
 
-  console.log("→ 5/6 échec d'audit après écriture : quatre rollbacks réels…");
+  console.log("→ 5/7 échec d'audit après écriture : quatre rollbacks réels…");
   const pp = await nouvelleProduction(user.id, motifA.id);
   const pq = await nouvelleProduction(user.id, undefined, true, 0);
   const pc = await nouvelleProduction(user.id, motifA.id, true);
@@ -300,7 +300,7 @@ async function main() {
   }
   console.log("  ✓ planning, pertes, qualité et clôture tous annulés par PostgreSQL.");
 
-  console.log("→ 6/6 verrou concurrent observé par pg_blocking_pids…");
+  console.log("→ 6/7 verrou concurrent observé par pg_blocking_pids…");
   const concurrente = await nouvelleProduction(user.id, motifA.id, true);
   const bloqueur = new PrismaClient();
   await bloqueur.$connect();
