@@ -88,7 +88,7 @@ describe("appliquerMouvement — verrou et audit transactionnel", () => {
           auteurId: "utilisateur-1",
         }),
       ),
-    ).rejects.toMatchObject<Partial<ErreurStock>>({ status: 400 });
+    ).rejects.toMatchObject({ status: 400 });
 
     expect(tx.mouvementStock.create).not.toHaveBeenCalled();
     expect(tx.matierePremiere.updateMany).not.toHaveBeenCalled();
