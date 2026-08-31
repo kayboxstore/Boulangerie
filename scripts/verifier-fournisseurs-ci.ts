@@ -80,6 +80,21 @@ async function attendreBlocageCommande() {
   }
   ko("le verrou concurrent sur CommandeFournisseur n'a jamais été observé");
 }
+async function attendreBlocageFournisseur() {
+  const debut = Date.now();
+  while (Date.now() - debut < 5000) {
+    const lignes = await db.$queryRaw<{ bloqueurs: number[] }[]>`
+      SELECT pg_blocking_pids(pid) AS bloqueurs
+      FROM pg_stat_activity
+      WHERE datname = current_database()
+        AND cardinality(pg_blocking_pids(pid)) > 0
+        AND query LIKE '%FROM "Fournisseur"%FOR UPDATE%'
+    `;
+    if (lignes.some((l) => l.bloqueurs.length > 0)) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+  }
+  ko("le verrou référentiel sur Fournisseur n'a jamais été observé");
+}
 async function nettoyer() {
   await triggerAudit(false).catch(() => undefined);
   if (traces.user) {
@@ -137,7 +152,7 @@ async function main() {
   });
   traces.matieres.push(matiereA.id, matiereB.id);
 
-  console.log("→ 1/7 réception réelle : statut, deux stocks et trois audits…");
+  console.log("→ 1/8 réception réelle : statut, deux stocks et trois audits…");
   const commande = await nouvelleCommande();
   let r = await request(app).post(`/api/fournisseurs/commandes/${commande.id}/reception`).set(auth);
   if (r.status !== 200) ko(`réception attendue 200, reçue ${r.status} ${JSON.stringify(r.body)}`);
@@ -164,7 +179,7 @@ async function main() {
   }
   console.log("  ✓ réception et audits atomiques exacts.");
 
-  console.log("→ 2/7 seconde réception refusée sans effet supplémentaire…");
+  console.log("→ 2/8 seconde réception refusée sans effet supplémentaire…");
   const avant2 = await stocks();
   const nbMouvements2 = await db.mouvementStock.count({ where: { commandeFournisseurId: commande.id } });
   const nbAudits2 = await db.auditLog.count({ where: { utilisateurId: user.id } });
@@ -178,7 +193,7 @@ async function main() {
   ) ko("la seconde réception a laissé un effet");
   console.log("  ✓ zéro double mouvement, zéro double audit.");
 
-  console.log("→ 3/7 double réception concurrente sous verrou PostgreSQL réel…");
+  console.log("→ 3/8 double réception concurrente sous verrou PostgreSQL réel…");
   const concurrente = await nouvelleCommande(1, 1);
   const avant3 = await stocks();
   const bloqueur = new PrismaClient();
@@ -215,7 +230,7 @@ async function main() {
   }
   console.log("  ✓ une réussite, un 409, blocage observé et un seul jeu de stocks.");
 
-  console.log("→ 4/7 échec d'audit de réception : rollback statut, stocks et mouvements…");
+  console.log("→ 4/8 échec d'audit de réception : rollback statut, stocks et mouvements…");
   const rollbackReception = await nouvelleCommande(4, 5);
   const avant4 = await stocks();
   const auditsAvant4 = await db.auditLog.count({ where: { utilisateurId: user.id } });
@@ -236,7 +251,7 @@ async function main() {
   ) ko("un mouvement ou audit partiel a survécu au rollback de réception");
   console.log("  ✓ rollback intégral après deux mouvements et leurs audits.");
 
-  console.log("→ 5/7 échec d'audit d'annulation : commande et lignes conservées…");
+  console.log("→ 5/8 échec d'audit d'annulation : commande et lignes conservées…");
   const rollbackAnnulation = await nouvelleCommande();
   await triggerAudit(true);
   try {
@@ -253,7 +268,7 @@ async function main() {
   }
   console.log("  ✓ suppression cascade et audits tous annulés.");
 
-  console.log("→ 6/7 échec d'audit de modification Fournisseur : ancienne valeur conservée…");
+  console.log("→ 6/8 échec d'audit de modification Fournisseur : ancienne valeur conservée…");
   await triggerAudit(true);
   try {
     r = await request(app).put(`/api/fournisseurs/${fournisseur.id}`).set(auth).send({ contact: "Après" });
@@ -265,7 +280,7 @@ async function main() {
   if (fournisseur6.contact !== "Avant") ko("la modification Fournisseur a survécu à l'échec d'audit");
   console.log("  ✓ modification et audit partagent le même rollback.");
 
-  console.log("→ 7/7 échec d'audit de suppression Fournisseur : ligne conservée…");
+  console.log("→ 7/8 échec d'audit de suppression Fournisseur : ligne conservée…");
   const supprimable = await db.fournisseur.create({ data: { nom: `Supprimable CI ${tag}` } });
   await triggerAudit(true);
   try {
@@ -280,7 +295,40 @@ async function main() {
   await db.fournisseur.delete({ where: { id: supprimable.id } });
   console.log("  ✓ suppression et audit partagent le même rollback.");
 
-  console.log("\n✅ Fournisseurs : 7/7 scénarios HTTP + PostgreSQL réels verts.\n");
+  console.log("→ 8/8 création de commande bloquée par le verrou référentiel Fournisseur…");
+  const bloqueurReference = new PrismaClient();
+  await bloqueurReference.$connect();
+  let libererReference!: () => void;
+  let signalerReference!: () => void;
+  const attenteReference = new Promise<void>((resolve) => { libererReference = resolve; });
+  const prisReference = new Promise<void>((resolve) => { signalerReference = resolve; });
+  const txnReference = bloqueurReference.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Fournisseur" WHERE id = ${fournisseur.id} FOR UPDATE`;
+    signalerReference();
+    await attenteReference;
+  });
+  try {
+    await prisReference;
+    const creation = request(app).post("/api/fournisseurs/commandes").set(auth).send({
+      fournisseurId: fournisseur.id,
+      lignes: [
+        { matierePremiereId: matiereB.id, quantite: 1, prixUnitaire: 2000 },
+        { matierePremiereId: matiereA.id, quantite: 1, prixUnitaire: 1000 },
+      ],
+    }).then((x) => x);
+    await attendreBlocageFournisseur();
+    libererReference();
+    await txnReference;
+    const reponse = await creation;
+    if (reponse.status !== 201) ko(`création sous verrou attendue 201, reçue ${reponse.status} ${JSON.stringify(reponse.body)}`);
+  } finally {
+    libererReference();
+    await txnReference.catch(() => undefined);
+    await bloqueurReference.$disconnect();
+  }
+  console.log("  ✓ la création attend réellement le verrou avant de figer ses références.");
+
+  console.log("\n✅ Fournisseurs : 8/8 scénarios HTTP + PostgreSQL réels verts.\n");
 }
 
 main()
