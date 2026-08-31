@@ -41,7 +41,9 @@ const mocks = vi.hoisted(() => {
   const prisma = {
     $transaction: vi.fn(),
     motifDon: { count: vi.fn() },
-    produit: { count: vi.fn() },
+    produit: { count: vi.fn(), findMany: vi.fn() },
+    client: { count: vi.fn(), findMany: vi.fn() },
+    schemaCommande: { findMany: vi.fn() },
     matierePremiere: { findMany: vi.fn() },
     motifPerte: { count: vi.fn() },
     motifNonConformite: { findUnique: vi.fn() },
@@ -53,6 +55,7 @@ const mocks = vi.hoisted(() => {
     appliquerMouvement: vi.fn(),
     emettreAlerteSeuil: vi.fn(),
     emettreEvenement: vi.fn(),
+    synchroniserPrevisionsCycles: vi.fn(),
   };
 });
 
@@ -70,6 +73,11 @@ vi.mock("../middleware/auth.js", () => ({
   },
   requirePermission: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
 }));
+
+vi.mock("../services/cyclesLivraison.js", async () => {
+  const actual = await vi.importActual<typeof import("../services/cyclesLivraison.js")>("../services/cyclesLivraison.js");
+  return { ...actual, synchroniserPrevisionsCycles: mocks.synchroniserPrevisionsCycles };
+});
 
 vi.mock("../services/caisseAtomique.js", async () => {
   const actual = await vi.importActual<typeof import("../services/caisseAtomique.js")>("../services/caisseAtomique.js");
@@ -173,6 +181,10 @@ beforeEach(() => {
   mocks.tx.$queryRaw.mockResolvedValue([{ id: "prod-1" }]);
   mocks.prisma.motifDon.count.mockResolvedValue(0);
   mocks.prisma.produit.count.mockResolvedValue(1);
+  mocks.prisma.produit.findMany.mockResolvedValue([]);
+  mocks.prisma.client.count.mockResolvedValue(0);
+  mocks.prisma.client.findMany.mockResolvedValue([]);
+  mocks.prisma.schemaCommande.findMany.mockResolvedValue([]);
   mocks.prisma.matierePremiere.findMany.mockResolvedValue([]);
   mocks.prisma.motifPerte.count.mockResolvedValue(1);
   mocks.prisma.motifNonConformite.findUnique.mockResolvedValue({ id: "motif-nc-1" });
@@ -270,6 +282,36 @@ describe("POST /api/production/planning — remplacement atomique", () => {
         module: "PRODUCTION",
         typeEntite: "PlanningProduction",
         entiteId: "planning-1",
+        action: "MODIFICATION",
+      }),
+    );
+  });
+});
+
+describe("PUT /api/production/schema-commande — alimentation atomique du Planning", () => {
+  it("remplace un Planning existant via *Many et audite dans la même transaction", async () => {
+    const avant = planning("planning-schema", 10);
+    const apres = { ...planning("planning-schema", 0), lignes: [] };
+    mocks.tx.planningProduction.findUnique.mockResolvedValue(avant);
+    mocks.tx.planningProduction.findUniqueOrThrow.mockResolvedValue(apres);
+
+    const res = await request(app()).put("/api/production/schema-commande").send({
+      date: "2026-09-01",
+      clients: [],
+    });
+
+    expect(res.status).toBe(200);
+    expect(mocks.synchroniserPrevisionsCycles).toHaveBeenCalled();
+    expect(mocks.tx.planningProduction.updateMany).toHaveBeenCalledWith({
+      where: { id: "planning-schema" },
+      data: { nombreBacsCommandes: 0 },
+    });
+    expect(mocks.tx.planningLigneProduit.deleteMany).toHaveBeenCalledBefore(mocks.auditerCaisseTx);
+    expect(mocks.auditerCaisseTx).toHaveBeenCalledWith(
+      mocks.tx,
+      expect.objectContaining({
+        typeEntite: "PlanningProduction",
+        entiteId: "planning-schema",
         action: "MODIFICATION",
       }),
     );
