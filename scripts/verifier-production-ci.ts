@@ -10,7 +10,7 @@ import { verifierEnvironnementIntegrationCI } from "./garde-integration-ci.js";
 verifierEnvironnementIntegrationCI(process.env, "scripts/verifier-production-ci.ts");
 const db = new PrismaClient();
 const tag = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-const traces = { role: "", user: "", matieres: [] as string[], pertes: [] as string[], nc: "" };
+const traces = { role: "", user: "", produit: "", matieres: [] as string[], pertes: [] as string[], nc: "" };
 
 function ko(message: string): never {
   process.exitCode = 1;
@@ -72,8 +72,10 @@ async function nettoyer() {
     await db.auditLog.deleteMany({ where: { utilisateurId: traces.user } });
     await db.mouvementStock.deleteMany({ where: { auteurId: traces.user } });
     await db.production.deleteMany({ where: { enregistreParId: traces.user } });
+    await db.planningProduction.deleteMany({ where: { creeParId: traces.user } });
     await db.utilisateur.deleteMany({ where: { id: traces.user } });
   }
+  if (traces.produit) await db.produit.deleteMany({ where: { id: traces.produit } });
   if (traces.matieres.length) await db.matierePremiere.deleteMany({ where: { id: { in: traces.matieres } } });
   if (traces.pertes.length) await db.motifPerte.deleteMany({ where: { id: { in: traces.pertes } } });
   if (traces.nc) await db.motifNonConformite.deleteMany({ where: { id: traces.nc } });
@@ -119,6 +121,10 @@ async function main() {
     const m = await db.matierePremiere.create({ data });
     traces.matieres.push(m.id);
   }
+  const produit = await db.produit.create({
+    data: { nom: `Carré Production CI ${tag}`, prixVente: 1500, categorie: "Pain" },
+  });
+  traces.produit = produit.id;
   const motifA = await db.motifPerte.create({ data: { nom: `Brûlé ${tag}` } });
   const motifB = await db.motifPerte.create({ data: { nom: `Tombé ${tag}` } });
   traces.pertes.push(motifA.id, motifB.id);
@@ -195,6 +201,15 @@ async function main() {
   const pp = await nouvelleProduction(user.id, motifA.id);
   const pq = await nouvelleProduction(user.id, undefined, true, 0);
   const pc = await nouvelleProduction(user.id, motifA.id, true);
+  const datePlanning = "2099-01-31";
+  const planningAvant = await db.planningProduction.create({
+    data: {
+      datePrevue: new Date(datePlanning),
+      nombreBacsCommandes: 10,
+      creeParId: user.id,
+      lignes: { create: [{ produitId: produit.id, quantitePrevue: 10 }] },
+    },
+  });
   await triggerAudit(true);
   try {
     r = await request(app).put(`/api/production/productions/${pp.id}/pertes`).set(auth)
@@ -213,10 +228,26 @@ async function main() {
     if (r.status !== 500) ko(`rollback clôture attendu 500, reçu ${r.status}`);
     const cp = await db.production.findUniqueOrThrow({ where: { id: pc.id } });
     if (cp.statut !== "OUVERTE" || cp.clotureeLe !== null || cp.clotureeParId !== null) ko("la clôture a survécu");
+
+    r = await request(app).post("/api/production/planning").set(auth).send({
+      datePrevue: datePlanning,
+      nombreBacsCommandes: 12,
+      lignes: [{ produitId: produit.id, quantitePrevue: 12 }],
+    });
+    if (r.status !== 500) ko(`rollback planning attendu 500, reçu ${r.status}`);
+    const planningReel = await db.planningProduction.findUniqueOrThrow({
+      where: { id: planningAvant.id },
+      include: { lignes: true },
+    });
+    if (
+      planningReel.nombreBacsCommandes !== 10 ||
+      planningReel.lignes.length !== 1 ||
+      planningReel.lignes[0]!.quantitePrevue !== 10
+    ) ko("le remplacement du planning a survécu");
   } finally {
     await triggerAudit(false);
   }
-  console.log("  ✓ pertes, qualité et clôture toutes annulées par PostgreSQL.");
+  console.log("  ✓ planning, pertes, qualité et clôture tous annulés par PostgreSQL.");
 
   console.log("→ 6/6 verrou concurrent observé par pg_blocking_pids…");
   const concurrente = await nouvelleProduction(user.id, motifA.id, true);
