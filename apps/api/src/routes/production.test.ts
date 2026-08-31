@@ -18,6 +18,16 @@ const mocks = vi.hoisted(() => {
       findUniqueOrThrow: vi.fn(),
       updateMany: vi.fn(),
     },
+    planningProduction: {
+      findUnique: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
+      create: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    planningLigneProduit: {
+      deleteMany: vi.fn(),
+      createMany: vi.fn(),
+    },
     productionPerte: {
       deleteMany: vi.fn(),
       createMany: vi.fn(),
@@ -31,6 +41,7 @@ const mocks = vi.hoisted(() => {
   const prisma = {
     $transaction: vi.fn(),
     motifDon: { count: vi.fn() },
+    produit: { count: vi.fn() },
     matierePremiere: { findMany: vi.fn() },
     motifPerte: { count: vi.fn() },
     motifNonConformite: { findUnique: vi.fn() },
@@ -161,15 +172,108 @@ beforeEach(() => {
   );
   mocks.tx.$queryRaw.mockResolvedValue([{ id: "prod-1" }]);
   mocks.prisma.motifDon.count.mockResolvedValue(0);
+  mocks.prisma.produit.count.mockResolvedValue(1);
   mocks.prisma.matierePremiere.findMany.mockResolvedValue([]);
   mocks.prisma.motifPerte.count.mockResolvedValue(1);
   mocks.prisma.motifNonConformite.findUnique.mockResolvedValue({ id: "motif-nc-1" });
+  mocks.tx.planningProduction.findUnique.mockResolvedValue(null);
+  mocks.tx.planningProduction.updateMany.mockResolvedValue({ count: 1 });
+  mocks.tx.planningLigneProduit.deleteMany.mockResolvedValue({ count: 0 });
+  mocks.tx.planningLigneProduit.createMany.mockResolvedValue({ count: 1 });
   mocks.tx.productionPerte.deleteMany.mockResolvedValue({ count: 0 });
   mocks.tx.productionPerte.createMany.mockResolvedValue({ count: 1 });
   mocks.tx.controleQualite.create.mockResolvedValue({ id: "controle-1" });
   mocks.tx.controleQualite.updateMany.mockResolvedValue({ count: 1 });
   mocks.tx.production.updateMany.mockResolvedValue({ count: 1 });
   mocks.auditerCaisseTx.mockResolvedValue(undefined);
+});
+
+function planning(id = "planning-1", quantitePrevue = 10) {
+  return {
+    id,
+    datePrevue: new Date("2026-09-01T00:00:00.000Z"),
+    nombreBacsCommandes: quantitePrevue,
+    sacsFarinePrevus: decimal(2),
+    paquetsLevurePrevus: decimal(1),
+    quantiteHuilePrevue: decimal(1),
+    kgSelPrevus: decimal(1),
+    observations: null,
+    creeParId: "u-production",
+    lignes: [{
+      id: "ligne-planning-1",
+      planningId: id,
+      produitId: "produit-1",
+      quantitePrevue,
+      produit: { id: "produit-1", nom: "Carré" },
+    }],
+    creePar: { id: "u-production", nom: "Responsable Production" },
+  };
+}
+
+describe("POST /api/production/planning — remplacement atomique", () => {
+  it("refuse un produit en double avant toute transaction", async () => {
+    const res = await request(app()).post("/api/production/planning").send({
+      datePrevue: "2026-09-01",
+      nombreBacsCommandes: 20,
+      lignes: [
+        { produitId: "produit-1", quantitePrevue: 10 },
+        { produitId: "produit-1", quantitePrevue: 10 },
+      ],
+    });
+
+    expect(res.status).toBe(400);
+    expect(mocks.prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("crée un nouveau planning sans inventer un audit de création", async () => {
+    mocks.tx.planningProduction.create.mockResolvedValue(planning());
+
+    const res = await request(app()).post("/api/production/planning").send({
+      datePrevue: "2026-09-01",
+      nombreBacsCommandes: 10,
+      lignes: [{ produitId: "produit-1", quantitePrevue: 10 }],
+    });
+
+    expect(res.status).toBe(201);
+    expect(mocks.tx.planningProduction.create).toHaveBeenCalled();
+    expect(mocks.auditerCaisseTx).not.toHaveBeenCalled();
+  });
+
+  it("remplace les lignes via *Many puis audite les suppressions et le Planning dans la transaction", async () => {
+    const avant = planning("planning-1", 10);
+    const apres = planning("planning-1", 12);
+    mocks.tx.planningProduction.findUnique.mockResolvedValue(avant);
+    mocks.tx.planningProduction.findUniqueOrThrow.mockResolvedValue(apres);
+
+    const res = await request(app()).post("/api/production/planning").send({
+      datePrevue: "2026-09-01",
+      nombreBacsCommandes: 12,
+      lignes: [{ produitId: "produit-1", quantitePrevue: 12 }],
+    });
+
+    expect(res.status).toBe(201);
+    expect(mocks.tx.planningLigneProduit.deleteMany).toHaveBeenCalled();
+    expect(mocks.tx.planningProduction.updateMany).toHaveBeenCalledBefore(mocks.auditerCaisseTx);
+    expect(mocks.tx.planningLigneProduit.createMany).toHaveBeenCalledBefore(mocks.auditerCaisseTx);
+    expect(mocks.auditerCaisseTx).toHaveBeenCalledWith(
+      mocks.tx,
+      expect.objectContaining({
+        module: "PRODUCTION",
+        typeEntite: "PlanningLigneProduit",
+        entiteId: "ligne-planning-1",
+        action: "SUPPRESSION",
+      }),
+    );
+    expect(mocks.auditerCaisseTx).toHaveBeenCalledWith(
+      mocks.tx,
+      expect.objectContaining({
+        module: "PRODUCTION",
+        typeEntite: "PlanningProduction",
+        entiteId: "planning-1",
+        action: "MODIFICATION",
+      }),
+    );
+  });
 });
 
 describe("POST /api/production/productions — stock transactionnel", () => {
