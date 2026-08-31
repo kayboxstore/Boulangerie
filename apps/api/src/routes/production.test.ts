@@ -67,7 +67,7 @@ vi.mock("../middleware/auth.js", () => ({
       id: "u-production",
       nom: "Responsable Production",
       estAdminPrincipal: false,
-      role: { permissions: [] },
+      role: { permissions: [{ module: "PRODUCTION", niveauAcces: "ECRITURE" }] },
     } as express.Request["utilisateur"];
     next();
   },
