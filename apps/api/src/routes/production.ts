@@ -181,7 +181,7 @@ productionRouter.post("/planning", ecriture, async (req, res, next) => {
 
     res.status(201).json({ planning: versPlanningDTO(planning) });
   } catch (e) {
-    next(e);
+    return repondreErreurMutationProduction(e, res, next);
   }
 });
 
