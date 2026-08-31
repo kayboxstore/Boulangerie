@@ -65,7 +65,7 @@ async function nouvelleProduction(userId: string, motifPerteId?: string, control
     },
   });
 }
-async function attendreBlocage() {
+async function attendreBlocageProduction() {
   const debut = Date.now();
   while (Date.now() - debut < 5000) {
     const lignes = await db.$queryRaw<{ bloqueurs: number[] }[]>`
@@ -195,19 +195,26 @@ async function main() {
   const compteP = await db.production.count({ where: { enregistreParId: user.id } });
   const compteM = await db.mouvementStock.count({ where: { auteurId: user.id } });
   const farineAvant = await db.matierePremiere.findUniqueOrThrow({ where: { code: "FARINE" } });
+  const levureAvant = await db.matierePremiere.findUniqueOrThrow({ where: { code: "LEVURE" } });
+  const compteAudits = await db.auditLog.count({ where: { utilisateurId: user.id } });
   const rejetStock = await request(app)
     .post("/api/production/productions").set(auth)
-    .send({ bacsProduits: 1, sacsUtilises: 10000 });
+    // La farine réussit d’abord (écriture + audit), puis la levure échoue :
+    // le rollback doit donc retirer aussi la trace STOCKS déjà écrite.
+    .send({ bacsProduits: 1, sacsUtilises: 1, paquetsLevureUtilises: 10000 });
   if (rejetStock.status !== 400) {
     ko(`stock insuffisant: attendu 400, reçu ${rejetStock.status} ${JSON.stringify(rejetStock.body)}`);
   }
   if (
     (await db.production.count({ where: { enregistreParId: user.id } })) !== compteP ||
-    (await db.mouvementStock.count({ where: { auteurId: user.id } })) !== compteM
-  ) ko("une écriture partielle a survécu au rejet de stock");
+    (await db.mouvementStock.count({ where: { auteurId: user.id } })) !== compteM ||
+    (await db.auditLog.count({ where: { utilisateurId: user.id } })) !== compteAudits
+  ) ko("une écriture ou une trace d’audit partielle a survécu au rejet de stock");
   const farineApres = await db.matierePremiere.findUniqueOrThrow({ where: { id: farineAvant.id } });
+  const levureApres = await db.matierePremiere.findUniqueOrThrow({ where: { id: levureAvant.id } });
   eqDecimal(farineApres.quantiteStock, farineAvant.quantiteStock.toNumber(), "farine après rollback");
-  console.log("  ✓ aucune Production, aucun mouvement, aucun stock partiel.");
+  eqDecimal(levureApres.quantiteStock, levureAvant.quantiteStock.toNumber(), "levure après rollback");
+  console.log("  ✓ Production, mouvement, stocks et AuditLog partiels tous annulés.");
 
   console.log("→ 3/6 pertes, qualité, clôture et audits exacts…");
   let r = await request(app).put(`/api/production/productions/${productionId}/pertes`).set(auth)
@@ -309,7 +316,7 @@ async function main() {
   try {
     await pris;
     const enCours = request(app).post(`/api/production/productions/${concurrente.id}/cloturer`).set(auth).then((x) => x);
-    await attendreBlocage();
+    await attendreBlocageProduction();
     liberer();
     await txn;
     r = await enCours;
@@ -321,7 +328,74 @@ async function main() {
   }
   console.log("  ✓ le routeur a réellement attendu le verrou PostgreSQL.");
 
-  console.log("\n✅ Production : 6/6 scénarios HTTP + PostgreSQL réels verts.\n");
+  console.log("→ 7/7 verrou du Planning observé avant toute suppression…");
+  const datePlanningConcurrent = "2099-02-01";
+  const planningConcurrent = await db.planningProduction.create({
+    data: {
+      datePrevue: new Date(datePlanningConcurrent),
+      nombreBacsCommandes: 10,
+      creeParId: user.id,
+      lignes: { create: [{ produitId: produit.id, quantitePrevue: 10 }] },
+    },
+  });
+  const bloqueurPlanning = new PrismaClient();
+  await bloqueurPlanning.$connect();
+  let libererPlanning!: () => void;
+  let signalerPlanning!: () => void;
+  const attentePlanning = new Promise<void>((resolve) => { libererPlanning = resolve; });
+  const prisPlanning = new Promise<void>((resolve) => { signalerPlanning = resolve; });
+  const txnPlanning = bloqueurPlanning.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "PlanningProduction" WHERE id = ${planningConcurrent.id} FOR UPDATE`;
+    signalerPlanning();
+    await attentePlanning;
+  });
+  try {
+    await prisPlanning;
+    const enCours = request(app).post("/api/production/planning").set(auth).send({
+      datePrevue: datePlanningConcurrent,
+      nombreBacsCommandes: 14,
+      lignes: [{ produitId: produit.id, quantitePrevue: 14 }],
+    }).then((x) => x);
+    const debut = Date.now();
+    let verrouObserve = false;
+    while (Date.now() - debut < 5000) {
+      const blocages = await db.$queryRaw<{ bloqueurs: number[] }[]>`
+        SELECT pg_blocking_pids(pid) AS bloqueurs
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND cardinality(pg_blocking_pids(pid)) > 0
+          AND query LIKE '%FROM "PlanningProduction"%FOR UPDATE%'
+      `;
+      if (blocages[0]?.bloqueurs.length) { verrouObserve = true; break; }
+      await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    }
+    if (!verrouObserve) ko("le verrou Planning FOR UPDATE n’a jamais été observé");
+    const pendant = await db.planningProduction.findUniqueOrThrow({
+      where: { id: planningConcurrent.id }, include: { lignes: true },
+    });
+    if (pendant.nombreBacsCommandes !== 10 || pendant.lignes[0]?.quantitePrevue !== 10) {
+      ko("le Planning a été écrit avant l’obtention du verrou");
+    }
+    libererPlanning();
+    await txnPlanning;
+    const reponse = await enCours;
+    if (reponse.status !== 201) ko(`Planning libéré attendu 201, reçu ${reponse.status} ${JSON.stringify(reponse.body)}`);
+    const apresPlanning = await db.planningProduction.findUniqueOrThrow({
+      where: { id: planningConcurrent.id }, include: { lignes: true },
+    });
+    if (
+      apresPlanning.nombreBacsCommandes !== 14 ||
+      apresPlanning.lignes.length !== 1 ||
+      apresPlanning.lignes[0]?.quantitePrevue !== 14
+    ) ko("le remplacement Planning final n’est pas exact");
+  } finally {
+    libererPlanning();
+    await txnPlanning.catch(() => undefined);
+    await bloqueurPlanning.$disconnect();
+  }
+  console.log("  ✓ aucune ligne supprimée avant le verrou, remplacement final exact.");
+
+  console.log("\n✅ Production : 7/7 scénarios HTTP + PostgreSQL réels verts.\n");
 }
 
 main()
