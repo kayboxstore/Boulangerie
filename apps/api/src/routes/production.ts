@@ -54,6 +54,8 @@ const ecriturePrevision = (req: Request, res: Response, next: NextFunction) => {
 const dec = (d: Prisma.Decimal | null) => (d === null ? null : d.toNumber());
 const jour = (d: Date) => d.toISOString().slice(0, 10);
 
+class ErreurPlanningConcurrent extends Error {}
+
 // --- Planning de production (section 3.3 a) ---------------------------------
 
 type PlanningAvecRelations = Prisma.PlanningProductionGetPayload<{
@@ -142,7 +144,7 @@ productionRouter.post("/planning", ecriture, async (req, res, next) => {
           data: donnees,
         });
         if (resultat.count !== 1) {
-          throw new ErreurMutationProduction(409, "PRODUCTION_CLOTUREE", "La planification a été modifiée simultanément");
+          throw new ErreurPlanningConcurrent("La planification a été modifiée simultanément");
         }
         if (lignes.length > 0) {
           await tx.planningLigneProduit.createMany({
@@ -181,7 +183,10 @@ productionRouter.post("/planning", ecriture, async (req, res, next) => {
 
     res.status(201).json({ planning: versPlanningDTO(planning) });
   } catch (e) {
-    return repondreErreurMutationProduction(e, res, next);
+    if (e instanceof ErreurPlanningConcurrent) {
+      return res.status(409).json({ code: "PREVISION_VERROUILLEE", erreur: e.message });
+    }
+    return next(e);
   }
 });
 
@@ -323,12 +328,45 @@ productionRouter.put("/schema-commande", ecriturePrevision, async (req, res, nex
       }));
       const nombreBacsCommandes = lignesPlanning.reduce((s, l) => s + l.quantitePrevue, 0);
 
-      const planningExistant = await tx.planningProduction.findUnique({ where: { datePrevue: dateObj } });
+      const planningExistant = await tx.planningProduction.findUnique({
+        where: { datePrevue: dateObj },
+        include: INCLUDE_PLANNING,
+      });
       if (planningExistant) {
         await tx.planningLigneProduit.deleteMany({ where: { planningId: planningExistant.id } });
-        await tx.planningProduction.update({
+        const resultat = await tx.planningProduction.updateMany({
           where: { id: planningExistant.id },
-          data: { nombreBacsCommandes, lignes: { create: lignesPlanning } },
+          data: { nombreBacsCommandes },
+        });
+        if (resultat.count !== 1) {
+          throw new ErreurPlanningConcurrent("La planification a été modifiée simultanément");
+        }
+        if (lignesPlanning.length > 0) {
+          await tx.planningLigneProduit.createMany({
+            data: lignesPlanning.map((ligne) => ({ ...ligne, planningId: planningExistant.id })),
+          });
+        }
+        const planningModifie = await tx.planningProduction.findUniqueOrThrow({
+          where: { id: planningExistant.id },
+          include: INCLUDE_PLANNING,
+        });
+        for (const ancienneLigne of planningExistant.lignes) {
+          await auditerCaisseTx(tx, {
+            module: "PRODUCTION",
+            typeEntite: "PlanningLigneProduit",
+            entiteId: ancienneLigne.id,
+            action: "SUPPRESSION",
+            avant: { ...ancienneLigne },
+            apres: null,
+          });
+        }
+        await auditerCaisseTx(tx, {
+          module: "PRODUCTION",
+          typeEntite: "PlanningProduction",
+          entiteId: planningExistant.id,
+          action: "MODIFICATION",
+          avant: { ...planningExistant },
+          apres: { ...planningModifie },
         });
       } else if (lignesPlanning.length > 0) {
         await tx.planningProduction.create({
@@ -358,6 +396,12 @@ productionRouter.put("/schema-commande", ecriturePrevision, async (req, res, nex
         code: e.code,
         erreur: e.message,
         ...(e.versionCourante === undefined ? {} : { versionCourante: e.versionCourante }),
+      });
+    }
+    if (e instanceof ErreurPlanningConcurrent) {
+      return res.status(409).json({
+        code: "PREVISION_VERROUILLEE",
+        erreur: e.message,
       });
     }
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034") {
