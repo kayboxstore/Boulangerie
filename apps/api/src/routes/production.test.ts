@@ -238,6 +238,7 @@ describe("POST /api/production/planning — remplacement atomique", () => {
   });
 
   it("crée un nouveau planning sans inventer un audit de création", async () => {
+    mocks.tx.$queryRaw.mockResolvedValue([]);
     mocks.tx.planningProduction.create.mockResolvedValue(planning());
 
     const res = await request(app()).post("/api/production/planning").send({
@@ -254,8 +255,8 @@ describe("POST /api/production/planning — remplacement atomique", () => {
   it("remplace les lignes via *Many puis audite les suppressions et le Planning dans la transaction", async () => {
     const avant = planning("planning-1", 10);
     const apres = planning("planning-1", 12);
-    mocks.tx.planningProduction.findUnique.mockResolvedValue(avant);
-    mocks.tx.planningProduction.findUniqueOrThrow.mockResolvedValue(apres);
+    mocks.tx.$queryRaw.mockResolvedValue([{ id: avant.id }]);
+    mocks.tx.planningProduction.findUniqueOrThrow.mockResolvedValueOnce(avant).mockResolvedValueOnce(apres);
 
     const res = await request(app()).post("/api/production/planning").send({
       datePrevue: "2026-09-01",
@@ -265,6 +266,7 @@ describe("POST /api/production/planning — remplacement atomique", () => {
 
     expect(res.status).toBe(201);
     expect(mocks.tx.planningLigneProduit.deleteMany).toHaveBeenCalled();
+    expect(mocks.tx.$queryRaw).toHaveBeenCalledBefore(mocks.tx.planningLigneProduit.deleteMany);
     expect(mocks.tx.planningProduction.updateMany).toHaveBeenCalledBefore(mocks.auditerCaisseTx);
     expect(mocks.tx.planningLigneProduit.createMany).toHaveBeenCalledBefore(mocks.auditerCaisseTx);
     expect(mocks.auditerCaisseTx).toHaveBeenCalledWith(
@@ -292,8 +294,8 @@ describe("PUT /api/production/schema-commande — alimentation atomique du Plann
   it("remplace un Planning existant via *Many et audite dans la même transaction", async () => {
     const avant = planning("planning-schema", 10);
     const apres = { ...planning("planning-schema", 0), lignes: [] };
-    mocks.tx.planningProduction.findUnique.mockResolvedValue(avant);
-    mocks.tx.planningProduction.findUniqueOrThrow.mockResolvedValue(apres);
+    mocks.tx.$queryRaw.mockResolvedValue([{ id: avant.id }]);
+    mocks.tx.planningProduction.findUniqueOrThrow.mockResolvedValueOnce(avant).mockResolvedValueOnce(apres);
 
     const res = await request(app()).put("/api/production/schema-commande").send({
       date: "2026-09-01",
@@ -306,6 +308,7 @@ describe("PUT /api/production/schema-commande — alimentation atomique du Plann
       where: { id: "planning-schema" },
       data: { nombreBacsCommandes: 0 },
     });
+    expect(mocks.tx.$queryRaw).toHaveBeenCalledBefore(mocks.tx.planningLigneProduit.deleteMany);
     expect(mocks.tx.planningLigneProduit.deleteMany).toHaveBeenCalledBefore(mocks.auditerCaisseTx);
     expect(mocks.auditerCaisseTx).toHaveBeenCalledWith(
       mocks.tx,
@@ -355,14 +358,14 @@ describe("POST /api/production/productions — stock transactionnel", () => {
       { id: "farine-1", code: "FARINE", nom: "Farine", unite: "SAC" },
     ]);
     mocks.tx.production.create.mockResolvedValue({ id: "prod-1", numero: 42 });
-    mocks.appliquerMouvement.mockRejectedValue(new ErreurStock(409, "Stock insuffisant"));
+    mocks.appliquerMouvement.mockRejectedValue(new ErreurStock(400, "Stock insuffisant"));
 
     const res = await request(app()).post("/api/production/productions").send({
       bacsProduits: 10,
       sacsUtilises: 99,
     });
 
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(400);
     expect(res.body.erreur).toBe("Stock insuffisant");
     expect(mocks.emettreEvenement).not.toHaveBeenCalled();
     expect(mocks.emettreAlerteSeuil).not.toHaveBeenCalled();
