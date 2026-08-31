@@ -3,6 +3,7 @@ import { formatQuantite, type TypeMouvementStock } from "@lomoto/shared";
 import { busEvenements } from "../lib/events.js";
 import { prisma } from "../lib/prisma.js";
 import type { TxClient } from "../lib/prisma.js";
+import { auditerCaisseTx } from "./caisseAtomique.js";
 
 /** Erreur métier renvoyée au client avec un statut HTTP dédié. */
 export class ErreurStock extends Error {
@@ -42,8 +43,13 @@ export async function appliquerMouvement(
     auteurId: string;
   },
 ): Promise<ResultatMouvement> {
-  const matiere = await tx.matierePremiere.findUnique({ where: { id: params.matierePremiereId } });
-  if (!matiere) throw new ErreurStock(404, "Matière première introuvable");
+  // Verrou de ligne avant la lecture : le contrôle de stock, le mouvement, la
+  // quantité finale et l'AuditLog reposent tous sur le même état sérialisé.
+  const ids = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "MatierePremiere" WHERE id = ${params.matierePremiereId} FOR UPDATE
+  `;
+  if (!ids[0]) throw new ErreurStock(404, "Matière première introuvable");
+  const matiere = await tx.matierePremiere.findUniqueOrThrow({ where: { id: ids[0].id } });
 
   const avant = matiere.quantiteStock.toNumber();
   const seuil = matiere.seuilAlerte.toNumber();
@@ -66,10 +72,8 @@ export async function appliquerMouvement(
       auteurId: params.auteurId,
     },
   });
-  // Calculé à l'avance (plutôt que relu sur `maj`) pour pouvoir réinitialiser
-  // alerteSeuilEnvoyeeLe dans le même UPDATE que le mouvement de stock.
   const apresPrevu = params.type === "ENTREE" ? avant + params.quantite : avant - params.quantite;
-  const maj = await tx.matierePremiere.update({
+  const modification = await tx.matierePremiere.updateMany({
     where: { id: matiere.id },
     data: {
       quantiteStock:
@@ -79,9 +83,9 @@ export async function appliquerMouvement(
       ...(apresPrevu >= seuil ? { alerteSeuilEnvoyeeLe: null } : {}),
     },
   });
+  if (modification.count !== 1) throw new ErreurStock(409, "Le stock vient d’être modifié — réessayez");
 
-  const apres = maj.quantiteStock.toNumber();
-  const vientDeFranchir = avant >= seuil && apres < seuil;
+  const vientDeFranchir = avant >= seuil && apresPrevu < seuil;
   let franchitSeuil = false;
   if (vientDeFranchir) {
     // Compare-and-set : si une alerte a déjà été émise pour ce passage sous le
@@ -92,6 +96,16 @@ export async function appliquerMouvement(
     });
     franchitSeuil = count === 1;
   }
+
+  const maj = await tx.matierePremiere.findUniqueOrThrow({ where: { id: matiere.id } });
+  await auditerCaisseTx(tx, {
+    module: "STOCKS",
+    typeEntite: "MatierePremiere",
+    entiteId: matiere.id,
+    action: "MODIFICATION",
+    avant: { ...matiere },
+    apres: { ...maj },
+  });
   return { matiere: maj, franchitSeuil };
 }
 
