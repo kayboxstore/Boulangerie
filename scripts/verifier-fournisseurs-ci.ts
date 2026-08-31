@@ -74,7 +74,6 @@ async function attendreBlocageCommande(id: string) {
       WHERE datname = current_database()
         AND cardinality(pg_blocking_pids(pid)) > 0
         AND query LIKE '%FROM "CommandeFournisseur"%FOR UPDATE%'
-        AND query LIKE ${`%${id}%`}
     `;
     if (lignes.some((l) => l.bloqueurs.length > 0)) return;
     await new Promise<void>((resolve) => setTimeout(resolve, 25));
