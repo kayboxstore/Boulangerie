@@ -361,6 +361,16 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-distribution-ci.ts
 
+      - name: Vérification HTTP + PostgreSQL réelle du Lot Travailleurs, présence et paie (P1, 01/09/2026)
+        # Sept scénarios sans mock : auteur de la fiche, pointages sans
+        # chevauchement, absence quotidienne et décision non rejouable,
+        # trois rollbacks réels après échec injecté de l'AuditLog, snapshot
+        # de paie immuable, verrou réellement observé par pg_blocking_pids et
+        # protection RESTRICT des bulletins contre toute suppression cascade.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-travailleurs-paie-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest
