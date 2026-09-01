@@ -600,8 +600,17 @@ productionRouter.put("/bons-livraison", ecriture, async (req, res, next) => {
         include: { lignes: true },
         orderBy: { id: "asc" },
       });
-      // Suppressions auditées manuellement dans la transaction : deleteMany et
-      // la cascade Prisma ne traversent pas l'extension d'audit automatique.
+      const suppression = await tx.bonLivraison.deleteMany({ where: { date: dateObj } });
+      if (suppression.count !== existants.length) {
+        throw new ErreurBonLivraison(
+          "Les bons ont été modifiés simultanément. Rechargez avant de réessayer.",
+          409,
+          "BONS_MODIFIES_SIMULTANEMENT",
+        );
+      }
+      // Audit après la suppression réelle, mais dans la même transaction :
+      // une panne d'AuditLog restaure donc exactement les bons et leurs lignes.
+      // La cascade/deleteMany ne traverse jamais l'extension automatique.
       for (const bon of existants) {
         for (const ligne of [...bon.lignes].sort((a, b) => a.id.localeCompare(b.id))) {
           await auditerCaisseTx(tx, {
@@ -621,14 +630,6 @@ productionRouter.put("/bons-livraison", ecriture, async (req, res, next) => {
           avant: bon,
           apres: null,
         });
-      }
-      const suppression = await tx.bonLivraison.deleteMany({ where: { date: dateObj } });
-      if (suppression.count !== existants.length) {
-        throw new ErreurBonLivraison(
-          "Les bons ont été modifiés simultanément. Rechargez avant de réessayer.",
-          409,
-          "BONS_MODIFIES_SIMULTANEMENT",
-        );
       }
 
       for (const client of clients) {
