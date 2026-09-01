@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => {
   const tx = {
     $queryRaw: vi.fn(),
+    $executeRaw: vi.fn(),
     production: {
       create: vi.fn(),
       findUniqueOrThrow: vi.fn(),
@@ -37,6 +38,14 @@ const mocks = vi.hoisted(() => {
       updateMany: vi.fn(),
       findUniqueOrThrow: vi.fn(),
     },
+    client: { findMany: vi.fn() },
+    produit: { findMany: vi.fn() },
+    cycleLivraison: { findFirst: vi.fn() },
+    bonLivraison: {
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
+      create: vi.fn(),
+    },
   };
   const prisma = {
     $transaction: vi.fn(),
@@ -44,6 +53,7 @@ const mocks = vi.hoisted(() => {
     produit: { count: vi.fn(), findMany: vi.fn() },
     client: { count: vi.fn(), findMany: vi.fn() },
     schemaCommande: { findMany: vi.fn() },
+    bonLivraison: { findMany: vi.fn() },
     matierePremiere: { findMany: vi.fn() },
     motifPerte: { count: vi.fn() },
     motifNonConformite: { findUnique: vi.fn() },
@@ -179,12 +189,14 @@ beforeEach(() => {
     async (operation: (tx: typeof mocks.tx) => Promise<unknown>) => operation(mocks.tx),
   );
   mocks.tx.$queryRaw.mockResolvedValue([{ id: "prod-1" }]);
+  mocks.tx.$executeRaw.mockResolvedValue(1);
   mocks.prisma.motifDon.count.mockResolvedValue(0);
   mocks.prisma.produit.count.mockResolvedValue(1);
   mocks.prisma.produit.findMany.mockResolvedValue([]);
   mocks.prisma.client.count.mockResolvedValue(0);
   mocks.prisma.client.findMany.mockResolvedValue([]);
   mocks.prisma.schemaCommande.findMany.mockResolvedValue([]);
+  mocks.prisma.bonLivraison.findMany.mockResolvedValue([]);
   mocks.prisma.matierePremiere.findMany.mockResolvedValue([]);
   mocks.prisma.motifPerte.count.mockResolvedValue(1);
   mocks.prisma.motifNonConformite.findUnique.mockResolvedValue({ id: "motif-nc-1" });
@@ -197,6 +209,12 @@ beforeEach(() => {
   mocks.tx.controleQualite.create.mockResolvedValue({ id: "controle-1" });
   mocks.tx.controleQualite.updateMany.mockResolvedValue({ count: 1 });
   mocks.tx.production.updateMany.mockResolvedValue({ count: 1 });
+  mocks.tx.client.findMany.mockResolvedValue([{ id: "client-1" }]);
+  mocks.tx.produit.findMany.mockResolvedValue([{ id: "produit-1" }]);
+  mocks.tx.cycleLivraison.findFirst.mockResolvedValue(null);
+  mocks.tx.bonLivraison.findMany.mockResolvedValue([]);
+  mocks.tx.bonLivraison.deleteMany.mockResolvedValue({ count: 0 });
+  mocks.tx.bonLivraison.create.mockResolvedValue({ id: "bon-1" });
   mocks.auditerCaisseTx.mockResolvedValue(undefined);
 });
 
@@ -318,6 +336,108 @@ describe("PUT /api/production/schema-commande — alimentation atomique du Plann
         action: "MODIFICATION",
       }),
     );
+  });
+});
+
+describe("PUT /api/production/bons-livraison — journée sérialisée et auditée", () => {
+  const corps = {
+    date: "2026-09-01",
+    clients: [{
+      clientId: "client-1",
+      lignes: [{ produitId: "produit-1", quantite: 12 }],
+      bacsVides: 3,
+      livrePar: "Moussa",
+      observations: "Bon témoin",
+    }],
+  };
+
+  it("verrouille avant de remplacer puis audite chaque suppression dans la transaction", async () => {
+    const ancien = {
+      id: "bon-ancien",
+      date: new Date("2026-09-01T00:00:00.000Z"),
+      clientId: "client-1",
+      bacsVides: 1,
+      livrePar: "Avant",
+      observations: null,
+      creeParId: "u-production",
+      lignes: [{
+        id: "ligne-bon-ancienne",
+        bonLivraisonId: "bon-ancien",
+        produitId: "produit-1",
+        quantite: 10,
+      }],
+    };
+    mocks.tx.bonLivraison.findMany.mockResolvedValue([ancien]);
+    mocks.tx.bonLivraison.deleteMany.mockResolvedValue({ count: 1 });
+
+    const res = await request(app()).put("/api/production/bons-livraison").send(corps);
+
+    expect(res.status).toBe(200);
+    expect(mocks.tx.$queryRaw).toHaveBeenCalledBefore(mocks.tx.bonLivraison.deleteMany);
+    expect(mocks.auditerCaisseTx).toHaveBeenCalledWith(
+      mocks.tx,
+      expect.objectContaining({
+        typeEntite: "BonLivraisonLigne",
+        entiteId: "ligne-bon-ancienne",
+        action: "SUPPRESSION",
+      }),
+    );
+    expect(mocks.auditerCaisseTx).toHaveBeenCalledWith(
+      mocks.tx,
+      expect.objectContaining({
+        typeEntite: "BonLivraison",
+        entiteId: "bon-ancien",
+        action: "SUPPRESSION",
+      }),
+    );
+    expect(mocks.tx.bonLivraison.deleteMany).toHaveBeenCalledBefore(mocks.auditerCaisseTx);
+    expect(mocks.auditerCaisseTx).toHaveBeenCalledBefore(mocks.tx.bonLivraison.create);
+    expect(mocks.tx.bonLivraison.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        clientId: "client-1",
+        bacsVides: 3,
+        livrePar: "Moussa",
+        creeParId: "u-production",
+      }),
+    });
+  });
+
+  it("refuse toute réécriture après le retour d'un bon physique", async () => {
+    mocks.tx.cycleLivraison.findFirst.mockResolvedValue({ id: "cycle-retourne" });
+
+    const res = await request(app()).put("/api/production/bons-livraison").send(corps);
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("BON_PHYSIQUE_DEJA_RETOURNE");
+    expect(mocks.tx.bonLivraison.deleteMany).not.toHaveBeenCalled();
+    expect(mocks.tx.bonLivraison.create).not.toHaveBeenCalled();
+  });
+
+  it("propage l'échec d'audit après la suppression et ne commence aucune recréation", async () => {
+    mocks.tx.bonLivraison.findMany.mockResolvedValue([{
+      id: "bon-ancien",
+      date: new Date("2026-09-01T00:00:00.000Z"),
+      clientId: "client-1",
+      bacsVides: 0,
+      livrePar: null,
+      observations: null,
+      creeParId: "u-production",
+      lignes: [{
+        id: "ligne-bon-ancienne",
+        bonLivraisonId: "bon-ancien",
+        produitId: "produit-1",
+        quantite: 10,
+      }],
+    }]);
+    mocks.tx.bonLivraison.deleteMany.mockResolvedValue({ count: 1 });
+    mocks.auditerCaisseTx.mockRejectedValueOnce(new Error("audit indisponible"));
+
+    const res = await request(app()).put("/api/production/bons-livraison").send(corps);
+
+    expect(res.status).toBe(500);
+    expect(mocks.tx.bonLivraison.deleteMany).toHaveBeenCalled();
+    expect(mocks.auditerCaisseTx).toHaveBeenCalled();
+    expect(mocks.tx.bonLivraison.create).not.toHaveBeenCalled();
   });
 });
 

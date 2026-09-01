@@ -56,6 +56,16 @@ const jour = (d: Date) => d.toISOString().slice(0, 10);
 
 class ErreurPlanningConcurrent extends Error {}
 
+class ErreurBonLivraison extends Error {
+  constructor(
+    message: string,
+    readonly statutHttp: 400 | 409 | 503,
+    readonly code: string,
+  ) {
+    super(message);
+  }
+}
+
 function estConflitPlanning(e: unknown): boolean {
   if (!(e instanceof Prisma.PrismaClientKnownRequestError)) return false;
   return (
@@ -527,53 +537,134 @@ productionRouter.put("/bons-livraison", ecriture, async (req, res, next) => {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
     const { date, clients } = parsed.data;
-
-    const clientIds = clients.map((c) => c.clientId);
+    const clientIds = clients.map((client) => client.clientId);
     if (new Set(clientIds).size !== clientIds.length) {
       return res.status(400).json({ erreur: "Un client apparaît deux fois dans le bon de livraison" });
     }
-    const produitIds = [...new Set(clients.flatMap((c) => c.lignes.map((l) => l.produitId)))];
-    if (clientIds.length > 0) {
-      const clientsConnus = await prisma.client.count({
-        where: { id: { in: clientIds }, typeClient: { nom: "Dépositaire" } },
-      });
-      if (clientsConnus !== clientIds.length) {
-        return res.status(400).json({ erreur: "Client inconnu ou non Dépositaire dans le bon de livraison" });
-      }
-    }
-    if (produitIds.length > 0) {
-      const produitsConnus = await prisma.produit.count({ where: { id: { in: produitIds } } });
-      if (produitsConnus !== produitIds.length) {
-        return res.status(400).json({ erreur: "Produit inconnu dans le bon de livraison" });
-      }
-    }
-
+    const produitIds = [...new Set(clients.flatMap((client) => client.lignes.map((ligne) => ligne.produitId)))];
     const dateObj = new Date(date);
 
     await prisma.$transaction(async (tx) => {
-      // Remplace intégralement les bons de cette date — même idiome que le
-      // Schéma de commande (plus simple et plus sûr qu'un diff ligne à ligne).
-      await tx.bonLivraison.deleteMany({ where: { date: dateObj } });
-      for (const c of clients) {
-        const lignesUtiles = c.lignes.filter((l) => l.quantite > 0);
-        const aUneValeur = lignesUtiles.length > 0 || c.bacsVides > 0 || !!c.livrePar || !!c.observations;
+      // Le verrou de journée couvre aussi une journée encore vide. Les verrous
+      // de lignes qui suivent rendent la sauvegarde incompatible avec un retour
+      // physique concurrent et figent les références jusqu'au commit.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"bon-livraison:" + date}))`;
+      await tx.$queryRaw`
+        SELECT c.id
+        FROM "CycleLivraison" c
+        JOIN "SchemaCommande" s ON s.id = c."schemaCommandeId"
+        WHERE s.date = ${dateObj}
+        FOR UPDATE OF c
+      `;
+      await tx.$queryRaw`SELECT id FROM "BonLivraison" WHERE date = ${dateObj} FOR UPDATE`;
+
+      if (clientIds.length > 0) {
+        const clientsConnus = await tx.client.findMany({
+          where: { id: { in: clientIds }, typeClient: { nom: "Dépositaire" } },
+          select: { id: true },
+        });
+        if (clientsConnus.length !== clientIds.length) {
+          throw new ErreurBonLivraison("Client inconnu ou non Dépositaire dans le bon de livraison", 400, "CLIENT_INVALIDE");
+        }
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "Client" WHERE id IN (${Prisma.join([...clientIds].sort())}) FOR KEY SHARE`,
+        );
+      }
+      if (produitIds.length > 0) {
+        const produitsConnus = await tx.produit.findMany({
+          where: { id: { in: produitIds } },
+          select: { id: true },
+        });
+        if (produitsConnus.length !== produitIds.length) {
+          throw new ErreurBonLivraison("Produit inconnu dans le bon de livraison", 400, "PRODUIT_INVALIDE");
+        }
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "Produit" WHERE id IN (${Prisma.join([...produitIds].sort())}) FOR KEY SHARE`,
+        );
+      }
+
+      const retourPhysique = await tx.cycleLivraison.findFirst({
+        where: { bonRetourne: true, schemaCommande: { date: dateObj } },
+        select: { id: true },
+      });
+      if (retourPhysique) {
+        throw new ErreurBonLivraison(
+          "Les bons de cette journée sont figés : un bon physique a déjà été retourné",
+          409,
+          "BON_PHYSIQUE_DEJA_RETOURNE",
+        );
+      }
+
+      const existants = await tx.bonLivraison.findMany({
+        where: { date: dateObj },
+        include: { lignes: true },
+        orderBy: { id: "asc" },
+      });
+      const suppression = await tx.bonLivraison.deleteMany({ where: { date: dateObj } });
+      if (suppression.count !== existants.length) {
+        throw new ErreurBonLivraison(
+          "Les bons ont été modifiés simultanément. Rechargez avant de réessayer.",
+          409,
+          "BONS_MODIFIES_SIMULTANEMENT",
+        );
+      }
+      // Audit après la suppression réelle, mais dans la même transaction :
+      // une panne d'AuditLog restaure donc exactement les bons et leurs lignes.
+      // La cascade/deleteMany ne traverse jamais l'extension automatique.
+      for (const bon of existants) {
+        for (const ligne of [...bon.lignes].sort((a, b) => a.id.localeCompare(b.id))) {
+          await auditerCaisseTx(tx, {
+            module: "PRODUCTION",
+            typeEntite: "BonLivraisonLigne",
+            entiteId: ligne.id,
+            action: "SUPPRESSION",
+            avant: ligne,
+            apres: null,
+          });
+        }
+        await auditerCaisseTx(tx, {
+          module: "PRODUCTION",
+          typeEntite: "BonLivraison",
+          entiteId: bon.id,
+          action: "SUPPRESSION",
+          avant: bon,
+          apres: null,
+        });
+      }
+
+      for (const client of clients) {
+        const lignesUtiles = client.lignes.filter((ligne) => ligne.quantite > 0);
+        const aUneValeur =
+          lignesUtiles.length > 0 ||
+          client.bacsVides > 0 ||
+          !!client.livrePar ||
+          !!client.observations;
         if (!aUneValeur) continue;
         await tx.bonLivraison.create({
           data: {
             date: dateObj,
-            clientId: c.clientId,
-            bacsVides: c.bacsVides,
-            livrePar: c.livrePar || null,
-            observations: c.observations || null,
+            clientId: client.clientId,
+            bacsVides: client.bacsVides,
+            livrePar: client.livrePar || null,
+            observations: client.observations || null,
             creeParId: req.utilisateur!.id,
             lignes: { create: lignesUtiles },
           },
         });
       }
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     res.json(await chargerBonLivraisonJour(date));
   } catch (e) {
+    if (e instanceof ErreurBonLivraison) {
+      return res.status(e.statutHttp).json({ code: e.code, erreur: e.message });
+    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034") {
+      return res.status(503).json({
+        code: "BONS_CONCURRENCE_PERSISTANTE",
+        erreur: "Conflit de concurrence sur les bons de livraison. Réessayez, aucune donnée partielle n'a été enregistrée.",
+      });
+    }
     next(e);
   }
 });

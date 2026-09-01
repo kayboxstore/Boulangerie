@@ -144,6 +144,24 @@ async function chargerCycle(client: TxClient, id: string): Promise<CycleComplet 
   return client.cycleLivraison.findUnique({ where: { id }, include: INCLUDE_CYCLE });
 }
 
+/**
+ * Sérialise les mutations annexes d'un cycle sur sa ligne PostgreSQL.
+ * La relecture ORM est faite dans la même transaction, après le verrou.
+ */
+async function verrouillerCycle(client: TxClient, id: string): Promise<CycleComplet | null> {
+  const lignes = await client.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "CycleLivraison" WHERE id = ${id} FOR UPDATE
+  `;
+  if (!lignes[0]) return null;
+  return chargerCycle(client, id);
+}
+
+const STATUTS_ACCEPTATION_TERMINAUX = new Set<CycleComplet["statut"]>([
+  "ACCEPTEE",
+  "PARTIELLEMENT_ACCEPTEE",
+  "RETOUR_TOTAL",
+]);
+
 function verifierVersionEtEtat(cycle: CycleComplet, input: TransitionCycleLivraisonInput) {
   if (cycle.version !== input.version) {
     throw new ErreurCycleLivraison(
@@ -446,27 +464,14 @@ export async function appliquerTransition(
         apres: clientApres,
       });
 
-      const cycleAvantLien = await tx.cycleLivraison.findUniqueOrThrow({ where: { id: cycle.id } });
       const { count: countCycle } = await tx.cycleLivraison.updateMany({
         where: { id: cycle.id },
         data: { commandeId: creee.id },
       });
-      // En pratique inatteignable : le cycle vient d'être verrouillé par
-      // `reclamerVersion` (CAS optimiste par version) plus haut dans CETTE
-      // même transaction — conservé par défense en profondeur, jamais un
-      // 500 générique.
+      // Défense en profondeur après la réclamation optimiste de version.
       if (countCycle !== 1) {
         throw new ErreurCycleLivraison("Cycle introuvable", 404, "CYCLE_INTROUVABLE");
       }
-      const cycleApresLien = await tx.cycleLivraison.findUniqueOrThrow({ where: { id: cycle.id } });
-      await auditerCaisseTx(tx, {
-        module: "PRODUCTION",
-        typeEntite: "CycleLivraison",
-        entiteId: cycle.id,
-        action: "MODIFICATION",
-        avant: cycleAvantLien,
-        apres: cycleApresLien,
-      });
 
       commande = creee;
     }
@@ -500,6 +505,16 @@ export async function appliquerTransition(
   });
   const misAJour = await chargerCycle(tx, cycle.id);
   if (!misAJour) throw new ErreurCycleLivraison("Cycle introuvable", 404, "CYCLE_INTROUVABLE");
+  // Une trace unique couvre la mutation complète du cycle et partage son
+  // rollback : statut, version, livreur, retour du bon et lien commande.
+  await auditerCaisseTx(tx, {
+    module: "PRODUCTION",
+    typeEntite: "CycleLivraison",
+    entiteId: cycle.id,
+    action: "MODIFICATION",
+    avant: cycle,
+    apres: misAJour,
+  });
   return { cycle: versCycleDTO(misAJour), commande };
 }
 
@@ -657,12 +672,20 @@ cyclesLivraisonRouter.post("/cycles-livraison/:id/bon-retourne", async (req, res
     const parsed = bonRetourneCycleSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ code: "DONNEES_INVALIDES", erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     const cycle = await prisma.$transaction(async (tx) => {
-      const courant = await chargerCycle(tx, req.params.id);
+      const courant = await verrouillerCycle(tx, req.params.id);
       if (!courant) throw new ErreurCycleLivraison("Cycle introuvable", 404, "CYCLE_INTROUVABLE");
       if (courant.version !== parsed.data.version) {
         throw new ErreurCycleLivraison("Le cycle a été modifié", 409, "VERSION_OBSOLETE", courant.version);
       }
       if (!courant.bonRetourne) {
+        if (!STATUTS_ACCEPTATION_TERMINAUX.has(courant.statut)) {
+          throw new ErreurCycleLivraison(
+            "Le bon physique ne peut être retourné qu'après la confirmation de l'acceptation",
+            409,
+            "TRANSITION_INTERDITE",
+            courant.version,
+          );
+        }
         const retourneLe = new Date();
         const maj = await tx.cycleLivraison.updateMany({
           where: { id: courant.id, version: courant.version },
@@ -674,13 +697,40 @@ cyclesLivraisonRouter.post("/cycles-livraison/:id/bon-retourne", async (req, res
           },
         });
         if (maj.count !== 1) throw new ErreurCycleLivraison("Le cycle a été modifié", 409, "VERSION_OBSOLETE");
-        await tx.anomalieCycleLivraison.updateMany({
+        const anomaliesAvant = await tx.anomalieCycleLivraison.findMany({
           where: { cycleId: courant.id, type: "BON_NON_RETOURNE", resolueLe: null },
-          data: {
-            resolueLe: retourneLe,
-            resolueParId: req.utilisateur!.id,
-            commentaireResolution: "Bon physique retourné et attribué par le serveur",
-          },
+        });
+        for (const anomalieAvant of anomaliesAvant) {
+          const resolution = await tx.anomalieCycleLivraison.updateMany({
+            where: { id: anomalieAvant.id, resolueLe: null },
+            data: {
+              resolueLe: retourneLe,
+              resolueParId: req.utilisateur!.id,
+              commentaireResolution: "Bon physique retourné et attribué par le serveur",
+            },
+          });
+          if (resolution.count !== 1) {
+            throw new ErreurCycleLivraison("L'anomalie a été modifiée simultanément", 409, "VERSION_OBSOLETE");
+          }
+          const anomalieApres = await tx.anomalieCycleLivraison.findUniqueOrThrow({ where: { id: anomalieAvant.id } });
+          await auditerCaisseTx(tx, {
+            module: "PRODUCTION",
+            typeEntite: "AnomalieCycleLivraison",
+            entiteId: anomalieAvant.id,
+            action: "MODIFICATION",
+            avant: anomalieAvant,
+            apres: anomalieApres,
+          });
+        }
+        const cycleApres = await chargerCycle(tx, courant.id);
+        if (!cycleApres) throw new ErreurCycleLivraison("Cycle introuvable", 404, "CYCLE_INTROUVABLE");
+        await auditerCaisseTx(tx, {
+          module: "PRODUCTION",
+          typeEntite: "CycleLivraison",
+          entiteId: courant.id,
+          action: "MODIFICATION",
+          avant: courant,
+          apres: cycleApres,
         });
       }
       const resultat = await chargerCycle(tx, courant.id);
@@ -701,7 +751,7 @@ cyclesLivraisonRouter.post("/cycles-livraison/:id/anomalies", async (req, res, n
     const parsed = anomalieCycleCreateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ code: "DONNEES_INVALIDES", erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     const resultat = await prisma.$transaction(async (tx) => {
-      const cycle = await chargerCycle(tx, req.params.id);
+      const cycle = await verrouillerCycle(tx, req.params.id);
       if (!cycle) throw new ErreurCycleLivraison("Cycle introuvable", 404, "CYCLE_INTROUVABLE");
       if (cycle.version !== parsed.data.version) {
         throw new ErreurCycleLivraison("Le cycle a été modifié", 409, "VERSION_OBSOLETE", cycle.version);
@@ -725,6 +775,14 @@ cyclesLivraisonRouter.post("/cycles-livraison/:id/anomalies", async (req, res, n
       });
       const maj = await chargerCycle(tx, cycle.id);
       if (!maj) throw new ErreurCycleLivraison("Cycle introuvable", 404, "CYCLE_INTROUVABLE");
+      await auditerCaisseTx(tx, {
+        module: "PRODUCTION",
+        typeEntite: "CycleLivraison",
+        entiteId: cycle.id,
+        action: "MODIFICATION",
+        avant: cycle,
+        apres: maj,
+      });
       const dto: AnomalieCycleDTO = {
         id: anomalie.id,
         type: anomalie.type,
@@ -761,7 +819,7 @@ cyclesLivraisonRouter.post("/cycles-livraison/:id/anomalies/:anomalieId/resoudre
     const parsed = anomalieCycleResoudreSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ code: "DONNEES_INVALIDES", erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     const resultat = await prisma.$transaction(async (tx) => {
-      const cycle = await chargerCycle(tx, req.params.id);
+      const cycle = await verrouillerCycle(tx, req.params.id);
       if (!cycle) throw new ErreurCycleLivraison("Cycle introuvable", 404, "CYCLE_INTROUVABLE");
       if (cycle.version !== parsed.data.version) {
         throw new ErreurCycleLivraison("Le cycle a été modifié", 409, "VERSION_OBSOLETE", cycle.version);
@@ -776,16 +834,37 @@ cyclesLivraisonRouter.post("/cycles-livraison/:id/anomalies/:anomalieId/resoudre
         data: { version: { increment: 1 } },
       });
       if (reclame.count !== 1) throw new ErreurCycleLivraison("Le cycle a été modifié", 409, "VERSION_OBSOLETE");
-      await tx.anomalieCycleLivraison.update({
-        where: { id: anomalie.id },
+      const resolueLe = new Date();
+      const resolution = await tx.anomalieCycleLivraison.updateMany({
+        where: { id: anomalie.id, resolueLe: null },
         data: {
-          resolueLe: new Date(),
+          resolueLe,
           resolueParId: req.utilisateur!.id,
           commentaireResolution: parsed.data.commentaire,
         },
       });
+      if (resolution.count !== 1) {
+        throw new ErreurCycleLivraison("Cette anomalie est déjà résolue", 409, "ANOMALIE_DEJA_RESOLUE");
+      }
+      const anomalieApres = await tx.anomalieCycleLivraison.findUniqueOrThrow({ where: { id: anomalie.id } });
+      await auditerCaisseTx(tx, {
+        module: "PRODUCTION",
+        typeEntite: "AnomalieCycleLivraison",
+        entiteId: anomalie.id,
+        action: "MODIFICATION",
+        avant: anomalie,
+        apres: anomalieApres,
+      });
       const maj = await chargerCycle(tx, cycle.id);
       if (!maj) throw new ErreurCycleLivraison("Cycle introuvable", 404, "CYCLE_INTROUVABLE");
+      await auditerCaisseTx(tx, {
+        module: "PRODUCTION",
+        typeEntite: "CycleLivraison",
+        entiteId: cycle.id,
+        action: "MODIFICATION",
+        avant: cycle,
+        apres: maj,
+      });
       return versCycleDTO(maj);
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     res.json({ cycle: resultat });
