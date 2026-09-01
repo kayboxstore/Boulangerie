@@ -548,7 +548,7 @@ productionRouter.put("/bons-livraison", ecriture, async (req, res, next) => {
       // Le verrou de journée couvre aussi une journée encore vide. Les verrous
       // de lignes qui suivent rendent la sauvegarde incompatible avec un retour
       // physique concurrent et figent les références jusqu'au commit.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${"bon-livraison:" + date}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"bon-livraison:" + date}))`;
       await tx.$queryRaw`
         SELECT c.id
         FROM "CycleLivraison" c
