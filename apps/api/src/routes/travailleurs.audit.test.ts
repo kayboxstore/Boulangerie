@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   findUniqueTravailleur: vi.fn(),
   findUniqueUtilisateur: vi.fn(),
   transaction: vi.fn(),
+  queryRaw: vi.fn(),
   updateMany: vi.fn(),
   findUniqueOrThrow: vi.fn(),
   auditLogCreate: vi.fn(),
@@ -108,14 +109,20 @@ const COMPTE_REMPLACANT = { id: "u-remplacant", nom: "Compte Remplaçant", email
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getStore.mockReturnValue({ id: "acteur-1", nom: "Chargé du personnel" });
+  mocks.queryRaw.mockResolvedValue([{ id: "t-1" }]);
   // Reproduit `prisma.$transaction(callback)` : exécute le callback avec un
   // `tx` minimal exposant les mêmes méthodes que le client transactionnel
   // réel — voir le caveat en tête de fichier.
   mocks.transaction.mockImplementation(async (callback: (tx: unknown) => unknown) =>
     callback({
+      $queryRaw: mocks.queryRaw,
       travailleur: {
+        findUnique: mocks.findUniqueTravailleur,
         updateMany: mocks.updateMany,
         findUniqueOrThrow: mocks.findUniqueOrThrow,
+      },
+      utilisateur: {
+        findUnique: mocks.findUniqueUtilisateur,
       },
       auditLog: {
         create: mocks.auditLogCreate,
