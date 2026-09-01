@@ -427,6 +427,7 @@ describe("PUT /api/production/bons-livraison — journée sérialisée et audit�
         quantite: 10,
       }],
     }]);
+    mocks.tx.bonLivraison.deleteMany.mockResolvedValue({ count: 1 });
     mocks.auditerCaisseTx.mockRejectedValueOnce(new Error("audit indisponible"));
 
     const res = await request(app()).put("/api/production/bons-livraison").send(corps);
