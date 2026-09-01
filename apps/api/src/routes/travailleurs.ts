@@ -26,16 +26,65 @@ import {
   type TypeSanction,
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
+import type { TxClient } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { declencherEmailPro, verifierEmailPro } from "../services/emailPro.js";
 import { construirePdf, nomFichierPdf } from "../services/pdf.js";
 import { busEvenements } from "../lib/events.js";
-import { contexteRequete } from "../lib/contexteRequete.js";
 import { ErreurAction } from "../lib/erreurAction.js";
+import {
+  auditerCaisseTx,
+  ErreurEcritureCaisseReessayable,
+  estViolationContrainteUnique,
+  executerAvecReessaiP2034,
+  transactionSerializable,
+} from "../services/caisseAtomique.js";
 
 export const travailleursRouter = Router();
 
 travailleursRouter.use(requireAuth);
+
+const transactionTravailleurs = <T>(executer: (tx: TxClient) => Promise<T>): Promise<T> =>
+  executerAvecReessaiP2034(() => transactionSerializable(prisma, executer));
+
+async function verrouillerTravailleur(tx: TxClient, id: string): Promise<boolean> {
+  const lignes = await tx.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "Travailleur" WHERE "id" = ${id} FOR UPDATE
+  `;
+  return lignes.length === 1;
+}
+
+async function verrouillerPointage(tx: TxClient, id: string): Promise<boolean> {
+  const lignes = await tx.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "Pointage" WHERE "id" = ${id} FOR UPDATE
+  `;
+  return lignes.length === 1;
+}
+
+async function verrouillerAbsence(tx: TxClient, id: string): Promise<boolean> {
+  const lignes = await tx.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "Absence" WHERE "id" = ${id} FOR UPDATE
+  `;
+  return lignes.length === 1;
+}
+
+async function verrouillerSanction(tx: TxClient, id: string): Promise<boolean> {
+  const lignes = await tx.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "Sanction" WHERE "id" = ${id} FOR UPDATE
+  `;
+  return lignes.length === 1;
+}
+
+function erreurMutationTravailleurs(e: unknown): { status: number; erreur: string } | null {
+  if (e instanceof ErreurAction) return { status: e.status, erreur: e.message };
+  if (e instanceof ErreurEcritureCaisseReessayable) {
+    return { status: 503, erreur: "Conflit de concurrence persistant — réessayez. Rien n'a été enregistré." };
+  }
+  if (estViolationContrainteUnique(e)) {
+    return { status: 409, erreur: "Cette opération entre en conflit avec un enregistrement existant." };
+  }
+  return null;
+}
 
 type TravailleurAvecCompte = Prisma.TravailleurGetPayload<{
   include: {
@@ -69,26 +118,6 @@ export const versTravailleurDTO = (t: TravailleurAvecCompte): TravailleurDTO => 
 });
 
 /**
- * Rend un enregistrement `Travailleur` sérialisable et sûr pour l'audit
- * (Date → ISO ; toute relation imbriquée écartée). Même logique que
- * `normaliser()` dans `lib/audit.ts` (fonction privée, non exportée) et que
- * `normaliserPourAudit()` dans `services/actionsCritiquesMetier.ts` —
- * reproduite ici à l'identique plutôt que partagée par une dépendance sur un
- * détail d'implémentation interne d'un autre module (même convention déjà
- * établie deux fois dans ce dépôt).
- */
-function normaliserPourAudit(valeur: Record<string, unknown>): Record<string, unknown> {
-  const json = JSON.stringify(valeur);
-  const obj = JSON.parse(json) as Record<string, unknown>;
-  const propre: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v !== null && typeof v === "object") continue;
-    propre[k] = v;
-  }
-  return propre;
-}
-
-/**
  * Vérifie la cohérence département/groupe (3.18) : un groupe appartient
  * toujours à un département précis, un Travailleur ne peut donc pas être
  * rattaché à un groupe qui n'est pas celui de son propre département. Un
@@ -98,15 +127,16 @@ function normaliserPourAudit(valeur: Record<string, unknown>): Record<string, un
 async function validerDepartementGroupe(
   departementId: string | null,
   groupeId: string | null,
+  db: Pick<TxClient, "departement" | "groupe"> = prisma,
 ): Promise<{ status: number; erreur: string } | { departementId: string | null; groupeId: string | null }> {
   if (!departementId) return { departementId: null, groupeId: null };
 
-  const departement = await prisma.departement.findUnique({ where: { id: departementId } });
+  const departement = await db.departement.findUnique({ where: { id: departementId } });
   if (!departement) return { status: 404, erreur: "Département introuvable" };
 
   if (!groupeId) return { departementId, groupeId: null };
 
-  const groupe = await prisma.groupe.findUnique({ where: { id: groupeId } });
+  const groupe = await db.groupe.findUnique({ where: { id: groupeId } });
   if (!groupe) return { status: 404, erreur: "Groupe introuvable" };
   if (groupe.departementId !== departementId) {
     return { status: 400, erreur: "Le groupe sélectionné n'appartient pas à ce département" };
@@ -161,10 +191,14 @@ const versAbsenceDTO = (a: AbsenceAvecRelations): AbsenceDTO => ({
 });
 
 /** Vérifie que le compte Utilisateur à lier existe et n'a pas déjà une fiche. */
-async function verifierCompteLie(utilisateurId: string, ignorerTravailleurId?: string): Promise<{ status: number; erreur: string } | null> {
-  const compte = await prisma.utilisateur.findUnique({ where: { id: utilisateurId } });
+async function verifierCompteLie(
+  utilisateurId: string,
+  ignorerTravailleurId?: string,
+  db: Pick<TxClient, "utilisateur" | "travailleur"> = prisma,
+): Promise<{ status: number; erreur: string } | null> {
+  const compte = await db.utilisateur.findUnique({ where: { id: utilisateurId } });
   if (!compte) return { status: 404, erreur: "Compte utilisateur introuvable" };
-  const dejaLie = await prisma.travailleur.findUnique({ where: { utilisateurId } });
+  const dejaLie = await db.travailleur.findUnique({ where: { utilisateurId } });
   if (dejaLie && dejaLie.id !== ignorerTravailleurId) {
     return { status: 409, erreur: `Ce compte est déjà lié à la fiche de ${dejaLie.nom}` };
   }
@@ -209,29 +243,38 @@ travailleursRouter.post("/", requirePermission("TRAVAILLEURS", "ECRITURE"), asyn
     }
     const { nom, telephone, poste, dateEmbauche, utilisateurId, departementId, groupeId, salaireMensuel, joursTravaillesParMois } = parsed.data;
 
-    if (utilisateurId) {
-      const invalide = await verifierCompteLie(utilisateurId);
-      if (invalide) return res.status(invalide.status).json({ erreur: invalide.erreur });
+    try {
+      const travailleur = await transactionTravailleurs(async (tx) => {
+        if (utilisateurId) {
+          const invalide = await verifierCompteLie(utilisateurId, undefined, tx);
+          if (invalide) throw new ErreurAction(invalide.status, invalide.erreur);
+        }
+
+        const depGroupe = await validerDepartementGroupe(departementId, groupeId ?? null, tx);
+        if ("erreur" in depGroupe) throw new ErreurAction(depGroupe.status, depGroupe.erreur);
+
+        return tx.travailleur.create({
+          data: {
+            nom,
+            telephone: telephone ?? null,
+            poste,
+            dateEmbauche: new Date(dateEmbauche),
+            utilisateurId: utilisateurId ?? null,
+            creeParId: req.utilisateur!.id,
+            departementId: depGroupe.departementId,
+            groupeId: depGroupe.groupeId,
+            salaireMensuel,
+            joursTravaillesParMois,
+          } as unknown as Prisma.TravailleurUncheckedCreateInput,
+          include: INCLUDE_TRAVAILLEUR,
+        });
+      });
+      res.status(201).json({ travailleur: versTravailleurDTO(travailleur) });
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
     }
-
-    const depGroupe = await validerDepartementGroupe(departementId, groupeId ?? null);
-    if ("erreur" in depGroupe) return res.status(depGroupe.status).json({ erreur: depGroupe.erreur });
-
-    const travailleur = await prisma.travailleur.create({
-      data: {
-        nom,
-        telephone: telephone ?? null,
-        poste,
-        dateEmbauche: new Date(dateEmbauche),
-        utilisateurId: utilisateurId ?? null,
-        departementId: depGroupe.departementId,
-        groupeId: depGroupe.groupeId,
-        salaireMensuel,
-        joursTravaillesParMois,
-      },
-      include: INCLUDE_TRAVAILLEUR,
-    });
-    res.status(201).json({ travailleur: versTravailleurDTO(travailleur) });
   } catch (e) {
     next(e);
   }
@@ -243,122 +286,58 @@ travailleursRouter.put("/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), as
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const existant = await prisma.travailleur.findUnique({ where: { id: req.params.id } });
-    if (!existant) return res.status(404).json({ erreur: "Travailleur introuvable" });
-
     const { nom, telephone, poste, dateEmbauche, utilisateurId, departementId, groupeId, salaireMensuel, joursTravaillesParMois } = parsed.data;
+    try {
+      const travailleur = await transactionTravailleurs(async (tx) => {
+        if (!(await verrouillerTravailleur(tx, req.params.id))) {
+          throw new ErreurAction(404, "Travailleur introuvable");
+        }
+        const existant = await tx.travailleur.findUnique({ where: { id: req.params.id } });
+        if (!existant) throw new ErreurAction(404, "Travailleur introuvable");
 
-    if (utilisateurId) {
-      const invalide = await verifierCompteLie(utilisateurId, existant.id);
-      if (invalide) return res.status(invalide.status).json({ erreur: invalide.erreur });
-    }
+        if (utilisateurId) {
+          const invalide = await verifierCompteLie(utilisateurId, existant.id, tx);
+          if (invalide) throw new ErreurAction(invalide.status, invalide.erreur);
+        }
 
-    // undefined = champ non touché par cette requête ; on part alors de la
-    // valeur actuelle pour revalider la cohérence département/groupe.
-    const departementFinal = departementId !== undefined ? departementId : existant.departementId;
-    const groupeFinal = groupeId !== undefined ? groupeId : existant.groupeId;
-    const depGroupe = await validerDepartementGroupe(departementFinal, groupeFinal);
-    if ("erreur" in depGroupe) return res.status(depGroupe.status).json({ erreur: depGroupe.erreur });
+        const departementFinal = departementId !== undefined ? departementId : existant.departementId;
+        const groupeFinal = groupeId !== undefined ? groupeId : existant.groupeId;
+        const depGroupe = await validerDepartementGroupe(departementFinal, groupeFinal, tx);
+        if ("erreur" in depGroupe) throw new ErreurAction(depGroupe.status, depGroupe.erreur);
 
-    const donneesEcriture = {
-      nom,
-      telephone,
-      poste,
-      dateEmbauche: dateEmbauche ? new Date(dateEmbauche) : undefined,
-      // undefined = intact ; null = délier ; id = lier.
-      utilisateurId,
-      departementId: depGroupe.departementId,
-      groupeId: depGroupe.groupeId,
-      salaireMensuel,
-      joursTravaillesParMois,
-    };
-
-    let travailleur;
-    if (utilisateurId !== undefined) {
-      // Correctif P1 (Round 2, contre-revue Codex du 25/08/2026) : cette
-      // requête modifie EXPLICITEMENT le rattachement (lier ou délier) —
-      // `verifierCompteLie` ci-dessus n'est qu'une prélecture, dépassée dès
-      // qu'un autre chemin (ex. l'approbation d'une demande CREER_COMPTE_ADMIN)
-      // modifie `utilisateurId` entre-temps. L'écriture est donc conditionnée
-      // sur la valeur RÉELLEMENT observée (`existant.utilisateurId`) — jamais
-      // un `update` inconditionnel — pour ne jamais écraser silencieusement
-      // un rattachement changé entre la prélecture et cette écriture.
-      //
-      // Correctif P1 (Round 3, contre-revue Codex du 26/08/2026) : ce
-      // `updateMany` n'est JAMAIS intercepté par l'extension d'audit générale
-      // (`lib/audit.ts`), qui n'intercepte que `update`/`delete` SINGULIERS —
-      // utilisée ici précisément pour permettre l'écriture CONDITIONNELLE du
-      // Round 2. Sans correction, toute modification touchant
-      // `utilisateurId` (liaison, déliaison, ou combinée à un changement de
-      // salaire/poste/département/groupe dans la même requête) réussissait
-      // donc SANS produire le moindre `AuditLog`. Corrigé en écrivant
-      // manuellement UNE ligne `AuditLog` "MODIFICATION", DANS la même
-      // transaction que l'écriture conditionnelle (même principe déjà établi
-      // par `services/actionsCritiquesMetier.ts`/`auditerTx` et
-      // `services/permissionsRoleAudit.ts`) :
-      //  - conflit (`count !== 1`) → `ErreurAction(409, ...)` levée DANS la
-      //    transaction → PostgreSQL annule tout, y compris l'écriture
-      //    métier déjà tentée par ce `updateMany` — aucun audit n'est écrit ;
-      //  - succès → l'audit complet (avant/après, tous les champs modifiés
-      //    par cette requête) est écrit avec le client transactionnel `tx`,
-      //    jamais avec le client de base — un échec de CETTE écriture
-      //    d'audit (ex. contrainte violée) fait donc échouer et annuler
-      //    (rollback) la MODIFICATION elle-même plutôt que de laisser
-      //    l'écriture réussir silencieusement non tracée ;
-      //  - aucun double comptage possible : le `updateMany` n'est jamais
-      //    intercepté par l'extension automatique (elle n'écoute que
-      //    `update`/`delete`), donc une seule ligne `AuditLog` est produite
-      //    par cette branche, jamais deux.
-      try {
-        travailleur = await prisma.$transaction(async (tx) => {
-          const { count } = await tx.travailleur.updateMany({
-            where: { id: existant.id, utilisateurId: existant.utilisateurId },
-            data: donneesEcriture,
-          });
-          if (count !== 1) {
-            throw new ErreurAction(409, "Le rattachement de cette fiche a changé entre-temps — réessayez.");
-          }
-          const apres = await tx.travailleur.findUniqueOrThrow({ where: { id: existant.id }, include: INCLUDE_TRAVAILLEUR });
-
-          const acteur = contexteRequete.getStore();
-          if (!acteur) {
-            // Ne devrait jamais se produire : `requireAuth` (en tête de ce
-            // routeur) peuple systématiquement `contexteRequete` avant que
-            // cette route ne soit atteinte. Garde défensive plutôt qu'un
-            // audit silencieusement absent — fait échouer (rollback) la
-            // modification, remonte en 500 via le handler générique.
-            throw new Error(
-              "Modification du rattachement Travailleur refusée : aucun acteur authentifié dans le contexte de " +
-                "requête — impossible de produire une piste d'audit fiable.",
-            );
-          }
-          await tx.auditLog.create({
-            data: {
-              utilisateurId: acteur.id,
-              utilisateurNom: acteur.nom,
-              module: "TRAVAILLEURS",
-              typeEntite: "Travailleur",
-              entiteId: existant.id,
-              action: "MODIFICATION",
-              avant: normaliserPourAudit(existant) as unknown as Prisma.InputJsonValue,
-              apres: normaliserPourAudit(apres) as unknown as Prisma.InputJsonValue,
-            },
-          });
-
-          return apres;
+        const { count } = await tx.travailleur.updateMany({
+          where: { id: existant.id, utilisateurId: existant.utilisateurId },
+          data: {
+            nom,
+            telephone,
+            poste,
+            dateEmbauche: dateEmbauche ? new Date(dateEmbauche) : undefined,
+            utilisateurId,
+            departementId: depGroupe.departementId,
+            groupeId: depGroupe.groupeId,
+            salaireMensuel,
+            joursTravaillesParMois,
+          },
         });
-      } catch (e) {
-        if (e instanceof ErreurAction) return res.status(e.status).json({ erreur: e.message });
-        throw e;
-      }
-    } else {
-      travailleur = await prisma.travailleur.update({
-        where: { id: existant.id },
-        data: donneesEcriture,
-        include: INCLUDE_TRAVAILLEUR,
+        if (count !== 1) throw new ErreurAction(409, "La fiche a changé entre-temps — réessayez.");
+
+        const apres = await tx.travailleur.findUniqueOrThrow({ where: { id: existant.id }, include: INCLUDE_TRAVAILLEUR });
+        await auditerCaisseTx(tx, {
+          module: "TRAVAILLEURS",
+          typeEntite: "Travailleur",
+          entiteId: existant.id,
+          action: "MODIFICATION",
+          avant: existant,
+          apres,
+        });
+        return apres;
       });
+      res.json({ travailleur: versTravailleurDTO(travailleur) });
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
     }
-    res.json({ travailleur: versTravailleurDTO(travailleur) });
   } catch (e) {
     next(e);
   }
@@ -370,18 +349,45 @@ travailleursRouter.put("/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), as
 // clients.ts) : jamais supprimés silencieusement avec la fiche.
 travailleursRouter.delete("/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
   try {
-    const travailleur = await prisma.travailleur.findUnique({
-      where: { id: req.params.id },
-      include: { _count: { select: { bulletinsPaie: true } } },
-    });
-    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
-    if (travailleur._count.bulletinsPaie > 0) {
-      return res.status(409).json({
-        erreur: `Suppression impossible : ${travailleur._count.bulletinsPaie} bulletin(s) de paie enregistré(s) pour ce travailleur`,
+    try {
+      await transactionTravailleurs(async (tx) => {
+        if (!(await verrouillerTravailleur(tx, req.params.id))) {
+          throw new ErreurAction(404, "Travailleur introuvable");
+        }
+        const travailleur = await tx.travailleur.findUniqueOrThrow({
+          where: { id: req.params.id },
+          include: { _count: { select: { bulletinsPaie: true, pointages: true, absences: true, sanctions: true } } },
+        });
+        if (travailleur._count.bulletinsPaie > 0) {
+          throw new ErreurAction(
+            409,
+            `Suppression impossible : ${travailleur._count.bulletinsPaie} bulletin(s) de paie enregistré(s) pour ce travailleur`,
+          );
+        }
+
+        const { count } = await tx.travailleur.deleteMany({ where: { id: travailleur.id } });
+        if (count !== 1) throw new ErreurAction(409, "La fiche a changé entre-temps — réessayez.");
+        await auditerCaisseTx(tx, {
+          module: "TRAVAILLEURS",
+          typeEntite: "Travailleur",
+          entiteId: travailleur.id,
+          action: "SUPPRESSION",
+          avant: {
+            ...travailleur,
+            nombrePointages: travailleur._count.pointages,
+            nombreAbsences: travailleur._count.absences,
+            nombreSanctions: travailleur._count.sanctions,
+            nombreBulletinsPaie: travailleur._count.bulletinsPaie,
+          },
+          apres: null,
+        });
       });
+      res.status(204).end();
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
     }
-    await prisma.travailleur.delete({ where: { id: travailleur.id } });
-    res.status(204).end();
   } catch (e) {
     next(e);
   }
@@ -431,6 +437,26 @@ travailleursRouter.post("/:id/email-pro/verifier", requirePermission("TRAVAILLEU
 
 // Filtres : ?travailleurId, ?du, ?au (AAAA-MM-JJ, bornent horodatageEntree) —
 // « Tout afficher » sans paramètres, même pattern que Commandes/Commissions.
+async function verifierAucunChevauchementPointage(
+  tx: TxClient,
+  travailleurId: string,
+  entree: Date,
+  sortie: Date | null,
+  ignorerId?: string,
+): Promise<void> {
+  const borneSortie = sortie ?? new Date("9999-12-31T23:59:59.999Z");
+  const conflit = await tx.pointage.findFirst({
+    where: {
+      travailleurId,
+      ...(ignorerId ? { id: { not: ignorerId } } : {}),
+      horodatageEntree: { lt: borneSortie },
+      OR: [{ horodatageSortie: null }, { horodatageSortie: { gt: entree } }],
+    },
+    select: { id: true },
+  });
+  if (conflit) throw new ErreurAction(409, "Ce pointage chevauche déjà une autre période de présence de ce travailleur.");
+}
+
 travailleursRouter.get("/pointages", requirePermission("TRAVAILLEURS", "LECTURE"), async (req, res, next) => {
   try {
     const { travailleurId, du, au } = req.query as Record<string, string | undefined>;
@@ -463,23 +489,26 @@ travailleursRouter.post("/pointages", requirePermission("TRAVAILLEURS", "ECRITUR
     }
     const { travailleurId, horodatageEntree, horodatageSortie } = parsed.data;
 
-    const travailleur = await prisma.travailleur.findUnique({ where: { id: travailleurId } });
-    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
-
-    if (horodatageSortie && new Date(horodatageSortie) <= new Date(horodatageEntree)) {
+    const entree = new Date(horodatageEntree);
+    const sortie = horodatageSortie ? new Date(horodatageSortie) : null;
+    if (sortie && sortie <= entree) {
       return res.status(400).json({ erreur: "L'horodatage de sortie doit être postérieur à l'horodatage d'entrée" });
     }
-
-    const pointage = await prisma.pointage.create({
-      data: {
-        travailleurId,
-        horodatageEntree: new Date(horodatageEntree),
-        horodatageSortie: horodatageSortie ? new Date(horodatageSortie) : null,
-        enregistreParId: req.utilisateur!.id,
-      },
-      include: INCLUDE_POINTAGE,
-    });
-    res.status(201).json({ pointage: versPointageDTO(pointage) });
+    try {
+      const pointage = await transactionTravailleurs(async (tx) => {
+        if (!(await verrouillerTravailleur(tx, travailleurId))) throw new ErreurAction(404, "Travailleur introuvable");
+        await verifierAucunChevauchementPointage(tx, travailleurId, entree, sortie);
+        return tx.pointage.create({
+          data: { travailleurId, horodatageEntree: entree, horodatageSortie: sortie, enregistreParId: req.utilisateur!.id },
+          include: INCLUDE_POINTAGE,
+        });
+      });
+      res.status(201).json({ pointage: versPointageDTO(pointage) });
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
+    }
   } catch (e) {
     next(e);
   }
@@ -493,22 +522,44 @@ travailleursRouter.put("/pointages/:id", requirePermission("TRAVAILLEURS", "ECRI
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const existant = await prisma.pointage.findUnique({ where: { id: req.params.id } });
-    if (!existant) return res.status(404).json({ erreur: "Pointage introuvable" });
-
     const { horodatageEntree, horodatageSortie } = parsed.data;
-    const entreeFinale = horodatageEntree ? new Date(horodatageEntree) : existant.horodatageEntree;
-    const sortieFinale = horodatageSortie === undefined ? existant.horodatageSortie : horodatageSortie ? new Date(horodatageSortie) : null;
-    if (sortieFinale && sortieFinale <= entreeFinale) {
-      return res.status(400).json({ erreur: "L'horodatage de sortie doit être postérieur à l'horodatage d'entrée" });
-    }
+    try {
+      const avantPrelecture = await prisma.pointage.findUnique({ where: { id: req.params.id }, select: { travailleurId: true } });
+      if (!avantPrelecture) throw new ErreurAction(404, "Pointage introuvable");
+      const pointage = await transactionTravailleurs(async (tx) => {
+        if (!(await verrouillerTravailleur(tx, avantPrelecture.travailleurId))) throw new ErreurAction(404, "Travailleur introuvable");
+        if (!(await verrouillerPointage(tx, req.params.id))) throw new ErreurAction(404, "Pointage introuvable");
+        const existant = await tx.pointage.findUniqueOrThrow({ where: { id: req.params.id } });
+        if (existant.travailleurId !== avantPrelecture.travailleurId) throw new ErreurAction(409, "Le pointage a changé — réessayez.");
 
-    const pointage = await prisma.pointage.update({
-      where: { id: existant.id },
-      data: { horodatageEntree: entreeFinale, horodatageSortie: sortieFinale },
-      include: INCLUDE_POINTAGE,
-    });
-    res.json({ pointage: versPointageDTO(pointage) });
+        const entreeFinale = horodatageEntree ? new Date(horodatageEntree) : existant.horodatageEntree;
+        const sortieFinale = horodatageSortie === undefined ? existant.horodatageSortie : horodatageSortie ? new Date(horodatageSortie) : null;
+        if (sortieFinale && sortieFinale <= entreeFinale) {
+          throw new ErreurAction(400, "L'horodatage de sortie doit être postérieur à l'horodatage d'entrée");
+        }
+        await verifierAucunChevauchementPointage(tx, existant.travailleurId, entreeFinale, sortieFinale, existant.id);
+        const { count } = await tx.pointage.updateMany({
+          where: { id: existant.id },
+          data: { horodatageEntree: entreeFinale, horodatageSortie: sortieFinale },
+        });
+        if (count !== 1) throw new ErreurAction(409, "Le pointage a changé — réessayez.");
+        const apres = await tx.pointage.findUniqueOrThrow({ where: { id: existant.id }, include: INCLUDE_POINTAGE });
+        await auditerCaisseTx(tx, {
+          module: "TRAVAILLEURS",
+          typeEntite: "Pointage",
+          entiteId: existant.id,
+          action: "MODIFICATION",
+          avant: existant,
+          apres,
+        });
+        return apres;
+      });
+      res.json({ pointage: versPointageDTO(pointage) });
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
+    }
   } catch (e) {
     next(e);
   }
@@ -516,10 +567,30 @@ travailleursRouter.put("/pointages/:id", requirePermission("TRAVAILLEURS", "ECRI
 
 travailleursRouter.delete("/pointages/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
   try {
-    const pointage = await prisma.pointage.findUnique({ where: { id: req.params.id } });
-    if (!pointage) return res.status(404).json({ erreur: "Pointage introuvable" });
-    await prisma.pointage.delete({ where: { id: pointage.id } });
-    res.status(204).end();
+    try {
+      const prelecture = await prisma.pointage.findUnique({ where: { id: req.params.id }, select: { travailleurId: true } });
+      if (!prelecture) throw new ErreurAction(404, "Pointage introuvable");
+      await transactionTravailleurs(async (tx) => {
+        if (!(await verrouillerTravailleur(tx, prelecture.travailleurId))) throw new ErreurAction(404, "Travailleur introuvable");
+        if (!(await verrouillerPointage(tx, req.params.id))) throw new ErreurAction(404, "Pointage introuvable");
+        const pointage = await tx.pointage.findUniqueOrThrow({ where: { id: req.params.id } });
+        const { count } = await tx.pointage.deleteMany({ where: { id: pointage.id } });
+        if (count !== 1) throw new ErreurAction(409, "Le pointage a changé — réessayez.");
+        await auditerCaisseTx(tx, {
+          module: "TRAVAILLEURS",
+          typeEntite: "Pointage",
+          entiteId: pointage.id,
+          action: "SUPPRESSION",
+          avant: pointage,
+          apres: null,
+        });
+      });
+      res.status(204).end();
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
+    }
   } catch (e) {
     next(e);
   }
@@ -562,14 +633,23 @@ travailleursRouter.post("/absences", requirePermission("TRAVAILLEURS", "ECRITURE
     }
     const { travailleurId, date, motif } = parsed.data;
 
-    const travailleur = await prisma.travailleur.findUnique({ where: { id: travailleurId } });
-    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
-
-    const absence = await prisma.absence.create({
-      data: { travailleurId, date: new Date(date), motif, declareParId: req.utilisateur!.id },
-      include: INCLUDE_ABSENCE,
-    });
-    res.status(201).json({ absence: versAbsenceDTO(absence) });
+    try {
+      const dateAbsence = new Date(date);
+      const absence = await transactionTravailleurs(async (tx) => {
+        if (!(await verrouillerTravailleur(tx, travailleurId))) throw new ErreurAction(404, "Travailleur introuvable");
+        const doublon = await tx.absence.findFirst({ where: { travailleurId, date: dateAbsence }, select: { id: true } });
+        if (doublon) throw new ErreurAction(409, "Une absence existe déjà pour ce travailleur à cette date.");
+        return tx.absence.create({
+          data: { travailleurId, date: dateAbsence, motif, declareParId: req.utilisateur!.id },
+          include: INCLUDE_ABSENCE,
+        });
+      });
+      res.status(201).json({ absence: versAbsenceDTO(absence) });
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
+    }
   } catch (e) {
     next(e);
   }
@@ -577,10 +657,30 @@ travailleursRouter.post("/absences", requirePermission("TRAVAILLEURS", "ECRITURE
 
 travailleursRouter.delete("/absences/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
   try {
-    const absence = await prisma.absence.findUnique({ where: { id: req.params.id } });
-    if (!absence) return res.status(404).json({ erreur: "Absence introuvable" });
-    await prisma.absence.delete({ where: { id: absence.id } });
-    res.status(204).end();
+    try {
+      const prelecture = await prisma.absence.findUnique({ where: { id: req.params.id }, select: { travailleurId: true } });
+      if (!prelecture) throw new ErreurAction(404, "Absence introuvable");
+      await transactionTravailleurs(async (tx) => {
+        if (!(await verrouillerTravailleur(tx, prelecture.travailleurId))) throw new ErreurAction(404, "Travailleur introuvable");
+        if (!(await verrouillerAbsence(tx, req.params.id))) throw new ErreurAction(404, "Absence introuvable");
+        const absence = await tx.absence.findUniqueOrThrow({ where: { id: req.params.id } });
+        const { count } = await tx.absence.deleteMany({ where: { id: absence.id } });
+        if (count !== 1) throw new ErreurAction(409, "L'absence a changé — réessayez.");
+        await auditerCaisseTx(tx, {
+          module: "TRAVAILLEURS",
+          typeEntite: "Absence",
+          entiteId: absence.id,
+          action: "SUPPRESSION",
+          avant: absence,
+          apres: null,
+        });
+      });
+      res.status(204).end();
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
+    }
   } catch (e) {
     next(e);
   }
@@ -596,26 +696,40 @@ travailleursRouter.put("/absences/:id/decision", requirePermission("TRAVAILLEURS
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const existant = await prisma.absence.findUnique({ where: { id: req.params.id }, include: INCLUDE_ABSENCE });
-    if (!existant) return res.status(404).json({ erreur: "Absence introuvable" });
+    try {
+      const prelecture = await prisma.absence.findUnique({ where: { id: req.params.id }, select: { travailleurId: true } });
+      if (!prelecture) throw new ErreurAction(404, "Absence introuvable");
+      const absence = await transactionTravailleurs(async (tx) => {
+        if (!(await verrouillerTravailleur(tx, prelecture.travailleurId))) throw new ErreurAction(404, "Travailleur introuvable");
+        if (!(await verrouillerAbsence(tx, req.params.id))) throw new ErreurAction(404, "Absence introuvable");
+        const existant = await tx.absence.findUniqueOrThrow({ where: { id: req.params.id } });
+        if (existant.decisionStatut !== "EN_ATTENTE") {
+          throw new ErreurAction(409, "Cette absence a déjà été tranchée.");
+        }
+        const { count } = await tx.absence.updateMany({
+          where: { id: existant.id, decisionStatut: "EN_ATTENTE" },
+          data: { decisionStatut: parsed.data.decisionStatut, decideParId: req.utilisateur!.id, dateDecision: new Date() },
+        });
+        if (count !== 1) throw new ErreurAction(409, "Cette absence a déjà été tranchée.");
+        const apres = await tx.absence.findUniqueOrThrow({ where: { id: existant.id }, include: INCLUDE_ABSENCE });
+        await auditerCaisseTx(tx, {
+          module: "TRAVAILLEURS",
+          typeEntite: "Absence",
+          entiteId: existant.id,
+          action: "MODIFICATION",
+          avant: existant,
+          apres,
+        });
+        return apres;
+      });
 
-    const absence = await prisma.absence.update({
-      where: { id: existant.id },
-      data: {
-        decisionStatut: parsed.data.decisionStatut,
-        decideParId: req.utilisateur!.id,
-        dateDecision: new Date(),
-      },
-      include: INCLUDE_ABSENCE,
-    });
-
-    if (parsed.data.decisionStatut === "NON_JUSTIFIEE") {
+      if (parsed.data.decisionStatut === "NON_JUSTIFIEE") {
       const autresAdmins = await prisma.utilisateur.findMany({
         where: { actif: true, id: { not: req.utilisateur!.id }, role: { nom: ROLE_ADMINISTRATEUR } },
         select: { id: true },
       });
       const destinataires = new Set(autresAdmins.map((a) => a.id));
-      const travailleurConcerne = await prisma.travailleur.findUnique({ where: { id: existant.travailleurId } });
+      const travailleurConcerne = await prisma.travailleur.findUnique({ where: { id: absence.travailleur.id } });
       if (travailleurConcerne?.utilisateurId) destinataires.add(travailleurConcerne.utilisateurId);
       if (destinataires.size > 0) {
         busEvenements.emettreEvenement({
@@ -629,9 +743,14 @@ travailleursRouter.put("/absences/:id/decision", requirePermission("TRAVAILLEURS
           donnees: { absenceId: absence.id, travailleurId: absence.travailleur.id },
         });
       }
-    }
+      }
 
-    res.json({ absence: versAbsenceDTO(absence) });
+      res.json({ absence: versAbsenceDTO(absence) });
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
+    }
   } catch (e) {
     next(e);
   }
@@ -777,14 +896,20 @@ travailleursRouter.post("/sanctions", requirePermission("TRAVAILLEURS", "ECRITUR
     }
     const { travailleurId, type, motif, date, montant } = parsed.data;
 
-    const travailleur = await prisma.travailleur.findUnique({ where: { id: travailleurId } });
-    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
-
-    const sanction = await prisma.sanction.create({
-      data: { travailleurId, type, motif, date: new Date(date), montant: montant ?? null, enregistreParId: req.utilisateur!.id },
-      include: INCLUDE_SANCTION,
-    });
-    res.status(201).json({ sanction: versSanctionDTO(sanction) });
+    try {
+      const sanction = await transactionTravailleurs(async (tx) => {
+        if (!(await verrouillerTravailleur(tx, travailleurId))) throw new ErreurAction(404, "Travailleur introuvable");
+        return tx.sanction.create({
+          data: { travailleurId, type, motif, date: new Date(date), montant: montant ?? null, enregistreParId: req.utilisateur!.id },
+          include: INCLUDE_SANCTION,
+        });
+      });
+      res.status(201).json({ sanction: versSanctionDTO(sanction) });
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
+    }
   } catch (e) {
     next(e);
   }
@@ -792,10 +917,30 @@ travailleursRouter.post("/sanctions", requirePermission("TRAVAILLEURS", "ECRITUR
 
 travailleursRouter.delete("/sanctions/:id", requirePermission("TRAVAILLEURS", "ECRITURE"), async (req, res, next) => {
   try {
-    const sanction = await prisma.sanction.findUnique({ where: { id: req.params.id } });
-    if (!sanction) return res.status(404).json({ erreur: "Sanction introuvable" });
-    await prisma.sanction.delete({ where: { id: sanction.id } });
-    res.status(204).end();
+    try {
+      const prelecture = await prisma.sanction.findUnique({ where: { id: req.params.id }, select: { travailleurId: true } });
+      if (!prelecture) throw new ErreurAction(404, "Sanction introuvable");
+      await transactionTravailleurs(async (tx) => {
+        if (!(await verrouillerTravailleur(tx, prelecture.travailleurId))) throw new ErreurAction(404, "Travailleur introuvable");
+        if (!(await verrouillerSanction(tx, req.params.id))) throw new ErreurAction(404, "Sanction introuvable");
+        const sanction = await tx.sanction.findUniqueOrThrow({ where: { id: req.params.id } });
+        const { count } = await tx.sanction.deleteMany({ where: { id: sanction.id } });
+        if (count !== 1) throw new ErreurAction(409, "La sanction a changé — réessayez.");
+        await auditerCaisseTx(tx, {
+          module: "TRAVAILLEURS",
+          typeEntite: "Sanction",
+          entiteId: sanction.id,
+          action: "SUPPRESSION",
+          avant: sanction,
+          apres: null,
+        });
+      });
+      res.status(204).end();
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
+    }
   } catch (e) {
     next(e);
   }
@@ -808,18 +953,24 @@ travailleursRouter.delete("/sanctions/:id", requirePermission("TRAVAILLEURS", "E
 // plus proche), une seule fois, à la toute fin. Factorisé ici : réutilisé à
 // la fois par la vue dynamique (GET .../paie) et par la génération d'un
 // Bulletin de paie (instantané figé, plus bas).
-async function calculerPaieBrute(travailleurId: string, salaireMensuel: number, joursTravaillesParMois: number, mois: string) {
+async function calculerPaieBrute(
+  db: Pick<TxClient, "absence" | "sanction">,
+  travailleurId: string,
+  salaireMensuel: number,
+  joursTravaillesParMois: number,
+  mois: string,
+) {
   // Bornes du mois en UTC — Absence.date/Sanction.date sont des colonnes
   // DATE pures (@db.Date), sans fuseau : cohérent avec le reste de l'app.
   const debut = new Date(`${mois}-01T00:00:00.000Z`);
   const fin = new Date(debut);
   fin.setUTCMonth(fin.getUTCMonth() + 1);
 
-  const absences = await prisma.absence.findMany({
+  const absences = await db.absence.findMany({
     where: { travailleurId, decisionStatut: "NON_JUSTIFIEE", date: { gte: debut, lt: fin } },
     orderBy: { date: "asc" },
   });
-  const sanctions = await prisma.sanction.findMany({
+  const sanctions = await db.sanction.findMany({
     where: { travailleurId, type: "RETENUE", date: { gte: debut, lt: fin } },
     orderBy: { date: "asc" },
   });
@@ -840,35 +991,42 @@ travailleursRouter.get("/:id/paie", requirePermission("TRAVAILLEURS", "LECTURE")
     }
     const mois = parsedMois.data;
 
-    const travailleur = await prisma.travailleur.findUnique({ where: { id: req.params.id } });
-    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
-    if (travailleur.salaireMensuel === null || travailleur.joursTravaillesParMois === null) {
-      return res.status(409).json({
-        erreur: "Le salaire mensuel et le nombre de jours travaillés doivent être renseignés sur la fiche avant de calculer la paie.",
+    try {
+      const dto = await transactionTravailleurs(async (tx): Promise<CalculPaieDTO> => {
+        if (!(await verrouillerTravailleur(tx, req.params.id))) throw new ErreurAction(404, "Travailleur introuvable");
+        const travailleur = await tx.travailleur.findUniqueOrThrow({ where: { id: req.params.id } });
+        if (travailleur.salaireMensuel === null || travailleur.joursTravaillesParMois === null) {
+          throw new ErreurAction(
+            409,
+            "Le salaire mensuel et le nombre de jours travaillés doivent être renseignés sur la fiche avant de calculer la paie.",
+          );
+        }
+        const calcul = await calculerPaieBrute(tx, travailleur.id, travailleur.salaireMensuel, travailleur.joursTravaillesParMois, mois);
+        return {
+          travailleurId: travailleur.id,
+          travailleurNom: travailleur.nom,
+          mois,
+          salaireMensuel: travailleur.salaireMensuel,
+          joursTravaillesParMois: travailleur.joursTravaillesParMois,
+          tauxJournalier: calcul.tauxJournalier,
+          absencesNonJustifiees: calcul.absences.map((a) => ({ absenceId: a.id, date: a.date.toISOString().slice(0, 10), motif: a.motif })),
+          retenueAbsences: calcul.retenueAbsences,
+          sanctionsRetenues: calcul.sanctions.map((s) => ({
+            sanctionId: s.id,
+            date: s.date.toISOString().slice(0, 10),
+            motif: s.motif,
+            montant: s.montant!,
+          })),
+          totalRetenuesDisciplinaires: calcul.totalRetenuesDisciplinaires,
+          salaireNet: calcul.salaireNet,
+        };
       });
+      res.json({ paie: dto });
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
     }
-
-    const calcul = await calculerPaieBrute(travailleur.id, travailleur.salaireMensuel, travailleur.joursTravaillesParMois, mois);
-
-    const dto: CalculPaieDTO = {
-      travailleurId: travailleur.id,
-      travailleurNom: travailleur.nom,
-      mois,
-      salaireMensuel: travailleur.salaireMensuel,
-      joursTravaillesParMois: travailleur.joursTravaillesParMois,
-      tauxJournalier: calcul.tauxJournalier,
-      absencesNonJustifiees: calcul.absences.map((a) => ({ absenceId: a.id, date: a.date.toISOString().slice(0, 10), motif: a.motif })),
-      retenueAbsences: calcul.retenueAbsences,
-      sanctionsRetenues: calcul.sanctions.map((s) => ({
-        sanctionId: s.id,
-        date: s.date.toISOString().slice(0, 10),
-        motif: s.motif,
-        montant: s.montant!,
-      })),
-      totalRetenuesDisciplinaires: calcul.totalRetenuesDisciplinaires,
-      salaireNet: calcul.salaireNet,
-    };
-    res.json({ paie: dto });
   } catch (e) {
     next(e);
   }
@@ -953,33 +1111,40 @@ travailleursRouter.post("/:id/bulletins-paie", requirePermission("TRAVAILLEURS",
     }
     const mois = parsedMois.data;
 
-    const travailleur = await prisma.travailleur.findUnique({ where: { id: req.params.id } });
-    if (!travailleur) return res.status(404).json({ erreur: "Travailleur introuvable" });
-    if (travailleur.salaireMensuel === null || travailleur.joursTravaillesParMois === null) {
-      return res.status(409).json({
-        erreur: "Le salaire mensuel et le nombre de jours travaillés doivent être renseignés sur la fiche avant de générer un bulletin.",
+    try {
+      const bulletin = await transactionTravailleurs(async (tx) => {
+        if (!(await verrouillerTravailleur(tx, req.params.id))) throw new ErreurAction(404, "Travailleur introuvable");
+        const travailleur = await tx.travailleur.findUniqueOrThrow({ where: { id: req.params.id } });
+        if (travailleur.salaireMensuel === null || travailleur.joursTravaillesParMois === null) {
+          throw new ErreurAction(
+            409,
+            "Le salaire mensuel et le nombre de jours travaillés doivent être renseignés sur la fiche avant de générer un bulletin.",
+          );
+        }
+        const calcul = await calculerPaieBrute(tx, travailleur.id, travailleur.salaireMensuel, travailleur.joursTravaillesParMois, mois);
+        return tx.bulletinPaie.create({
+          data: {
+            travailleurId: travailleur.id,
+            mois,
+            salaireMensuel: travailleur.salaireMensuel,
+            joursTravaillesParMois: travailleur.joursTravaillesParMois,
+            tauxJournalier: calcul.tauxJournalier,
+            absencesNonJustifiees: calcul.absences.map((a) => ({ date: a.date.toISOString().slice(0, 10), motif: a.motif })),
+            retenueAbsences: calcul.retenueAbsences,
+            sanctionsRetenues: calcul.sanctions.map((s) => ({ date: s.date.toISOString().slice(0, 10), motif: s.motif, montant: s.montant! })),
+            totalRetenuesDisciplinaires: calcul.totalRetenuesDisciplinaires,
+            salaireNet: calcul.salaireNet,
+            genereParId: req.utilisateur!.id,
+          },
+          include: INCLUDE_BULLETIN,
+        });
       });
+      res.status(201).json({ bulletin: versBulletinDTO(bulletin) });
+    } catch (e) {
+      const erreur = erreurMutationTravailleurs(e);
+      if (erreur) return res.status(erreur.status).json({ erreur: erreur.erreur });
+      throw e;
     }
-
-    const calcul = await calculerPaieBrute(travailleur.id, travailleur.salaireMensuel, travailleur.joursTravaillesParMois, mois);
-
-    const bulletin = await prisma.bulletinPaie.create({
-      data: {
-        travailleurId: travailleur.id,
-        mois,
-        salaireMensuel: travailleur.salaireMensuel,
-        joursTravaillesParMois: travailleur.joursTravaillesParMois,
-        tauxJournalier: calcul.tauxJournalier,
-        absencesNonJustifiees: calcul.absences.map((a) => ({ date: a.date.toISOString().slice(0, 10), motif: a.motif })),
-        retenueAbsences: calcul.retenueAbsences,
-        sanctionsRetenues: calcul.sanctions.map((s) => ({ date: s.date.toISOString().slice(0, 10), motif: s.motif, montant: s.montant! })),
-        totalRetenuesDisciplinaires: calcul.totalRetenuesDisciplinaires,
-        salaireNet: calcul.salaireNet,
-        genereParId: req.utilisateur!.id,
-      },
-      include: INCLUDE_BULLETIN,
-    });
-    res.status(201).json({ bulletin: versBulletinDTO(bulletin) });
   } catch (e) {
     next(e);
   }
