@@ -226,7 +226,12 @@ async function main() {
     await porte;
   }, { timeout: 15_000 });
   await pris;
-  const bulletinBloque = request(app).post(`/api/travailleurs/${travailleurId}/bulletins-paie?mois=2097-09`).set(auth);
+  // Supertest est un thenable paresseux : sans `.then`, la requête ne démarre
+  // qu'au premier `await`, donc après notre observation de pg_blocking_pids.
+  const bulletinBloque = request(app)
+    .post(`/api/travailleurs/${travailleurId}/bulletins-paie?mois=2097-09`)
+    .set(auth)
+    .then((reponse) => reponse);
   const observation = await attendreBlocageTravailleur();
   liberer();
   await verrou;
