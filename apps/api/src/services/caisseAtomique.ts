@@ -176,7 +176,7 @@ export class ErreurActeurRequisPourAuditCaisse extends Error {
 export async function auditerCaisseTx(
   tx: TxClient,
   params: {
-    module: "CAISSE" | "COMMANDES" | "PRODUCTION" | "STOCKS" | "FOURNISSEURS";
+    module: "CAISSE" | "COMMANDES" | "PRODUCTION" | "STOCKS" | "FOURNISSEURS" | "TRAVAILLEURS";
     typeEntite: string;
     entiteId: string;
     action: "MODIFICATION" | "SUPPRESSION";

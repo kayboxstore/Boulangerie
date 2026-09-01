@@ -177,6 +177,7 @@ model Utilisateur {
   commandesFournisseurCreees  CommandeFournisseur[]             @relation("CommandesFournisseurCreees")
   commandesFournisseurRecues  CommandeFournisseur[]             @relation("CommandesFournisseurRecues")
   ficheTravailleur            Travailleur?
+  fichesTravailleurCreees     Travailleur[]                      @relation("TravailleursCrees")
   pointagesEnregistres        Pointage[]                        @relation("PointagesEnregistres")
   absencesDecidees            Absence[]                         @relation("AbsencesDecidees")
   absencesDeclarees           Absence[]                         @relation("AbsencesDeclarees")
@@ -850,6 +851,8 @@ model Travailleur {
   dateNaissance          DateTime?      @db.Date
   utilisateurId          String?        @unique
   utilisateur            Utilisateur?   @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
+  creeParId              String?
+  creePar                Utilisateur?   @relation("TravailleursCrees", fields: [creeParId], references: [id], onDelete: SetNull)
   pointages              Pointage[]
   absences               Absence[]
   // Départements & Groupes (3.18, nouveau) — purement organisationnel, aucune
@@ -1013,7 +1016,7 @@ enum TypeSanction {
 model BulletinPaie {
   id                          String       @id @default(cuid())
   travailleurId               String
-  travailleur                 Travailleur  @relation(fields: [travailleurId], references: [id], onDelete: Cascade)
+  travailleur                 Travailleur  @relation(fields: [travailleurId], references: [id], onDelete: Restrict)
   mois                        String
   salaireMensuel              Int
   joursTravaillesParMois      Int
