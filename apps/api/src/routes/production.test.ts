@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => {
   const tx = {
     $queryRaw: vi.fn(),
+    $executeRaw: vi.fn(),
     production: {
       create: vi.fn(),
       findUniqueOrThrow: vi.fn(),
@@ -188,6 +189,7 @@ beforeEach(() => {
     async (operation: (tx: typeof mocks.tx) => Promise<unknown>) => operation(mocks.tx),
   );
   mocks.tx.$queryRaw.mockResolvedValue([{ id: "prod-1" }]);
+  mocks.tx.$executeRaw.mockResolvedValue(1);
   mocks.prisma.motifDon.count.mockResolvedValue(0);
   mocks.prisma.produit.count.mockResolvedValue(1);
   mocks.prisma.produit.findMany.mockResolvedValue([]);
