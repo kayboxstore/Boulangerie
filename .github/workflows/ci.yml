@@ -351,6 +351,16 @@ jobs:
           CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
         run: npx tsx scripts/verifier-fournisseurs-ci.ts
 
+      - name: Vérification HTTP + PostgreSQL réelle du Lot Distribution (P1, 01/09/2026)
+        # Six scénarios sans mock : bon et bacs vides, sept transitions C4,
+        # quantités chargée/déposée/acceptée/retournée/manquante, retour tardif
+        # du bon et gel de la journée, anomalies et audits transactionnels,
+        # deux rollbacks réels après échec injecté de l'AuditLog, puis chaîne
+        # espèces complète cycle → commande → déclaration → remise Caisse.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-distribution-ci.ts
+
   garde-seed-demo-windows:
     name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
     runs-on: windows-latest
