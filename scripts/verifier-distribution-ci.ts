@@ -111,9 +111,10 @@ async function main() {
   app.use("/api/production", cyclesLivraisonRouter);
   app.use("/api/commandes", commandesRouter);
   app.use("/api/caisse", caisseRouter);
-  app.use((_e: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) =>
-    res.status(500).json({ erreur: "Erreur interne" }),
-  );
+  app.use((e: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error("Erreur route Distribution CI :", e);
+    res.status(500).json({ erreur: "Erreur interne" });
+  });
 
   const role = await db.role.create({ data: { nom: `Distribution CI ${tag}`, roleParentId: null } });
   traces.role = role.id;
