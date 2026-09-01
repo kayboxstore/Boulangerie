@@ -388,8 +388,8 @@ describe("PUT /api/production/bons-livraison — journée sérialisée et audit�
         action: "SUPPRESSION",
       }),
     );
-    expect(mocks.auditerCaisseTx).toHaveBeenCalledBefore(mocks.tx.bonLivraison.deleteMany);
-    expect(mocks.tx.bonLivraison.deleteMany).toHaveBeenCalledBefore(mocks.tx.bonLivraison.create);
+    expect(mocks.tx.bonLivraison.deleteMany).toHaveBeenCalledBefore(mocks.auditerCaisseTx);
+    expect(mocks.auditerCaisseTx).toHaveBeenCalledBefore(mocks.tx.bonLivraison.create);
     expect(mocks.tx.bonLivraison.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         clientId: "client-1",
@@ -411,7 +411,7 @@ describe("PUT /api/production/bons-livraison — journée sérialisée et audit�
     expect(mocks.tx.bonLivraison.create).not.toHaveBeenCalled();
   });
 
-  it("ne commence aucune suppression si le journal d'une ancienne ligne échoue", async () => {
+  it("propage l'échec d'audit après la suppression et ne commence aucune recréation", async () => {
     mocks.tx.bonLivraison.findMany.mockResolvedValue([{
       id: "bon-ancien",
       date: new Date("2026-09-01T00:00:00.000Z"),
@@ -432,7 +432,8 @@ describe("PUT /api/production/bons-livraison — journée sérialisée et audit�
     const res = await request(app()).put("/api/production/bons-livraison").send(corps);
 
     expect(res.status).toBe(500);
-    expect(mocks.tx.bonLivraison.deleteMany).not.toHaveBeenCalled();
+    expect(mocks.tx.bonLivraison.deleteMany).toHaveBeenCalled();
+    expect(mocks.auditerCaisseTx).toHaveBeenCalled();
     expect(mocks.tx.bonLivraison.create).not.toHaveBeenCalled();
   });
 });
