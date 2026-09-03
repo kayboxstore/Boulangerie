@@ -64,7 +64,7 @@ npm test
 npm run build
 ```
 
-La suite automatisée couvre les règles partagées, les routes API critiques, l’authentification, les permissions, l’idempotence, les frontières de journée Kinshasa, les composants React/DOM, ainsi que le bootstrap de production (non-destructif et atomique) et la garde du seed de démonstration (correctif P0-01). Dernière validation : **582 tests sur 582**, plus une vérification d'intégration dédiée contre une vraie base PostgreSQL en CI, audit sans vulnérabilité, migrations PostgreSQL, génération Prisma et compilation API/web réussis.
+La suite automatisée couvre les règles partagées, les routes API critiques, l’authentification, les permissions, l’idempotence, les frontières de journée Kinshasa, les composants React/DOM, ainsi que le bootstrap de production (non-destructif et atomique) et la garde du seed de démonstration (correctif P0-01). Dernière validation : **896 tests sur 896** (90 fichiers), plus une vérification d'intégration dédiée contre une vraie base PostgreSQL en CI, audit sans vulnérabilité, migrations PostgreSQL, génération Prisma et compilation API/web réussis.
 
 ## Comptes de démonstration
 
@@ -81,7 +81,10 @@ La suite automatisée couvre les règles partagées, les routes API critiques, l
 > voir DEPLOIEMENT.md § « Se connecter » pour l'assainissement manuel dans ce
 > cas.
 
-Mot de passe commun (dev uniquement) : `Lomoto2026!`
+Mot de passe commun (dev uniquement) : `Lomoto2026!` — figé volontairement pour la
+commodité de l'équipe en local ; il n'a jamais aucun effet en production (garde
+ci-dessus) et figure déjà en clair dans `prisma/seed-demo.ts`, sur ce même dépôt
+**privé** : sa présence ici n'ouvre donc aucune exposition supplémentaire.
 
 | Rôle | E-mail | Écriture | Lecture seule supplémentaire |
 |---|---|---|---|
