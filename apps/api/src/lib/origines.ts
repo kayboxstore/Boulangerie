@@ -27,7 +27,14 @@ export const ORIGINES_AUTORISEES = [
   `https://${APEX}`,
   // Ancienne URL Render conservée accessible (liens déjà partagés, favoris).
   "https://boulangerie-lomoto.onrender.com",
-];
+  // URL Render réelle du service courant — injectée automatiquement par
+  // Render (aucune configuration requise), donc toujours à jour même après
+  // un changement de compte/service qui change le suffixe .onrender.com
+  // (ex. boulangerie-lomoto-0cls.onrender.com). Absente hors Render (dev
+  // local) : filtrée avant d'être ajoutée, jamais une chaîne vide dans la
+  // liste.
+  process.env.RENDER_EXTERNAL_URL,
+].filter((origine): origine is string => Boolean(origine));
 
 /**
  * Callback de validation d'origine, au format attendu à la fois par le paquet
