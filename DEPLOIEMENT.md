@@ -85,27 +85,28 @@ Dans les deux cas, le fichier obtenu est à copier sur une clé USB ou un disque
 externe. L'écran affiche aussi le statut de chaque tentative automatique
 (succès/échec) dans son historique.
 
-### Décision d'infrastructure restante — stockage durable externe
+### Décision d'infrastructure — stockage durable externe (tranchée le 03/09/2026)
 
-**Non traité par ce lot** (hors périmètre : aucun stockage externe, aucun
-service Neon/Render/Cloudflare n'a été configuré ou modifié) — à trancher par
-Augustin avant le pilote réel si le risque est jugé insuffisamment couvert :
+**Statu quo accepté par Augustin sur les deux points**, en connaissance du
+risque décrit ci-dessous — aucun changement d'infrastructure engagé (aucun
+service Neon/Render/Cloudflare configuré ou modifié) :
 
-- Le projet Neon réel utilisé en production est actuellement sur l'offre
-  **gratuite**, dont la fenêtre d'historique (point-in-time recovery) n'est
-  que de **21 600 secondes (6 heures)**. Au-delà, seule la dernière
-  sauvegarde locale (disque éphémère Render) ou téléchargée à la main fait
-  foi.
+- Le projet Neon réel utilisé en production reste sur l'offre **gratuite**,
+  dont la fenêtre d'historique (point-in-time recovery) n'est que de
+  **21 600 secondes (6 heures)**. Au-delà, seule la dernière sauvegarde
+  locale (disque éphémère Render) ou téléchargée à la main fait foi. Passer
+  sur une offre Neon payante pour une fenêtre PITR plus longue a été
+  explicitement écarté pour l'instant.
 - Le disque local du service Render n'est **pas garanti persistant** (voir
   ci-dessus) : sans téléchargement régulier vers un support externe, une
   sauvegarde peut disparaître à un redéploiement avant d'avoir jamais quitté
-  le serveur.
-- Options à évaluer (coût et mise en place à décider, non engagées ici) :
-  passer le projet Neon sur une offre payante avec une fenêtre de PITR plus
-  longue ; ajouter un envoi automatique des sauvegardes locales vers un
-  stockage objet externe (ex. Cloudflare R2, déjà utilisé pour l'email pro) ;
-  ou formaliser une routine humaine de téléchargement régulier via le bouton
-  déjà existant.
+  le serveur. L'ajout d'un envoi automatique vers un stockage objet externe
+  (ex. Cloudflare R2) a également été explicitement écarté pour l'instant ;
+  la routine reste le téléchargement manuel régulier via le bouton déjà
+  existant (section précédente).
+- **À rouvrir** si le volume de données réel, la fréquence des incidents, ou
+  le passage du pilote à une exploitation à plus grande échelle changent le
+  calcul coût/risque — aucune de ces deux décisions n'est définitive.
 
 ### Variables facultatives
 
