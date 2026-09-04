@@ -63,7 +63,7 @@ Quand un Admin secondaire déclenche une de ces actions, une demande est créée
 
 La liste des rôles est conçue pour être extensible (ajout d'un rôle et de ses permissions sans changement de code).
 
-⚠️ **Impact sur l'existant** : les Phases 1 et 2 ont déjà été codées avec l'ancienne liste de rôles (Administrateur unique, Chargé du stock séparé du Responsable Fournisseurs, pas de Chargé du personnel, DG en lecture sur Paramètres). Une session de retrofit sera nécessaire pour aligner le seed de rôles/permissions déjà en base sur cette nouvelle version avant de continuer.
+**État actuel** : le retrofit des rôles et permissions est terminé. Le bootstrap de production initialise la matrice actuelle sans réécrire les rôles déjà configurés ; le DG reste strictement en lecture sur les modules métier et sans accès aux Paramètres, tandis que l’Administrateur principal agit comme super-utilisateur audité.
 
 ## 3. Périmètre fonctionnel (v1 — scope complet)
 
@@ -73,8 +73,8 @@ La **vente au comptoir** (panier, vente par produit) est **retirée du périmèt
 la boulangerie ne vend pas à l'unité au comptoir, tout passe par les commandes
 clients (3.4). Sont retirés avec elle :
 
-- le **panier et la vente par produit** — les tables `Vente`/`LigneVente` sont
-  laissées **orphelines en base** (aucune route, aucune UI) plutôt que supprimées ;
+- le **panier et la vente par produit** — les tables `Vente`/`LigneVente` ont été
+  supprimées du schéma après vérification qu’elles ne contenaient plus de données utiles ;
 - l'**exception DG « annuler une vente »** — bouton, route et permission spéciale
   disparaissent : il n'y a plus rien à annuler. Le DG redevient **strictement en
   lecture seule sur toute l'application, sans aucune exception** ;
@@ -596,7 +596,7 @@ Caissier(ère) et DG en lecture) :
 
 **Commandes spéciales (gâteaux personnalisés, événements) : retirées du périmètre** (décision métier). Le module Commandes ne couvre que les commandes en bacs.
 
-**Séparation Commandes / Caisse (clarification, aucun changement de logique)** : les deux modules sont et restent totalement indépendants, avec deux catalogues de prix qui ne se croisent jamais. **Commandes** raisonne en **nombre total de bacs**, sans détail produit — `montantBrut = bacs × prix unitaire de la Qualité` (ex. Mutombo, Dépositaire, 50 bacs × 4.100 Fc = 205.000 Fc), via `TypeClient.prixParBac`. **Caisse** raisonne **par produit à l'unité** (Carré, Baguette…), via `Produit.prixVente`. La logique Commandes reste inchangée.
+**Articulation Commandes / Caisse** : **Commandes** calcule en nombre total de bacs, sans détail produit — `montantBrut = bacs × prix unitaire de la Qualité`, via `TypeClient.prixParBac` — et porte la dette ainsi que l’avance du client. **Caisse** ne vend plus de produits à l’unité : elle reprend uniquement les règlements déclarés dans Commandes après leur rattachement à une `RemiseCaisse` et leur confirmation par le Caissier. Une déclaration seule n’affecte donc pas le registre ; sa confirmation transactionnelle constitue l’entrée financière.
 
 ### 3.5 Clients & fidélité
 Fiche client, historique d'achats. **Programme de fidélité : conçu mais NON activé** (décision métier) — ni l'interface ni la logique de points/récompenses ne sont construites pour l'instant. Le champ `pointsFidélité` reste en base (placeholder), sans mécanisme associé.
@@ -838,9 +838,7 @@ LigneCommandeFournisseur (commandeId, matierePremiereId, quantité, prixUnitaire
 Client (id, nom, téléphone, typeClientId, avanceDisponible, pointsFidélité)   # avanceDisponible = solde reporté d'une commande à l'autre
 CommandeClient (id, numero, clientId, quantitéBacs, montantBrut, commission, avanceUtilisee, montantAPercevoir, montantRecu, dette, avanceGeneree, statut, dateRetrait, créePar)   # commission figée au taux TypeClient.commissionParBac en vigueur à l'enregistrement (3.11, Lot 7 pt 6) — jamais recalculée après coup
 PaiementCommande (id, commandeClientId, montant, date, enregistrePar, statut, remiseCaisse?, confirmeLe?, confirmePar?)   # statut: declare | confirme (3.1 pt 4) — seule la confirmation réduit la dette
-Vente (…)          # ORPHELINE — vente au comptoir retirée (refonte 3.1)
-LigneVente (…)     # ORPHELINE — idem
-ClotureCaisse (…)  # ORPHELINE — pas de clôture dans le registre journalier
+`Vente`, `LigneVente` et l’ancien modèle `ClotureCaisse` ont été supprimés du schéma ; la clôture actuelle est portée par `SessionCaisse`.
 TauxDuJour (id, date, valeur, definiPar)                                  # une valeur par date (3.1)
 DepenseCaisse (id, date, motif, montant, origine, tauxApplique?, sacsUtilises?, enregistrePar)   # origine: MANUELLE | FARINE
 SessionCaisse (id, date, statut, soldeOuverture, soldeTheoriqueFermeture?, soldeCompteFermeture?, ecartFermeture?, motifEcart?, ouvertePar?, fermeePar?, derniereCorrection*?)   # statut: ouverte | fermee — une par date (3.1 pt 5)
@@ -858,7 +856,7 @@ BulletinPaie (id, travailleurId, mois, salaireMensuel, joursTravaillesParMois, t
 
 | Couche | Choix | Pourquoi |
 |---|---|---|
-| Frontend | React 18 + TypeScript + Vite | Rapide à développer, écosystème mature |
+| Frontend | React 19 + TypeScript + Vite | Interface responsive, écosystème mature |
 | UI | Tailwind CSS + shadcn/ui | Responsive natif, composants accessibles |
 | Données serveur | React Query | Cache, synchronisation, gestion des états de chargement |
 | Backend | Node.js + TypeScript + Express (ou Fastify) | Cohérence du langage front/back |
@@ -905,16 +903,17 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 8. **Rapports personnels, À propos** — journal d'activité par utilisateur (3.13), page statique (3.12)
 9. **Travailleurs & Utilisateurs** — module Travailleurs (Admin secondaire, écriture — scope résolu)
 10. **Admin : Activation, État système, Approbations, Délégation temporaire** — gestion des comptes, statut système, workflow d'approbation multi-admin, délégation de droits
-11. **Journal d'audit** — traçabilité des modifications/suppressions réussies ; couverture complète de l'application existante (toutes les phases sont désormais construites : les ~13 modules Commandes, Commissions, Caisse, Stocks, Production, Fournisseurs, Équipe, Travailleurs, Paramètres, Activation, Approbations, Délégation sont tous couverts)
+11. **Journal d'audit** — traçabilité des modifications/suppressions réussies. Les parcours financiers et critiques utilisent un audit transactionnel explicite ; l’audit de préparation au pilote a encore identifié trois écarts localisés à corriger sur la réception fournisseur, les pertes de production et le contrôle qualité.
 
-*Interface bilingue (Français/Lingala, section 3.8/3.9)* : concerne toutes les phases UI. Plus tôt elle est intégrée, moins coûteux sera le retrofit des écrans déjà construits (Commandes/Commissions actuellement en français uniquement) — à prioriser selon vos contraintes de temps.
+*Interface multilingue (Français, Anglais, Lingala et Swahili, sections 3.8/3.9)* : les quatre catalogues sont intégrés. Les traductions Lingala et Swahili restent des premiers jets à faire relire par des locuteurs natifs avant un pilote qui les utiliserait.
 
 ## 10. Exemples de critères d'acceptation
 
-**Vente en caisse**
-- Étant donné un panier de pain
-- Quand le Caissier(ère) valide la vente
-- Alors le ticket affiche le total sans TVA (produit exonéré)
+**Confirmation d’un règlement en caisse**
+- Étant donné un règlement déclaré dans Commandes et une session de caisse ouverte
+- Quand le Caissier rattache ce règlement à une remise et le confirme
+- Alors la dette et l’avance du client sont recalculées, le paiement devient confirmé et l’entrée apparaît dans la session concernée
+- Et aucune confirmation n’est possible sans remise ni session ouverte
 
 **Commission — client Maman**
 - Étant donné une commande de 10 bacs pour un client de type Maman (6.000 Fc/bac)
