@@ -1,14 +1,18 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Crown, Pencil, Power, Trash2, UserPlus, X } from "lucide-react";
+import { CalendarClock, Crown, Pencil, Power, ShieldCheck, Trash2, UserPlus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   MODULE_LABELS,
   MODULES,
+  NIVEAUX_ACCES,
+  NIVEAU_ACCES_LABELS,
   ROLE_ADMINISTRATEUR,
   type CompteDTO,
   type DelegationDTO,
   type Module,
+  type NiveauAcces,
+  type PermissionDTO,
   type ResultatActionCritique,
   type TravailleurDTO,
 } from "@lomoto/shared";
@@ -36,6 +40,12 @@ interface RoleListe {
   id: string;
   nom: string;
   roleParentNom: string | null;
+  permissions: PermissionDTO[];
+}
+
+/** État initial d'un éditeur de matrice : les 10 modules à AUCUN. */
+function matricePermissionsVide(): Record<Module, NiveauAcces> {
+  return Object.fromEntries(MODULES.map((m) => [m, "AUCUN"])) as Record<Module, NiveauAcces>;
 }
 
 /** Détecte une réponse d'action critique différée (Admin secondaire → demande). */
@@ -53,7 +63,7 @@ export function EquipePage() {
   const { utilisateur, peutEcrire } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { confirmer, toastErreur } = useFeedback();
+  const { confirmer, toast, toastErreur } = useFeedback();
   const editable = peutEcrire("EQUIPE");
 
   // Bandeau « demande soumise à l'approbation de l'Admin Principal ».
@@ -147,6 +157,44 @@ export function EquipePage() {
     mutationFn: (id: string) => api(`/api/equipe/${id}/principal`, { method: "POST" }),
     onSuccess: rafraichir,
     onError: (e) => toastErreur(e instanceof Error ? e.message : t("parametres.saveError")),
+  });
+
+  // --- Dialog permissions d'un rôle (tâche critique, section 2) -------------
+  // PUT /api/roles/:id/permissions REMPLACE la matrice complète du rôle — on
+  // envoie donc toujours les 10 modules, jamais seulement ceux modifiés (un
+  // module omis serait silencieusement ramené à AUCUN côté serveur).
+  const [dialogPermissions, setDialogPermissions] = useState(false);
+  const [roleEnEdition, setRoleEnEdition] = useState<RoleListe | null>(null);
+  const [permissionsEdit, setPermissionsEdit] = useState<Record<Module, NiveauAcces>>(matricePermissionsVide());
+  const [permissionsErreur, setPermissionsErreur] = useState<string | null>(null);
+
+  function ouvrirPermissions(role: RoleListe) {
+    const parModule = new Map(role.permissions.map((p) => [p.module, p.niveauAcces]));
+    const matrice = matricePermissionsVide();
+    for (const m of MODULES) matrice[m] = parModule.get(m) ?? "AUCUN";
+    setPermissionsEdit(matrice);
+    setRoleEnEdition(role);
+    setPermissionsErreur(null);
+    setDialogPermissions(true);
+  }
+
+  const sauverPermissions = useMutation({
+    mutationFn: () =>
+      api(`/api/roles/${roleEnEdition!.id}/permissions`, {
+        method: "PUT",
+        body: JSON.stringify({ permissions: MODULES.map((m) => ({ module: m, niveauAcces: permissionsEdit[m] })) }),
+      }),
+    onSuccess: (res) => {
+      setDialogPermissions(false);
+      const avis = messageApprobation(res);
+      if (avis) {
+        setAvisApprobation(avis);
+      } else {
+        toast({ variante: "succes", message: t("roles.permissionsSaved", { nom: roleEnEdition?.nom ?? "" }) });
+      }
+      queryClient.invalidateQueries({ queryKey: ["roles"] });
+    },
+    onError: (e) => setPermissionsErreur(e instanceof Error ? e.message : t("roles.permissionsError")),
   });
 
   // --- Délégations temporaires (section 3.7) --------------------------------
@@ -426,6 +474,69 @@ export function EquipePage() {
         </CardContent>
       </Card>
 
+      {/* Rôles & matrice de permissions (section 2 — tâche critique « Modifier
+          les permissions d'un rôle ») */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("roles.title")}</CardTitle>
+          <CardDescription>{t("roles.subtitle", { count: roles.length })}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table className="hidden md:table">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("common.name")}</TableHead>
+                <TableHead>{t("roles.parentHeader")}</TableHead>
+                {editable && <TableHead className="text-right">{t("common.actions")}</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {roles.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="font-medium">{r.nom}</TableCell>
+                  <TableCell className="text-muted-foreground">{r.roleParentNom ?? "—"}</TableCell>
+                  {editable && (
+                    <TableCell className="text-right">
+                      <Button variant="outline" size="sm" onClick={() => ouvrirPermissions(r)}>
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        {t("roles.editPermissions")}
+                      </Button>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+              {roles.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={editable ? 3 : 2} className="py-8 text-center text-muted-foreground">
+                    {t("roles.empty")}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+
+          <div className="space-y-2 md:hidden">
+            {roles.map((r) => (
+              <CarteLigne key={r.id}>
+                <CarteLigneTitre>
+                  <span>{r.nom}</span>
+                </CarteLigneTitre>
+                <CarteLigneChamp label={t("roles.parentHeader")} value={r.roleParentNom ?? "—"} />
+                {editable && (
+                  <CarteLigneActions>
+                    <Button variant="outline" size="sm" onClick={() => ouvrirPermissions(r)}>
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      {t("roles.editPermissions")}
+                    </Button>
+                  </CarteLigneActions>
+                )}
+              </CarteLigne>
+            ))}
+            {roles.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">{t("roles.empty")}</p>}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Délégations temporaires de rôle (section 3.7) */}
       {editable && (
         <Card>
@@ -690,6 +801,60 @@ export function EquipePage() {
               </Button>
               <Button type="submit" variant="cta" disabled={creerDelegation.isPending}>
                 {t("delegations.grant")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog permissions d'un rôle */}
+      <Dialog open={dialogPermissions} onOpenChange={setDialogPermissions}>
+        <DialogContent className="sm:max-w-xl">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              sauverPermissions.mutate();
+            }}
+            className="space-y-4"
+          >
+            <DialogHeader>
+              <DialogTitle>{t("roles.permissionsDialogTitle", { nom: roleEnEdition?.nom ?? "" })}</DialogTitle>
+              <DialogDescription>{t("roles.permissionsDialogHelp")}</DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+              {MODULES.map((m) => (
+                <div key={m} className="flex items-center justify-between gap-3">
+                  <Label htmlFor={`permission-${m}`} className="flex-1">
+                    {MODULE_LABELS[m]}
+                  </Label>
+                  <NativeSelect
+                    id={`permission-${m}`}
+                    className="w-48"
+                    value={permissionsEdit[m]}
+                    onChange={(e) =>
+                      setPermissionsEdit((prev) => ({ ...prev, [m]: e.target.value as NiveauAcces }))
+                    }
+                  >
+                    {NIVEAUX_ACCES.map((niveau) => (
+                      <option key={niveau} value={niveau}>
+                        {NIVEAU_ACCES_LABELS[niveau]}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+              ))}
+            </div>
+            {permissionsErreur && (
+              <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
+                {permissionsErreur}
+              </p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDialogPermissions(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button type="submit" variant="cta" disabled={sauverPermissions.isPending}>
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </form>

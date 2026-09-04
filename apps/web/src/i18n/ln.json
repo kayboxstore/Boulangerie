@@ -263,6 +263,17 @@
     "deactivate": "Kokanga {{nom}}",
     "activate": "Kofungola {{nom}}"
   },
+  "roles": {
+    "title": "Ba-rôle mpe ndingisa",
+    "subtitle": "ba-rôle {{count}} — matrise ya ndingisa epesaka nzela na kɔnti moko na moko oyo ezali na se ya yango.",
+    "parentHeader": "na se ya",
+    "editPermissions": "Kobongola ndingisa",
+    "empty": "Rôle moko te.",
+    "permissionsDialogTitle": "Ndingisa — {{nom}}",
+    "permissionsDialogHelp": "Module moko na molɔngɔ. Kobomba ekobongola matrise mobimba ya rôle oyo.",
+    "permissionsSaved": "Ndingisa ya rôle « {{nom}} » ebongwani.",
+    "permissionsError": "Ekoki te kobomba ndingisa. Meka lisusu na moke."
+  },
   "premierLancement": {
     "title": "Boyei malamu",
     "subtitle": "Kɔnti moko te ezali naino — tosala Administrateur mokonzi.",

@@ -263,6 +263,17 @@
     "deactivate": "Zima {{nom}}",
     "activate": "Washa tena {{nom}}"
   },
+  "roles": {
+    "title": "Majukumu na ruhusa",
+    "subtitle": "Majukumu {{count}} — matriki ya ruhusa huamua ufikiaji wa kila akaunti iliyounganishwa.",
+    "parentHeader": "Imeunganishwa na",
+    "editPermissions": "Hariri ruhusa",
+    "empty": "Hakuna jukumu.",
+    "permissionsDialogTitle": "Ruhusa — {{nom}}",
+    "permissionsDialogHelp": "Moduli moja kwa kila mstari. Kuhifadhi kutabadilisha matriki nzima ya jukumu hili.",
+    "permissionsSaved": "Ruhusa za jukumu « {{nom}} » zimesasishwa.",
+    "permissionsError": "Imeshindikana kuhifadhi ruhusa. Jaribu tena baada ya muda mfupi."
+  },
   "premierLancement": {
     "title": "Karibu",
     "subtitle": "Hakuna akaunti iliyopo bado — hebu tuweke Msimamizi Mkuu.",
