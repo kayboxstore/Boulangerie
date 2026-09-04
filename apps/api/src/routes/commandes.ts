@@ -15,7 +15,7 @@ import {
   type ResumeCommandesJourDTO,
   type StrategieDoublon,
 } from "@lomoto/shared";
-import { prisma } from "../lib/prisma.js";
+import { prisma, type TxClient } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
 import {
@@ -329,6 +329,177 @@ commandesRouter.get("/", requirePermission("COMMANDES", "LECTURE"), async (req, 
  * ouverte à C4 changerait cette règle métier et exige une décision
  * explicite d'Augustin — non prise ici.
  */
+/**
+ * Cœur transactionnel de la création/mise à jour d'une commande (section 3.4)
+ * — extrait de la route POST "/" ci-dessous pour être réutilisable ailleurs
+ * (confirmation d'une DemandeCommandePublique, voir
+ * routes/demandesCommandePubliques.ts) sans dupliquer cette logique délicate
+ * (avance/dette, détection de doublon, mise à jour atomique + audit manuel
+ * de Client.avanceDisponible). Extraction MÉCANIQUE, aucun changement de
+ * comportement par rapport à ce qui existait inline avant — voir le
+ * commentaire original juste avant l'appel à tx.client.updateMany plus bas
+ * pour le contexte historique de pourquoi c'est updateMany + audit manuel,
+ * pas update().
+ */
+export async function executerCreationOuMiseAJourCommande(
+  tx: TxClient,
+  params: { clientId: string; quantiteBacs: number; montantRecu: number; strategie?: StrategieDoublon },
+  creeParId: string,
+) {
+  const { clientId, quantiteBacs, montantRecu, strategie } = params;
+  const jour = jourLomoto();
+  await verrouillerSessionOuverte(tx, jour);
+  await verifierAucuneSessionAnterieureOuverte(tx, jour);
+
+  const client = await tx.client.findUnique({
+    where: { id: clientId },
+    include: { typeClient: true },
+  });
+  if (!client) throw new ErreurClientInconnu();
+
+  const dateOperationnelle = dateSQLDepuisJourLomoto(jour);
+  const [debut, fin] = bornesJourLomoto(jour);
+  const existante = await tx.commandeClient.findFirst({
+    where: {
+      clientId: client.id,
+      OR: [
+        { dateOperationnelle },
+        { dateOperationnelle: null, dateCreation: { gte: debut, lte: fin } },
+      ],
+    },
+    include: INCLUDE_RELATIONS,
+    orderBy: { numero: "asc" },
+  });
+
+  if (!existante) {
+    const calcul = calculerCommande({
+      quantiteBacs,
+      prixParBac: client.typeClient.prixParBac,
+      avanceExistante: client.avanceDisponible,
+      montantRecu,
+    });
+    const creee = await tx.commandeClient.create({
+      data: {
+        clientId: client.id,
+        quantiteBacs,
+        montantBrut: calcul.montantBrut,
+        commission: calculerCommission({ quantiteBacs, commissionParBac: client.typeClient.commissionParBac }),
+        avanceUtilisee: calcul.avanceUtilisee,
+        montantAPercevoir: calcul.montantAPercevoir,
+        montantRecu,
+        dette: calcul.dette,
+        avanceGeneree: calcul.avanceGeneree,
+        nouvelleAvance: calcul.nouvelleAvance,
+        creeParId,
+        dateOperationnelle,
+      },
+      include: INCLUDE_RELATIONS,
+    });
+    // Création de CommandeClient : non auditée, même convention que le
+    // reste du dépôt (lib/audit.ts) — les créations ne sont jamais
+    // journalisées, déjà tracées via creeParId. Mais la mise à jour de
+    // l'avance du Client, elle, EST une modification d'une entité
+    // EXISTANTE : `Client` figure dans MODELE_MODULE (lib/audit.ts),
+    // donc un `update()` singulier serait intercepté par l'extension
+    // d'audit automatique — NON transactionnelle (voir
+    // services/caisseAtomique.ts) — exactement le défaut que ce lot
+    // corrige partout ailleurs. `updateMany` + audit manuel, comme la
+    // branche MODIFIER/REMPLACER ci-dessous (défaut trouvé en Passe B).
+    const clientAvantCreation = client;
+    await tx.client.updateMany({
+      where: { id: client.id },
+      data: { avanceDisponible: calcul.nouvelleAvance },
+    });
+    const clientApresCreation = await tx.client.findUniqueOrThrow({ where: { id: client.id } });
+    await auditerCaisseTx(tx, {
+      module: "COMMANDES",
+      typeEntite: "Client",
+      entiteId: client.id,
+      action: "MODIFICATION",
+      avant: clientAvantCreation,
+      apres: clientApresCreation,
+    });
+    return { type: "creee" as const, commande: creee };
+  }
+
+  if (!strategie) return { type: "conflit" as const, existante };
+  // Une commande issue d'une acceptation C4 est immuable : les paiements
+  // restent permis, mais l'ancien flux manuel ne peut ni l'additionner ni
+  // la remplacer et donc altérer la quantité acceptée.
+  if (existante.cycleLivraison) return { type: "cycleImmuable" as const, existante };
+  if (strategie === "REMPLACER" && existante.reglements.length > 0) {
+    return { type: "reglementsPresents" as const, existante };
+  }
+
+  const totaux =
+    strategie === "MODIFIER"
+      ? {
+          quantiteBacs: existante.quantiteBacs + quantiteBacs,
+          montantRecu: existante.montantRecu + montantRecu,
+        }
+      : { quantiteBacs, montantRecu };
+
+  const avanceExistante = avanceAvantCommande({
+    avanceDisponibleClient: client.avanceDisponible,
+    avanceUtilisee: existante.avanceUtilisee,
+    avanceGeneree: existante.avanceGeneree,
+  });
+  const calcul = calculerCommande({
+    quantiteBacs: totaux.quantiteBacs,
+    prixParBac: client.typeClient.prixParBac,
+    avanceExistante,
+    montantRecu: totaux.montantRecu,
+  });
+
+  // MODIFIER/REMPLACER : mise à jour d'une commande EXISTANTE — donc
+  // auditée. `updateMany` (jamais `update` singulier) pour ne pas être
+  // intercepté par l'extension d'audit automatique, non transactionnelle
+  // (voir services/caisseAtomique.ts) ; audit manuel dans la même tx.
+  await tx.commandeClient.updateMany({
+    where: { id: existante.id },
+    data: {
+      quantiteBacs: totaux.quantiteBacs,
+      montantBrut: calcul.montantBrut,
+      commission: calculerCommission({
+        quantiteBacs: totaux.quantiteBacs,
+        commissionParBac: client.typeClient.commissionParBac,
+      }),
+      avanceUtilisee: calcul.avanceUtilisee,
+      montantAPercevoir: calcul.montantAPercevoir,
+      montantRecu: totaux.montantRecu,
+      dette: calcul.dette,
+      avanceGeneree: calcul.avanceGeneree,
+      nouvelleAvance: calcul.nouvelleAvance,
+    },
+  });
+  const maj = await tx.commandeClient.findUniqueOrThrow({ where: { id: existante.id }, include: INCLUDE_RELATIONS });
+  await auditerCaisseTx(tx, {
+    module: "COMMANDES",
+    typeEntite: "CommandeClient",
+    entiteId: existante.id,
+    action: "MODIFICATION",
+    avant: existante,
+    apres: maj,
+  });
+
+  const clientAvant = client;
+  await tx.client.updateMany({
+    where: { id: client.id },
+    data: { avanceDisponible: calcul.nouvelleAvance },
+  });
+  const clientApres = await tx.client.findUniqueOrThrow({ where: { id: client.id } });
+  await auditerCaisseTx(tx, {
+    module: "COMMANDES",
+    typeEntite: "Client",
+    entiteId: client.id,
+    action: "MODIFICATION",
+    avant: clientAvant,
+    apres: clientApres,
+  });
+
+  return { type: "miseAJour" as const, commande: maj, strategie };
+}
+
 commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
   try {
     const parsed = commandeCreateSchema.safeParse(req.body);
@@ -342,159 +513,7 @@ commandesRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req
         req,
         "POST:/api/commandes",
         parsed.data,
-        async (tx) => {
-          const jour = jourLomoto();
-          await verrouillerSessionOuverte(tx, jour);
-          await verifierAucuneSessionAnterieureOuverte(tx, jour);
-
-          const client = await tx.client.findUnique({
-            where: { id: clientId },
-            include: { typeClient: true },
-          });
-          if (!client) throw new ErreurClientInconnu();
-
-          const dateOperationnelle = dateSQLDepuisJourLomoto(jour);
-          const [debut, fin] = bornesJourLomoto(jour);
-          const existante = await tx.commandeClient.findFirst({
-            where: {
-              clientId: client.id,
-              OR: [
-                { dateOperationnelle },
-                { dateOperationnelle: null, dateCreation: { gte: debut, lte: fin } },
-              ],
-            },
-            include: INCLUDE_RELATIONS,
-            orderBy: { numero: "asc" },
-          });
-
-          if (!existante) {
-            const calcul = calculerCommande({
-              quantiteBacs,
-              prixParBac: client.typeClient.prixParBac,
-              avanceExistante: client.avanceDisponible,
-              montantRecu,
-            });
-            const creee = await tx.commandeClient.create({
-              data: {
-                clientId: client.id,
-                quantiteBacs,
-                montantBrut: calcul.montantBrut,
-                commission: calculerCommission({ quantiteBacs, commissionParBac: client.typeClient.commissionParBac }),
-                avanceUtilisee: calcul.avanceUtilisee,
-                montantAPercevoir: calcul.montantAPercevoir,
-                montantRecu,
-                dette: calcul.dette,
-                avanceGeneree: calcul.avanceGeneree,
-                nouvelleAvance: calcul.nouvelleAvance,
-                creeParId: req.utilisateur!.id,
-                dateOperationnelle,
-              },
-              include: INCLUDE_RELATIONS,
-            });
-            // Création de CommandeClient : non auditée, même convention que le
-            // reste du dépôt (lib/audit.ts) — les créations ne sont jamais
-            // journalisées, déjà tracées via creeParId. Mais la mise à jour de
-            // l'avance du Client, elle, EST une modification d'une entité
-            // EXISTANTE : `Client` figure dans MODELE_MODULE (lib/audit.ts),
-            // donc un `update()` singulier serait intercepté par l'extension
-            // d'audit automatique — NON transactionnelle (voir
-            // services/caisseAtomique.ts) — exactement le défaut que ce lot
-            // corrige partout ailleurs. `updateMany` + audit manuel, comme la
-            // branche MODIFIER/REMPLACER ci-dessous (défaut trouvé en Passe B).
-            const clientAvantCreation = client;
-            await tx.client.updateMany({
-              where: { id: client.id },
-              data: { avanceDisponible: calcul.nouvelleAvance },
-            });
-            const clientApresCreation = await tx.client.findUniqueOrThrow({ where: { id: client.id } });
-            await auditerCaisseTx(tx, {
-              module: "COMMANDES",
-              typeEntite: "Client",
-              entiteId: client.id,
-              action: "MODIFICATION",
-              avant: clientAvantCreation,
-              apres: clientApresCreation,
-            });
-            return { type: "creee" as const, commande: creee };
-          }
-
-          if (!strategie) return { type: "conflit" as const, existante };
-          // Une commande issue d'une acceptation C4 est immuable : les paiements
-          // restent permis, mais l'ancien flux manuel ne peut ni l'additionner ni
-          // la remplacer et donc altérer la quantité acceptée.
-          if (existante.cycleLivraison) return { type: "cycleImmuable" as const, existante };
-          if (strategie === "REMPLACER" && existante.reglements.length > 0) {
-            return { type: "reglementsPresents" as const, existante };
-          }
-
-          const totaux =
-            strategie === "MODIFIER"
-              ? {
-                  quantiteBacs: existante.quantiteBacs + quantiteBacs,
-                  montantRecu: existante.montantRecu + montantRecu,
-                }
-              : { quantiteBacs, montantRecu };
-
-          const avanceExistante = avanceAvantCommande({
-            avanceDisponibleClient: client.avanceDisponible,
-            avanceUtilisee: existante.avanceUtilisee,
-            avanceGeneree: existante.avanceGeneree,
-          });
-          const calcul = calculerCommande({
-            quantiteBacs: totaux.quantiteBacs,
-            prixParBac: client.typeClient.prixParBac,
-            avanceExistante,
-            montantRecu: totaux.montantRecu,
-          });
-
-          // MODIFIER/REMPLACER : mise à jour d'une commande EXISTANTE — donc
-          // auditée. `updateMany` (jamais `update` singulier) pour ne pas être
-          // intercepté par l'extension d'audit automatique, non transactionnelle
-          // (voir services/caisseAtomique.ts) ; audit manuel dans la même tx.
-          await tx.commandeClient.updateMany({
-            where: { id: existante.id },
-            data: {
-              quantiteBacs: totaux.quantiteBacs,
-              montantBrut: calcul.montantBrut,
-              commission: calculerCommission({
-                quantiteBacs: totaux.quantiteBacs,
-                commissionParBac: client.typeClient.commissionParBac,
-              }),
-              avanceUtilisee: calcul.avanceUtilisee,
-              montantAPercevoir: calcul.montantAPercevoir,
-              montantRecu: totaux.montantRecu,
-              dette: calcul.dette,
-              avanceGeneree: calcul.avanceGeneree,
-              nouvelleAvance: calcul.nouvelleAvance,
-            },
-          });
-          const maj = await tx.commandeClient.findUniqueOrThrow({ where: { id: existante.id }, include: INCLUDE_RELATIONS });
-          await auditerCaisseTx(tx, {
-            module: "COMMANDES",
-            typeEntite: "CommandeClient",
-            entiteId: existante.id,
-            action: "MODIFICATION",
-            avant: existante,
-            apres: maj,
-          });
-
-          const clientAvant = client;
-          await tx.client.updateMany({
-            where: { id: client.id },
-            data: { avanceDisponible: calcul.nouvelleAvance },
-          });
-          const clientApres = await tx.client.findUniqueOrThrow({ where: { id: client.id } });
-          await auditerCaisseTx(tx, {
-            module: "COMMANDES",
-            typeEntite: "Client",
-            entiteId: client.id,
-            action: "MODIFICATION",
-            avant: clientAvant,
-            apres: clientApres,
-          });
-
-          return { type: "miseAJour" as const, commande: maj, strategie };
-        },
+        (tx) => executerCreationOuMiseAJourCommande(tx, { clientId, quantiteBacs, montantRecu, strategie }, req.utilisateur!.id),
         (resultat) => {
         if (resultat.type === "conflit") {
           const existant = versCommandeDTO(resultat.existante);
@@ -672,4 +691,4 @@ commandesRouter.post("/:id/reglements", requirePermission("COMMANDES", "ECRITURE
   }
 });
 
-class ErreurClientInconnu extends Error {}
+export class ErreurClientInconnu extends Error {}

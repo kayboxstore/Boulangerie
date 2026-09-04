@@ -33,6 +33,16 @@ enum PrioriteNotification {
   HAUTE
 }
 
+// Demande de commande soumise depuis le site vitrine public (section 3.4,
+// nouveau canal) — jamais une CommandeClient directement : une simple requête
+// qu'un Chargé des commandes examine et confirme (ou rejette) manuellement.
+// Aucune conséquence financière tant qu'elle n'est pas CONFIRMEE.
+enum StatutDemandePublique {
+  EN_ATTENTE
+  CONFIRMEE
+  REJETEE
+}
+
 enum StatutCycleLivraison {
   PREVISION
   RETENUE_PRODUCTION
@@ -287,6 +297,7 @@ model Client {
   zoneDepositaire   ZoneDepositaire? @relation(fields: [zoneDepositaireId], references: [id], onDelete: SetNull)
   schemasCommande   SchemaCommande[]
   bonsLivraison     BonLivraison[]
+  demandesPubliques DemandeCommandePublique[]
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
@@ -342,11 +353,40 @@ model CommandeClient {
   alerteDetteEnvoyeeLe DateTime?
   reglements           PaiementCommande[]
 
+  demandeOrigine       DemandeCommandePublique?
+
   @@unique([clientId, dateOperationnelle])
   @@index([clientId])
   @@index([dateCreation])
   @@index([dateOperationnelle])
   @@index([alerteDetteEnvoyeeLe])
+}
+
+// Demande de commande soumise depuis le site vitrine public (nouveau canal,
+// section 3.4) — JAMAIS une CommandeClient directement. Un Dépositaire ou une
+// Maman déjà enregistré s'identifie par téléphone sur le site public, décrit
+// ce qu'il souhaite, et un Chargé des commandes confirme (crée une vraie
+// CommandeClient à partir d'ici) ou rejette. Conservée après traitement,
+// jamais supprimée — trace de la demande d'origine même une fois confirmée.
+model DemandeCommandePublique {
+  id              String                @id @default(cuid())
+  clientId        String
+  client          Client                @relation(fields: [clientId], references: [id])
+  quantiteBacs    Int
+  dateSouhaitee   DateTime?
+  note            String?
+  statut          StatutDemandePublique @default(EN_ATTENTE)
+  // Renseigné uniquement au passage à CONFIRMEE — jamais modifiable après.
+  commandeCreeeId String?               @unique
+  commandeCreee   CommandeClient?       @relation(fields: [commandeCreeeId], references: [id])
+  traiteParId     String?
+  traiteLe        DateTime?
+  // Renseigné uniquement au passage à REJETEE.
+  motifRejet      String?
+  createdAt       DateTime              @default(now())
+
+  @@index([clientId])
+  @@index([statut])
 }
 
 // Un règlement naît DECLARE (section 3.1/3.4, Lot 6 — P0-07) : l'argent que le
