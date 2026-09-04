@@ -219,6 +219,10 @@ export const TYPES_EVENEMENT = [
   // Confirmation d'un règlement DECLARE par la Caisse (P0-07) : seul cet
   // événement correspond à une baisse effective de la dette du client.
   "REGLEMENT_CONFIRME",
+  // Nouvelle demande de commande publique (site vitrine, section 3.4) : émis
+  // par le SYSTÈME (aucun émetteur humain, soumission anonyme identifiée par
+  // téléphone) — même logique que DETTE_NON_PAYEE.
+  "DEMANDE_COMMANDE_PUBLIQUE",
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -302,6 +306,44 @@ export const commandeCreateSchema = z.object({
    */
   strategie: z.enum(STRATEGIES_DOUBLON).optional(),
 });
+
+// Demande de commande publique (site vitrine, nouveau canal — section 3.4).
+// Identification par téléphone uniquement : jamais de mot de passe pour un
+// Client (ce n'est pas un compte Utilisateur), le risque reste faible
+// puisqu'une demande n'a aucun effet tant qu'un Chargé des commandes ne l'a
+// pas confirmée manuellement.
+export const demandePubliqueIdentifierSchema = z.object({
+  telephone: z.string().trim().min(3, "Numéro de téléphone requis"),
+});
+export type DemandePubliqueIdentifierInput = z.infer<typeof demandePubliqueIdentifierSchema>;
+
+export const demandePubliqueCreateSchema = z.object({
+  telephone: z.string().trim().min(3, "Numéro de téléphone requis"),
+  quantiteBacs: z.number().finite("Le nombre doit être fini").int("Nombre de bacs entier").min(1, "Au moins 1 bac"),
+  dateSouhaitee: dateISOSchema.optional(),
+  note: z.string().trim().max(500, "500 caractères maximum").optional(),
+});
+export type DemandePubliqueCreateInput = z.infer<typeof demandePubliqueCreateSchema>;
+
+export const demandePubliqueRejeterSchema = z.object({
+  motif: z.string().trim().min(1, "Le motif est requis").max(500, "500 caractères maximum"),
+});
+export type DemandePubliqueRejeterInput = z.infer<typeof demandePubliqueRejeterSchema>;
+
+export const STATUTS_DEMANDE_PUBLIQUE = ["EN_ATTENTE", "CONFIRMEE", "REJETEE"] as const;
+export type StatutDemandePublique = (typeof STATUTS_DEMANDE_PUBLIQUE)[number];
+
+export interface DemandeCommandePubliqueDTO {
+  id: string;
+  client: { id: string; nom: string; typeClient: string };
+  quantiteBacs: number;
+  dateSouhaitee: string | null;
+  note: string | null;
+  statut: StatutDemandePublique;
+  commandeCreeeId: string | null;
+  motifRejet: string | null;
+  createdAt: string;
+}
 export type CommandeCreateInput = z.infer<typeof commandeCreateSchema>;
 
 export interface CalculCommande {

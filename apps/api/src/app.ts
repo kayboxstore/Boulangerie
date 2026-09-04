@@ -16,6 +16,10 @@ import { notificationsRouter } from "./routes/notifications.js";
 import { clientsRouter, typeClientsRouter } from "./routes/clients.js";
 import { zonesDepositaireRouter } from "./routes/zones-depositaires.js";
 import { commandesRouter } from "./routes/commandes.js";
+import {
+  demandesCommandePubliquesPubliqueRouter,
+  demandesCommandePubliquesRouter,
+} from "./routes/demandesCommandePubliques.js";
 import { commissionsRouter } from "./routes/commissions.js";
 import { caisseRouter } from "./routes/caisse.js";
 import { stocksRouter } from "./routes/stocks.js";
@@ -147,6 +151,29 @@ export function createApp() {
   app.use("/api/clients", clientsRouter);
   app.use("/api/type-clients", typeClientsRouter);
   app.use("/api/zones-depositaires", zonesDepositaireRouter);
+  // /api/public/* : CORS dédié, plus permissif que le reste de l'API — ces
+  // routes sont FAITES pour être appelées depuis un autre domaine (le site
+  // vitrine, pas encore sur un nom de domaine figé pendant son
+  // développement). Jamais `credentials: true` ici (pas de cookie/session
+  // sur ces routes, et un navigateur refuse de toute façon cette combinaison
+  // avec une origine ouverte) — contrairement au CORS global juste au-dessus,
+  // qui reste strict et sert l'app de gestion authentifiée.
+  app.use("/api/public", cors());
+  // Chemin dédié /api/public/* : sépare visuellement, dans ce fichier, les
+  // routes PUBLIQUES (sans authentification) du reste — utile pour repérer
+  // d'un coup d'œil toute nouvelle route accidentellement non protégée.
+  app.use(
+    "/api/public/demandes-commande",
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 10,
+      standardHeaders: "draft-8",
+      legacyHeaders: false,
+      handler: reponseLimitee,
+    }),
+    demandesCommandePubliquesPubliqueRouter,
+  );
+  app.use("/api/demandes-commande-publiques", demandesCommandePubliquesRouter);
   app.use("/api/commandes", commandesRouter);
   app.use("/api/commissions", commissionsRouter);
   app.use("/api/caisse", caisseRouter);
