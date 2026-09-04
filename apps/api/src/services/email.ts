@@ -92,6 +92,10 @@ export async function envoyerLienReinitialisation(params: {
   jeton: string;
   expireLe: Date;
 }): Promise<void> {
+  // TODO(migration domaine) : repointer vers gestion.boulangerie-lomoto.com
+  // une fois la bascule DNS confirmée (voir lib/origines.ts) — pas avant,
+  // sinon les liens de réinitialisation de mot de passe pointeraient vers un
+  // sous-domaine pas encore actif alors que l'app répond encore sur www.
   const origine = process.env.APP_PUBLIC_URL ?? "https://www.boulangerie-lomoto.com";
   const url = new URL("/nouveau-mot-de-passe", origine);
   url.searchParams.set("jeton", params.jeton);

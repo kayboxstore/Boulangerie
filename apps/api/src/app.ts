@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { DOMAINE_A_REDIRIGER, DOMAINE_CANONIQUE, verifierOrigine } from "./lib/origines.js";
+import { verifierOrigine } from "./lib/origines.js";
 import { gardeBarriereEcriture, marquerRequeteReinitialisation } from "./lib/barriereEcriture.js";
 import { logger } from "./lib/logger.js";
 import { authRouter } from "./routes/auth.js";
@@ -56,17 +56,12 @@ export function createApp() {
     next();
   });
 
-  // Domaine canonique = www.boulangerie-lomoto.com (voir le commentaire dans
-  // lib/origines.ts sur pourquoi c'est www et pas l'apex) : l'apex redirige
-  // vers www, pour n'avoir qu'UNE seule adresse qui compte plutôt que deux qui
-  // fonctionnent en parallèle. Placé avant toute autre route pour s'appliquer
-  // aussi à /api et /socket.io.
-  app.use((req, res, next) => {
-    if (req.hostname === DOMAINE_A_REDIRIGER) {
-      return res.redirect(301, `https://${DOMAINE_CANONIQUE}${req.originalUrl}`);
-    }
-    next();
-  });
+  // Pas de redirection de domaine ici : depuis la migration vers un site
+  // vitrine public sur l'apex/www de boulangerie-lomoto.com, cette app ne
+  // possède plus qu'un seul domaine (gestion.boulangerie-lomoto.com, voir
+  // lib/origines.ts) — rien à rediriger vers autre chose. L'ancienne logique
+  // apex→www (pertinente quand cette app possédait encore l'apex) a été
+  // retirée avec ce changement.
 
   app.use(helmet());
   app.use(cors({ origin: verifierOrigine, credentials: true }));

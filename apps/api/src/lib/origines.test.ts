@@ -21,9 +21,13 @@ describe("verifierOrigine / ORIGINES_AUTORISEES", () => {
     process.env = env;
   });
 
-  it("autorise le domaine canonique (www) et l'apex", async () => {
-    await expect(appelerVerification("https://www.boulangerie-lomoto.com")).resolves.toBe(true);
+  it("autorise le domaine canonique (gestion.boulangerie-lomoto.com)", async () => {
+    await expect(appelerVerification("https://gestion.boulangerie-lomoto.com")).resolves.toBe(true);
+  });
+
+  it("autorise encore www et l'apex (transition en cours — l'app y répond toujours réellement)", async () => {
     await expect(appelerVerification("https://boulangerie-lomoto.com")).resolves.toBe(true);
+    await expect(appelerVerification("https://www.boulangerie-lomoto.com")).resolves.toBe(true);
   });
 
   it("autorise l'ancienne URL Render (liens déjà partagés)", async () => {

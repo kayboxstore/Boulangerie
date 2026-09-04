@@ -5,25 +5,34 @@
  * chacun leur propre configuration CORS, un piège classique où l'une des deux
  * est mise à jour et l'autre oubliée. En pratique, l'app fonctionne en
  * SAME-ORIGIN (le frontend appelle l'API en chemins relatifs, cf. app.ts) donc
- * CORS n'est pas ce qui ferait échouer une visite du nouveau domaine ; cette
- * liste sert de durcissement (elle empêche un site tiers d'appeler l'API
+ * CORS n'est pas ce qui ferait échouer une visite du domaine ; cette liste
+ * sert de durcissement (elle empêche un site tiers d'appeler l'API
  * directement), pas de condition de fonctionnement.
  */
-// Domaine CANONIQUE = www, pas l'apex. Contre-intuitif (l'usage récent va
-// plutôt vers l'apex sans www), mais Render redirige DÉJÀ l'apex vers www à
-// son edge (avant même que cette app ne reçoive la requête — probablement
-// « www » choisi comme domaine principal au moment d'ajouter le domaine
-// personnalisé dans Render). Un premier essai en sens inverse (apex
-// canonique) a provoqué une boucle de redirection infinie : Render renvoie
-// apex→www, cette app renvoyait www→apex. Sans accès au tableau de bord
-// Render pour changer leur réglage, la seule sortie de boucle est de suivre
-// leur choix plutôt que de le contredire.
+// APEX = le domaine de base (boulangerie-lomoto.com), utilisé pour la
+// génération des adresses email professionnelles (services/emailPro.ts,
+// Cloudflare Email Routing) — un domaine EST toujours à un seul niveau
+// (Cloudflare gère les emails pour tout le domaine), indépendamment de quel
+// sous-domaine sert l'app de gestion. Ne pas réutiliser APEX pour une
+// redirection web ou une origine CORS : depuis la migration vers un site
+// vitrine sur l'apex, cette app ne possède plus ce domaine côté web, seul
+// DOMAINE_CANONIQUE (le sous-domaine gestion.) compte pour ça.
 export const APEX = "boulangerie-lomoto.com";
-export const DOMAINE_CANONIQUE = `www.${APEX}`;
-export const DOMAINE_A_REDIRIGER = APEX;
+
+// Domaine CANONIQUE de l'app de gestion = un sous-domaine dédié
+// (gestion.boulangerie-lomoto.com), destiné à remplacer www/apex une fois
+// qu'un site vitrine public sera en place sur la racine du domaine.
+export const DOMAINE_CANONIQUE = `gestion.${APEX}`;
 
 export const ORIGINES_AUTORISEES = [
   `https://${DOMAINE_CANONIQUE}`,
+  // www/apex : ENCORE autorisés pendant la transition — l'app de gestion y
+  // répond toujours aujourd'hui, tant que le site vitrine n'est pas déployé
+  // et le DNS pas repointé. À retirer explicitement une fois la bascule
+  // confirmée (voir docs/coordination/ pour le suivi de cette migration),
+  // pas avant : les retirer prématurément casserait l'accès réel de
+  // l'équipe à l'app pendant la période de transition.
+  `https://www.${APEX}`,
   `https://${APEX}`,
   // Ancienne URL Render conservée accessible (liens déjà partagés, favoris).
   "https://boulangerie-lomoto.onrender.com",
