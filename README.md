@@ -64,7 +64,7 @@ npm test
 npm run build
 ```
 
-La suite automatisée couvre les règles partagées, les routes API critiques, l’authentification, les permissions, l’idempotence, les frontières de journée Kinshasa, les composants React/DOM, ainsi que le bootstrap de production (non-destructif et atomique) et la garde du seed de démonstration (correctif P0-01). Dernière validation : **582 tests sur 582**, plus une vérification d'intégration dédiée contre une vraie base PostgreSQL en CI, audit sans vulnérabilité, migrations PostgreSQL, génération Prisma et compilation API/web réussis.
+La suite automatisée couvre les règles partagées, les routes API critiques, l’authentification, les permissions, l’idempotence, les frontières de journée Kinshasa, les composants React/DOM, ainsi que le bootstrap de production (non-destructif et atomique) et la garde du seed de démonstration (correctif P0-01). Dernière validation : **896 tests sur 896** (90 fichiers), plus une vérification d'intégration dédiée contre une vraie base PostgreSQL en CI, audit sans vulnérabilité, migrations PostgreSQL, génération Prisma et compilation API/web réussis.
 
 ## Comptes de démonstration
 
@@ -81,7 +81,10 @@ La suite automatisée couvre les règles partagées, les routes API critiques, l
 > voir DEPLOIEMENT.md § « Se connecter » pour l'assainissement manuel dans ce
 > cas.
 
-Mot de passe commun (dev uniquement) : `Lomoto2026!`
+Mot de passe commun (dev uniquement) : `Lomoto2026!` — figé volontairement pour la
+commodité de l'équipe en local ; il n'a jamais aucun effet en production (garde
+ci-dessus) et figure déjà en clair dans `prisma/seed-demo.ts`, sur ce même dépôt
+**privé** : sa présence ici n'ouvre donc aucune exposition supplémentaire.
 
 | Rôle | E-mail | Écriture | Lecture seule supplémentaire |
 |---|---|---|---|
@@ -104,6 +107,6 @@ Le rôle Administrateur peut avoir jusqu'à 3 comptes (1 principal + 2 secondair
 - **Commandes & avances** (section 3.4 de la spec) : à l'enregistrement, `brut = bacs × prix de la Qualité`, l'avance du client est déduite en premier (`montantAPercevoir = brut − avanceUtilisee`), puis `dette = max(0, àPercevoir − reçu)` et `avanceGeneree = max(0, reçu − àPercevoir)` ; le solde d'avance est porté par le **client** et se reporte d'une commande à l'autre. Calcul dans `calculerCommande()` (`@lomoto/shared`), partagé entre l'API (transaction Serializable) et l'aperçu du formulaire. Seul le Chargé des commandes enregistre (matrice stricte) ; Caissière et DG consultent.
 - **Commissions** (section 3.11) : vue dérivée des commandes dont la Qualité a `commissionParBac > 0` (les « Mamans »). `Montant total payé = brut si dette = 0, sinon montant reçu` ; `commission = bacs × 1 650 Fc`. Lecture seule Caissière + DG + Chargé des commandes.
 - **Règlement de dette** : `POST /api/commandes/:id/reglements` (écriture Commandes) — le montant s'ajoute au montant reçu, dette/avance recalculées via `calculerCommande()`, journal dans `PaiementCommande`, notification temps réel `REGLEMENT_COMMANDE`. Un trop-versé devient une avance du client.
-- **Caisse** (section 3.1) : `POST /api/caisse/ventes` (écriture Caisse) — prix et taux de taxe lus en base, jamais depuis le client ; pain exonéré (`tauxTaxe = 0`). `POST /api/caisse/cloture` fige les ventes ouvertes avec totaux par moyen de paiement.
-- **Alerte transaction inhabituelle** (section 3.10) : toute vente ou tout règlement dépassant le seuil (`ParametreBoutique.seuil_alerte_transaction`, 100 000 Fc par défaut, modifiable en base) déclenche une notification `TRANSACTION_INHABITUELLE` **priorité HAUTE**, dédiée au DG, visuellement distincte dans le feed.
-- **Menu** : tous les modules sont listés pour tous les rôles ; ceux hors permission ou pas encore construits apparaissent grisés/non cliquables (règle d'interface, spec section 2).
+- **Caisse — registre journalier** (section 3.1, refonte — plus de vente au comptoir, tout passe par les commandes) : `PUT /api/caisse/taux` (taux du jour), `POST /api/caisse/depenses` (dépense libre) et `PUT /api/caisse/depenses/farine` (dépense farine auto-calculée depuis les sacs utilisés en Production). `GET /api/caisse/registre` calcule Entrées/Dettes payées/Dépenses/Solde côté serveur, jamais depuis le client.
+- **Session de caisse & clôture** (section 3.1 pt 4-5) : une session par date (`POST /api/caisse/sessions`), discipline chronologique (pas de session tant que la précédente reste ouverte). `POST /api/caisse/sessions/:id/cloturer` fige le registre du jour, écart compté/théorique calculé côté serveur. Un règlement déclaré depuis Commandes (`PaiementCommande` statut `declare`) ne réduit la dette qu'après confirmation via une remise contradictoire (`POST /api/caisse/sessions/:id/confirmer-reglements`).
+- **Menu** : tous les modules sont listés pour tous les rôles ; ceux hors permission du rôle connecté apparaissent grisés/non cliquables (règle d'interface, spec section 2).
