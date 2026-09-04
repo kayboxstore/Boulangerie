@@ -8,16 +8,20 @@ import {
   NIVEAUX_ACCES,
   NIVEAU_ACCES_LABELS,
   ROLE_ADMINISTRATEUR,
+  SEXES,
+  SEXE_LABELS,
   type CompteDTO,
   type DelegationDTO,
   type Module,
   type NiveauAcces,
   type PermissionDTO,
   type ResultatActionCritique,
+  type Sexe,
   type TravailleurDTO,
 } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { redimensionnerImageAvatar } from "@/lib/image";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -101,6 +105,8 @@ export function EquipePage() {
   const [travailleurId, setTravailleurId] = useState("");
   const [roleId, setRoleId] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
+  const [sexe, setSexe] = useState<Sexe | "">("");
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
 
   function ouvrirCompte(c: CompteDTO | null) {
@@ -109,8 +115,21 @@ export function EquipePage() {
     setTravailleurId("");
     setRoleId(c?.role.id ?? "");
     setMotDePasse("");
+    setSexe(c?.sexe ?? "");
+    setPhotoUrl(c?.photoUrl ?? null);
     setErreur(null);
     setDialogCompte(true);
+  }
+
+  async function surChoixPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const fichier = e.target.files?.[0];
+    e.target.value = "";
+    if (!fichier) return;
+    try {
+      setPhotoUrl(await redimensionnerImageAvatar(fichier));
+    } catch {
+      setErreur(t("equipe.photoError"));
+    }
   }
 
   const sauverCompte = useMutation({
@@ -118,11 +137,11 @@ export function EquipePage() {
       compteEdite
         ? api(`/api/equipe/${compteEdite.id}`, {
             method: "PUT",
-            body: JSON.stringify({ nom: nom.trim(), roleId }),
+            body: JSON.stringify({ nom: nom.trim(), roleId, sexe: sexe || null, photoUrl }),
           })
         : api("/api/equipe", {
             method: "POST",
-            body: JSON.stringify({ travailleurId, roleId, motDePasse }),
+            body: JSON.stringify({ travailleurId, roleId, motDePasse, sexe: sexe || null, photoUrl }),
           }),
     onSuccess: (res) => {
       setDialogCompte(false);
@@ -723,6 +742,33 @@ export function EquipePage() {
                   />
                 </div>
               )}
+              <div className="space-y-1.5">
+                <Label htmlFor="compte-sexe">{t("equipe.sexe")}</Label>
+                <NativeSelect id="compte-sexe" value={sexe} onChange={(e) => setSexe(e.target.value as Sexe | "")}>
+                  <option value="">{t("equipe.sexeUnspecified")}</option>
+                  {SEXES.map((s) => (
+                    <option key={s} value={s}>
+                      {SEXE_LABELS[s]}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="compte-photo">{t("equipe.photo")}</Label>
+                <div className="flex items-center gap-3">
+                  {photoUrl ? (
+                    <img src={photoUrl} alt="" className="h-12 w-12 rounded-full object-cover ring-1 ring-border" />
+                  ) : (
+                    <div className="h-12 w-12 rounded-full bg-secondary" aria-hidden />
+                  )}
+                  <Input id="compte-photo" type="file" accept="image/*" onChange={surChoixPhoto} className="max-w-xs" />
+                  {photoUrl && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setPhotoUrl(null)}>
+                      {t("common.delete")}
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
             {erreur && (
               <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">

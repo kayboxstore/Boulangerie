@@ -136,6 +136,9 @@ export interface UtilisateurDTO {
   // Langue d'interface préférée (section 3.9) ; null = suivre la langue par
   // défaut de la boutique. `Langue` est défini plus bas dans ce fichier.
   languePreferee: Langue | null;
+  // Photo de profil (V2) — Data URI base64, ou null si non définie. Affichée
+  // dans l'en-tête (avatar déclenchant le menu Mon profil / Mode / Déconnexion).
+  photoUrl: string | null;
 }
 
 export interface ProduitDTO {
@@ -1170,6 +1173,26 @@ export const MAX_COMPTES_ADMIN = 3;
 export const ROLE_ADMINISTRATEUR = "Administrateur";
 export const ROLE_DIRECTEUR_GENERAL = "Directeur Général";
 
+// Sexe (V2) — champ optionnel de la fiche compte.
+export const SEXES = ["HOMME", "FEMME"] as const;
+export type Sexe = (typeof SEXES)[number];
+export const SEXE_LABELS: Record<Sexe, string> = {
+  HOMME: "Homme",
+  FEMME: "Femme",
+};
+
+// Photo de profil (V2) — Data URI base64, redimensionnée côté client avant
+// l'envoi (voir apps/web/src/lib/image.ts) : la limite ici est une bavure de
+// sécurité généreuse (~375 Ko de binaire une fois décodé), pas la taille
+// réellement attendue (un avatar 256×256 compressé pèse quelques dizaines de
+// Ko). Cohérente avec la limite globale du corps JSON (5 Mo, app.ts).
+const photoUrlSchema = z
+  .string()
+  .max(500_000, "Photo trop volumineuse")
+  .regex(/^data:image\/(png|jpeg|jpg|webp);base64,/, "Format de photo invalide")
+  .nullable()
+  .optional();
+
 // Identifiant de connexion issu de Travailleurs (section 3.7, nouveau) : créer
 // un compte ne se fait plus en saisissant un email librement — on sélectionne
 // une fiche Travailleur dont l'email professionnel est actif (3.18). L'email
@@ -1180,6 +1203,9 @@ export const compteCreateSchema = z.object({
   // Mot de passe initial défini par l'Admin, changé ensuite par l'employé
   // depuis « Mon profil ».
   motDePasse: z.string().min(8, "Le mot de passe initial doit faire au moins 8 caractères").max(100),
+  // Sexe et photo (V2) — facultatifs, définissables dès la création du compte.
+  sexe: z.enum(SEXES).nullable().optional(),
+  photoUrl: photoUrlSchema,
 });
 export type CompteCreateInput = z.infer<typeof compteCreateSchema>;
 
@@ -1188,6 +1214,8 @@ export type CompteCreateInput = z.infer<typeof compteCreateSchema>;
 export const compteUpdateSchema = z.object({
   nom: z.string().trim().min(1, "Le nom est requis").max(120).optional(),
   roleId: z.string().min(1).optional(),
+  sexe: z.enum(SEXES).nullable().optional(),
+  photoUrl: photoUrlSchema,
 });
 export type CompteUpdateInput = z.infer<typeof compteUpdateSchema>;
 
@@ -1258,6 +1286,8 @@ export interface CompteDTO {
   motDePasseDoitChanger?: boolean;
   role: { id: string; nom: string };
   dateCreation: string;
+  sexe: Sexe | null;
+  photoUrl: string | null;
 }
 
 // ---------------------------------------------------------------------------

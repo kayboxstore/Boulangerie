@@ -36,6 +36,7 @@ import { dateISOKinshasa, dateISOKinshasaLendemain } from "@/lib/dateKinshasa";
 import { formaterDateFr } from "@/components/ui/dateHeureFr";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { ZonesDepositaireCard } from "@/components/ZonesDepositaireCard";
+import { ProduitsCard } from "@/components/ProduitsCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -470,6 +471,9 @@ export function ProductionPage() {
           </ul>
         </div>
       )}
+
+      {/* --- Catalogue produits (V2, fusionné depuis l'ancienne page /produits) --- */}
+      <ProduitsCard />
 
       {/* --- d) Zones de dépôt --- */}
       <ZonesDepositaireCard editable={peutEcrire("COMMANDES") || peutEcrire("PRODUCTION")} />

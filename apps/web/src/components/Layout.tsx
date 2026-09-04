@@ -2,40 +2,33 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Bell,
-  CircleUserRound,
   ClipboardCheck,
   Factory,
   HandCoins,
   History,
   Info,
   LayoutDashboard,
-  LogOut,
   Menu,
   MessageCircle,
-  Moon,
   Package,
   ScrollText,
   ServerCog,
   Settings,
   ShoppingBasket,
   ShoppingCart,
-  Sun,
   Truck,
   UserCog,
   Users,
-  Wheat,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { TAGLINE, type AlerteAbsenceDTO, type AlerteDetteDTO, type Module } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useTheme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { IndicateurConnexion } from "@/components/IndicateurConnexion";
 import { ChargementModule } from "@/components/ChargementModule";
-import { HorlogeFlip } from "@/components/HorlogeFlip";
+import { MenuProfil } from "@/components/MenuProfil";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 // La cloche de notifications tire framer-motion : chargée en lazy pour garder
@@ -52,29 +45,19 @@ function ClocheStatique() {
 }
 import { cn } from "@/lib/utils";
 
-/** Bascule clair/sombre (section 3.8) — préférence de l'appareil (localStorage), pas du compte. */
-function BasculeTheme() {
-  const { sombre, basculer } = useTheme();
-  const { t } = useTranslation();
-  const label = t(sombre ? "nav.enableLightMode" : "nav.enableDarkMode");
-  return (
-    <Button variant="ghost" size="icon" onClick={basculer} aria-label={label} title={label}>
-      {sombre ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-    </Button>
-  );
-}
-
 // Règle d'interface (spec section 2) : TOUS les modules apparaissent dans le
 // menu pour tout le monde ; ceux hors du périmètre du rôle connecté (ou pas
 // encore construits) restent visibles mais grisés/non cliquables.
 interface EntreeNav {
   labelKey: string; // clé i18n (nav.*)
   icon: typeof LayoutDashboard;
-  module?: Module; // absent = accessible à tous (Tableau de bord, catalogue Produits)
+  module?: Module; // absent = accessible à tous (Tableau de bord, Rapports personnels…)
   to?: string; // absent = module pas encore construit ("à venir")
   ecriture?: boolean; // exige l'ÉCRITURE sur le module (réservé Admin), pas la simple lecture
 }
 
+// Produits (catalogue) n'a plus d'entrée de menu propre depuis la V2 : fusionné
+// dans Production (ProduitsCard), visible aux mêmes rôles — voir Production.tsx.
 const navigation: EntreeNav[] = [
   { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard },
   { to: "/caisse", labelKey: "nav.caisse", icon: ShoppingCart, module: "CAISSE" },
@@ -83,7 +66,6 @@ const navigation: EntreeNav[] = [
   { to: "/stocks", labelKey: "nav.stocks", icon: Package, module: "STOCKS" },
   { to: "/production", labelKey: "nav.production", icon: Factory, module: "PRODUCTION" },
   { to: "/fournisseurs", labelKey: "nav.fournisseurs", icon: Truck, module: "FOURNISSEURS" },
-  { to: "/produits", labelKey: "nav.produits", icon: Wheat },
   { to: "/equipe", labelKey: "nav.equipe", icon: UserCog, module: "EQUIPE" },
   // Approbations (3.16) & État système (3.15) : réservés aux Admins (écriture Équipe).
   { to: "/approbations", labelKey: "nav.approbations", icon: ClipboardCheck, module: "EQUIPE", ecriture: true },
@@ -163,7 +145,7 @@ function ListeNavigation({ liens, t }: { liens: LienNavigation[]; t: (cle: strin
 }
 
 export function Layout() {
-  const { utilisateur, logout, peutLire, peutEcrire } = useAuth();
+  const { peutLire, peutEcrire } = useAuth();
   const location = useLocation();
   const [menuOuvert, setMenuOuvert] = useState(false);
 
@@ -196,9 +178,15 @@ export function Layout() {
   const liens = calculerLiens(peutLire, peutEcrire, t);
 
   return (
-    <div className="flex min-h-screen bg-background print:bg-white">
-      {/* Barre latérale — marine, logo et navigation */}
-      <aside className="hidden w-64 flex-col bg-marine text-creme md:flex">
+    // h-screen + overflow-hidden : la coquille (barre latérale, en-têtes)
+    // reste toujours visible, seul <main> défile — plus besoin de remonter en
+    // haut de la page pour retrouver la navigation. print:* revient à un flux
+    // normal (hauteur libre, pas de recadrage) : aside/header/nav sont de
+    // toute façon masqués à l'impression (voir index.css, @media print), seul
+    // le contenu de <main> doit s'étaler sur autant de pages que nécessaire.
+    <div className="flex h-screen overflow-hidden bg-background print:h-auto print:overflow-visible print:bg-white">
+      {/* Barre latérale — marine, logo et navigation, figée sur toute la hauteur */}
+      <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto bg-marine text-creme md:flex">
         <NavLink
           to="/"
           end
@@ -215,44 +203,20 @@ export function Layout() {
           </div>
         </NavLink>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 space-y-1 px-3 py-4">
           <ListeNavigation liens={liens} t={t} />
         </nav>
 
-        <div className="border-t border-creme/10 px-5 py-4">
-          <NavLink
-            to="/profil"
-            className={({ isActive }) =>
-              cn(
-                "-mx-2 block rounded-md px-2 py-1 transition-colors hover:bg-creme/5",
-                isActive && "bg-creme/5",
-              )
-            }
-            title={t("nav.myProfile")}
-          >
-            <p className="flex items-center gap-1.5 truncate text-sm font-medium">
-              <CircleUserRound className="h-4 w-4 shrink-0 text-creme/60" />
-              {utilisateur?.nom}
-            </p>
-            <Badge variant="gold" className="mt-1">{utilisateur?.role.nom}</Badge>
-          </NavLink>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={logout}
-            className="mt-3 w-full justify-start gap-2 text-creme/70 hover:bg-creme/5 hover:text-creme"
-          >
-            <LogOut className="h-4 w-4" />
-            {t("nav.logout")}
-          </Button>
+        <div className="border-t border-creme/10 px-3 py-4">
+          <MenuProfil avecDetails triggerClassName="w-full px-2 py-1.5" />
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">
         {/* En-tête mobile — la navigation elle-même vit dans le tiroir
             (Sheet) plutôt qu'en rangée horizontale : sur un petit écran, une
             quinzaine de modules ne tient de toute façon pas sur une ligne. */}
-        <header className="flex items-center justify-between bg-marine px-4 py-3 text-creme md:hidden">
+        <header className="flex shrink-0 items-center justify-between bg-marine px-4 py-3 text-creme md:hidden">
           <div className="flex items-center gap-1">
             <Sheet open={menuOuvert} onOpenChange={setMenuOuvert}>
               <SheetTrigger asChild>
@@ -265,7 +229,7 @@ export function Layout() {
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="p-0">
+              <SheetContent side="left" className="flex flex-col p-0">
                 <SheetTitle asChild>
                   <div className="border-b border-creme/10">
                     <NavLink
@@ -289,27 +253,8 @@ export function Layout() {
                 <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
                   <ListeNavigation liens={liens} t={t} />
                 </nav>
-                <div className="border-t border-creme/10 px-5 py-4">
-                  <NavLink
-                    to="/profil"
-                    className={({ isActive }) => cn("-mx-2 block rounded-md px-2 py-1 transition-colors hover:bg-creme/5", isActive && "bg-creme/5")}
-                    title={t("nav.myProfile")}
-                  >
-                    <p className="flex items-center gap-1.5 truncate text-sm font-medium">
-                      <CircleUserRound className="h-4 w-4 shrink-0 text-creme/60" />
-                      {utilisateur?.nom}
-                    </p>
-                    <Badge variant="gold" className="mt-1">{utilisateur?.role.nom}</Badge>
-                  </NavLink>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={logout}
-                    className="mt-3 w-full justify-start gap-2 text-creme/70 hover:bg-creme/5 hover:text-creme"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    {t("nav.logout")}
-                  </Button>
+                <div className="border-t border-creme/10 px-3 py-4">
+                  <MenuProfil avecDetails triggerClassName="w-full px-2 py-1.5" />
                 </div>
               </SheetContent>
             </Sheet>
@@ -319,25 +264,16 @@ export function Layout() {
             </NavLink>
           </div>
           <div className="flex items-center gap-1 [&_button]:text-creme/80 [&_button:hover]:bg-creme/10 [&_button:hover]:text-creme">
-            <HorlogeFlip className="mr-1 text-creme/70" />
-            <BasculeTheme />
             <Suspense fallback={<ClocheStatique />}>
               <NotificationBell />
             </Suspense>
-            <NavLink to="/profil" aria-label={t("nav.myProfile")} className="rounded-md p-2 text-creme/80 hover:bg-creme/10 hover:text-creme">
-              <CircleUserRound className="h-4 w-4" />
-            </NavLink>
-            <Button variant="ghost" size="icon" onClick={logout}>
-              <LogOut className="h-4 w-4" />
-            </Button>
+            <MenuProfil avatarClassName="h-8 w-8" />
           </div>
         </header>
 
-        {/* Barre supérieure (desktop) : statut temps réel + notifications */}
-        <div className="no-print hidden items-center justify-end gap-3 border-b bg-card px-6 py-2 md:flex">
-          <HorlogeFlip className="mr-auto text-muted-foreground" />
+        {/* Barre supérieure (desktop) : statut temps réel + notifications, figée en haut de la zone de contenu */}
+        <div className="no-print hidden shrink-0 items-center justify-end gap-3 border-b bg-card px-6 py-2 md:flex">
           <IndicateurConnexion etendu />
-          <BasculeTheme />
           <Suspense fallback={<ClocheStatique />}>
             <NotificationBell />
           </Suspense>
@@ -346,22 +282,27 @@ export function Layout() {
         {/* min-w-0 : sans lui, un enfant plus large que l'écran (tableau non
             enroulé, etc.) élargit ce conteneur flex au lieu de défiler dans
             son propre cadre — c'était la cause du débordement horizontal de
-            toute la page sur mobile, pas un problème propre à chaque écran. */}
+            toute la page sur mobile, pas un problème propre à chaque écran.
+            overflow-y-auto : seule zone qui défile désormais (voir la
+            coquille h-screen/overflow-hidden ci-dessus). */}
         {/* id ciblé par ConstellationLomoto (F3) pour rendre le focus à un
             emplacement logique après la fermeture de la célébration. */}
-        <main id="contenu-principal" className="min-w-0 flex-1 p-4 md:p-8">
+        <main
+          id="contenu-principal"
+          className="min-w-0 flex-1 overflow-y-auto p-4 md:p-8 print:overflow-visible"
+        >
           {/* Chaque module est chargé à la demande (React.lazy) ; la navigation
               reste affichée, seul le contenu montre le fallback de marque. */}
           <Suspense fallback={<ChargementModule />}>
             <Outlet />
           </Suspense>
-        </main>
 
-        {/* À l'impression, c'est le pied de page dédié ci-dessous qui porte la
-            marque — inutile de doubler la mention ici. */}
-        <footer className="no-print px-4 pb-4 text-center text-xs text-muted-foreground">
-          Boulangerie Lomoto — <span className="italic">Pain Lia o Tonda</span>
-        </footer>
+          {/* À l'impression, c'est le pied de page dédié ci-dessous qui porte la
+              marque — inutile de doubler la mention ici. */}
+          <footer className="no-print px-1 pb-1 pt-6 text-center text-xs text-muted-foreground">
+            Boulangerie Lomoto — <span className="italic">Pain Lia o Tonda</span>
+          </footer>
+        </main>
 
         {/* Pied de page des documents imprimés (section 3.13) : rendu ici, au
             niveau de la coquille, pour ne dépendre d'aucun écran — et donc ne

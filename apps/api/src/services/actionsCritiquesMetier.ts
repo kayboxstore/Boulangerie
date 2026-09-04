@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import type { Sexe } from "@lomoto/shared";
 import type { prisma as prismaApp, TxClient } from "../lib/prisma.js";
 import { contexteRequete } from "../lib/contexteRequete.js";
 import { ErreurAction } from "../lib/erreurAction.js";
@@ -262,6 +263,8 @@ export interface DonneesCreerCompteAdmin {
   roleId: string;
   motDePasseHash: string;
   travailleurId?: string | null;
+  sexe?: Sexe | null;
+  photoUrl?: string | null;
 }
 
 export interface RattachementTravailleurAttendu {
@@ -341,7 +344,7 @@ export async function rattacherTravailleurAuNouveauCompteTx(
 }
 
 export async function creerCompteAdminTx(tx: TxClient, donnees: DonneesCreerCompteAdmin): Promise<{ message: string }> {
-  const { nom, email, roleId, motDePasseHash, travailleurId } = donnees;
+  const { nom, email, roleId, motDePasseHash, travailleurId, sexe, photoUrl } = donnees;
 
   const existant = await tx.utilisateur.findUnique({ where: { email } });
   if (existant) throw new ErreurAction(409, "Un compte utilise déjà cette adresse e-mail");
@@ -372,7 +375,7 @@ export async function creerCompteAdminTx(tx: TxClient, donnees: DonneesCreerComp
   // `lib/audit.ts`) — comportement inchangé : aucune ligne AuditLog pour la
   // création elle-même.
   const compte = await tx.utilisateur.create({
-    data: { nom, email, roleId, motDePasseHash, motDePasseDoitChanger: true },
+    data: { nom, email, roleId, motDePasseHash, motDePasseDoitChanger: true, sexe: sexe ?? null, photoUrl: photoUrl ?? null },
   });
 
   // Identifiant de connexion issu de Travailleurs (section 3.7) : la fiche

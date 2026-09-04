@@ -75,6 +75,7 @@ export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | n
       permissions: [...niveaux.entries()].map(([module, niveauAcces]) => ({ module, niveauAcces })),
     },
     languePreferee,
+    photoUrl: u.photoUrl,
   };
 }
 

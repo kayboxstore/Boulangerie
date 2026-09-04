@@ -16,6 +16,7 @@ const utilisateurBase: UtilisateurDTO = {
   estAdminPrincipal: false,
   role: { id: "r1", nom: "Production", roleParentId: null, permissions: [] },
   languePreferee: null,
+  photoUrl: null,
 };
 
 let utilisateurMock: UtilisateurDTO | null = null;

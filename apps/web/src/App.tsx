@@ -36,7 +36,6 @@ const ChangementMotDePasseObligatoirePage = lazy(() =>
 
 // `.then(...)` : les pages exportent des composants nommés, pas un export default.
 const DashboardPage = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.DashboardPage })));
-const ProduitsPage = lazy(() => import("@/pages/Produits").then((m) => ({ default: m.ProduitsPage })));
 const CommandesPage = lazy(() => import("@/pages/Commandes").then((m) => ({ default: m.CommandesPage })));
 // Sous-module de Commandes (3.4) : fiche client, écran à part pour ne pas encombrer /commandes.
 const ClientsPage = lazy(() => import("@/pages/Clients").then((m) => ({ default: m.ClientsPage })));
@@ -164,7 +163,9 @@ function AppAuthentifiee() {
       <Routes>
         <Route element={<Layout />}>
         <Route path="/" element={<DashboardPage />} />
-        <Route path="/produits" element={<ProduitsPage />} />
+        {/* Produits (V2) : fusionné dans Production (ProduitsCard) — l'ancienne
+            route reste redirigée pour ne pas casser les liens déjà partagés. */}
+        <Route path="/produits" element={<Navigate to="/production" replace />} />
         <Route
           path="/caisse"
           element={

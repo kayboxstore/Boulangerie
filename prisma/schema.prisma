@@ -28,6 +28,12 @@ enum NiveauAcces {
   ECRITURE
 }
 
+// Sexe de l'utilisateur (V2) — champ optionnel de la fiche compte.
+enum Sexe {
+  HOMME
+  FEMME
+}
+
 enum PrioriteNotification {
   NORMALE
   HAUTE
@@ -156,6 +162,14 @@ model Utilisateur {
   // langue par défaut de la boutique (ParametreBoutique). Choisie par l'employé
   // dans « Mon profil ».
   languePreferee              String?
+  // Sexe (V2) — optionnel, saisi par l'Admin à la création du compte,
+  // modifiable ensuite comme le reste de la fiche.
+  sexe                        Sexe?
+  // Photo de profil (V2) — Data URI base64 stockée directement en base, même
+  // choix délibéré que les captures d'écran de l'Assistant (3.19) : pas
+  // d'objet de stockage externe à mettre en place pour une petite image
+  // d'avatar déjà redimensionnée côté client avant l'envoi.
+  photoUrl                    String?
   createdAt                   DateTime                          @default(now())
   updatedAt                   DateTime                          @updatedAt
   notifications               Notification[]                    @relation("NotificationsRecues")

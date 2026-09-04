@@ -39,6 +39,8 @@ const COMPTE_FIXTURE: CompteDTO = {
   estAdminPrincipal: true,
   role: { id: "role-admin", nom: "Administrateur" },
   dateCreation: "2026-01-01T00:00:00.000Z",
+  sexe: null,
+  photoUrl: null,
 };
 
 function roleCommandesFixture() {

@@ -1,8 +1,7 @@
 /**
- * Logique pure de date dans le fuseau opérationnel Africa/Kinshasa — même
- * principe que `components/horlogeLogique.ts` (`decomposerHeureKinshasa`),
- * appliqué ici à la journée calendaire plutôt qu'à l'heure. N'importe rien :
- * utilisable tel quel depuis n'importe quelle page.
+ * Logique pure de date dans le fuseau opérationnel Africa/Kinshasa —
+ * appliquée à la journée calendaire. N'importe rien : utilisable tel quel
+ * depuis n'importe quelle page.
  *
  * Corrige (F4 round 2, revue Codex) : les dates par défaut de Production.tsx
  * et BonsLivraison.tsx (`jourISO`/`demain`) utilisaient `toISOString()`, qui

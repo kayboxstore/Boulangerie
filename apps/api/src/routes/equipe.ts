@@ -42,6 +42,8 @@ const versCompteDTO = (u: CompteAvecRole): CompteDTO => ({
   motDePasseDoitChanger: u.motDePasseDoitChanger,
   role: u.role,
   dateCreation: u.createdAt.toISOString(),
+  sexe: u.sexe,
+  photoUrl: u.photoUrl,
 });
 
 /**
@@ -84,7 +86,7 @@ equipeRouter.post("/", requirePermission("EQUIPE", "ECRITURE"), async (req, res,
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const { travailleurId, roleId, motDePasse } = parsed.data;
+    const { travailleurId, roleId, motDePasse, sexe, photoUrl } = parsed.data;
 
     const travailleur = await prisma.travailleur.findUnique({ where: { id: travailleurId } });
     if (!travailleur) return res.status(404).json({ erreur: "Fiche Travailleur introuvable" });
@@ -114,7 +116,7 @@ equipeRouter.post("/", requirePermission("EQUIPE", "ECRITURE"), async (req, res,
       const r = await traiterActionCritique(
         req,
         "CREER_COMPTE_ADMIN",
-        { nom, email, roleId, motDePasseHash, travailleurId: travailleur.id },
+        { nom, email, roleId, motDePasseHash, travailleurId: travailleur.id, sexe, photoUrl },
         `créer le compte Administrateur « ${nom} » (${email})`,
       );
       return res.status(r.http).json(r.body);
@@ -130,7 +132,10 @@ equipeRouter.post("/", requirePermission("EQUIPE", "ECRITURE"), async (req, res,
     // entre les pré-vérifications ci-dessus et cette transaction).
     try {
       const compte = await prisma.$transaction(async (tx) => {
-        const c = await tx.utilisateur.create({ data: { nom, email, roleId, motDePasseHash, motDePasseDoitChanger: true }, include: INCLUDE_COMPTE });
+        const c = await tx.utilisateur.create({
+          data: { nom, email, roleId, motDePasseHash, motDePasseDoitChanger: true, sexe: sexe ?? null, photoUrl: photoUrl ?? null },
+          include: INCLUDE_COMPTE,
+        });
         await rattacherTravailleurAuNouveauCompteTx(tx, { travailleurId: travailleur.id, compteId: c.id, emailAttendu: email });
         return c;
       });
@@ -255,12 +260,12 @@ equipeRouter.put("/:id/activation", requirePermission("EQUIPE", "ECRITURE"), asy
   }
 });
 
-// Réaffectation d'équipe (section 3.7, nouveau) : changer le rôle d'un compte
-// existant se fait ici. L'identifiant de connexion (email pro) ne change
-// jamais — compteUpdateSchema n'accepte plus que nom/roleId. Le titulaire
-// reçoit une notification temps réel dès que son équipe change ; la
-// modification est déjà tracée au Journal d'audit (extension Prisma centrale,
-// lib/audit.ts, branchée sur `update`).
+// Réaffectation d'équipe (section 3.7) + fiche (V2, sexe/photo) : changer le
+// rôle, le nom, le sexe ou la photo d'un compte existant se fait ici.
+// L'identifiant de connexion (email pro) ne change jamais — hors du périmètre
+// de compteUpdateSchema. Le titulaire reçoit une notification temps réel dès
+// que son équipe change ; la modification est déjà tracée au Journal d'audit
+// (extension Prisma centrale, lib/audit.ts, branchée sur `update`).
 equipeRouter.put("/:id", requirePermission("EQUIPE", "ECRITURE"), async (req, res, next) => {
   try {
     const parsed = compteUpdateSchema.safeParse(req.body);
@@ -270,7 +275,7 @@ equipeRouter.put("/:id", requirePermission("EQUIPE", "ECRITURE"), async (req, re
     const existant = await prisma.utilisateur.findUnique({ where: { id: req.params.id }, include: INCLUDE_COMPTE });
     if (!existant) return res.status(404).json({ erreur: "Compte introuvable" });
 
-    const { nom, roleId } = parsed.data;
+    const { nom, roleId, sexe, photoUrl } = parsed.data;
     const equipeChangee = !!roleId && roleId !== existant.roleId;
 
     if (equipeChangee) {
@@ -287,7 +292,7 @@ equipeRouter.put("/:id", requirePermission("EQUIPE", "ECRITURE"), async (req, re
 
     const compte = await prisma.utilisateur.update({
       where: { id: existant.id },
-      data: { nom, roleId },
+      data: { nom, roleId, sexe, photoUrl },
       include: INCLUDE_COMPTE,
     });
 

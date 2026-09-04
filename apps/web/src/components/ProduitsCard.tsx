@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, Wheat } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatFc, type ProduitDTO } from "@lomoto/shared";
 import { api } from "@/lib/api";
@@ -28,7 +28,14 @@ interface FormulaireProduit {
 
 const FORMULAIRE_VIDE: FormulaireProduit = { nom: "", prixVente: "", categorie: "Pain" };
 
-export function ProduitsPage() {
+/**
+ * Catalogue des produits (V2) — rattaché au module Production (visible aux
+ * mêmes rôles que le reste de cette page) : les deux sujets sont ce qu'un
+ * responsable de production manipule ensemble au quotidien. L'édition reste
+ * réservée à Paramètres (`peutEcrire("PARAMETRES")`), inchangé depuis
+ * l'ancienne page dédiée `/produits`.
+ */
+export function ProduitsCard() {
   const { peutEcrire } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -99,26 +106,22 @@ export function ProduitsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("produits.title")}</h1>
-          <p className="mt-1 text-muted-foreground">{t("produits.subtitle")}</p>
-        </div>
-        {editable && (
-          <Button variant="cta" onClick={ouvrirCreation}>
-            <Plus className="h-4 w-4" />
-            {t("produits.newProduct")}
-          </Button>
-        )}
-      </div>
-
+    <>
       <Card>
-        <CardHeader>
-          <CardTitle>{t("produits.cardTitle")}</CardTitle>
-          <CardDescription>
-            {editable ? t("produits.descManage") : t("produits.descView")}
-          </CardDescription>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Wheat className="h-5 w-5 text-or" />
+              {t("produits.cardTitle")}
+            </CardTitle>
+            <CardDescription>{editable ? t("produits.descManage") : t("produits.descView")}</CardDescription>
+          </div>
+          {editable && (
+            <Button variant="cta" onClick={ouvrirCreation}>
+              <Plus className="h-4 w-4" />
+              {t("produits.newProduct")}
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {isLoading && <p className="py-8 text-center text-muted-foreground">{t("common.loading")}</p>}
@@ -193,9 +196,9 @@ export function ProduitsPage() {
           </DialogHeader>
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="nom">{t("common.name")}</Label>
+              <Label htmlFor="produit-nom">{t("common.name")}</Label>
               <Input
-                id="nom"
+                id="produit-nom"
                 value={formulaire.nom}
                 onChange={(e) => setFormulaire({ ...formulaire, nom: e.target.value })}
                 placeholder="Ex. : Baguette"
@@ -204,9 +207,9 @@ export function ProduitsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="prixVente">{t("produits.fieldPrice")}</Label>
+                <Label htmlFor="produit-prixVente">{t("produits.fieldPrice")}</Label>
                 <Input
-                  id="prixVente"
+                  id="produit-prixVente"
                   type="number"
                   min={0}
                   step={1}
@@ -217,9 +220,9 @@ export function ProduitsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="categorie">{t("produits.fieldCategory")}</Label>
+                <Label htmlFor="produit-categorie">{t("produits.fieldCategory")}</Label>
                 <Input
-                  id="categorie"
+                  id="produit-categorie"
                   value={formulaire.categorie}
                   onChange={(e) => setFormulaire({ ...formulaire, categorie: e.target.value })}
                   placeholder="Pain"
@@ -267,6 +270,6 @@ export function ProduitsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

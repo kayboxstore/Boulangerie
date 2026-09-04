@@ -263,7 +263,7 @@ export function ParametresPage() {
         </CardContent>
       </Card>
 
-      {/* Renvoi vers le catalogue Produits (édité sur sa propre page) */}
+      {/* Renvoi vers le catalogue Produits (V2 : fusionné dans Production) */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -274,7 +274,7 @@ export function ParametresPage() {
         </CardHeader>
         <CardContent>
           <Button asChild variant="outline">
-            <Link to="/produits">
+            <Link to="/production">
               <Wheat className="h-4 w-4" />
               {t("parametres.openCatalog")}
             </Link>
