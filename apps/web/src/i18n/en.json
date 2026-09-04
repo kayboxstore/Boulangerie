@@ -262,6 +262,17 @@
     "deactivate": "Deactivate {{nom}}",
     "activate": "Reactivate {{nom}}"
   },
+  "roles": {
+    "title": "Roles & permissions",
+    "subtitle": "{{count}} role(s) — the permission matrix determines the access of each attached account.",
+    "parentHeader": "Attached to",
+    "editPermissions": "Edit permissions",
+    "empty": "No roles.",
+    "permissionsDialogTitle": "Permissions — {{nom}}",
+    "permissionsDialogHelp": "One module per row. Saving replaces the entire permission matrix for this role.",
+    "permissionsSaved": "Permissions for role \"{{nom}}\" updated.",
+    "permissionsError": "Could not save the permissions. Please try again shortly."
+  },
   "premierLancement": {
     "title": "Welcome",
     "subtitle": "No account exists yet — let's set up the Principal Administrator.",

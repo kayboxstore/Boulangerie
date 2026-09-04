@@ -262,6 +262,17 @@
     "deactivate": "Désactiver {{nom}}",
     "activate": "Réactiver {{nom}}"
   },
+  "roles": {
+    "title": "Rôles & permissions",
+    "subtitle": "{{count}} rôle(s) — la matrice de permissions détermine l'accès de chaque compte rattaché.",
+    "parentHeader": "Rattaché à",
+    "editPermissions": "Modifier les permissions",
+    "empty": "Aucun rôle.",
+    "permissionsDialogTitle": "Permissions — {{nom}}",
+    "permissionsDialogHelp": "Un module par ligne. La sauvegarde remplace l'intégralité de la matrice de ce rôle.",
+    "permissionsSaved": "Permissions du rôle « {{nom}} » mises à jour.",
+    "permissionsError": "Impossible d'enregistrer les permissions. Réessayez dans un instant."
+  },
   "premierLancement": {
     "title": "Bienvenue",
     "subtitle": "Aucun compte n'existe encore — configurons l'Administrateur principal.",

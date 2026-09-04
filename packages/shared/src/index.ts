@@ -77,6 +77,12 @@ export const MODULE_LABELS: Record<Module, string> = {
 export const NIVEAUX_ACCES = ["AUCUN", "LECTURE", "ECRITURE"] as const;
 export type NiveauAcces = (typeof NIVEAUX_ACCES)[number];
 
+export const NIVEAU_ACCES_LABELS: Record<NiveauAcces, string> = {
+  AUCUN: "Aucun accès",
+  LECTURE: "Lecture seule",
+  ECRITURE: "Lecture + écriture",
+};
+
 // ---------------------------------------------------------------------------
 // Schémas de validation (Zod) partagés front/back
 // ---------------------------------------------------------------------------
