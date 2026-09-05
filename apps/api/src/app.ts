@@ -68,6 +68,39 @@ export function createApp() {
   // retirée avec ce changement.
 
   app.use(helmet());
+
+  const reponseLimitee = (_req: express.Request, res: express.Response) =>
+    res.status(429).json({
+      erreur: "Trop de tentatives. Patientez quelques minutes avant de réessayer.",
+      code: "TROP_DE_REQUETES",
+      idRequete: res.locals.idRequete,
+    });
+
+  // /api/public/* : traité et TERMINÉ ici, avant le CORS strict global
+  // ci-dessous — bug réel trouvé via les logs Render (idRequete
+  // 536a13c1...) : Express exécute les middlewares dans l'ordre
+  // d'enregistrement, et un `cors()` qui rejette appelle son callback avec
+  // une erreur, ce qui court-circuite la requête AVANT qu'un `cors()` plus
+  // permissif enregistré plus tard n'ait la moindre chance de s'exécuter.
+  // Le premier essai (CORS permissif pour /api/public enregistré APRÈS le
+  // CORS strict global, plus bas dans ce fichier) semblait raisonnable —
+  // "le dernier cors() l'emporte" — mais c'est faux dès qu'un des deux
+  // rejette plutôt que de simplement poser des en-têtes : express.json()
+  // n'étant pas encore monté globalement à ce stade, ce bloc a son propre
+  // analyseur JSON, seulement pour ce chemin.
+  app.use("/api/public", cors(), express.json({ limit: "1mb" }));
+  app.use(
+    "/api/public/demandes-commande",
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 10,
+      standardHeaders: "draft-8",
+      legacyHeaders: false,
+      handler: reponseLimitee,
+    }),
+    demandesCommandePubliquesPubliqueRouter,
+  );
+
   app.use(cors({ origin: verifierOrigine, credentials: true }));
   // 5 Mo plutôt que le défaut 100 Ko : l'Assistant (3.19) stocke les captures
   // d'écran en base64 directement dans le corps JSON (pas d'upload fichier).
@@ -92,13 +125,6 @@ export function createApp() {
   // lib/barriereEcriture.ts pour le détail du mécanisme et sa limite
   // mono-instance.
   app.use(gardeBarriereEcriture);
-
-  const reponseLimitee = (_req: express.Request, res: express.Response) =>
-    res.status(429).json({
-      erreur: "Trop de tentatives. Patientez quelques minutes avant de réessayer.",
-      code: "TROP_DE_REQUETES",
-      idRequete: res.locals.idRequete,
-    });
 
   // Les limites sont ciblées sur les routes publiques qui déclenchent le plus
   // de travail ou qui pourraient servir à une attaque par force brute. Les
@@ -152,27 +178,6 @@ export function createApp() {
   app.use("/api/type-clients", typeClientsRouter);
   app.use("/api/zones-depositaires", zonesDepositaireRouter);
   // /api/public/* : CORS dédié, plus permissif que le reste de l'API — ces
-  // routes sont FAITES pour être appelées depuis un autre domaine (le site
-  // vitrine, pas encore sur un nom de domaine figé pendant son
-  // développement). Jamais `credentials: true` ici (pas de cookie/session
-  // sur ces routes, et un navigateur refuse de toute façon cette combinaison
-  // avec une origine ouverte) — contrairement au CORS global juste au-dessus,
-  // qui reste strict et sert l'app de gestion authentifiée.
-  app.use("/api/public", cors());
-  // Chemin dédié /api/public/* : sépare visuellement, dans ce fichier, les
-  // routes PUBLIQUES (sans authentification) du reste — utile pour repérer
-  // d'un coup d'œil toute nouvelle route accidentellement non protégée.
-  app.use(
-    "/api/public/demandes-commande",
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      limit: 10,
-      standardHeaders: "draft-8",
-      legacyHeaders: false,
-      handler: reponseLimitee,
-    }),
-    demandesCommandePubliquesPubliqueRouter,
-  );
   app.use("/api/demandes-commande-publiques", demandesCommandePubliquesRouter);
   app.use("/api/commandes", commandesRouter);
   app.use("/api/commissions", commissionsRouter);

@@ -56,4 +56,45 @@ describe("sécurité HTTP de l’API", () => {
     expect(bloquee.body.code).toBe("TROP_DE_REQUETES");
     expect(bloquee.body.idRequete).toBe(bloquee.headers["x-request-id"]);
   });
+
+  // Non-régression d'un vrai bug de production (trouvé via les logs Render,
+  // idRequete 536a13c1...) : le CORS permissif de /api/public était enregistré
+  // APRÈS le CORS strict global — ce dernier rejetait la requête (il appelle
+  // son callback avec une erreur, ce qui court-circuite Express) avant que le
+  // permissif n'ait la moindre chance de s'exécuter. Un test qui appelle
+  // seulement demandesCommandePubliquesRouter en isolation (voir
+  // demandesCommandePubliques.test.ts) ne peut PAS attraper ce genre de bug
+  // d'ordre : il faut la vraie chaîne de app.ts, via createApp().
+  describe("CORS de /api/public/* (site vitrine, origine différente de l'app de gestion)", () => {
+    const ORIGINE_SITE_VITRINE = "https://boulangerie-lomoto-site.vercel.app";
+
+    it("une origine étrangère à l'app de gestion N'EST PAS rejetée par CORS sur /api/public", async () => {
+      const res = await request(createApp())
+        .post("/api/public/demandes-commande/identifier")
+        .set("Origin", ORIGINE_SITE_VITRINE)
+        .send({ telephone: "+000000000" });
+
+      // Peu importe que ce téléphone corresponde à un client (404 probable
+      // en base de test vide) — l'assertion porte sur l'ABSENCE de rejet
+      // CORS, jamais vu ici comme une erreur 500 "Origine non autorisée".
+      expect(res.status).not.toBe(500);
+      expect(res.body?.erreur).not.toBe("Origine non autorisée");
+      expect(res.headers["access-control-allow-origin"]).toBeTruthy();
+    });
+
+    it("la même origine étrangère reste bien rejetée sur une route interne authentifiée, en production", async () => {
+      // verifierOrigine reste volontairement permissif hors production (voir
+      // origines.test.ts) — sans ce réglage explicite, ce test donnerait un
+      // faux négatif ici, pas parce que la séparation public/interne aurait
+      // un défaut.
+      const precedent = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
+      try {
+        const res = await request(createApp()).get("/api/commandes").set("Origin", ORIGINE_SITE_VITRINE);
+        expect(res.headers["access-control-allow-origin"]).not.toBe(ORIGINE_SITE_VITRINE);
+      } finally {
+        process.env.NODE_ENV = precedent;
+      }
+    });
+  });
 });
