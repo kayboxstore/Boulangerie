@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   clientFindFirst: vi.fn(),
   produitCount: vi.fn(),
+  produitFindMany: vi.fn(),
   demandeCreate: vi.fn(),
   demandeFindMany: vi.fn(),
   demandeFindUnique: vi.fn(),
@@ -18,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../lib/prisma.js", () => ({
   prisma: {
     client: { findFirst: mocks.clientFindFirst },
-    produit: { count: mocks.produitCount },
+    produit: { count: mocks.produitCount, findMany: mocks.produitFindMany },
     demandeCommandePublique: {
       create: mocks.demandeCreate,
       findMany: mocks.demandeFindMany,
@@ -115,6 +116,25 @@ describe("POST /identifier", () => {
     const res = await request(appPublic()).post("/identifier").send({ telephone: "0000000000" });
     expect(res.status).toBe(404);
     expect(res.body.trouve).toBe(false);
+  });
+});
+
+describe("GET /produits", () => {
+  it("liste seulement les produits actifs et pertinents pour la commande, sans donnée interne", async () => {
+    mocks.produitFindMany.mockResolvedValue([
+      { id: "p-baguette-500", nom: "Baguette 500 Fc", prixVente: 500 },
+      { id: "p-carre-1500", nom: "Carré 1.500 Fc", prixVente: 1500 },
+    ]);
+
+    const res = await request(appPublic()).get("/produits");
+
+    expect(res.status).toBe(200);
+    expect(res.body.produits).toHaveLength(2);
+    expect(mocks.produitFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ actif: true }) }),
+    );
+    // Jamais de coûts, marge ou autre donnée interne — seulement id/nom/prixVente.
+    expect(Object.keys(res.body.produits[0]).sort()).toEqual(["id", "nom", "prixVente"]);
   });
 });
 
