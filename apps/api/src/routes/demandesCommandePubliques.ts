@@ -3,6 +3,7 @@ import {
   demandePubliqueIdentifierSchema,
   demandePubliqueCreateSchema,
   demandePubliqueRejeterSchema,
+  NOMS_PRODUITS_SCHEMA_COMMANDE,
   type DemandeCommandePubliqueDTO,
   type SchemaCommandeLigneClientInput,
 } from "@lomoto/shared";
@@ -80,6 +81,28 @@ demandesCommandePubliquesPubliqueRouter.post("/identifier", async (req, res, nex
       return res.status(404).json({ trouve: false, erreur: "Aucun compte Dépositaire/Maman ne correspond à ce numéro." });
     }
     return res.json({ trouve: true, clientId: client.id, nom: client.nom, typeClient: client.typeClient.nom });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * Liste publique des produits éligibles à une demande de commande — jamais
+ * de prix de revient, marge ou donnée interne, juste ce qui est déjà visible
+ * sur le site vitrine en dur (nom, prix de vente). Sert UNIQUEMENT à ce que
+ * le formulaire public connaisse le vrai produitId (identifiant interne
+ * généré par la base, imprévisible) sans le coder en dur côté site vitrine —
+ * un produit renommé, désactivé ou réinitialisé (nouvelle base de
+ * développement, restauration) ne casserait sinon plus jamais le formulaire.
+ */
+demandesCommandePubliquesPubliqueRouter.get("/produits", async (_req, res, next) => {
+  try {
+    const produits = await prisma.produit.findMany({
+      where: { actif: true, nom: { in: [...NOMS_PRODUITS_SCHEMA_COMMANDE] } },
+      select: { id: true, nom: true, prixVente: true },
+      orderBy: { nom: "asc" },
+    });
+    return res.json({ produits });
   } catch (e) {
     next(e);
   }
