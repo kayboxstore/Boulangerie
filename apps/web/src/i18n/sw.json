@@ -538,6 +538,30 @@
     "depositZoneOptional": "Eneo la kuachia bidhaa (si lazima)",
     "noDepositZone": "— Hakuna eneo —"
   },
+  "demandesPubliques": {
+    "title": "Maombi kutoka tovuti ya umma",
+    "subtitle": "Maombi ya oda yaliyotumwa na Wasambazaji/Mama kutoka tovuti ya umma, yanayosubiri uthibitisho.",
+    "empty": "Hakuna ombi linalosubiri.",
+    "loadError": "Haiwezekani kupakia maombi.",
+    "colBacs": "Vikapu vinavyoombwa",
+    "colWantedDate": "Tarehe inayoombwa",
+    "colNote": "Kumbuka",
+    "colRejectReason": "Sababu ya kukataa",
+    "confirm": "Thibitisha",
+    "reject": "Kataa",
+    "history": "Historia ({{count}})",
+    "status": {
+      "CONFIRMEE": "Imethibitishwa",
+      "REJETEE": "Imekataliwa"
+    },
+    "confirmError": "Imeshindwa kuthibitisha",
+    "rejectError": "Imeshindwa kukataa",
+    "rejectTitle": "Kataa ombi la {{nom}}",
+    "rejectDesc": "Sababu inabaki ndani (historia) — haitumwi kwa mteja.",
+    "motifLabel": "Sababu ya kukataa",
+    "motifRequired": "Sababu inahitajika",
+    "rejectSubmit": "Kataa ombi"
+  },
   "zonesDepot": {
     "title": "Maeneo ya kuachia bidhaa",
     "subtitle": "Ugawaji wa kijiografia wa Wawakilishi (Dépositaires), unaotumika kwenye Fomu ya agizo.",

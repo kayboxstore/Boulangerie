@@ -537,6 +537,30 @@
     "depositZoneOptional": "Zone de dépôt (optionnel)",
     "noDepositZone": "— Aucune zone —"
   },
+  "demandesPubliques": {
+    "title": "Demandes du site vitrine",
+    "subtitle": "Demandes de commande soumises par les Dépositaires/Mamans depuis le site public, en attente de confirmation.",
+    "empty": "Aucune demande en attente.",
+    "loadError": "Impossible de charger les demandes.",
+    "colBacs": "Bacs souhaités",
+    "colWantedDate": "Date souhaitée",
+    "colNote": "Note",
+    "colRejectReason": "Motif du rejet",
+    "confirm": "Confirmer",
+    "reject": "Rejeter",
+    "history": "Historique ({{count}})",
+    "status": {
+      "CONFIRMEE": "Confirmée",
+      "REJETEE": "Rejetée"
+    },
+    "confirmError": "Confirmation impossible",
+    "rejectError": "Rejet impossible",
+    "rejectTitle": "Rejeter la demande de {{nom}}",
+    "rejectDesc": "Le motif est communiqué en interne (historique) — pas au client.",
+    "motifLabel": "Motif du rejet",
+    "motifRequired": "Le motif est requis",
+    "rejectSubmit": "Rejeter la demande"
+  },
   "zonesDepot": {
     "title": "Zones de dépôt",
     "subtitle": "Regroupement géographique des Dépositaires, utilisé dans le Schéma de commande.",

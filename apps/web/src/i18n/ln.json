@@ -538,6 +538,30 @@
     "depositZoneOptional": "Zone ya kotika biloko (na esengo)",
     "noDepositZone": "— Zone te —"
   },
+  "demandesPubliques": {
+    "title": "Bosɛngi ya site ya bato nyonso",
+    "subtitle": "Bosɛngi ya komande oyo Bapesi biloko/Bamama batindi na site ya bato nyonso, ezali kozela kondimama.",
+    "empty": "Bosɛngi moko te ezali kozela.",
+    "loadError": "Ekoki kozua bosɛngi te.",
+    "colBacs": "Bakisi oyo balingi",
+    "colWantedDate": "Mokolo oyo balingi",
+    "colNote": "Nota",
+    "colRejectReason": "Ntina ya koboya",
+    "confirm": "Kondima",
+    "reject": "Koboya",
+    "history": "Istware ({{count}})",
+    "status": {
+      "CONFIRMEE": "Endimami",
+      "REJETEE": "Eboyami"
+    },
+    "confirmError": "Ekoki kondima te",
+    "rejectError": "Ekoki koboya te",
+    "rejectTitle": "Koboya bosɛngi ya {{nom}}",
+    "rejectDesc": "Ntina ekotikala kaka na kati — ekokende epai ya client te.",
+    "motifLabel": "Ntina ya koboya",
+    "motifRequired": "Ntina esɛngami",
+    "rejectSubmit": "Koboya bosɛngi"
+  },
   "zonesDepot": {
     "title": "Bazone ya kotika biloko",
     "subtitle": "Bosangisi ya bisika mpo na ba-Dépositaire, esalelami na Fiche ya komande.",

@@ -537,6 +537,30 @@
     "depositZoneOptional": "Delivery zone (optional)",
     "noDepositZone": "— No zone —"
   },
+  "demandesPubliques": {
+    "title": "Storefront requests",
+    "subtitle": "Order requests submitted by Depositors/Mamans from the public site, awaiting confirmation.",
+    "empty": "No pending requests.",
+    "loadError": "Could not load requests.",
+    "colBacs": "Requested crates",
+    "colWantedDate": "Requested date",
+    "colNote": "Note",
+    "colRejectReason": "Rejection reason",
+    "confirm": "Confirm",
+    "reject": "Reject",
+    "history": "History ({{count}})",
+    "status": {
+      "CONFIRMEE": "Confirmed",
+      "REJETEE": "Rejected"
+    },
+    "confirmError": "Could not confirm",
+    "rejectError": "Could not reject",
+    "rejectTitle": "Reject {{nom}}'s request",
+    "rejectDesc": "The reason is kept internal (history) — not shared with the client.",
+    "motifLabel": "Rejection reason",
+    "motifRequired": "A reason is required",
+    "rejectSubmit": "Reject request"
+  },
   "zonesDepot": {
     "title": "Delivery zones",
     "subtitle": "Geographic grouping of Dépositaires, used in the Order sheet.",

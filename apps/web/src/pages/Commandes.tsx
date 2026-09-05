@@ -21,6 +21,7 @@ import {
 import { api, ApiError } from "@/lib/api";
 import { useCleIdempotence } from "@/lib/idempotence";
 import { useAuth } from "@/lib/auth";
+import { DemandesCommandePubliquesCard } from "@/components/DemandesCommandePubliquesCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -352,6 +353,9 @@ export function CommandesPage() {
           </ul>
         </div>
       )}
+
+      {/* Demandes du site vitrine (V2) — file d'attente à traiter en priorité */}
+      <DemandesCommandePubliquesCard editable={editable} />
 
       {/* Tableau de bord journalier (section 3.4) */}
       {resumeJour && (
