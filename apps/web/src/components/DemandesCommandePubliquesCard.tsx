@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, Globe, TriangleAlert, X } from "lucide-react";
+import { Check, ChevronDown, Globe, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { type DemandeCommandePubliqueDTO, type StrategieDoublon } from "@lomoto/shared";
-import { api, ApiError } from "@/lib/api";
+import { type DemandeCommandePubliqueDTO } from "@lomoto/shared";
+import { api } from "@/lib/api";
 import { useCleIdempotence } from "@/lib/idempotence";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { formaterDateFr } from "@/components/ui/dateHeureFr";
@@ -22,11 +22,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-interface CorpsConflit {
-  conflit?: boolean;
-  erreur?: string;
-}
-
 /** Statut → variante de badge + libellé, pour l'historique. */
 const BADGE_STATUT: Record<"CONFIRMEE" | "REJETEE", { variant: "gold" | "destructive" }> = {
   CONFIRMEE: { variant: "gold" },
@@ -37,11 +32,13 @@ const BADGE_STATUT: Record<"CONFIRMEE" | "REJETEE", { variant: "gold" | "destruc
  * File d'attente des demandes de commande publiques (V2, canal site vitrine) —
  * module Commandes. Consomme l'API existante (`/api/demandes-commande-
  * publiques`, déjà testée) sans y toucher ; ce composant ne fait QUE
- * l'interface. Confirmer délègue au même cœur transactionnel que la création
- * manuelle (`executerCreationOuMiseAJourCommande` côté serveur) — un doublon
- * (client déjà commandé aujourd'hui) renvoie donc le même 409 { conflit: true }
- * que le flux manuel, traité ici avec le même choix Modifier/Remplacer
- * (mêmes clés i18n `commandes.strategy.*`), pas un mécanisme réinventé.
+ * l'interface. Confirmer alimente le Schéma de commande (Prévision) du jour
+ * souhaité — JAMAIS une commande facturable directe, voir la refonte de
+ * demandesCommandePubliques.ts (l'ancien choix Modifier/Remplacer n'existe
+ * plus : les quantités s'additionnent automatiquement à ce que le client a
+ * déjà pour cette date, sans dialogue). Un vrai conflit possible aujourd'hui
+ * (verrouillage concurrent du Planning) n'a pas de choix à faire — un simple
+ * message d'erreur explicite invitant à réessayer suffit.
  */
 export function DemandesCommandePubliquesCard({ editable }: { editable: boolean }) {
   const { t } = useTranslation();
@@ -66,36 +63,19 @@ export function DemandesCommandePubliquesCard({ editable }: { editable: boolean 
     queryClient.invalidateQueries({ queryKey: ["commissions"] });
   };
 
-  // --- Confirmer (+ conflit Modifier/Remplacer, même 409 que la création manuelle) ---
-  const [demandeEnConflit, setDemandeEnConflit] = useState<DemandeCommandePubliqueDTO | null>(null);
-  const [messageConflit, setMessageConflit] = useState<string | null>(null);
-
+  // --- Confirmer (alimente la Prévision du jour — voir doc de tête) ---
   const cleIdempotenceConfirmer = useCleIdempotence();
   const confirmer = useMutation({
-    mutationFn: ({ demande, strategie }: { demande: DemandeCommandePubliqueDTO; strategie?: StrategieDoublon }) => {
-      const corps = strategie ? { strategie } : {};
-      const empreinte = JSON.stringify({ demandeId: demande.id, ...corps });
-      return api<{ commandeId: string }>(`/api/demandes-commande-publiques/${demande.id}/confirmer`, {
+    mutationFn: (demande: DemandeCommandePubliqueDTO) => {
+      const empreinte = JSON.stringify({ demandeId: demande.id });
+      return api<{ commandeId?: string }>(`/api/demandes-commande-publiques/${demande.id}/confirmer`, {
         method: "POST",
         headers: { "Idempotency-Key": cleIdempotenceConfirmer(empreinte) },
-        body: JSON.stringify(corps),
+        body: JSON.stringify({}),
       });
     },
-    onSuccess: () => {
-      setDemandeEnConflit(null);
-      rafraichir();
-    },
-    onError: (e, variables) => {
-      if (e instanceof ApiError && e.status === 409) {
-        const corps = e.corps as CorpsConflit | undefined;
-        if (corps?.conflit) {
-          setDemandeEnConflit(variables.demande);
-          setMessageConflit(corps.erreur ?? null);
-          return;
-        }
-      }
-      toastErreur(e instanceof Error ? e.message : t("demandesPubliques.confirmError"));
-    },
+    onSuccess: () => rafraichir(),
+    onError: (e) => toastErreur(e instanceof Error ? e.message : t("demandesPubliques.confirmError")),
   });
 
   // --- Rejeter (motif obligatoire) ---
@@ -195,7 +175,7 @@ export function DemandesCommandePubliquesCard({ editable }: { editable: boolean 
                       <Button
                         variant="cta"
                         size="sm"
-                        onClick={() => confirmer.mutate({ demande: d })}
+                        onClick={() => confirmer.mutate(d)}
                         disabled={enCours}
                         className="gap-1"
                       >
@@ -252,39 +232,6 @@ export function DemandesCommandePubliquesCard({ editable }: { editable: boolean 
           )}
         </CardContent>
       </Card>
-
-      {/* Conflit (client déjà commandé aujourd'hui) : Modifier ou Remplacer —
-          même choix, mêmes libellés que le doublon détecté à la création manuelle. */}
-      <Dialog open={!!demandeEnConflit} onOpenChange={(o) => !o && setDemandeEnConflit(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <TriangleAlert className="h-5 w-5 text-terracotta dark:text-or" />
-              {t("commandes.duplicateTitle")}
-            </DialogTitle>
-            <DialogDescription>{messageConflit}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            {(["MODIFIER", "REMPLACER"] as StrategieDoublon[]).map((s) => (
-              <button
-                key={s}
-                type="button"
-                disabled={confirmer.isPending}
-                onClick={() => demandeEnConflit && confirmer.mutate({ demande: demandeEnConflit, strategie: s })}
-                className="w-full rounded-lg border border-input px-3 py-2.5 text-left transition-colors hover:border-or hover:bg-or/10 disabled:opacity-50"
-              >
-                <p className="font-semibold text-marine dark:text-creme">{t(`commandes.strategy.${s}`)}</p>
-                <p className="text-xs text-muted-foreground">{t(`commandes.strategyHelp.${s}`)}</p>
-              </button>
-            ))}
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDemandeEnConflit(null)}>
-              {t("common.cancel")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Rejet : motif obligatoire avant soumission */}
       <Dialog open={!!demandeARejeter} onOpenChange={(o) => !o && setDemandeARejeter(null)}>
