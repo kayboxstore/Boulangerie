@@ -1,0 +1,94 @@
+# Blueprint de déploiement Render — Boulangerie Lomoto
+# ---------------------------------------------------------------------------
+# Déploie l'application comme UN SEUL service web (l'API Express sert aussi le
+# frontend compilé). La base PostgreSQL de production est hébergée sur Neon ;
+# sa chaîne de connexion est fournie à Render comme secret de service.
+# Aucun terminal requis : on connecte ce dépôt GitHub à Render depuis le
+# navigateur (même depuis un téléphone). Voir DEPLOIEMENT.md pour la marche à
+# suivre pas à pas.
+
+services:
+  - type: web
+    name: boulangerie-lomoto
+    runtime: node
+    plan: free
+    region: frankfurt
+    # Les déploiements de production restent manuels après validation explicite.
+    autoDeployTrigger: off
+    # --include=dev : Render met NODE_ENV=production, or on a besoin des outils
+    # de build (vite, prisma CLI) qui sont en devDependencies.
+    # db:bootstrap:production (correctif P0-01) : ne crée QUE les rôles/permissions
+    # et motifs fixes indispensables au premier lancement — jamais de compte, jamais
+    # de mot de passe, jamais de donnée de démonstration. Le seed de démonstration
+    # (db:seed:demo) N'EST JAMAIS appelé ici ; il refuse même de s'exécuter si on
+    # tentait de le lancer avec NODE_ENV=production (voir prisma/seed-demo.ts).
+    # `typecheck --workspace apps/api` AVANT le bootstrap (et non après, comme
+    # `build`) : c'est ce qui rend réel l'argument « un accès à prisma.utilisateur
+    # depuis bootstrap-production.ts ne compilerait même pas » (voir le type
+    # ClientBootstrap) — `npm run db:bootstrap:production` s'exécute via `tsx`, qui
+    # transpile sans jamais vérifier les types ; sans cette étape, cette garantie
+    # ne tiendrait qu'en CI/local, pas sur le chemin de déploiement réel.
+    buildCommand: >-
+      npm install --include=dev &&
+      npx prisma generate &&
+      npx prisma migrate deploy &&
+      npm run typecheck --workspace apps/api &&
+      npm run db:bootstrap:production &&
+      npm run build --workspace apps/web
+    startCommand: npm run start --workspace apps/api
+    healthCheckPath: /api/health
+    envVars:
+      # URL de connexion à PostgreSQL externe (Neon). La valeur est définie
+      # manuellement dans Render et préservée lors des synchronisations Blueprint.
+      # Ne jamais écrire la chaîne de connexion dans le dépôt.
+      - key: DATABASE_URL
+        sync: false
+      # Secret de signature des jetons JWT — généré et gardé secret par Render.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_VERSION
+        value: "22"
+      # Envoi des rapports par email (section 3.13). `sync: false` = Render
+      # demande la valeur dans son interface et ne la stocke JAMAIS dans le
+      # dépôt. À saisir ici ET dans le .env local : les deux environnements
+      # sont indépendants. Tant qu'elles sont vides, le bouton « Envoyer par
+      # email » ne s'affiche pas ; l'impression et le PDF fonctionnent quand même.
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      # Assistant IA (section 3.19, premier niveau) : clé de l'API Gemini. Tant
+      # qu'elle est vide, l'Assistant reste utilisable — chaque message bascule
+      # simplement en escalade automatique vers un Admin (voir apps/api/src/lib/ia.ts).
+      # Diagnostic en direct disponible sur l'écran État système (Admin).
+      - key: GEMINI_API_KEY
+        sync: false
+      # Optionnel — par défaut "gemini-2.0-flash" si absent (voir lib/ia.ts).
+      # À renseigner seulement si Google fait évoluer les identifiants de modèle.
+      - key: GEMINI_MODEL
+        sync: false
+      # Bascule 3.19 : IA désactivée temporairement (facturation Google Cloud
+      # non finalisée) — l'Assistant repasse en mode humain seul, aucun appel
+      # Gemini n'est déclenché. Repasser à "true" réactive la couche IA sans
+      # aucun autre changement de code (voir routes/assistant.ts).
+      - key: ASSISTANT_IA_ACTIF
+        value: "false"
+      # Adresse email professionnelle (section 3.18) — Cloudflare Email
+      # Routing. Deux portées DIFFÉRENTES requises sur le jeton : "Email
+      # Routing Addresses: Edit" (Compte) pour les adresses de destination,
+      # ET "Email Routing Rules: Edit" (Zone, limitable au domaine) pour les
+      # règles de routage — voir apps/api/src/lib/cloudflareEmail.ts.
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      # Tableau de bord Cloudflare → domaine → aperçu, colonne de droite.
+      - key: CLOUDFLARE_ZONE_ID
+        sync: false
+      # Même page, juste en dessous du Zone ID — portée Compte, différente.
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      # Sauvegarde quotidienne (section 3.15) : écrite localement sur le disque
+      # du service (pas de destination externe — un compte de service Google
+      # Cloud a été essayé puis abandonné pour Google Drive, sans quota de
+      # stockage propre). Sur l'offre gratuite, ce disque n'est pas garanti de
+      # survivre à un redéploiement ; complète avec un téléchargement régulier
+      # vers un support externe depuis l'écran État système.

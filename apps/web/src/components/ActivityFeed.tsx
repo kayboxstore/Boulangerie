@@ -1,16 +1,16 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, BellRing } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { NotificationDTO } from "@lomoto/shared";
-import { MODULE_LABELS } from "@lomoto/shared";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-/** "il y a 3 min", "il y a 2 h", "hier"… */
-export function tempsRelatif(dateIso: string): string {
+/** "il y a 3 min", "il y a 2 h", "hier"… (formats de dates : locale fr conservée) */
+export function tempsRelatif(dateIso: string, justNow: string): string {
   const rtf = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
   const diffSec = Math.round((new Date(dateIso).getTime() - Date.now()) / 1000);
   const abs = Math.abs(diffSec);
-  if (abs < 60) return "à l'instant";
+  if (abs < 60) return justNow;
   if (abs < 3600) return rtf.format(Math.round(diffSec / 60), "minute");
   if (abs < 86400) return rtf.format(Math.round(diffSec / 3600), "hour");
   return rtf.format(Math.round(diffSec / 86400), "day");
@@ -29,11 +29,12 @@ interface ActivityFeedProps {
  * marque comme lue.
  */
 export function ActivityFeed({ notifications, onMarquerLue, vide, compact }: ActivityFeedProps) {
+  const { t } = useTranslation();
   if (notifications.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
         <BellRing className="h-8 w-8 opacity-40" />
-        <p className="text-sm">{vide ?? "Aucune activité pour le moment."}</p>
+        <p className="text-sm">{vide ?? t("feed.noActivity")}</p>
       </div>
     );
   }
@@ -87,13 +88,13 @@ export function ActivityFeed({ notifications, onMarquerLue, vide, compact }: Act
                     {n.message}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    {n.priorite === "HAUTE" && <Badge variant="destructive">Priorité haute</Badge>}
+                    {n.priorite === "HAUTE" && <Badge variant="destructive">{t("feed.highPriority")}</Badge>}
                     <Badge variant="secondary" className="font-normal">
-                      {MODULE_LABELS[n.module]}
+                      {t(`module.${n.module}`)}
                     </Badge>
-                    {n.emetteur && <span>par {n.emetteur.nom}</span>}
+                    {n.emetteur && <span>{t("feed.by", { nom: n.emetteur.nom })}</span>}
                     <span>·</span>
-                    <time dateTime={n.dateCreation}>{tempsRelatif(n.dateCreation)}</time>
+                    <time dateTime={n.dateCreation}>{tempsRelatif(n.dateCreation, t("feed.justNow"))}</time>
                   </div>
                 </div>
               </div>

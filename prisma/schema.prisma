@@ -28,15 +28,103 @@ enum NiveauAcces {
   ECRITURE
 }
 
-enum MoyenPaiement {
-  ESPECES
-  MOBILE_MONEY
-  CARTE
+// Sexe de l'utilisateur (V2) — champ optionnel de la fiche compte.
+enum Sexe {
+  HOMME
+  FEMME
 }
 
 enum PrioriteNotification {
   NORMALE
   HAUTE
+}
+
+// Demande de commande soumise depuis le site vitrine public (section 3.4,
+// nouveau canal) — jamais une CommandeClient directement : une simple requête
+// qu'un Chargé des commandes examine et confirme (ou rejette) manuellement.
+// Aucune conséquence financière tant qu'elle n'est pas CONFIRMEE.
+enum StatutDemandePublique {
+  EN_ATTENTE
+  CONFIRMEE
+  REJETEE
+}
+
+enum StatutCycleLivraison {
+  PREVISION
+  RETENUE_PRODUCTION
+  PREPAREE
+  REMISE_MAGASIN
+  CHARGEE
+  EN_TOURNEE
+  EN_ATTENTE_CONFIRMATION
+  PARTIELLEMENT_ACCEPTEE
+  ACCEPTEE
+  RETOUR_TOTAL
+  ANNULEE
+}
+
+enum ActionCycleLivraison {
+  RETENIR_PRODUCTION
+  CONFIRMER_PREPARATION
+  CONFIRMER_REMISE_MAGASIN
+  CONFIRMER_CHARGEMENT
+  CONFIRMER_DEPART
+  SIGNALER_DEPOT
+  CONFIRMER_ACCEPTATION
+}
+
+enum TypeAnomalieCycle {
+  BON_NON_RETOURNE
+  ECART_QUANTITE
+  PRODUIT_ENDOMMAGE
+  RETOUR_QUALITE
+  CASH_TRANSPORTE_NON_RECU
+  AUTRE
+}
+
+enum StatutProduction {
+  OUVERTE
+  CLOTUREE
+}
+
+enum VerdictQualite {
+  CONFORME
+  NON_CONFORME
+}
+
+enum TypeMouvementStock {
+  ENTREE
+  SORTIE
+}
+
+// Ingrédients suivis à la production (section 3.3) : relient les 4 quantités
+// saisies (sacs, paquets de levure, kg de sel, huile) aux matières premières.
+enum CodeIngredient {
+  FARINE
+  LEVURE
+  SEL
+  HUILE
+}
+
+enum StatutCommandeFournisseur {
+  EN_ATTENTE
+  RECUE
+}
+
+enum StatutDemande {
+  EN_ATTENTE
+  APPROUVEE
+  REJETEE
+}
+
+// Tâches critiques (section 2) : quand un Admin secondaire les déclenche,
+// l'action est différée en attente de l'Admin Principal.
+enum TypeActionCritique {
+  SUPPRIMER_UTILISATEUR
+  CREER_COMPTE_ADMIN
+  MODIFIER_TYPE_CLIENT
+  MODIFIER_TAUX_TAXE
+  MODIFIER_PERMISSIONS_ROLE
 }
 
 // Hiérarchie portée par le rôle (roleParentId) — extensible sans changement de code.
@@ -63,36 +151,120 @@ model RolePermission {
 }
 
 model Utilisateur {
-  id            String   @id @default(cuid())
-  nom           String
-  email         String   @unique
-  motDePasseHash String
-  roleId        String
-  role          Role     @relation(fields: [roleId], references: [id])
-  actif         Boolean  @default(true)
+  id                          String                            @id @default(cuid())
+  nom                         String
+  email                       String                            @unique
+  motDePasseHash              String
+  motDePasseDoitChanger       Boolean                           @default(false)
+  roleId                      String
+  role                        Role                              @relation(fields: [roleId], references: [id])
+  actif                       Boolean                           @default(true)
   // Compte Administrateur principal (max 3 comptes admin : 1 principal + 2
   // secondaires). Unicité du principal garantie par un index partiel en SQL
   // (voir migration) ; le workflow d'approbation complet arrive en Phase 10.
-  estAdminPrincipal Boolean @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  notifications Notification[] @relation("NotificationsRecues")
-  notificationsEmises Notification[] @relation("NotificationsEmises")
-  commandesCreees CommandeClient[]
-  reglementsEnregistres PaiementCommande[]
-  ventes        Vente[]
-  clotures      ClotureCaisse[]
+  estAdminPrincipal           Boolean                           @default(false)
+  // Session unique (section 3.7) : identifiant régénéré à chaque connexion
+  // réussie et embarqué dans le JWT (claim `sid`). Une requête ou un socket
+  // portant un `sid` différent de celui-ci est refusé — la connexion la plus
+  // récente invalide donc automatiquement toutes les précédentes.
+  sessionActuelleId           String?
+  // Langue d'interface préférée (section 3.9) : "FR" | "LN". Nul = suivre la
+  // langue par défaut de la boutique (ParametreBoutique). Choisie par l'employé
+  // dans « Mon profil ».
+  languePreferee              String?
+  // Sexe (V2) — optionnel, saisi par l'Admin à la création du compte,
+  // modifiable ensuite comme le reste de la fiche.
+  sexe                        Sexe?
+  // Photo de profil (V2) — Data URI base64 stockée directement en base, même
+  // choix délibéré que les captures d'écran de l'Assistant (3.19) : pas
+  // d'objet de stockage externe à mettre en place pour une petite image
+  // d'avatar déjà redimensionnée côté client avant l'envoi.
+  photoUrl                    String?
+  createdAt                   DateTime                          @default(now())
+  updatedAt                   DateTime                          @updatedAt
+  notifications               Notification[]                    @relation("NotificationsRecues")
+  notificationsEmises         Notification[]                    @relation("NotificationsEmises")
+  commandesCreees             CommandeClient[]
+  reglementsEnregistres       PaiementCommande[]
+  reglementsConfirmes         PaiementCommande[]                @relation("ReglementsConfirmes")
+  mouvementsStock             MouvementStock[]
+  productions                 Production[]
+  productionsCloturees        Production[]                      @relation("ProductionsCloturees")
+  controlesQualiteEffectues   ControleQualite[]                 @relation("ControlesQualiteEffectues")
+  planningsCrees              PlanningProduction[]
+  schemasCommandeCrees        SchemaCommande[]
+  bonsLivraisonCrees          BonLivraison[]
+  transitionsCycleLivraison   TransitionCycleLivraison[]
+  cyclesBonRetourne           CycleLivraison[]                  @relation("CyclesBonRetournePar")
+  anomaliesCycleSignalees     AnomalieCycleLivraison[]          @relation("AnomaliesCycleSignalees")
+  anomaliesCycleResolues      AnomalieCycleLivraison[]          @relation("AnomaliesCycleResolues")
+  commandesFournisseurCreees  CommandeFournisseur[]             @relation("CommandesFournisseurCreees")
+  commandesFournisseurRecues  CommandeFournisseur[]             @relation("CommandesFournisseurRecues")
+  ficheTravailleur            Travailleur?
+  fichesTravailleurCreees     Travailleur[]                      @relation("TravailleursCrees")
+  pointagesEnregistres        Pointage[]                        @relation("PointagesEnregistres")
+  absencesDecidees            Absence[]                         @relation("AbsencesDecidees")
+  absencesDeclarees           Absence[]                         @relation("AbsencesDeclarees")
+  sanctionsEnregistrees       Sanction[]                        @relation("SanctionsEnregistrees")
+  bulletinsGeneres            BulletinPaie[]                    @relation("BulletinsGeneres")
+  demandesEmises              DemandeApprobation[]              @relation("DemandesEmises")
+  demandesDecidees            DemandeApprobation[]              @relation("DemandesDecidees")
+  delegationsRecues           DelegationRole[]                  @relation("DelegationsRecues")
+  delegationsCreees           DelegationRole[]                  @relation("DelegationsCreees")
+  auditsEffectues             AuditLog[]                        @relation("AuditsEffectues")
+  sauvegardesDeclenchees      SauvegardeBase[]                  @relation("SauvegardesDeclenchees")
+  tauxDefinis                 TauxDuJour[]                      @relation("TauxDefinis")
+  depensesEnregistrees        DepenseCaisse[]                   @relation("DepensesEnregistrees")
+  produitsArchives            Produit[]                         @relation("ProduitsArchives")
+  operationsIdempotentes      OperationIdempotente[]
+  sessionsCaisseOuvertes      SessionCaisse[]                   @relation("SessionsCaisseOuvertes")
+  sessionsCaisseFermees       SessionCaisse[]                   @relation("SessionsCaisseFermees")
+  sessionsCaisseCorrigees     SessionCaisse[]                   @relation("SessionsCaisseCorrigees")
+  remisesCaisseRecues         RemiseCaisse[]                    @relation("RemisesCaisseRecues")
+  remisesCaisseEnregistrees   RemiseCaisse[]                    @relation("RemisesCaisseEnregistrees")
+  jetonsReinitialisation      JetonReinitialisationMotDePasse[]
+  affichagesAnniversaire      AffichageAnniversaire[]
+  conversationsSupport        ConversationSupport[]             @relation("ConversationsUtilisateur")
+  conversationsSupportFermees ConversationSupport[]             @relation("ConversationsSupportFermeesPar")
+  messagesSupportEnvoyes      MessageSupport[]                  @relation("MessagesSupportEnvoyes")
+}
+
+// Jeton de récupération : seul le SHA-256 est stocké, jamais le secret envoyé.
+model JetonReinitialisationMotDePasse {
+  id            String      @id @default(cuid())
+  utilisateurId String
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  jetonHash     String      @unique
+  expireLe      DateTime
+  utiliseLe     DateTime?
+  createdAt     DateTime    @default(now())
+
+  @@index([utilisateurId, createdAt])
+  @@index([expireLe])
+}
+
+// Réservation atomique de la célébration : une ligne au plus par utilisateur
+// et par jour civil de Kinshasa, même si plusieurs appareils interrogent l'API.
+model AffichageAnniversaire {
+  id            String      @id @default(cuid())
+  utilisateurId String
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  date          DateTime    @db.Date
+  createdAt     DateTime    @default(now())
+
+  @@unique([utilisateurId, date])
+  @@index([date])
 }
 
 // Notification métier (section 3.10) : persistée pour le rattrapage hors ligne,
 // poussée en temps réel via Socket.io aux destinataires déterminés par la
 // matrice de permissions + la hiérarchie.
 model Notification {
-  id             String      @id @default(cuid())
+  id             String               @id @default(cuid())
   destinataireId String
-  destinataire   Utilisateur @relation("NotificationsRecues", fields: [destinataireId], references: [id], onDelete: Cascade)
+  destinataire   Utilisateur          @relation("NotificationsRecues", fields: [destinataireId], references: [id], onDelete: Cascade)
   emetteurId     String?
-  emetteur       Utilisateur? @relation("NotificationsEmises", fields: [emetteurId], references: [id], onDelete: SetNull)
+  emetteur       Utilisateur?         @relation("NotificationsEmises", fields: [emetteurId], references: [id], onDelete: SetNull)
   type           String
   module         Module
   evenementRef   String?
@@ -100,8 +272,8 @@ model Notification {
   donnees        Json?
   // HAUTE = alerte visuellement distincte (ex. transaction inhabituelle, 3.10)
   priorite       PrioriteNotification @default(NORMALE)
-  lu             Boolean     @default(false)
-  dateCreation   DateTime    @default(now())
+  lu             Boolean              @default(false)
+  dateCreation   DateTime             @default(now())
 
   @@index([destinataireId, lu])
   @@index([destinataireId, dateCreation])
@@ -123,120 +295,967 @@ model TypeClient {
 // Le solde d'avance est porté par le client (pas par la commande) et se
 // reporte automatiquement d'une commande à l'autre (section 3.4).
 model Client {
-  id               String           @id @default(cuid())
-  nom              String
-  telephone        String?
-  typeClientId     String
-  typeClient       TypeClient       @relation(fields: [typeClientId], references: [id])
-  avanceDisponible Int              @default(0)
-  pointsFidelite   Int              @default(0)
-  commandes        CommandeClient[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id                String           @id @default(cuid())
+  nom               String
+  telephone         String?
+  typeClientId      String
+  typeClient        TypeClient       @relation(fields: [typeClientId], references: [id])
+  avanceDisponible  Int              @default(0)
+  pointsFidelite    Int              @default(0)
+  commandes         CommandeClient[]
+  // Zone de dépôt (section 3.3 d) — purement organisationnel, uniquement
+  // pertinent pour la Qualité Dépositaire (regroupe les fiches du Schéma de
+  // commande par secteur, ex. « Sous-total 1 », « Dépôts Bandal »). Nul pour
+  // les Mamans et les clients Vente cash.
+  zoneDepositaireId String?
+  zoneDepositaire   ZoneDepositaire? @relation(fields: [zoneDepositaireId], references: [id], onDelete: SetNull)
+  schemasCommande   SchemaCommande[]
+  bonsLivraison     BonLivraison[]
+  demandesPubliques DemandeCommandePublique[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([zoneDepositaireId])
+}
+
+// Regroupement des dépositaires par secteur de livraison (section 3.3 d),
+// utilisé pour organiser l'affichage du Schéma de commande — sans incidence
+// sur la tarification (toujours portée par TypeClient) ni les permissions.
+// `ordre` fixe l'ordre d'affichage (les zones ne se trient pas alphabétiquement
+// sur le terrain : elles suivent l'ordre des tournées).
+model ZoneDepositaire {
+  id        String   @id @default(cuid())
+  nom       String   @unique
+  ordre     Int      @default(0)
+  clients   Client[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Commande client (section 3.4). Tous les montants sont figés à
 // l'enregistrement (en Fc) ; nouvelleAvance est le solde du client juste
 // après cette commande (photographie, pour afficher le champ 11 de la spec).
 model CommandeClient {
-  id                String      @id @default(cuid())
-  numero            Int         @unique @default(autoincrement())
-  clientId          String
-  client            Client      @relation(fields: [clientId], references: [id])
-  quantiteBacs      Int
-  montantBrut       Int
-  avanceUtilisee    Int
-  montantAPercevoir Int
-  montantRecu       Int
-  dette             Int
-  avanceGeneree     Int
-  nouvelleAvance    Int
-  creeParId         String
-  creePar           Utilisateur @relation(fields: [creeParId], references: [id])
-  dateCreation      DateTime    @default(now())
-  reglements        PaiementCommande[]
+  id                   String             @id @default(cuid())
+  numero               Int                @unique @default(autoincrement())
+  clientId             String
+  client               Client             @relation(fields: [clientId], references: [id])
+  quantiteBacs         Int
+  montantBrut          Int
+  // Commission figée au taux en vigueur au moment de l'enregistrement (comme
+  // montantBrut) — voir calculerCommission (section 3.11, Lot 7 pt 6). Ne
+  // change jamais rétroactivement si TypeClient.commissionParBac est modifié
+  // ensuite, ni si le client change de Qualité.
+  commission           Int
+  avanceUtilisee       Int
+  montantAPercevoir    Int
+  montantRecu          Int
+  dette                Int
+  avanceGeneree        Int
+  nouvelleAvance       Int
+  creeParId            String
+  creePar              Utilisateur        @relation(fields: [creeParId], references: [id])
+  dateCreation         DateTime           @default(now())
+  // Jour métier de la vente. Nul pour les commandes historiques créées avant
+  // C4 ; les nouvelles commandes manuelles utilisent le jour de Kinshasa et
+  // une conversion C4 conserve la date de livraison, même si elle est validée
+  // ultérieurement.
+  dateOperationnelle   DateTime?          @db.Date
+  cycleLivraison       CycleLivraison?
+  // Alerte « dette non payée » (3.4) : horodatage de l'envoi, pour ne jamais
+  // notifier deux fois la même commande. Nul = alerte pas encore envoyée.
+  alerteDetteEnvoyeeLe DateTime?
+  reglements           PaiementCommande[]
 
+  demandeOrigine       DemandeCommandePublique?
+
+  @@unique([clientId, dateOperationnelle])
   @@index([clientId])
   @@index([dateCreation])
+  @@index([dateOperationnelle])
+  @@index([alerteDetteEnvoyeeLe])
+}
+
+// Demande de commande soumise depuis le site vitrine public (nouveau canal,
+// section 3.4) — JAMAIS une CommandeClient directement. Un Dépositaire ou une
+// Maman déjà enregistré s'identifie par téléphone sur le site public, décrit
+// ce qu'il souhaite, et un Chargé des commandes confirme (crée une vraie
+// CommandeClient à partir d'ici) ou rejette. Conservée après traitement,
+// jamais supprimée — trace de la demande d'origine même une fois confirmée.
+model DemandeCommandePublique {
+  id              String                @id @default(cuid())
+  clientId        String
+  client          Client                @relation(fields: [clientId], references: [id])
+  quantiteBacs    Int
+  dateSouhaitee   DateTime?
+  note            String?
+  statut          StatutDemandePublique @default(EN_ATTENTE)
+  // Renseigné uniquement au passage à CONFIRMEE — jamais modifiable après.
+  commandeCreeeId String?               @unique
+  commandeCreee   CommandeClient?       @relation(fields: [commandeCreeeId], references: [id])
+  traiteParId     String?
+  traiteLe        DateTime?
+  // Renseigné uniquement au passage à REJETEE.
+  motifRejet      String?
+  createdAt       DateTime              @default(now())
+
+  @@index([clientId])
+  @@index([statut])
+}
+
+// Un règlement naît DECLARE (section 3.1/3.4, Lot 6 — P0-07) : l'argent que le
+// Chargé des commandes dit avoir reçu, mais qui n'a pas encore été compté par
+// la Caisse. Seule la confirmation (rattachement à une RemiseCaisse, voir
+// POST /caisse/sessions/:id/confirmer-reglements) fait passer le statut à
+// CONFIRME et applique alors — seulement alors — l'effet sur la dette.
+enum StatutPaiement {
+  DECLARE
+  CONFIRME
 }
 
 // Règlement ultérieur d'une dette de commande (section 3.4) : le montant
 // s'ajoute au montant reçu de la commande, dette/avance recalculées avec la
-// même logique qu'à l'enregistrement. Journal conservé (montant, date, auteur).
+// même logique qu'à l'enregistrement — mais seulement à la CONFIRMATION
+// (statut CONFIRME), jamais à la déclaration. Journal conservé (montant,
+// date, auteur, puis confirmation).
 model PaiementCommande {
-  id               String         @id @default(cuid())
+  id               String          @id @default(cuid())
   commandeClientId String
-  commandeClient   CommandeClient @relation(fields: [commandeClientId], references: [id], onDelete: Cascade)
+  commandeClient   CommandeClient  @relation(fields: [commandeClientId], references: [id], onDelete: Cascade)
   montant          Int
-  date             DateTime       @default(now())
+  date             DateTime        @default(now())
   enregistreParId  String
-  enregistrePar    Utilisateur    @relation(fields: [enregistreParId], references: [id])
+  enregistrePar    Utilisateur     @relation(fields: [enregistreParId], references: [id])
+  statut           StatutPaiement  @default(DECLARE)
+  remiseCaisseId   String?
+  remiseCaisse     RemiseCaisse?   @relation(fields: [remiseCaisseId], references: [id], onDelete: SetNull)
+  confirmeLe       DateTime?
+  confirmeParId    String?
+  confirmePar      Utilisateur?    @relation("ReglementsConfirmes", fields: [confirmeParId], references: [id], onDelete: SetNull)
 
   @@index([commandeClientId])
+  @@index([statut])
 }
 
 // Catalogue produits. Montants en Fc. Le pain est exonéré de TVA (tauxTaxe = 0) ;
 // le taux reste configurable par produit pour d'éventuels articles hors pain.
 model Produit {
-  id        String   @id @default(cuid())
-  nom       String   @unique
-  prixVente Int
-  tauxTaxe  Float    @default(0)
-  categorie String
-  actif     Boolean  @default(true)
-  lignesVente LigneVente[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String                 @id @default(cuid())
+  nom             String                 @unique
+  prixVente       Int
+  tauxTaxe        Float                  @default(0)
+  categorie       String
+  actif           Boolean                @default(true)
+  archiveLe       DateTime?
+  archiveParId    String?
+  archivePar      Utilisateur?           @relation("ProduitsArchives", fields: [archiveParId], references: [id], onDelete: SetNull)
+  recette         Recette?
+  lignesPlanning  PlanningLigneProduit[]
+  lignesSchema    SchemaCommandeLigne[]
+  lignesLivraison BonLivraisonLigne[]
+  lignesCycle     CycleLivraisonLigne[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([actif, nom])
+  @@index([archiveLe])
 }
 
-// --- Caisse (section 3.1) ---------------------------------------------------
+// --- Stocks & matières premières (section 3.2) ------------------------------
 
-// Vente au comptoir. Montants en Fc, figés à l'encaissement ; le pain est
-// exonéré (tauxTaxe = 0), la taxe éventuelle vient des produits hors pain.
-model Vente {
+// Quantités en Decimal(12,3) : les matières se comptent en kg/L fractionnaires
+// et le Decimal évite la dérive des flottants sur les décrémentations répétées.
+model MatierePremiere {
+  id                        String                     @id @default(cuid())
+  nom                       String                     @unique
+  // Relie une matière aux 4 ingrédients saisis à la production (section 3.3).
+  // Nul pour les matières hors de ce circuit (sucre, beurre…).
+  code                      CodeIngredient?            @unique
+  unite                     String // sac, paquet, kg, L…
+  quantiteStock             Decimal                    @default(0) @db.Decimal(12, 3)
+  seuilAlerte               Decimal                    @db.Decimal(12, 3)
+  // Compare-and-set de l'alerte seuil en cours (section 3.2/3.4, Lot 7 pt 2) :
+  // horodatage de la dernière alerte envoyée pour le passage sous le seuil
+  // ACTUEL, remis à null dès que le stock repasse au-dessus. Même mécanisme
+  // que CommandeClient.alerteDetteEnvoyeeLe / Absence.alerteEnvoyeeLe — permet
+  // à la vérification paresseuse de détecter aussi le cas où seuilAlerte est
+  // relevé sans mouvement de stock (aucun franchissement à détecter sinon).
+  alerteSeuilEnvoyeeLe      DateTime?
+  mouvements                MouvementStock[]
+  ingredients               IngredientRecette[]
+  lignesCommandeFournisseur LigneCommandeFournisseur[]
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+}
+
+// Journal des mouvements de stock — append-only : jamais modifié ni supprimé
+// rétroactivement (aucun endpoint d'update/delete). `reference` relie le
+// mouvement à son origine (ex. « Production n°12 », bon de livraison…).
+model MouvementStock {
+  id                    String               @id @default(cuid())
+  matierePremiereId     String
+  matierePremiere       MatierePremiere      @relation(fields: [matierePremiereId], references: [id])
+  type                  TypeMouvementStock
+  quantite              Decimal              @db.Decimal(12, 3)
+  reference             String?
+  // Renseigné quand le mouvement est généré automatiquement par une production
+  // (SORTIE) ou par la réception d'une commande fournisseur (ENTREE).
+  productionId          String?
+  production            Production?          @relation(fields: [productionId], references: [id])
+  commandeFournisseurId String?
+  commandeFournisseur   CommandeFournisseur? @relation(fields: [commandeFournisseurId], references: [id])
+  auteurId              String?
+  auteur                Utilisateur?         @relation(fields: [auteurId], references: [id], onDelete: SetNull)
+  date                  DateTime             @default(now())
+
+  @@index([matierePremiereId, date])
+}
+
+// --- Fournisseurs & achats (section 3.6) ------------------------------------
+
+model Fournisseur {
+  id        String                @id @default(cuid())
+  nom       String                @unique
+  contact   String? // téléphone, e-mail, adresse — champ libre
+  commandes CommandeFournisseur[]
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+}
+
+// Bon de commande fournisseur : EN_ATTENTE puis RECUE. La réception crée les
+// MouvementStock ENTREE (référence = cette commande) et incrémente le stock —
+// même mécanisme transactionnel que la production (Phase 5), en sens inverse.
+model CommandeFournisseur {
+  id            String                     @id @default(cuid())
+  numero        Int                        @unique @default(autoincrement())
+  fournisseurId String
+  fournisseur   Fournisseur                @relation(fields: [fournisseurId], references: [id])
+  statut        StatutCommandeFournisseur  @default(EN_ATTENTE)
+  date          DateTime                   @default(now())
+  dateReception DateTime?
+  creeParId     String?
+  creePar       Utilisateur?               @relation("CommandesFournisseurCreees", fields: [creeParId], references: [id], onDelete: SetNull)
+  recueParId    String?
+  recuePar      Utilisateur?               @relation("CommandesFournisseurRecues", fields: [recueParId], references: [id], onDelete: SetNull)
+  lignes        LigneCommandeFournisseur[]
+  mouvements    MouvementStock[]
+
+  @@index([statut])
+  @@index([date])
+}
+
+model LigneCommandeFournisseur {
+  id                    String              @id @default(cuid())
+  commandeFournisseurId String
+  commandeFournisseur   CommandeFournisseur @relation(fields: [commandeFournisseurId], references: [id], onDelete: Cascade)
+  matierePremiereId     String
+  matierePremiere       MatierePremiere     @relation(fields: [matierePremiereId], references: [id])
+  quantite              Decimal             @db.Decimal(12, 3)
+  prixUnitaire          Int // Fc par unité de la matière (kg, L…)
+
+  @@unique([commandeFournisseurId, matierePremiereId])
+}
+
+// --- Production & recettes (section 3.3) ------------------------------------
+
+// ORPHELINE (refonte 3.3) — plus rien ne l'écrit ni ne la lit côté
+// application depuis la suppression des recettes en Production (les
+// ingrédients sont désormais consommés globalement, sans nomenclature par
+// produit). NON supprimée lors du nettoyage des tables orphelines (3.18,
+// nettoyage) : contient encore des lignes résiduelles d'avant cette refonte
+// (2 recettes / 6 ingrédients constatés en sandbox) — à trancher séparément.
+// Une recette par produit : ingrédients + quantités POUR UNE UNITÉ produite
+// (la production multiplie par la quantité produite).
+model Recette {
+  id           String              @id @default(cuid())
+  produitId    String              @unique
+  produit      Produit             @relation(fields: [produitId], references: [id])
+  instructions String?
+  ingredients  IngredientRecette[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model IngredientRecette {
+  id                String          @id @default(cuid())
+  recetteId         String
+  recette           Recette         @relation(fields: [recetteId], references: [id], onDelete: Cascade)
+  matierePremiereId String
+  matierePremiere   MatierePremiere @relation(fields: [matierePremiereId], references: [id])
+  quantite          Decimal         @db.Decimal(12, 3)
+
+  @@unique([recetteId, matierePremiereId])
+}
+
+// Planning de production (section 3.3 a) — ce qui est prévu pour le jour
+// suivant. Une seule planification par date : la vue des écarts compare
+// sans ambiguïté le prévu et le réalisé d'une même journée.
+model PlanningProduction {
+  id                  String                 @id @default(cuid())
+  datePrevue          DateTime               @unique @db.Date
+  nombreBacsCommandes Int
+  // Prévision d'ingrédients — mêmes unités que les quantités saisies à la
+  // production, pour que l'écart se calcule sans conversion.
+  sacsFarinePrevus    Decimal                @default(0) @db.Decimal(12, 3)
+  paquetsLevurePrevus Decimal                @default(0) @db.Decimal(12, 3)
+  quantiteHuilePrevue Decimal                @default(0) @db.Decimal(12, 3)
+  kgSelPrevus         Decimal                @default(0) @db.Decimal(12, 3)
+  observations        String?
+  lignes              PlanningLigneProduit[]
+  creeParId           String?
+  creePar             Utilisateur?           @relation(fields: [creeParId], references: [id], onDelete: SetNull)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  @@index([datePrevue])
+}
+
+// Détail par produit du planning : rattaché au catalogue Produit existant
+// (Carré 1.500 Fc, Baguette 500 Fc…), pas à un catalogue parallèle.
+model PlanningLigneProduit {
+  id             String             @id @default(cuid())
+  planningId     String
+  planning       PlanningProduction @relation(fields: [planningId], references: [id], onDelete: Cascade)
+  produitId      String
+  produit        Produit            @relation(fields: [produitId], references: [id])
+  quantitePrevue Int
+
+  @@unique([planningId, produitId])
+}
+
+// Schéma de commande (section 3.3 d) — relevé, client par client, de ce que
+// chaque Dépositaire ou Maman demande pour une date donnée. Digitalise la
+// « Fiche de commande » papier : une fiche par client et par date, avec le
+// détail par produit. Les totaux du jour (tous clients confondus) alimentent
+// AUTOMATIQUEMENT PlanningProduction.nombreBacsCommandes et ses lignes dès
+// l'enregistrement — seuls les champs d'ingrédients et les observations du
+// planning restent saisis à la main.
+model SchemaCommande {
+  id        String                @id @default(cuid())
+  date      DateTime              @db.Date
+  clientId  String
+  client    Client                @relation(fields: [clientId], references: [id])
+  lignes    SchemaCommandeLigne[]
+  cycle     CycleLivraison?
+  creeParId String?
+  creePar   Utilisateur?          @relation(fields: [creeParId], references: [id], onDelete: SetNull)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  @@unique([date, clientId])
+  @@index([date])
+}
+
+// Détail par produit du schéma d'un client — mêmes produits que le Planning
+// et la Production (Carré 1.500 Fc, Baguette 500 Fc…), pas de catalogue
+// parallèle.
+model SchemaCommandeLigne {
+  id               String         @id @default(cuid())
+  schemaCommandeId String
+  schemaCommande   SchemaCommande @relation(fields: [schemaCommandeId], references: [id], onDelete: Cascade)
+  produitId        String
+  produit          Produit        @relation(fields: [produitId], references: [id])
+  quantite         Int
+
+  @@unique([schemaCommandeId, produitId])
+}
+
+// Bon de livraison (section 3.3 e) — digitalise la fiche papier remplie à la
+// livraison chez chaque Dépositaire : détail par produit LIVRÉ (peut différer
+// du Schéma de commande, saisie volontairement indépendante — aucune
+// alimentation automatique dans un sens ni dans l'autre), bacs vides repris et
+// observations. Le nom du livreur est un texte libre (« Livré par » sur la
+// fiche papier) ; les signatures Chauffeur/Dépositaire restent physiques,
+// apposées sur le PDF imprimé — non capturées en base.
+model BonLivraison {
+  id           String              @id @default(cuid())
+  date         DateTime            @db.Date
+  clientId     String
+  client       Client              @relation(fields: [clientId], references: [id])
+  lignes       BonLivraisonLigne[]
+  bacsVides    Int                 @default(0)
+  livrePar     String?
+  observations String?
+  creeParId    String?
+  creePar      Utilisateur?        @relation(fields: [creeParId], references: [id], onDelete: SetNull)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([date, clientId])
+  @@index([date])
+}
+
+// Détail par produit livré — mêmes produits que le Schéma de commande.
+model BonLivraisonLigne {
+  id             String       @id @default(cuid())
+  bonLivraisonId String
+  bonLivraison   BonLivraison @relation(fields: [bonLivraisonId], references: [id], onDelete: Cascade)
+  produitId      String
+  produit        Produit      @relation(fields: [produitId], references: [id])
+  quantite       Int
+
+  @@unique([bonLivraisonId, produitId])
+}
+
+// C4 enveloppe le SchemaCommande existant : le cycle ne duplique jamais la
+// prévision, il lui apporte seulement l'identifiant stable, les quantités aval
+// et le journal append-only des transitions.
+model CycleLivraison {
+  id               String                     @id @default(cuid())
+  schemaCommandeId String                     @unique
+  schemaCommande   SchemaCommande             @relation(fields: [schemaCommandeId], references: [id], onDelete: Cascade)
+  statut           StatutCycleLivraison       @default(PREVISION)
+  version          Int                        @default(1)
+  livrePar         String?
+  bonRetourne      Boolean                    @default(false)
+  bonRetourneLe    DateTime?
+  bonRetourneParId String?
+  bonRetournePar   Utilisateur?               @relation("CyclesBonRetournePar", fields: [bonRetourneParId], references: [id], onDelete: SetNull)
+  commandeId       String?                    @unique
+  commande         CommandeClient?            @relation(fields: [commandeId], references: [id], onDelete: Restrict)
+  lignes           CycleLivraisonLigne[]
+  transitions      TransitionCycleLivraison[]
+  anomalies        AnomalieCycleLivraison[]
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  @@index([statut])
+  @@index([bonRetourne, statut])
+}
+
+model CycleLivraisonLigne {
+  id                        String         @id @default(cuid())
+  cycleId                   String
+  cycle                     CycleLivraison @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  produitId                 String
+  produit                   Produit        @relation(fields: [produitId], references: [id])
+  quantiteRetenueProduction Int?
+  quantitePreparee          Int?
+  quantiteRemiseMagasin     Int?
+  quantiteChargee           Int?
+  quantiteDeposee           Int?
+  quantiteAcceptee          Int?
+  quantiteRetournee         Int?
+  quantiteManquante         Int?
+
+  @@unique([cycleId, produitId])
+  @@index([produitId])
+}
+
+model TransitionCycleLivraison {
+  id            String               @id @default(cuid())
+  cycleId       String
+  cycle         CycleLivraison       @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  action        ActionCycleLivraison
+  versionAvant  Int
+  versionApres  Int
+  utilisateurId String?
+  utilisateur   Utilisateur?         @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
+  observations  String?
+  donnees       Json
+  createdAt     DateTime             @default(now())
+
+  @@index([cycleId, createdAt])
+}
+
+model AnomalieCycleLivraison {
+  id                    String            @id @default(cuid())
+  cycleId               String
+  cycle                 CycleLivraison    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  type                  TypeAnomalieCycle
+  description           String
+  signaleeParId         String?
+  signaleePar           Utilisateur?      @relation("AnomaliesCycleSignalees", fields: [signaleeParId], references: [id], onDelete: SetNull)
+  signaleeLe            DateTime          @default(now())
+  resolueParId          String?
+  resoluePar            Utilisateur?      @relation("AnomaliesCycleResolues", fields: [resolueParId], references: [id], onDelete: SetNull)
+  resolueLe             DateTime?
+  commentaireResolution String?
+
+  @@index([cycleId, resolueLe])
+  @@index([type, resolueLe])
+}
+
+// Motif d'un don de bacs (section 3.3 b) — liste fixe mais extensible,
+// initialisée avec « Police » et « Baraka ».
+model MotifDon {
+  id        String          @id @default(cuid())
+  nom       String          @unique
+  dons      ProductionDon[]
+  createdAt DateTime        @default(now())
+}
+
+// Motif d'une perte de bacs à la production (section 3.3 f) — même logique que
+// MotifDon : liste fixe mais extensible, initialisée en seed.
+model MotifPerte {
+  id        String            @id @default(cuid())
+  nom       String            @unique
+  pertes    ProductionPerte[]
+  createdAt DateTime          @default(now())
+}
+
+// Répartition des bacs foutus (Production.bacsFoutus) par motif — contrepartie
+// de ProductionDon pour les pertes. La clôture d'une Production exige que la
+// somme des lignes égale exactement bacsFoutus (contrairement aux dons,
+// purement informatifs, ici l'exhaustivité est exigée avant clôture).
+model ProductionPerte {
+  id           String     @id @default(cuid())
+  productionId String
+  production   Production @relation(fields: [productionId], references: [id], onDelete: Cascade)
+  motifPerteId String
+  motifPerte   MotifPerte @relation(fields: [motifPerteId], references: [id])
+  nombreBacs   Int
+
+  @@unique([productionId, motifPerteId])
+}
+
+// Motif de non-conformité relevé au contrôle qualité (section 3.3 f) — liste
+// fixe mais extensible, initialisée en seed.
+model MotifNonConformite {
+  id        String            @id @default(cuid())
+  nom       String            @unique
+  controles ControleQualite[]
+  createdAt DateTime          @default(now())
+}
+
+// Contrôle qualité formel d'une Production (section 3.3 f) — un seul contrôle
+// par Production. Un motif est exigé quand le verdict est NON_CONFORME (validé
+// côté schéma partagé), facultatif sinon.
+model ControleQualite {
+  id            String              @id @default(cuid())
+  productionId  String              @unique
+  production    Production          @relation(fields: [productionId], references: [id], onDelete: Cascade)
+  verdict       VerdictQualite
+  motifId       String?
+  motif         MotifNonConformite? @relation(fields: [motifId], references: [id])
+  observations  String?
+  controleParId String?
+  controlePar   Utilisateur?        @relation("ControlesQualiteEffectues", fields: [controleParId], references: [id], onDelete: SetNull)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
+// Production enregistrée (section 3.3 b + c). Les 4 quantités d'ingrédients
+// utilisés décrémentent AUTOMATIQUEMENT le stock via des MouvementStock SORTIE
+// créés dans la même transaction (référence = cette production).
+//
+// Réconciliation : bacsProduits peut différer de la somme des destinations —
+// l'écart est signalé à l'utilisateur mais n'empêche jamais l'enregistrement.
+//
+// Clôture (section 3.3 f) : une Production naît OUVERTE (modifiable sur ses
+// seules pertes/contrôle qualité) puis se CLOTURE explicitement — verrou
+// définitif. La clôture exige un contrôle qualité enregistré et, si
+// bacsFoutus > 0, des lignes ProductionPerte dont la somme égale bacsFoutus.
+model Production {
+  id                     String            @id @default(cuid())
+  numero                 Int               @unique @default(autoincrement())
+  date                   DateTime          @default(now())
+  // Bacs produits et leur destination
+  bacsProduits           Int
+  bacsLivresDepositaires Int               @default(0)
+  bacsLivresMamans       Int               @default(0)
+  bacsVendusVC           Int               @default(0)
+  bacsRestants           Int               @default(0)
+  bacsFoutus             Int               @default(0)
+  dons                   ProductionDon[]
+  pertes                 ProductionPerte[]
+  controleQualite        ControleQualite?
+  // Ingrédients réellement utilisés (déclenchent la décrémentation du stock)
+  sacsUtilises           Decimal           @default(0) @db.Decimal(12, 3)
+  paquetsLevureUtilises  Decimal           @default(0) @db.Decimal(12, 3)
+  kgSelUtilises          Decimal           @default(0) @db.Decimal(12, 3)
+  quantiteHuileUtilisee  Decimal           @default(0) @db.Decimal(12, 3)
+  kgFarineAbimes         Decimal?          @db.Decimal(12, 3)
+  observations           String?
+  enregistreParId        String?
+  enregistrePar          Utilisateur?      @relation(fields: [enregistreParId], references: [id], onDelete: SetNull)
+  mouvements             MouvementStock[]
+  statut                 StatutProduction  @default(OUVERTE)
+  clotureeLe             DateTime?
+  clotureeParId          String?
+  clotureePar            Utilisateur?      @relation("ProductionsCloturees", fields: [clotureeParId], references: [id], onDelete: SetNull)
+
+  @@index([date])
+  @@index([statut])
+}
+
+// Répartition des bacs donnés par motif (section 3.3 b).
+model ProductionDon {
+  id           String     @id @default(cuid())
+  productionId String
+  production   Production @relation(fields: [productionId], references: [id], onDelete: Cascade)
+  motifDonId   String
+  motifDon     MotifDon   @relation(fields: [motifDonId], references: [id])
+  nombreBacs   Int
+
+  @@unique([productionId, motifDonId])
+}
+
+// --- Travailleurs (section 3.18) --------------------------------------------
+
+// Roster du personnel, plus large que les comptes Utilisateur : couvre aussi
+// le personnel sans accès à l'application (livreur, agent d'entretien…).
+// `utilisateurId` relie optionnellement la fiche à un compte de l'app.
+model Travailleur {
+  id                     String         @id @default(cuid())
+  nom                    String
+  telephone              String?
+  poste                  String
+  dateEmbauche           DateTime       @db.Date
+  dateNaissance          DateTime?      @db.Date
+  utilisateurId          String?        @unique
+  utilisateur            Utilisateur?   @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
+  creeParId              String?
+  creePar                Utilisateur?   @relation("TravailleursCrees", fields: [creeParId], references: [id], onDelete: SetNull)
+  pointages              Pointage[]
+  absences               Absence[]
+  // Départements & Groupes (3.18, nouveau) — purement organisationnel, aucune
+  // permission associée. Nullable en base pour ne pas casser les fiches
+  // existantes créées avant cette fonctionnalité ; obligatoire côté schéma
+  // applicatif pour toute NOUVELLE fiche (travailleurCreateSchema).
+  departementId          String?
+  departement            Departement?   @relation("TravailleursDuDepartement", fields: [departementId], references: [id], onDelete: SetNull)
+  groupeId               String?
+  groupe                 Groupe?        @relation("TravailleursDuGroupe", fields: [groupeId], references: [id], onDelete: SetNull)
+  departementsDontChef   Departement[]  @relation("ChefDepartement")
+  // Adresse email professionnelle (3.18, nouveau) — Cloudflare Email Routing.
+  // emailDestination = boîte perso existante de l'employé, saisie par le
+  // Chargé du personnel. emailProAdresse = adresse générée
+  // (prenom.nom@boulangerie-lomoto.com), unique, avec suffixe numérique en
+  // cas de collision de nom. Les deux identifiants Cloudflare sont internes
+  // (jamais exposés au front) : ils permettent de reprendre la vérification
+  // ou d'éviter de recréer une règle déjà posée.
+  emailDestination       String?
+  emailProAdresse        String?        @unique
+  emailProStatut         StatutEmailPro @default(AUCUNE)
+  emailProErreur         String?
+  cloudflareAdresseId    String?
+  cloudflareRegleId      String?
+  // Salaire & paie (3.18, nouveau). Nullable en base pour ne pas casser les
+  // fiches existantes ; obligatoires côté schéma applicatif pour toute
+  // NOUVELLE fiche (travailleurCreateSchema). joursTravaillesParMois sert de
+  // diviseur du taux journalier — individuel par agent (26 jours, 13 jours…),
+  // jamais une valeur fixe pour tous.
+  salaireMensuel         Int?
+  joursTravaillesParMois Int?
+  sanctions              Sanction[]
+  bulletinsPaie          BulletinPaie[]
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+}
+
+enum StatutEmailPro {
+  AUCUNE
+  EN_ATTENTE_VERIFICATION
+  ACTIF
+  ECHEC
+}
+
+// Départements & Groupes (3.18, nouveau) : purement organisationnel, aucune
+// permission propre — géré via le module TRAVAILLEURS (Admin secondaire/
+// Principal, écriture). Le chef de département est une simple référence à un
+// Travailleur, sans droit particulier dans l'app.
+model Departement {
+  id                String        @id @default(cuid())
+  nom               String        @unique
+  chefTravailleurId String?
+  chefTravailleur   Travailleur?  @relation("ChefDepartement", fields: [chefTravailleurId], references: [id], onDelete: SetNull)
+  groupes           Groupe[]
+  travailleurs      Travailleur[] @relation("TravailleursDuDepartement")
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+// Subdivision d'un Département (ex. « Groupe 1 », « Groupe 2 » au sein de la
+// Production). Terme volontairement différent d'« Équipe » (nom d'affichage
+// des rôles, 3.7) pour éviter toute confusion.
+model Groupe {
   id            String        @id @default(cuid())
-  numero        Int           @unique @default(autoincrement())
-  date          DateTime      @default(now())
-  vendeurId     String
-  vendeur       Utilisateur   @relation(fields: [vendeurId], references: [id])
-  total         Int
-  totalTaxe     Int           @default(0)
-  moyenPaiement MoyenPaiement
-  lignes        LigneVente[]
-  // Renseigné par la clôture de caisse journalière qui englobe cette vente.
-  clotureId     String?
-  cloture       ClotureCaisse? @relation(fields: [clotureId], references: [id])
+  departementId String
+  departement   Departement   @relation(fields: [departementId], references: [id], onDelete: Cascade)
+  nom           String
+  travailleurs  Travailleur[] @relation("TravailleursDuGroupe")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  @@index([date])
-  @@index([clotureId])
+  @@unique([departementId, nom])
 }
 
-model LigneVente {
-  id           String  @id @default(cuid())
-  venteId      String
-  vente        Vente   @relation(fields: [venteId], references: [id], onDelete: Cascade)
-  produitId    String
-  produit      Produit @relation(fields: [produitId], references: [id])
-  quantite     Int
-  prixUnitaire Int
-  tauxTaxe     Float
+// Pointage (3.18, remplace Presence) : horodatage réel d'entrée/sortie
+// (date + heure, pas juste une date) — gère nativement les équipes de nuit
+// à cheval sur deux jours calendaires. horodatageSortie nul = la personne
+// est encore en poste.
+model Pointage {
+  id               String       @id @default(cuid())
+  travailleurId    String
+  travailleur      Travailleur  @relation(fields: [travailleurId], references: [id], onDelete: Cascade)
+  horodatageEntree DateTime
+  horodatageSortie DateTime?
+  enregistreParId  String?
+  enregistrePar    Utilisateur? @relation("PointagesEnregistres", fields: [enregistreParId], references: [id], onDelete: SetNull)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([travailleurId, horodatageEntree])
 }
 
-// Clôture de caisse journalière : regroupe toutes les ventes non encore
-// clôturées et fige les totaux par moyen de paiement.
-model ClotureCaisse {
-  id               String   @id @default(cuid())
-  date             DateTime @default(now())
-  caissierId       String
-  caissier         Utilisateur @relation(fields: [caissierId], references: [id])
-  nombreVentes     Int
-  totalVentes      Int
-  totalEspeces     Int
-  totalMobileMoney Int
-  totalCarte       Int
-  ventes           Vente[]
+// Absence (3.18, nouveau) : motif déclaré + décision distincte, tranchée par
+// l'Admin secondaire ou Principal (pas le chef de département, purement
+// organisationnel — 3.18). decideParId/dateDecision restent nuls tant que
+// decisionStatut vaut EN_ATTENTE.
+model Absence {
+  id              String                @id @default(cuid())
+  travailleurId   String
+  travailleur     Travailleur           @relation(fields: [travailleurId], references: [id], onDelete: Cascade)
+  date            DateTime              @db.Date
+  motif           String
+  // Auteur de la déclaration initiale — distinct de decidePar, qui peut être
+  // la même personne ou une autre (3.18).
+  declareParId    String?
+  declarePar      Utilisateur?          @relation("AbsencesDeclarees", fields: [declareParId], references: [id], onDelete: SetNull)
+  decisionStatut  StatutDecisionAbsence @default(EN_ATTENTE)
+  decideParId     String?
+  decidePar       Utilisateur?          @relation("AbsencesDecidees", fields: [decideParId], references: [id], onDelete: SetNull)
+  dateDecision    DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  // Rappel « absence en attente » (3.18, nouveau) : même pattern que
+  // CommandeClient.alerteDetteEnvoyeeLe — non-null dès que l'alerte est
+  // partie, empêche tout renvoi.
+  alerteEnvoyeeLe DateTime?
+
+  @@index([travailleurId, date])
+}
+
+enum StatutDecisionAbsence {
+  EN_ATTENTE
+  JUSTIFIEE
+  NON_JUSTIFIEE
+}
+
+// Sanction (3.18, nouveau) : punition ou retenue disciplinaire — distincte
+// des déductions automatiques pour absence, s'additionne à elles dans le
+// calcul de paie. montant réservé aux retenues (une punition n'est jamais
+// financière) — contrainte appliquée côté schéma applicatif (zod), pas en
+// base : rien n'empêche techniquement une valeur, mais l'API la rejette.
+model Sanction {
+  id              String       @id @default(cuid())
+  travailleurId   String
+  travailleur     Travailleur  @relation(fields: [travailleurId], references: [id], onDelete: Cascade)
+  type            TypeSanction
+  motif           String
+  montant         Int?
+  date            DateTime     @db.Date
+  enregistreParId String?
+  enregistrePar   Utilisateur? @relation("SanctionsEnregistrees", fields: [enregistreParId], references: [id], onDelete: SetNull)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([travailleurId, date])
+}
+
+enum TypeSanction {
+  PUNITION
+  RETENUE
+}
+
+// Bulletin de paie (3.18, nouveau) : instantané FIGÉ du calcul de paie au
+// moment de la génération — absencesNonJustifiees/sanctionsRetenues en JSON,
+// jamais recalculés depuis Absence/Sanction après coup. Un ajustement
+// ultérieur (nouvelle sanction, décision d'absence changée) n'altère jamais
+// rétroactivement un bulletin déjà émis ; seul un nouveau calcul (ou une
+// nouvelle génération) en tient compte. Aucune contrainte d'unicité sur
+// (travailleurId, mois) : régénérer produit un nouvel instantané distinct,
+// l'ancien reste inchangé et consultable.
+model BulletinPaie {
+  id                          String       @id @default(cuid())
+  travailleurId               String
+  travailleur                 Travailleur  @relation(fields: [travailleurId], references: [id], onDelete: Restrict)
+  mois                        String
+  salaireMensuel              Int
+  joursTravaillesParMois      Int
+  tauxJournalier              Float
+  absencesNonJustifiees       Json
+  retenueAbsences             Float
+  sanctionsRetenues           Json
+  totalRetenuesDisciplinaires Int
+  salaireNet                  Int
+  genereParId                 String?
+  generePar                   Utilisateur? @relation("BulletinsGeneres", fields: [genereParId], references: [id], onDelete: SetNull)
+  dateGeneration              DateTime     @default(now())
+
+  @@index([travailleurId, mois])
+}
+
+// --- Approbations (section 3.16) & délégation (section 3.7), Phase 10 ---------
+
+// Demande d'exécution d'une tâche critique, en attente de l'Admin Principal.
+// `donnees` porte le payload de l'action à rejouer telle quelle à l'approbation.
+model DemandeApprobation {
+  id            String             @id @default(cuid())
+  type          TypeActionCritique
+  donnees       Json
+  resume        String // description lisible (qui/quoi) figée à la création
+  statut        StatutDemande      @default(EN_ATTENTE)
+  demandeParId  String
+  demandePar    Utilisateur        @relation("DemandesEmises", fields: [demandeParId], references: [id])
+  approuveParId String?
+  approuvePar   Utilisateur?       @relation("DemandesDecidees", fields: [approuveParId], references: [id], onDelete: SetNull)
+  erreur        String? // renseigné si l'exécution a échoué à l'approbation
+  dateDemande   DateTime           @default(now())
+  dateDecision  DateTime?
+
+  @@index([statut, dateDemande])
+}
+
+// Délégation temporaire d'un droit d'écriture sur un module (section 3.7).
+// Active si dateDebut <= aujourd'hui <= dateFin — évaluée par date à chaque
+// requête, aucune tâche planifiée nécessaire.
+model DelegationRole {
+  id            String       @id @default(cuid())
+  utilisateurId String
+  utilisateur   Utilisateur  @relation("DelegationsRecues", fields: [utilisateurId], references: [id], onDelete: Cascade)
+  module        Module
+  dateDebut     DateTime     @db.Date
+  dateFin       DateTime     @db.Date
+  creeParId     String?
+  creePar       Utilisateur? @relation("DelegationsCreees", fields: [creeParId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
+
+  @@index([utilisateurId, dateFin])
+}
+
+// --- Caisse : registre journalier (section 3.1) -----------------------------
+// Les modèles Vente / LigneVente / ClotureCaisse ci-dessus sont ORPHELINS depuis
+// la refonte de 3.1 (vente au comptoir retirée) : conservés en base, plus
+// référencés par aucune route ni UI.
+
+// Taux du jour — une valeur par date, saisie par le Caissier. Sert au calcul de
+// la dépense farine ; son absence ne bloque que cette case.
+model TauxDuJour {
+  id          String       @id @default(cuid())
+  date        DateTime     @unique @db.Date
+  valeur      Decimal      @db.Decimal(12, 3)
+  definiParId String?
+  definiPar   Utilisateur? @relation("TauxDefinis", fields: [definiParId], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+// Origine d'une ligne de dépense : saisie libre, ou ligne farine calculée.
+enum OrigineDepense {
+  MANUELLE
+  FARINE
+}
+
+// Dépense du registre journalier. La ligne FARINE est générée par la case à
+// cocher : montant = [(33,5 × taux du jour) + 500] × sacs utilisés en production.
+// Le montant est FIGÉ à l'enregistrement ; tauxApplique et sacsUtilises gardent
+// les entrées du calcul pour qu'il reste vérifiable après coup.
+// Au plus une ligne d'origine FARINE par date est déjà garanti par un index
+// unique PARTIEL PostgreSQL (migration 20260813180500_c2_archivage_idempotence_caisse,
+// `DepenseCaisse_date_farinee_key`, `WHERE origine = 'FARINE'`) — non
+// représentable ici, Prisma ne supporte pas les index partiels dans le DSL.
+// P1-B (28/08/2026) : la contrainte existait déjà ; ce qui manquait, c'est que
+// `PUT /depenses/farine` (routes/caisse.ts) traduise la violation P2002
+// résultante en 409 métier au lieu de la laisser remonter en 500 brut — corrigé
+// dans ce lot. Les dépenses MANUELLE restent illimitées par jour.
+model DepenseCaisse {
+  id              String         @id @default(cuid())
+  date            DateTime       @db.Date
+  motif           String
+  montant         Int
+  origine         OrigineDepense @default(MANUELLE)
+  tauxApplique    Decimal?       @db.Decimal(12, 3)
+  sacsUtilises    Decimal?       @db.Decimal(12, 3)
+  enregistreParId String?
+  enregistrePar   Utilisateur?   @relation("DepensesEnregistrees", fields: [enregistreParId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@index([date])
+}
+
+// Trace générique des écritures sensibles protégées par Idempotency-Key.
+// La réponse sérialisée permet de rejouer exactement le premier résultat.
+model OperationIdempotente {
+  id            String      @id @default(cuid())
+  utilisateurId String
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  portee        String
+  cle           String
+  empreinte     String
+  statutHttp    Int
+  reponse       Json
+  createdAt     DateTime    @default(now())
+
+  @@unique([utilisateurId, portee, cle])
+  @@index([createdAt])
+}
+
+enum StatutSessionCaisse {
+  OUVERTE
+  FERMEE
+}
+
+// Session de caisse nominative (section 3.1, Lot 6). Une session par date —
+// enveloppe le registre journalier existant sans recalculer ni dupliquer ses
+// lignes. Les soldes de fermeture restent des photographies vérifiables au
+// moment de la clôture. Une fois FERMEE, plus aucune écriture n'est permise
+// sur le registre de cette date (taux, dépenses) : c'est ce qui rend
+// soldeTheoriqueFermeture stable pour une éventuelle correction ultérieure.
+// motifEcart est exigé quand ecartFermeture ≠ 0 (contrainte SQL, migration).
+// derniereCorrection* : la correction post-clôture (droit spécial Admin
+// Principal) écrase soldeCompteFermeture/ecartFermeture — l'historique complet
+// des corrections successives reste consultable via AuditLog (module CAISSE).
+model SessionCaisse {
+  id                      String              @id @default(cuid())
+  date                    DateTime            @unique @db.Date
+  statut                  StatutSessionCaisse @default(OUVERTE)
+  soldeOuverture          Int
+  soldeTheoriqueFermeture Int?
+  soldeCompteFermeture    Int?
+  ecartFermeture          Int?
+  motifEcart              String?
+  ouverteParId            String?
+  ouvertePar              Utilisateur?        @relation("SessionsCaisseOuvertes", fields: [ouverteParId], references: [id], onDelete: SetNull)
+  fermeeParId             String?
+  fermeePar               Utilisateur?        @relation("SessionsCaisseFermees", fields: [fermeeParId], references: [id], onDelete: SetNull)
+  ouverteLe               DateTime            @default(now())
+  fermeeLe                DateTime?
+  derniereCorrectionLe    DateTime?
+  derniereCorrectionParId String?
+  derniereCorrectionPar   Utilisateur?        @relation("SessionsCaisseCorrigees", fields: [derniereCorrectionParId], references: [id], onDelete: SetNull)
+  motifCorrection         String?
+  remises                 RemiseCaisse[]
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  @@index([statut, date])
+}
+
+// Remise contradictoire d'espèces rattachée à la session du jour. Le remettant
+// peut ne pas avoir de compte applicatif ; son nom reste donc figé en texte.
+// Depuis le Lot 6 (P0-07), une remise peut aussi confirmer un ou plusieurs
+// règlements DECLARE (reglementsConfirmes) : c'est ce rattachement, et lui
+// seul, qui fait passer un règlement à CONFIRME et réduit la dette du client.
+model RemiseCaisse {
+  id                  String             @id @default(cuid())
+  sessionCaisseId     String
+  sessionCaisse       SessionCaisse      @relation(fields: [sessionCaisseId], references: [id], onDelete: Restrict)
+  montant             Int
+  remisParNom         String
+  recuParId           String?
+  recuPar             Utilisateur?       @relation("RemisesCaisseRecues", fields: [recuParId], references: [id], onDelete: SetNull)
+  enregistreParId     String?
+  enregistrePar       Utilisateur?       @relation("RemisesCaisseEnregistrees", fields: [enregistreParId], references: [id], onDelete: SetNull)
+  reference           String?            @unique
+  observation         String?
+  dateRemise          DateTime           @default(now())
+  createdAt           DateTime           @default(now())
+  reglementsConfirmes PaiementCommande[]
+
+  @@index([sessionCaisseId, dateRemise])
 }
 
 // Paramètres de la boutique (section 3.9) — clé/valeur, édités par l'Admin.
@@ -246,4 +1265,164 @@ model ParametreBoutique {
   cle       String   @unique
   valeur    String
   updatedAt DateTime @updatedAt
+}
+
+// Secret de bootstrap du premier lancement (P1-A, 28/08/2026) — remplace
+// l'absence de compte comme seule autorisation d'accès à
+// routes/premierLancement.ts. Généré hors dépôt (scripts/generer-secret-
+// premier-lancement.ts, exécuté manuellement par un administrateur ayant
+// déjà accès à l'infrastructure), jamais stocké ni journalisé en clair —
+// seul son empreinte SHA-256 est conservée (secret à haute entropie,
+// contrairement à un mot de passe humain : un hachage rapide et non salé
+// suffit, un lookup par égalité est nécessaire pour la consommation
+// atomique conditionnelle, bcrypt s'y prêterait mal). `expiresAt` et
+// `consommeLe` bornent la fenêtre d'utilisation et empêchent le rejeu —
+// la consommation elle-même est un `updateMany` conditionnel
+// (`consommeLe IS NULL AND expiresAt > now()`) dans la même transaction
+// Serializable que la création du compte Administrateur Principal.
+model SecretPremierLancement {
+  id         String    @id @default(cuid())
+  secretHash String    @unique
+  expiresAt  DateTime
+  consommeLe DateTime?
+  creeLe     DateTime  @default(now())
+
+  @@index([consommeLe, expiresAt])
+}
+
+// Type d'action journalisée (section 3.17). Uniquement les MODIFICATIONS et
+// SUPPRESSIONS réussies — les créations sont déjà tracées via créePar/
+// enregistrePar sur chaque entité, et les tentatives refusées (403) ne sont
+// pas journalisées (question ouverte résolue, section 11).
+enum ActionAudit {
+  MODIFICATION
+  SUPPRESSION
+}
+
+// Journal d'audit (section 3.17) — historique IMMUABLE : aucune route d'écriture
+// n'est exposée, la table n'est alimentée que par l'extension Prisma centrale
+// (lib/audit.ts). Lecture réservée au DG et aux Admins.
+model AuditLog {
+  id             String       @id @default(cuid())
+  // Auteur de l'action. onDelete: SetNull pour ne pas bloquer la suppression
+  // d'un compte ; le nom reste figé dans utilisateurNom (historique immuable).
+  utilisateurId  String?
+  utilisateur    Utilisateur? @relation("AuditsEffectues", fields: [utilisateurId], references: [id], onDelete: SetNull)
+  utilisateurNom String
+  module         Module
+  typeEntite     String
+  entiteId       String
+  action         ActionAudit
+  // Instantanés avant/après (champs scalaires, secrets expurgés).
+  avant          Json?
+  apres          Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([createdAt])
+  @@index([module, createdAt])
+  @@index([utilisateurId, createdAt])
+}
+
+// Sauvegardes de la base (section 3.15). Une sauvegarde AUTOMATIQUE est
+// déclenchée chaque jour par le planificateur (services/planificateurSauvegarde)
+// et écrite localement sur le disque du serveur (pas d'envoi vers un service
+// externe : un compte de service Google Drive a été essayé puis abandonné,
+// voir .env.example) ; une MANUELLE est déclenchée par l'Admin Principal et
+// repart aussi directement dans son navigateur en plus de la copie locale.
+enum TypeSauvegarde {
+  AUTOMATIQUE
+  MANUELLE
+  // Sauvegarde de sûreté déclenchée automatiquement juste avant une
+  // réinitialisation de la base (section 3.15) — écrite localement comme les
+  // autres, donc soumise à la même rétention glissante (services/sauvegardeLocale.ts).
+  REINITIALISATION
+}
+
+enum StatutSauvegarde {
+  SUCCES
+  ECHEC
+}
+
+// Journal des tentatives de sauvegarde — écrit AUSSI en cas d'échec : une
+// sauvegarde qui ne s'est pas faite est précisément ce qu'il faut voir.
+model SauvegardeBase {
+  id                     String           @id @default(cuid())
+  type                   TypeSauvegarde
+  statut                 StatutSauvegarde
+  // Taille du dump produit ; null si la génération elle-même a échoué. En Int :
+  // au-delà de 2 Go, un dump de cette base relèverait d'un autre problème.
+  tailleOctets           Int?
+  nomFichier             String?
+  // Destination réelle du fichier : dossier Google Drive (avec son identifiant
+  // distant) ou téléchargement direct, qui ne laisse aucune copie sur le serveur.
+  destination            String?
+  idDistant              String?
+  // Message d'erreur tel que remonté (pg_dump absent, Drive refusé…), pour que
+  // l'Admin puisse agir sans accès aux journaux du serveur.
+  erreur                 String?
+  dureeMs                Int?
+  // Auteur d'une sauvegarde manuelle ; null pour les automatiques (pas d'humain).
+  declencheParId         String?
+  declenchePar           Utilisateur?     @relation("SauvegardesDeclenchees", fields: [declencheParId], references: [id], onDelete: SetNull)
+  // Raison saisie par l'Admin Principal avant une réinitialisation (section
+  // 3.15) — seule trace qui survit à l'opération, puisque le Journal d'audit
+  // lui-même est effacé. Nul pour tout autre type de sauvegarde.
+  raisonReinitialisation String?
+  createdAt              DateTime         @default(now())
+
+  @@index([createdAt])
+  @@index([type, createdAt])
+}
+
+// --- Assistant (section 3.19) — messagerie humaine directe utilisateur ↔ Admin.
+
+enum StatutConversation {
+  OUVERTE
+  FERMEE
+}
+
+// Une conversation par cycle ouverture→fermeture (pas un fil unique à vie) :
+// une fois fermée par un Admin, le prochain message de l'utilisateur en ouvre
+// une nouvelle plutôt que de rouvrir l'ancienne — historique propre, comme des
+// tickets successifs.
+model ConversationSupport {
+  id            String             @id @default(cuid())
+  utilisateurId String
+  utilisateur   Utilisateur        @relation("ConversationsUtilisateur", fields: [utilisateurId], references: [id])
+  statut        StatutConversation @default(OUVERTE)
+  // IA (premier niveau, section 3.19 mise à jour) : tant que false, l'IA
+  // répond automatiquement aux messages de l'utilisateur. Passe à true via
+  // "Parler à un Admin" (ou automatiquement si l'IA échoue, voir lib/ia.ts) —
+  // irréversible pour le cycle en cours : seul un Admin peut alors répondre.
+  escaladee     Boolean            @default(false)
+  fermeeParId   String?
+  fermeePar     Utilisateur?       @relation("ConversationsSupportFermeesPar", fields: [fermeeParId], references: [id], onDelete: SetNull)
+  dateFermeture DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  messages      MessageSupport[]
+
+  @@index([utilisateurId, statut])
+  @@index([statut, updatedAt])
+}
+
+// `auteurType` est une chaîne libre — PAS un enum Prisma — délibérément : le
+// modèle doit pouvoir absorber un futur auteur "IA" sans migration de schéma
+// cassante — désormais utilisé (UTILISATEUR | ADMIN | IA, packages/shared).
+// `auteurId` est nullable pour cette même raison : un message IA n'a pas
+// d'auteur humain.
+model MessageSupport {
+  id             String              @id @default(cuid())
+  conversationId String
+  conversation   ConversationSupport @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  auteurType     String
+  auteurId       String?
+  auteur         Utilisateur?        @relation("MessagesSupportEnvoyes", fields: [auteurId], references: [id])
+  contenu        String?
+  // Data URI base64 stockée directement en base (choix délibéré, 3.19 : la
+  // simplicité prime sur la robustesse à grande échelle pour cette v1).
+  captureEcran   String?
+  createdAt      DateTime            @default(now())
+
+  @@index([conversationId, createdAt])
 }

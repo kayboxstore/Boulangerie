@@ -1,17 +1,23 @@
-import { CLE_SEUIL_ALERTE_TRANSACTION } from "@lomoto/shared";
 import { prisma } from "./prisma.js";
 
-const SEUIL_PAR_DEFAUT = 100_000; // Fc — valeur par défaut de la spec (3.10)
+/** Lit une valeur du magasin clé/valeur ParametreBoutique (ou `defaut`). */
+export async function lireParametre(cle: string, defaut = ""): Promise<string> {
+  const parametre = await prisma.parametreBoutique.findUnique({ where: { cle } });
+  return parametre?.valeur ?? defaut;
+}
 
 /**
- * Seuil (Fc) au-delà duquel une transaction déclenche l'alerte dédiée au DG.
- * Lu en base (ParametreBoutique) pour rester modifiable par l'Admin ;
- * retombe sur la valeur par défaut si le paramètre est absent ou invalide.
+ * Écrit une valeur dans le magasin clé/valeur ParametreBoutique — create/update
+ * explicites plutôt qu'un upsert : l'extension d'audit centrale (lib/audit.ts)
+ * n'intercepte que les opérations `update`/`delete`, pas `upsert`. Un upsert
+ * silencieux ferait disparaître toute trace de modification au Journal d'audit
+ * (section 3.17) dès la deuxième écriture sur une même clé.
  */
-export async function seuilAlerteTransaction(): Promise<number> {
-  const parametre = await prisma.parametreBoutique.findUnique({
-    where: { cle: CLE_SEUIL_ALERTE_TRANSACTION },
-  });
-  const valeur = Number(parametre?.valeur);
-  return Number.isFinite(valeur) && valeur > 0 ? valeur : SEUIL_PAR_DEFAUT;
+export async function ecrireParametre(cle: string, valeur: string): Promise<void> {
+  const existant = await prisma.parametreBoutique.findUnique({ where: { cle } });
+  if (existant) {
+    await prisma.parametreBoutique.update({ where: { cle }, data: { valeur } });
+  } else {
+    await prisma.parametreBoutique.create({ data: { cle, valeur } });
+  }
 }

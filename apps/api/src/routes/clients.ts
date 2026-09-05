@@ -1,7 +1,16 @@
 import { Router } from "express";
-import { clientCreateSchema, type ClientDTO } from "@lomoto/shared";
+import { Prisma } from "@prisma/client";
+import {
+  clientCreateSchema,
+  clientUpdateSchema,
+  typeClientCreateSchema,
+  typeClientUpdateSchema,
+  type ClientDTO,
+} from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { traiterActionCritique } from "../services/actionsCritiques.js";
+import { bornesJourLomoto, jourLomoto } from "../lib/temps.js";
 
 export const clientsRouter = Router();
 export const typeClientsRouter = Router();
@@ -9,13 +18,32 @@ export const typeClientsRouter = Router();
 clientsRouter.use(requireAuth);
 typeClientsRouter.use(requireAuth);
 
-const versClientDTO = (c: {
-  id: string;
-  nom: string;
-  telephone: string | null;
-  avanceDisponible: number;
-  typeClient: { id: string; nom: string; prixParBac: number; commissionParBac: number };
-}): ClientDTO => ({
+// Suivi commercial (section 3.5, Lot 7 pt 5) : nombre de jours écoulés
+// depuis la dernière commande, en jours Lomoto (comme joursDepuis pour
+// l'alerte dette, commandes.ts) — pas un simple écart de millisecondes.
+function joursDepuisDerniereCommande(derniereCommandeLe: Date | null): number | null {
+  if (!derniereCommandeLe) return null;
+  const [debutAujourdhui] = bornesJourLomoto();
+  return Math.max(
+    0,
+    Math.floor(
+      (debutAujourdhui.getTime() - bornesJourLomoto(jourLomoto(derniereCommandeLe))[0].getTime()) / 86_400_000,
+    ),
+  );
+}
+
+const versClientDTO = (
+  c: {
+    id: string;
+    nom: string;
+    telephone: string | null;
+    avanceDisponible: number;
+    typeClient: { id: string; nom: string; prixParBac: number; commissionParBac: number };
+    zoneDepositaireId: string | null;
+    zoneDepositaire: { nom: string } | null;
+  },
+  derniereCommandeLe: Date | null = null,
+): ClientDTO => ({
   id: c.id,
   nom: c.nom,
   telephone: c.telephone,
@@ -26,32 +54,111 @@ const versClientDTO = (c: {
     prixParBac: c.typeClient.prixParBac,
     commissionParBac: c.typeClient.commissionParBac,
   },
+  zoneDepositaireId: c.zoneDepositaireId,
+  zoneDepositaireNom: c.zoneDepositaire?.nom ?? null,
+  derniereCommandeLe: derniereCommandeLe?.toISOString() ?? null,
+  joursDepuisDerniereCommande: joursDepuisDerniereCommande(derniereCommandeLe),
 });
 
-// Les qualités (types de clients) — donnée de référence pour les formulaires.
+const INCLUDE_CLIENT = { typeClient: true, zoneDepositaire: { select: { nom: true } } } as const;
+
+const versTypeClientDTO = (t: {
+  id: string;
+  nom: string;
+  prixParBac: number;
+  commissionParBac: number;
+}) => ({ id: t.id, nom: t.nom, prixParBac: t.prixParBac, commissionParBac: t.commissionParBac });
+
+// Écriture des types de clients réservée à l'Administrateur (Paramètres, 3.9).
+const ecritureParametres = requirePermission("PARAMETRES", "ECRITURE");
+
+// Les qualités (types de clients) — donnée de référence pour les formulaires,
+// lisible par tout utilisateur authentifié (comme le catalogue Produits).
 typeClientsRouter.get("/", async (_req, res, next) => {
   try {
     const typeClients = await prisma.typeClient.findMany({ orderBy: { nom: "asc" } });
-    res.json({
-      typeClients: typeClients.map((t) => ({
-        id: t.id,
-        nom: t.nom,
-        prixParBac: t.prixParBac,
-        commissionParBac: t.commissionParBac,
-      })),
-    });
+    res.json({ typeClients: typeClients.map(versTypeClientDTO) });
   } catch (e) {
+    next(e);
+  }
+});
+
+typeClientsRouter.post("/", ecritureParametres, async (req, res, next) => {
+  try {
+    const parsed = typeClientCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const existant = await prisma.typeClient.findUnique({ where: { nom: parsed.data.nom } });
+    if (existant) return res.status(409).json({ erreur: "Une qualité porte déjà ce nom" });
+
+    const typeClient = await prisma.typeClient.create({ data: parsed.data });
+    res.status(201).json({ typeClient: versTypeClientDTO(typeClient) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Modifier prix/commission : n'affecte que les commandes FUTURES — les
+// commandes existantes ont figé leur montantBrut à l'enregistrement (3.4).
+typeClientsRouter.put("/:id", ecritureParametres, async (req, res, next) => {
+  try {
+    const parsed = typeClientUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const existant = await prisma.typeClient.findUnique({ where: { id: req.params.id } });
+    if (!existant) return res.status(404).json({ erreur: "Qualité introuvable" });
+
+    if (parsed.data.nom && parsed.data.nom !== existant.nom) {
+      const doublon = await prisma.typeClient.findUnique({ where: { nom: parsed.data.nom } });
+      if (doublon) return res.status(409).json({ erreur: "Une qualité porte déjà ce nom" });
+    }
+
+    // Modifier prix/commission d'une qualité est une tâche critique (section 2).
+    const r = await traiterActionCritique(
+      req,
+      "MODIFIER_TYPE_CLIENT",
+      { typeClientId: existant.id, data: parsed.data },
+      `modifier la qualité « ${existant.nom} » (prix/commission)`,
+    );
+    res.status(r.http).json(r.body);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Suppression bloquée si des clients utilisent encore cette qualité (FK).
+typeClientsRouter.delete("/:id", ecritureParametres, async (req, res, next) => {
+  try {
+    const typeClient = await prisma.typeClient.findUnique({
+      where: { id: req.params.id },
+      include: { _count: { select: { clients: true } } },
+    });
+    if (!typeClient) return res.status(404).json({ erreur: "Qualité introuvable" });
+    if (typeClient._count.clients > 0) {
+      return res.status(409).json({
+        erreur: `Suppression impossible : ${typeClient._count.clients} client(s) utilisent cette qualité`,
+      });
+    }
+    await prisma.typeClient.delete({ where: { id: typeClient.id } });
+    res.status(204).end();
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+      return res.status(409).json({ erreur: "Suppression impossible : des clients utilisent cette qualité" });
+    }
     next(e);
   }
 });
 
 clientsRouter.get("/", requirePermission("COMMANDES", "LECTURE"), async (_req, res, next) => {
   try {
-    const clients = await prisma.client.findMany({
-      include: { typeClient: true },
-      orderBy: { nom: "asc" },
-    });
-    res.json({ clients: clients.map(versClientDTO) });
+    const [clients, dernieresCommandes] = await Promise.all([
+      prisma.client.findMany({ include: INCLUDE_CLIENT, orderBy: { nom: "asc" } }),
+      prisma.commandeClient.groupBy({ by: ["clientId"], _max: { dateCreation: true } }),
+    ]);
+    const derniereParClientId = new Map(dernieresCommandes.map((d) => [d.clientId, d._max.dateCreation]));
+    res.json({ clients: clients.map((c) => versClientDTO(c, derniereParClientId.get(c.id) ?? null)) });
   } catch (e) {
     next(e);
   }
@@ -65,17 +172,82 @@ clientsRouter.post("/", requirePermission("COMMANDES", "ECRITURE"), async (req, 
     }
     const typeClient = await prisma.typeClient.findUnique({ where: { id: parsed.data.typeClientId } });
     if (!typeClient) return res.status(400).json({ erreur: "Qualité inconnue" });
+    if (parsed.data.zoneDepositaireId) {
+      const zone = await prisma.zoneDepositaire.findUnique({ where: { id: parsed.data.zoneDepositaireId } });
+      if (!zone) return res.status(400).json({ erreur: "Zone de dépôt inconnue" });
+    }
 
     const client = await prisma.client.create({
       data: {
         nom: parsed.data.nom,
         telephone: parsed.data.telephone || null,
         typeClientId: typeClient.id,
+        zoneDepositaireId: parsed.data.zoneDepositaireId || null,
       },
-      include: { typeClient: true },
+      include: INCLUDE_CLIENT,
     });
     res.status(201).json({ client: versClientDTO(client) });
   } catch (e) {
+    next(e);
+  }
+});
+
+// Nom, téléphone, qualité et zone de dépôt (aucun impact sur les commandes
+// déjà enregistrées, qui figent leur montant à la création — 3.4).
+clientsRouter.put("/:id", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
+  try {
+    const parsed = clientUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const existant = await prisma.client.findUnique({ where: { id: req.params.id } });
+    if (!existant) return res.status(404).json({ erreur: "Client introuvable" });
+
+    if (parsed.data.typeClientId) {
+      const typeClient = await prisma.typeClient.findUnique({ where: { id: parsed.data.typeClientId } });
+      if (!typeClient) return res.status(400).json({ erreur: "Qualité inconnue" });
+    }
+    if (parsed.data.zoneDepositaireId) {
+      const zone = await prisma.zoneDepositaire.findUnique({ where: { id: parsed.data.zoneDepositaireId } });
+      if (!zone) return res.status(400).json({ erreur: "Zone de dépôt inconnue" });
+    }
+
+    const client = await prisma.client.update({
+      where: { id: existant.id },
+      data: {
+        nom: parsed.data.nom,
+        telephone: parsed.data.telephone === undefined ? undefined : parsed.data.telephone || null,
+        typeClientId: parsed.data.typeClientId,
+        zoneDepositaireId: parsed.data.zoneDepositaireId === undefined ? undefined : parsed.data.zoneDepositaireId,
+      },
+      include: INCLUDE_CLIENT,
+    });
+    res.json({ client: versClientDTO(client) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Suppression bloquée si le client a déjà des commandes (FK) — l'historique
+// des commandes ne doit jamais se retrouver orphelin.
+clientsRouter.delete("/:id", requirePermission("COMMANDES", "ECRITURE"), async (req, res, next) => {
+  try {
+    const client = await prisma.client.findUnique({
+      where: { id: req.params.id },
+      include: { _count: { select: { commandes: true } } },
+    });
+    if (!client) return res.status(404).json({ erreur: "Client introuvable" });
+    if (client._count.commandes > 0) {
+      return res.status(409).json({
+        erreur: `Suppression impossible : ${client._count.commandes} commande(s) enregistrée(s) pour ce client`,
+      });
+    }
+    await prisma.client.delete({ where: { id: client.id } });
+    res.status(204).end();
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+      return res.status(409).json({ erreur: "Suppression impossible : des données sont encore liées à ce client" });
+    }
     next(e);
   }
 });

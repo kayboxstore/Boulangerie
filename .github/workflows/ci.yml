@@ -1,0 +1,423 @@
+name: Vérifications
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - main-a7fm5x
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://lomoto:lomoto@localhost:5432/lomoto_ci?schema=public
+      JWT_SECRET: ci-secret-uniquement-pour-les-tests
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: lomoto
+          POSTGRES_PASSWORD: lomoto
+          POSTGRES_DB: lomoto_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Auditer les dépendances
+        run: npm audit
+
+      - name: Appliquer les migrations PostgreSQL
+        run: npx prisma migrate deploy
+
+      - name: Générer le client Prisma
+        run: npx prisma generate
+
+      - name: Exécuter les tests
+        run: npm test
+
+      - name: Vérifier et compiler
+        run: npm run build
+
+      - name: Vérification d'intégration PostgreSQL réelle du correctif P0-01 (round 4)
+        # Additif : ne remplace pas les tests unitaires mockés ci-dessus — les
+        # mêmes garanties (bootstrap idempotent, permission personnalisée
+        # jamais écrasée/recréée, hiérarchie de rôle jamais réécrite, rollback
+        # réel sur échec, zéro utilisateur à chaque étape, seed démo refusé en
+        # production — message précis vérifié —, base inchangée après ce
+        # refus, VRAI chemin `npm run db:bootstrap:production`), mais contre
+        # une vraie base PostgreSQL plutôt qu'un client Prisma simulé.
+        #
+        # CI_INTEGRATION_BOOTSTRAP_CONFIRME=true : confirmation explicite
+        # propre à ce script (round 3, point 3) — ce script effectue de
+        # VRAIES écritures destructives volontaires (modification/suppression
+        # de permission, échec de transaction injecté). Sa garde
+        # (scripts/garde-integration-ci.ts) exige EN PLUS que DATABASE_URL
+        # pointe vers un hôte local et la base exacte `lomoto_ci` définie
+        # ci-dessus (`env.DATABASE_URL`, service `postgres`) — jamais une
+        # base de développement réelle, jamais un hôte distant.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-integration-bootstrap-ci.ts
+
+      - name: Vérification de concurrence PostgreSQL réelle du correctif P0-01 (round 6, point 1)
+        # Additif, distinct du script ci-dessus : prouve l'atomicité des
+        # écritures de PUT /api/equipe/:id/activation et
+        # POST /api/equipe/:id/principal sous une VRAIE concurrence
+        # PostgreSQL (deux connexions séparées, Promise.allSettled, un
+        # crochet de test qui élargit délibérément la fenêtre de course pour
+        # un scénario déterministe) — jamais un Administrateur Principal
+        # inactif, jamais deux Principaux, rollback réel vérifié. Même garde
+        # que le script précédent (hôte local + base exacte `lomoto_ci` +
+        # confirmation explicite).
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-concurrence-equipe-ci.ts
+
+      - name: Vérification PostgreSQL réelle du correctif P1 — piste d'audit de MODIFIER_PERMISSIONS_ROLE (contre-revue Codex 24/08/2026)
+        # Additif, distinct des deux scripts ci-dessus : prouve que l'action
+        # critique MODIFIER_PERMISSIONS_ROLE écrit désormais une piste
+        # d'audit complète (état avant/après COMPLET et déterministe,
+        # diff ajouts/retraits/modifications, identité de l'acteur et du
+        # demandeur d'origine) DANS LA MÊME transaction PostgreSQL que les
+        # écritures RolePermission — avec deux preuves de ROLLBACK réel
+        # (échec d'une écriture de permission, échec de l'écriture d'audit
+        # elle-même) relues depuis une connexion séparée. Les tests unitaires
+        # mockés (apps/api/src/services/permissionsRoleAudit.test.ts)
+        # prouvent la logique ; seule une vraie base PostgreSQL peut prouver
+        # un vrai ROLLBACK. Même garde que les deux scripts précédents (hôte
+        # local + base exacte `lomoto_ci` + confirmation explicite).
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-audit-permissions-role-ci.ts
+
+      - name: Vérification HTTP réelle du correctif P2-01 — parcours complet de MODIFIER_PERMISSIONS_ROLE (Round 3, contre-revue Codex 24/08/2026)
+        # Additif, distinct des scripts ci-dessus : ceux-ci prouvent la
+        # logique de service contre PostgreSQL, mais pas le parcours HTTP
+        # complet — celui-ci exerce le VRAI routeur Express (rolesRouter,
+        # approbationsRouter), servi par supertest, avec une VRAIE
+        # authentification JWT (aucun mock d'auth ni de Prisma) : parcours
+        # direct (PUT /api/roles/:id/permissions par l'Admin Principal) et
+        # parcours approbation (soumission par un Admin secondaire, puis
+        # POST /api/approbations/:id/approuver par le Principal), avec
+        # relecture Prisma indépendante après chaque appel HTTP. Même garde
+        # que les scripts précédents (hôte local + base exacte lomoto_ci +
+        # confirmation explicite).
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-http-permissions-role-ci.ts
+
+      - name: Vérification HTTP réelle du correctif P1 — parcours complet des 4 autres actions critiques (mission « atomicité exécution métier », 25/08/2026)
+        # Additif, distinct des scripts ci-dessus : mêmes garanties que le
+        # script HTTP réel de MODIFIER_PERMISSIONS_ROLE, mais pour les 4
+        # AUTRES types d'action critique (SUPPRIMER_UTILISATEUR,
+        # CREER_COMPTE_ADMIN, MODIFIER_TYPE_CLIENT, MODIFIER_TAUX_TAXE) —
+        # VRAI routeur Express (equipeRouter, clients.ts/typeClientsRouter,
+        # produitsRouter, approbationsRouter), servi par supertest, VRAIE
+        # authentification JWT (aucun mock d'auth ni de Prisma), parcours
+        # direct ET parcours approbation pour chacun des 4 types, avec
+        # relecture Prisma indépendante après chaque appel HTTP. Même garde
+        # que les scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-http-actions-metier-ci.ts
+
+      - name: Vérification de concurrence PostgreSQL réelle du correctif P1 — atomicité des 4 autres actions critiques (mission « atomicité exécution métier », 25/08/2026)
+        # Additif, distinct des scripts ci-dessus : prouve, contre une VRAIE
+        # base PostgreSQL et avec la même méthodologie que
+        # verifier-audit-permissions-role-ci.ts (scénarios 10-13 — pid réel
+        # capturé DEPUIS chaque transaction via pg_backend_pid(), blocage
+        # RÉELLEMENT observé depuis une troisième connexion via
+        # pg_blocking_pids, jamais un délai comme preuve), que la réservation
+        # de la DemandeApprobation, l'exécution métier des 4 autres types
+        # d'action critique, ET la transition finale sont désormais
+        # ENSEMBLE, dans UNE SEULE transaction PostgreSQL Serializable :
+        # deux approbations concurrentes sur la même demande, approbation vs
+        # rejet concurrents (les deux issues), chacun rejoué 10 fois sans
+        # instabilité — PLUS trois preuves de ROLLBACK réel complet
+        # (SUPPRIMER_UTILISATEUR sur une violation de clé étrangère RÉELLE,
+        # CREER_COMPTE_ADMIN avec le rattachement Travailleur INCLUS,
+        # MODIFIER_TYPE_CLIENT et MODIFIER_TAUX_TAXE). Même garde que les
+        # scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-concurrence-actions-metier-ci.ts
+
+      - name: Vérification PostgreSQL réelle du correctif « suppression de matière bloquée par une recette orpheline » (27/08/2026)
+        # Additif, distinct des scripts ci-dessus : constat de production
+        # (Farine/Levure impossibles à supprimer même après réinitialisation
+        # complète de la base) — prouve contre une VRAIE contrainte de clé
+        # étrangère PostgreSQL que la cause (IngredientRecette résiduelle,
+        # table morte depuis la refonte 3.3) bloque réellement la
+        # suppression, et que la purger (migration
+        # 20260827120333_purger_recettes_orphelines, et l'ajout correspondant
+        # dans reinitialiserBase()) débloque réellement la matière. Le test
+        # mocké routes/stocks.matieres.test.ts prouve séparément que la route
+        # HTTP traduit ce P2003 en 409 explicite plutôt qu'un 500 générique.
+        # Même garde que les scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-purge-recettes-orphelines-ci.ts
+
+      - name: Vérification PostgreSQL réelle de l'APPLICATION de la migration purge à des données pré-existantes (contre-revue Codex 28/08/2026)
+        # Additif, distinct du script ci-dessus : celui-ci prouve le mécanisme
+        # (CASCADE) en appelant directement recette.deleteMany() sur une base
+        # déjà entièrement migrée — il ne prouve pas que la VRAIE migration
+        # `20260827120333_purger_recettes_orphelines`, appliquée par
+        # `prisma migrate deploy` à une base qui la précède encore, purge
+        # réellement des données pré-existantes (le scénario réel de
+        # production). Ce script comble cet écart : schéma PostgreSQL isolé
+        # migré à l'état exact précédant le correctif (36 migrations),
+        # données « historiques » insérées, PUIS vraie exécution de
+        # `prisma migrate deploy` (processus enfant) pour la 37e — avec
+        # témoin de non-régression (une matière sans lien à Recette reste
+        # strictement intacte) et preuve explicite qu'aucune connexion
+        # PostgreSQL ne subsiste après coup, y compris en cas d'échec. Même
+        # garde que les scripts précédents (hôte local + base exacte
+        # lomoto_ci + confirmation explicite).
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-application-reelle-migration-purge-recettes-ci.ts
+
+      - name: Vérification de concurrence PostgreSQL réelle du secret de bootstrap du premier lancement (P1-A, 28/08/2026)
+        # Additif, distinct des scripts ci-dessus : avant ce correctif,
+        # l'absence de compte Utilisateur était la SEULE autorisation
+        # d'accès à routes/premierLancement.ts — sur une base neuve ou
+        # réinitialisée, n'importe quel visiteur découvrant l'écran avant
+        # l'administrateur légitime pouvait devenir Administrateur
+        # Principal. Ce script prouve, contre une VRAIE base PostgreSQL et
+        # avec la même méthodologie que verifier-concurrence-equipe-ci.ts
+        # (pid réel capturé DEPUIS la transaction via
+        # tx.$queryRaw`SELECT pg_backend_pid()`, blocage RÉELLEMENT observé
+        # depuis une troisième connexion via pg_blocking_pids, jamais un
+        # délai comme preuve) que deux finalisations concurrentes — même
+        # secret, ou secrets différents — ne peuvent jamais toutes les deux
+        # réussir : jamais plus d'un Administrateur Principal créé. Les
+        # tests mockés (premierLancement.test.ts) prouvent séparément les 5
+        # scénarios applicatifs (absence de secret, mauvais secret,
+        # expiration, rejeu, course). Même garde que les scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-concurrence-premier-lancement-ci.ts
+
+      - name: Vérification de concurrence PostgreSQL réelle de l'atomicité de la caisse (P1-B, 28/08/2026)
+        # Toute écriture pouvant modifier ou sceller la journée financière
+        # (taux, dépense manuelle ou farine, remise, confirmation de
+        # règlement, commande manuelle, clôture, correction) exige désormais
+        # une SessionCaisse EXISTANTE et OUVERTE — verrou de ligne PostgreSQL
+        # réel (SELECT ... FOR UPDATE) sur cette session, jamais un verrou
+        # global ni une FK nouvelle. Ce script prouve, contre une VRAIE base
+        # PostgreSQL et avec la même méthodologie que les scripts voisins
+        # (pid réel capturé DEPUIS la transaction, blocage RÉELLEMENT
+        # observé via pg_blocking_pids, jamais un délai comme preuve) :
+        # clôture vs création de commande à montant reçu / confirmation de
+        # règlement (la clôture gagne, aucun enregistrement partiel après) ;
+        # attribution comptable correcte d'un règlement déclaré à J mais
+        # confirmé dans la session J+1 (J reste strictement inchangé) ; au
+        # plus une ligne de dépense farine par date sous double activation
+        # concurrente ; une seule définition de taux gagnante entre deux
+        # premières définitions concurrentes ; une seule correction gagnante
+        # entre deux corrections concurrentes d'une session déjà clôturée
+        # (jeton de version optimiste, jamais d'écrasement silencieux) ; et
+        # rollback COMPLET (y compris la transition déjà exécutée) sur un
+        # échec d'audit injecté. Les tests mockés (routes/caisse.test.ts,
+        # routes/commandes.test.ts, services/caisseAtomique.test.ts)
+        # prouvent séparément le câblage HTTP et le réessai borné. Même
+        # garde que les scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-concurrence-caisse-ci.ts
+
+      - name: Vérification d'intégrité PostgreSQL réelle de la conversion C4 (round correctif Codex, 29/08/2026)
+        # La PR #38 affirmait à tort que la conversion C4
+        # (CONFIRMER_ACCEPTATION, cycles-livraison.ts) est « sans impact
+        # comptable » car sa commande porte montantRecu=0 — inexact : C4
+        # reste neutre pour les ESPÈCES et le SOLDE de caisse, mais modifie
+        # bien l'avance et la dette du CLIENT, via des update() autrefois
+        # singuliers sur des modèles audités (Client, CycleLivraison,
+        # CycleLivraisonLigne) interceptés par l'extension d'audit
+        # automatique NON transactionnelle. Ce script prouve, contre une
+        # VRAIE base PostgreSQL : rollback COMPLET sur un échec d'audit
+        # injecté (même méthodologie que verifier-concurrence-caisse-ci.ts,
+        # scénario 7) ; conflit de sérialisation RÉEL (P2034, jamais un 500
+        # brut, jamais d'écrasement silencieux) entre C4 et une autre
+        # écriture touchant le même Client, entrelacement déterministe via
+        # un crochet de test dédié (jamais un délai) ; et neutralité
+        # comptable exacte d'une conversion C4 sur une caisse déjà figée
+        # (registre et session inchangés, avance/dette du client bien
+        # modifiées). Les tests mockés (routes/cycles-livraison.test.ts,
+        # routes/cyclesLivraison.parcoursComplet.test.ts) prouvent
+        # séparément le contrat exact (avance positive, chiffres). Même
+        # garde que les scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-integrite-c4-ci.ts
+
+      - name: Vérification HTTP + PostgreSQL réelle de POST /sessions/:id/confirmer-reglements (round correctif Codex, 29/08/2026, point 3)
+        # Les 12 tests mockés de routes/caisse.test.ts pour /remises et
+        # /confirmer-reglements exercent le VRAI routeur Express mais une
+        # transaction Prisma mockée — ils prouvent le câblage, pas la
+        # persistance réelle. Ce script exerce le VRAI routeur (caisseRouter),
+        # servi par supertest, avec une VRAIE authentification JWT et une
+        # VRAIE base PostgreSQL : confirmation réussie, rattachement à la
+        # RemiseCaisse de la session d'encaissement, écritures réelles de
+        # CommandeClient/Client/PaiementCommande, et les 3 AuditLog
+        # réellement persistés DANS la transaction avec l'acteur exact —
+        # relus depuis une connexion Prisma indépendante après la réponse
+        # HTTP. Même garde que les scripts précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-http-confirmer-reglements-ci.ts
+
+      - name: Installer le client PostgreSQL (pg_dump/pg_restore/psql/createdb/dropdb — Lot P0 sauvegarde)
+        # Ubuntu 24.04 (image ubuntu-latest à la date de ce lot) fournit par
+        # défaut la version 16 du paquet postgresql-client, qui correspond
+        # exactement au service postgres:16-alpine ci-dessus — nécessaire à
+        # la vérification qui suit (le dépôt ne parlait jusqu'ici avec
+        # PostgreSQL qu'à travers Prisma, jamais via ces outils en ligne de
+        # commande).
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Vérification PostgreSQL réelle du Lot P0 — sauvegarde, réinitialisation, restauration (30/08/2026, constat conjoint Codex/Claude)
+        # Constat corrigé : les sauvegardes automatiques vivaient sur le
+        # disque éphémère de Render, sans stockage externe durable, avec un
+        # Neon gratuit dont la fenêtre d'historique n'est que de 6 heures ;
+        # reinitialiserBase() produisait son dump AVANT la transaction
+        # d'effacement sans empêcher aucune écriture concurrente entre les
+        # deux (perte silencieuse possible) ; aucune validation réelle de
+        # l'archive ; restaurer-sauvegarde.ts utilisait --clean --if-exists
+        # sans valider le dump ni confirmation liée à la cible ; et aucun
+        # test PostgreSQL réel ne prouvait rien de tout cela. Ce script
+        # prouve, contre une VRAIE base : sauvegarde réelle (structurel +
+        # transactionnel), archive validée par pg_restore --list, échecs
+        # RÉELLEMENT injectés de pg_dump/écriture locale/archive invalide
+        # sans aucun effacement, désactivation par défaut en production et
+        # activation contrôlée explicite, écriture concurrente HTTP rejetée
+        # si nouvelle et drainée sans perte si déjà en vol (entrelacement
+        # déterministe, jamais un délai), réinitialisation réelle complète
+        # (transactionnel effacé, structurel conservé, stock à zéro), et
+        # restauration réelle dans une base temporaire séparée avec relecture
+        # indépendante puis nettoyage garanti. Même garde que les scripts
+        # précédents.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-sauvegarde-reinitialisation-ci.ts
+
+      - name: Vérification HTTP + PostgreSQL réelle du Lot Production (P1, 31/08/2026)
+        # Complète les tests HTTP mockés de routes/production.test.ts par sept
+        # scénarios sans mock : quatre décrémentations de stock liées à la
+        # Production, rollback métier ET audit après une première matière,
+        # audits transactionnels
+        # exacts des pertes/qualité/clôture, verrou définitif post-clôture,
+        # quatre rollbacks injectés APRÈS une écriture réelle (planning,
+        # pertes, qualité, clôture) via un trigger AuditLog, et blocage
+        # FOR UPDATE réellement observé par pg_blocking_pids sur Production et
+        # Planning avant toute suppression. Même garde locale stricte que les
+        # scripts voisins.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-production-ci.ts
+
+      - name: Vérification HTTP + PostgreSQL réelle du Lot Fournisseurs (P1, 31/08/2026)
+        # Huit scénarios sans mock : réception et audits exacts, seconde
+        # réception sans effet, vraie concurrence observée par pg_blocking_pids,
+        # puis rollbacks réels de réception, annulation et CRUD Fournisseur
+        # après échec injecté de l'AuditLog, plus verrou référentiel de création.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-fournisseurs-ci.ts
+
+      - name: Vérification HTTP + PostgreSQL réelle du Lot Distribution (P1, 01/09/2026)
+        # Six scénarios sans mock : bon et bacs vides, sept transitions C4,
+        # quantités chargée/déposée/acceptée/retournée/manquante, retour tardif
+        # du bon et gel de la journée, anomalies et audits transactionnels,
+        # deux rollbacks réels après échec injecté de l'AuditLog, puis chaîne
+        # espèces complète cycle → commande → déclaration → remise Caisse.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-distribution-ci.ts
+
+      - name: Vérification HTTP + PostgreSQL réelle du Lot Travailleurs, présence et paie (P1, 01/09/2026)
+        # Sept scénarios sans mock : auteur de la fiche, pointages sans
+        # chevauchement, absence quotidienne et décision non rejouable,
+        # trois rollbacks réels après échec injecté de l'AuditLog, snapshot
+        # de paie immuable, verrou réellement observé par pg_blocking_pids et
+        # protection RESTRICT des bulletins contre toute suppression cascade.
+        env:
+          CI_INTEGRATION_BOOTSTRAP_CONFIRME: "true"
+        run: npx tsx scripts/verifier-travailleurs-paie-ci.ts
+
+  garde-seed-demo-windows:
+    name: Garde du seed démo — preuve réelle sous Windows (round 4, point 1)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    # Aucun service PostgreSQL ici : la garde (garde-environnement-seed-demo.ts)
+    # doit refuser sur NODE_ENV AVANT toute tentative de connexion à
+    # DATABASE_URL — cette URL n'a donc besoin d'être ni réelle ni jamais
+    # contactée, seulement présente et syntaxiquement locale.
+    env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/lomoto_windows_ci_factice
+      NODE_ENV: production
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Générer le client Prisma (types nécessaires à seed-demo.ts)
+        run: npx prisma generate
+
+      - name: npm run db:seed:demo doit réellement échouer sous Windows avec NODE_ENV=production
+        # round 4, point 1 : la version round 3 résolvait puis exécutait
+        # node_modules/.bin/prisma.cmd via spawnSync SANS shell — un .cmd
+        # n'est pas un exécutable natif Windows, ceci échouait silencieusement
+        # d'une manière que les tests (Linux uniquement jusqu'ici) ne
+        # pouvaient pas détecter. Preuve directe, sur une vraie machine
+        # Windows : exit non nul ET message précis de la garde, pas
+        # n'importe quel échec (qui pourrait aussi bien venir d'un binaire
+        # introuvable que de la garde elle-même).
+        shell: pwsh
+        run: |
+          $sortie = npm run db:seed:demo 2>&1 | Out-String
+          Write-Host $sortie
+          if ($LASTEXITCODE -eq 0) {
+            Write-Error "npm run db:seed:demo a RÉUSSI avec NODE_ENV=production sous Windows — ne doit JAMAIS arriver"
+            exit 1
+          }
+          if ($sortie -notmatch 'NODE_ENV="production"') {
+            Write-Error "npm run db:seed:demo a échoué (attendu) mais SANS le message précis de la garde (NODE_ENV=`"production`") — voir la sortie ci-dessus pour la cause réelle de l'échec"
+            exit 1
+          }
+          Write-Host "OK : refusé sous Windows avec le message exact de la garde, exit=$LASTEXITCODE"
+          exit 0

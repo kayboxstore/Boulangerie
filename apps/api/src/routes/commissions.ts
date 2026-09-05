@@ -1,31 +1,46 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
-import { montantTotalPaye, type CommissionLigneDTO } from "@lomoto/shared";
+import { dateISOSchema, montantTotalPaye, type CommissionLigneDTO } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { bornesJourLomoto } from "../lib/temps.js";
 
 export const commissionsRouter = Router();
 
 commissionsRouter.use(requireAuth);
 
 // Module Commissions (section 3.11) : vue dérivée des commandes dont la
-// qualité du client génère une commission (> 0 Fc/bac — les « Mamans »).
+// commission a été générée (> 0 Fc/bac — les « Mamans »). La commission est
+// figée sur CommandeClient au taux en vigueur au moment de l'enregistrement
+// (Lot 7 pt 6) : filtrer/afficher cette valeur, jamais le taux courant du
+// TypeClient, pour ne pas réécrire rétroactivement l'historique si le taux
+// change ensuite ou si le client est reclassé dans une autre Qualité.
 // Lecture seule : Caissier(ère) et DG via la matrice de permissions.
 commissionsRouter.get("/", requirePermission("COMMISSIONS", "LECTURE"), async (req, res, next) => {
   try {
     const { du, au } = req.query as Record<string, string | undefined>;
 
+    if (du && !dateISOSchema.safeParse(du).success) {
+      return res.status(400).json({ erreur: "Date de début invalide (AAAA-MM-JJ)" });
+    }
+    if (au && !dateISOSchema.safeParse(au).success) {
+      return res.status(400).json({ erreur: "Date de fin invalide (AAAA-MM-JJ)" });
+    }
+    if (du && au && du > au) {
+      return res.status(400).json({ erreur: "La date de fin doit suivre la date de début" });
+    }
+
     const dateCreation: Prisma.DateTimeFilter = {};
-    if (du) dateCreation.gte = new Date(`${du}T00:00:00`);
-    if (au) dateCreation.lte = new Date(`${au}T23:59:59.999`);
+    if (du) dateCreation.gte = bornesJourLomoto(du)[0];
+    if (au) dateCreation.lte = bornesJourLomoto(au)[1];
 
     const commandes = await prisma.commandeClient.findMany({
       where: {
-        client: { typeClient: { commissionParBac: { gt: 0 } } },
+        commission: { gt: 0 },
         ...(du || au ? { dateCreation } : {}),
       },
       include: {
-        client: { select: { nom: true, typeClient: { select: { commissionParBac: true } } } },
+        client: { select: { nom: true } },
       },
       orderBy: { numero: "desc" },
     });
@@ -37,7 +52,7 @@ commissionsRouter.get("/", requirePermission("COMMISSIONS", "LECTURE"), async (r
       clientNom: c.client.nom,
       quantiteBacs: c.quantiteBacs,
       montantTotalPaye: montantTotalPaye(c),
-      commission: c.quantiteBacs * c.client.typeClient.commissionParBac,
+      commission: c.commission,
     }));
 
     res.json({

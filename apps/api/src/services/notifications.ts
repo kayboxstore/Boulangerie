@@ -4,6 +4,8 @@ import type { Notification, Utilisateur } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { getIo, roomUtilisateur } from "../lib/realtime.js";
 import { busEvenements, type EvenementMetier } from "../lib/events.js";
+import { logger } from "../lib/logger.js";
+import { executerTacheDeFondSuivie } from "../lib/barriereEcriture.js";
 
 /**
  * Détermine les rôles destinataires d'un événement (section 2 + 3.10) :
@@ -38,6 +40,18 @@ async function rolesDestinataires(module: Module, emetteurRoleId: string): Promi
   return roleIds;
 }
 
+/**
+ * Destinataires d'un événement SYSTÈME : tous les rôles ayant au moins la
+ * lecture sur le module (pas de hiérarchie à remonter, faute d'émetteur).
+ */
+async function rolesAvecLecture(module: Module): Promise<Set<string>> {
+  const permissions = await prisma.rolePermission.findMany({
+    where: { module, niveauAcces: { in: ["LECTURE", "ECRITURE"] } },
+    select: { roleId: true },
+  });
+  return new Set(permissions.map((p) => p.roleId));
+}
+
 function versDTO(n: Notification, emetteur: (Utilisateur & { role: { nom: string } }) | null): NotificationDTO {
   return {
     id: n.id,
@@ -58,30 +72,47 @@ function versDTO(n: Notification, emetteur: (Utilisateur & { role: { nom: string
  * dans la room user:{id} de chacun. Retourne les DTO créés.
  */
 export async function publierEvenement(evenement: EvenementMetier): Promise<NotificationDTO[]> {
-  const emetteur = await prisma.utilisateur.findUnique({
-    where: { id: evenement.emetteurId },
-    include: { role: { select: { id: true, nom: true } } },
-  });
-  if (!emetteur) return [];
+  // Événement SYSTÈME : aucun émetteur humain (ex. alerte de dette non payée).
+  // Personne n'est alors exclu des destinataires.
+  const emetteur = evenement.emetteurId
+    ? await prisma.utilisateur.findUnique({
+        where: { id: evenement.emetteurId },
+        include: { role: { select: { id: true, nom: true } } },
+      })
+    : null;
+  if (evenement.emetteurId && !emetteur) return [];
 
-  const roleIds = await rolesDestinataires(evenement.module, emetteur.role.id);
-
-  const destinataires = await prisma.utilisateur.findMany({
-    where: {
-      roleId: { in: [...roleIds] },
-      actif: true,
-      id: { not: emetteur.id },
-      ...(evenement.restreindreAuxRoles
-        ? { role: { nom: { in: evenement.restreindreAuxRoles } } }
-        : {}),
-    },
-    select: { id: true },
-  });
+  // Ciblage direct (ex. approbation → Admin Principal) : court-circuite la
+  // matrice. Sinon, destinataires déduits de la matrice + hiérarchie.
+  const rolesCibles = emetteur
+    ? await rolesDestinataires(evenement.module, emetteur.role.id)
+    : await rolesAvecLecture(evenement.module);
+  const destinataires = evenement.destinataireIdsDirects
+    ? await prisma.utilisateur.findMany({
+        where: {
+          id: { in: evenement.destinataireIdsDirects, ...(emetteur ? { not: emetteur.id } : {}) },
+          actif: true,
+        },
+        select: { id: true },
+      })
+    : await prisma.utilisateur.findMany({
+        where: {
+          roleId: { in: [...rolesCibles] },
+          actif: true,
+          ...(emetteur ? { id: { not: emetteur.id } } : {}),
+          ...(evenement.restreindreAuxRoles
+            ? { role: { nom: { in: evenement.restreindreAuxRoles } } }
+            : {}),
+        },
+        select: { id: true },
+      });
   if (destinataires.length === 0) return [];
 
   const message =
     evenement.message ??
-    `${emetteur.nom} (${emetteur.role.nom}) — événement ${evenement.type} sur ${MODULE_LABELS[evenement.module]}`;
+    (emetteur
+      ? `${emetteur.nom} (${emetteur.role.nom}) — événement ${evenement.type} sur ${MODULE_LABELS[evenement.module]}`
+      : `Événement ${evenement.type} sur ${MODULE_LABELS[evenement.module]}`);
 
   const io = getIo();
   const dtos: NotificationDTO[] = [];
@@ -89,7 +120,7 @@ export async function publierEvenement(evenement: EvenementMetier): Promise<Noti
     const notification = await prisma.notification.create({
       data: {
         destinataireId: d.id,
-        emetteurId: emetteur.id,
+        emetteurId: emetteur?.id ?? null,
         type: evenement.type,
         module: evenement.module,
         evenementRef: evenement.evenementRef ?? null,
@@ -105,11 +136,24 @@ export async function publierEvenement(evenement: EvenementMetier): Promise<Noti
   return dtos;
 }
 
-/** Branche le service sur le bus d'événements interne (appelé au démarrage). */
+/**
+ * Branche le service sur le bus d'événements interne (appelé au démarrage).
+ *
+ * Suivi par la barrière d'écriture (P0, correctif Codex round 2, 30/08/2026) :
+ * `publierEvenement` écrit réellement en base (`Notification.create` par
+ * destinataire) en tâche de fond, sans que l'appelant (le handler HTTP qui a
+ * émis l'événement) n'attende sa fin — la réponse HTTP peut donc partir avant
+ * que ces écritures ne soient terminées. Enveloppé dans
+ * `executerTacheDeFondSuivie` : une publication déjà commencée est comptée
+ * « en vol » et drainée avant tout dump de réinitialisation ; si la barrière
+ * est déjà active au moment où l'événement arrive, la publication ne démarre
+ * simplement pas (aucune notification ne peut donc apparaître entre le
+ * snapshot du dump et l'effacement).
+ */
 export function initNotificationService() {
   busEvenements.surEvenement((evenement) => {
-    publierEvenement(evenement).catch((e) =>
-      console.error("Échec de publication de notification :", e),
+    executerTacheDeFondSuivie(() => publierEvenement(evenement)).catch((e) =>
+      logger.error("Échec de publication de notification", { erreur: e }),
     );
   });
 }

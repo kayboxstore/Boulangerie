@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { HandCoins, RotateCcw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { formatFc, type CommissionLigneDTO } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -8,12 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CarteLigne, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
+import { BarreExport } from "@/components/BarreExport";
+import type { SectionCSV } from "@/lib/csv";
 
 function formatDate(iso: string): string {
   return new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(new Date(iso));
 }
 
 export function CommissionsPage() {
+  const { t } = useTranslation();
   const [du, setDu] = useState("");
   const [au, setAu] = useState("");
 
@@ -27,25 +32,70 @@ export function CommissionsPage() {
       api<{ commissions: CommissionLigneDTO[]; totalCommissions: number }>(`/api/commissions?${params}`),
   });
 
+  /** Sections du document exporté (impression, PDF, email). */
+  function construireSections(): SectionCSV[] {
+    const lignes = data?.commissions ?? [];
+    return [
+      {
+        titre: t("commissions.mamanOrders"),
+        entetes: [
+          t("commissions.colNum"),
+          t("common.date"),
+          t("commissions.colClient"),
+          t("commissions.colBacs"),
+          t("commissions.colTotalPaid"),
+          t("commissions.colCommission"),
+        ],
+        lignes: lignes.map((l) => [
+          l.numero,
+          l.dateCreation.slice(0, 10),
+          l.clientNom,
+          l.quantiteBacs,
+          formatFc(l.montantTotalPaye),
+          formatFc(l.commission),
+        ]),
+      },
+      {
+        titre: t("commissions.totalLabel"),
+        entetes: [t("commissions.totalLabel")],
+        lignes: [[formatFc(data?.totalCommissions ?? 0)]],
+      },
+    ];
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Commissions</h1>
-        <p className="mt-1 text-muted-foreground">
-          Vue en lecture seule, dérivée des commandes des clientes « Maman » — calcul automatique, aucune saisie.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("commissions.title")}</h1>
+          <p className="mt-1 text-muted-foreground">{t("commissions.subtitle")}</p>
+          {/* La carte de filtres ne s'imprime pas : on rappelle ici la période
+              retenue, sinon le papier ne dirait pas sur quoi porte le total. */}
+          {(du || au) && (
+            <p className="lomoto-print-only mt-1 text-sm">
+              {t("common.from")} {du || "…"} {t("common.to").toLowerCase()} {au || "…"}
+            </p>
+          )}
+        </div>
+        <BarreExport
+          titre={t("commissions.title")}
+          sousTitre={du || au ? `${du || "…"} → ${au || "…"}` : undefined}
+          modules={["COMMISSIONS"]}
+          construireSections={construireSections}
+        />
       </div>
 
       <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
-        {/* Filtres */}
-        <Card>
+        {/* Filtres — contrôles d'écran : à l'impression, la période retenue est
+            portée par le sous-titre du document, pas par des champs vides. */}
+        <Card className="no-print">
           <CardContent className="flex flex-wrap items-end gap-3 pt-6">
             <div className="space-y-1.5">
-              <Label htmlFor="commissions-du">Du</Label>
+              <Label htmlFor="commissions-du">{t("common.from")}</Label>
               <Input id="commissions-du" type="date" value={du} onChange={(e) => setDu(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="commissions-au">Au</Label>
+              <Label htmlFor="commissions-au">{t("common.to")}</Label>
               <Input id="commissions-au" type="date" value={au} onChange={(e) => setAu(e.target.value)} />
             </div>
             <Button
@@ -56,7 +106,7 @@ export function CommissionsPage() {
               }}
             >
               <RotateCcw className="h-4 w-4" />
-              Tout afficher
+              {t("common.showAll")}
             </Button>
           </CardContent>
         </Card>
@@ -68,7 +118,7 @@ export function CommissionsPage() {
               <HandCoins className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Total commissions {du || au ? "(période)" : ""}</p>
+              <p className="text-xs text-muted-foreground">{t("commissions.totalLabel")} {du || au ? t("commissions.period") : ""}</p>
               <p className="text-xl font-bold text-marine dark:text-or">
                 {formatFc(data?.totalCommissions ?? 0)}
               </p>
@@ -79,52 +129,76 @@ export function CommissionsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Commandes « Maman »</CardTitle>
-          <CardDescription>Commission : 1 650 Fc par bac (27,5 %) — montants en Fc.</CardDescription>
+          <CardTitle>{t("commissions.mamanOrders")}</CardTitle>
+          <CardDescription>{t("commissions.commissionDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading && <p className="py-8 text-center text-muted-foreground">Chargement…</p>}
+          {isLoading && <p className="py-8 text-center text-muted-foreground">{t("common.loading")}</p>}
           {error && (
             <p className="py-8 text-center font-medium text-terracotta">
-              {error instanceof Error ? error.message : "Erreur de chargement"}
+              {error instanceof Error ? error.message : t("commissions.loadError")}
             </p>
           )}
           {data && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>N°</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Nom du client</TableHead>
-                  <TableHead className="text-right">Bacs reçus</TableHead>
-                  <TableHead className="text-right">Montant total payé</TableHead>
-                  <TableHead className="text-right">Commission disponible</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.commissions.map((l) => (
-                  <TableRow key={l.commandeId}>
-                    <TableCell className="font-medium">{l.numero}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {formatDate(l.dateCreation)}
-                    </TableCell>
-                    <TableCell className="font-medium">{l.clientNom}</TableCell>
-                    <TableCell className="text-right">{l.quantiteBacs}</TableCell>
-                    <TableCell className="text-right">{formatFc(l.montantTotalPaye)}</TableCell>
-                    <TableCell className="text-right font-semibold text-terracotta dark:text-or">
-                      {formatFc(l.commission)}
-                    </TableCell>
+            <>
+              <Table className="hidden md:table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("commissions.colNum")}</TableHead>
+                    <TableHead>{t("common.date")}</TableHead>
+                    <TableHead>{t("commissions.colClient")}</TableHead>
+                    <TableHead className="text-right">{t("commissions.colBacs")}</TableHead>
+                    <TableHead className="text-right">{t("commissions.colTotalPaid")}</TableHead>
+                    <TableHead className="text-right">{t("commissions.colCommission")}</TableHead>
                   </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.commissions.map((l) => (
+                    <TableRow key={l.commandeId}>
+                      <TableCell className="font-medium">{l.numero}</TableCell>
+                      <TableCell className="whitespace-nowrap text-muted-foreground">
+                        {formatDate(l.dateCreation)}
+                      </TableCell>
+                      <TableCell className="font-medium">{l.clientNom}</TableCell>
+                      <TableCell className="text-right">{l.quantiteBacs}</TableCell>
+                      <TableCell className="text-right">{formatFc(l.montantTotalPaye)}</TableCell>
+                      <TableCell className="text-right font-semibold text-terracotta dark:text-or">
+                        {formatFc(l.commission)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {data.commissions.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                        {t("commissions.empty")}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+
+              <div className="space-y-2 md:hidden">
+                {data.commissions.map((l) => (
+                  <CarteLigne key={l.commandeId}>
+                    <CarteLigneTitre>
+                      <span>
+                        n°{l.numero} — {l.clientNom}
+                      </span>
+                    </CarteLigneTitre>
+                    <CarteLigneChamp label={t("common.date")} value={formatDate(l.dateCreation)} />
+                    <CarteLigneChamp label={t("commissions.colBacs")} value={l.quantiteBacs} />
+                    <CarteLigneChamp label={t("commissions.colTotalPaid")} value={formatFc(l.montantTotalPaye)} />
+                    <CarteLigneChamp
+                      label={t("commissions.colCommission")}
+                      value={<span className="font-semibold text-terracotta dark:text-or">{formatFc(l.commission)}</span>}
+                    />
+                  </CarteLigne>
                 ))}
                 {data.commissions.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                      Aucune commission pour ces critères.
-                    </TableCell>
-                  </TableRow>
+                  <p className="py-8 text-center text-sm text-muted-foreground">{t("commissions.empty")}</p>
                 )}
-              </TableBody>
-            </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

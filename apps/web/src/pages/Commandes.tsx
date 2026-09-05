@@ -1,15 +1,27 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HandCoins, Plus, RotateCcw, UserPlus } from "lucide-react";
+import { ClipboardCheck, HandCoins, Layers, Plus, RotateCcw, TriangleAlert, UserPlus, Users } from "lucide-react";
+// TriangleAlert sert au doublon ET au bandeau de dettes non payées.
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   calculerCommande,
   formatFc,
+  sommeDeclarationsEnAttente,
   type ClientDTO,
+  type AlerteDetteDTO,
   type CommandeDTO,
+  type ConflitCommandeDTO,
+  type LivraisonsDuJourDTO,
+  type ResumeCommandesJourDTO,
+  type StrategieDoublon,
   type TypeClientDTO,
+  type ZoneDepositaireDTO,
 } from "@lomoto/shared";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { useCleIdempotence } from "@/lib/idempotence";
 import { useAuth } from "@/lib/auth";
+import { DemandesCommandePubliquesCard } from "@/components/DemandesCommandePubliquesCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { NativeSelect } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CarteLigne, CarteLigneActions, CarteLigneChamp, CarteLigneTitre } from "@/components/ui/carte-ligne";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +53,7 @@ const FILTRES_VIDES: Filtres = { typeClientId: "", du: "", au: "" };
 
 export function CommandesPage() {
   const { peutEcrire } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const editable = peutEcrire("COMMANDES");
 
@@ -49,10 +63,15 @@ export function CommandesPage() {
     queryKey: ["type-clients"],
     queryFn: () => api<{ typeClients: TypeClientDTO[] }>("/api/type-clients"),
   });
+  // La liste des clients (gérée sur l'écran dédié /commandes/clients, 3.4) reste
+  // lue ici pour le menu déroulant de la nouvelle commande.
   const { data: clientsData } = useQuery({
     queryKey: ["clients"],
     queryFn: () => api<{ clients: ClientDTO[] }>("/api/clients"),
-    enabled: editable,
+  });
+  const { data: zonesData } = useQuery({
+    queryKey: ["zones-depositaires"],
+    queryFn: () => api<{ zones: ZoneDepositaireDTO[] }>("/api/zones-depositaires"),
   });
 
   const paramsListe = new URLSearchParams();
@@ -63,6 +82,20 @@ export function CommandesPage() {
     queryKey: ["commandes", filtres],
     queryFn: () => api<{ commandes: CommandeDTO[] }>(`/api/commandes?${paramsListe}`),
   });
+  // Tableau de bord journalier (section 3.4) — lecture pour tous les rôles
+  // ayant accès au module.
+  const { data: resumeJour } = useQuery({
+    queryKey: ["commandes-resume-jour"],
+    queryFn: () => api<ResumeCommandesJourDTO>("/api/commandes/resume-jour"),
+  });
+  // Dettes non payées (3.4) : même clé que le déclencheur du Layout — la liste
+  // reste affichée tant que la dette n'est pas soldée, même si la notification
+  // ponctuelle est déjà partie.
+  const { data: alertesData } = useQuery({
+    queryKey: ["alertes-dette"],
+    queryFn: () => api<{ alertes: AlerteDetteDTO[] }>("/api/commandes/alertes-dette"),
+  });
+  const alertesDette = alertesData?.alertes ?? [];
 
   // --- Dialogue nouvelle commande -----------------------------------------
   const [dialogCommande, setDialogCommande] = useState(false);
@@ -72,6 +105,30 @@ export function CommandesPage() {
   const [erreurCommande, setErreurCommande] = useState<string | null>(null);
 
   const clientChoisi = clientsData?.clients.find((c) => c.id === clientId);
+
+  // Pré-remplissage optionnel (amélioration proactive) : si le client a déjà
+  // une livraison du jour (Bon de livraison, module Production), on suggère
+  // ce total pour « Nombre de bacs reçus » — simple indice modifiable, aucun
+  // lien rigide entre les deux modules.
+  const { data: livraisonsJour } = useQuery({
+    queryKey: ["commandes-livraisons-du-jour"],
+    queryFn: () => api<LivraisonsDuJourDTO>("/api/commandes/livraisons-du-jour"),
+    enabled: dialogCommande,
+  });
+  const [bacsPreRemplis, setBacsPreRemplis] = useState(false);
+  useEffect(() => {
+    if (!clientId || bacs) {
+      setBacsPreRemplis(false);
+      return;
+    }
+    const totalLivre = livraisonsJour?.totauxParClientId[clientId];
+    if (totalLivre && totalLivre > 0) {
+      setBacs(String(totalLivre));
+      setBacsPreRemplis(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, livraisonsJour]);
+
   const apercu = useMemo(() => {
     const nbBacs = Number(bacs);
     if (!clientChoisi || !Number.isInteger(nbBacs) || nbBacs < 1) return null;
@@ -83,19 +140,49 @@ export function CommandesPage() {
     });
   }, [clientChoisi, bacs, recu]);
 
+  // Doublon détecté (même client, même jour) : l'API renvoie 409 avec la
+  // commande en conflit ; on propose alors Modifier ou Remplacer, appliqué sur
+  // CETTE commande (jamais une nouvelle).
+  const [conflit, setConflit] = useState<ConflitCommandeDTO | null>(null);
+
+  const rafraichirCommandes = () => {
+    queryClient.invalidateQueries({ queryKey: ["commandes"] });
+    queryClient.invalidateQueries({ queryKey: ["commandes-resume-jour"] });
+    queryClient.invalidateQueries({ queryKey: ["clients"] });
+    queryClient.invalidateQueries({ queryKey: ["commissions"] });
+  };
+
+  const cleIdempotenceCommande = useCleIdempotence();
   const creerCommande = useMutation({
-    mutationFn: () =>
-      api("/api/commandes", {
+    mutationFn: (strategie?: StrategieDoublon) => {
+      const corps = {
+        clientId,
+        quantiteBacs: Number(bacs),
+        montantRecu: Number(recu) || 0,
+        ...(strategie ? { strategie } : {}),
+      };
+      const empreinte = JSON.stringify(corps);
+      return api("/api/commandes", {
         method: "POST",
-        body: JSON.stringify({ clientId, quantiteBacs: Number(bacs), montantRecu: Number(recu) || 0 }),
-      }),
+        headers: { "Idempotency-Key": cleIdempotenceCommande(empreinte) },
+        body: empreinte,
+      });
+    },
     onSuccess: () => {
       setDialogCommande(false);
-      queryClient.invalidateQueries({ queryKey: ["commandes"] });
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      queryClient.invalidateQueries({ queryKey: ["commissions"] });
+      setConflit(null);
+      rafraichirCommandes();
     },
-    onError: (e) => setErreurCommande(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => {
+      if (e instanceof ApiError && e.status === 409) {
+        const corps = e.corps as ConflitCommandeDTO | undefined;
+        if (corps?.conflit) {
+          setConflit(corps);
+          return;
+        }
+      }
+      setErreurCommande(e instanceof Error ? e.message : t("commandes.saveError"));
+    },
   });
 
   function ouvrirDialogCommande() {
@@ -103,18 +190,20 @@ export function CommandesPage() {
     setBacs("");
     setRecu("");
     setErreurCommande(null);
+    setConflit(null);
+    setBacsPreRemplis(false);
     setDialogCommande(true);
   }
 
   function soumettreCommande(e: FormEvent) {
     e.preventDefault();
     setErreurCommande(null);
-    if (!clientId) return setErreurCommande("Choisissez un client");
+    if (!clientId) return setErreurCommande(t("commandes.errChooseClient"));
     const nbBacs = Number(bacs);
-    if (!Number.isInteger(nbBacs) || nbBacs < 1) return setErreurCommande("Nombre de bacs invalide");
+    if (!Number.isInteger(nbBacs) || nbBacs < 1) return setErreurCommande(t("commandes.errBacs"));
     const montantRecu = Number(recu) || 0;
-    if (!Number.isInteger(montantRecu) || montantRecu < 0) return setErreurCommande("Montant reçu invalide");
-    creerCommande.mutate();
+    if (!Number.isInteger(montantRecu) || montantRecu < 0) return setErreurCommande(t("commandes.errReceived"));
+    creerCommande.mutate(undefined);
   }
 
   // --- Dialogue règlement de dette ----------------------------------------
@@ -122,30 +211,28 @@ export function CommandesPage() {
   const [montantReglement, setMontantReglement] = useState("");
   const [erreurReglement, setErreurReglement] = useState<string | null>(null);
 
-  const apercuReglement = useMemo(() => {
-    const montant = Number(montantReglement);
-    if (!commandeARegler || !Number.isInteger(montant) || montant < 1) return null;
-    return calculerCommande({
-      quantiteBacs: commandeARegler.quantiteBacs,
-      prixParBac: commandeARegler.montantBrut / commandeARegler.quantiteBacs,
-      avanceExistante: commandeARegler.avanceUtilisee,
-      montantRecu: commandeARegler.montantRecu + montant,
-    });
-  }, [commandeARegler, montantReglement]);
+  // Le montant déclaré n'a AUCUN effet immédiat sur la dette (Lot 6, P0-07) :
+  // seule la confirmation par la Caisse (comptage contradictoire) la réduit.
+  // Le reste à déclarer tient donc compte des déclarations déjà en attente.
+  const detteRestanteADeclarer = commandeARegler
+    ? commandeARegler.dette - sommeDeclarationsEnAttente(commandeARegler.reglements)
+    : 0;
 
+  const cleIdempotenceReglement = useCleIdempotence();
   const enregistrerReglement = useMutation({
-    mutationFn: () =>
-      api(`/api/commandes/${commandeARegler!.id}/reglements`, {
+    mutationFn: () => {
+      const empreinte = JSON.stringify({ commandeId: commandeARegler!.id, montant: Number(montantReglement) });
+      return api(`/api/commandes/${commandeARegler!.id}/reglements`, {
         method: "POST",
+        headers: { "Idempotency-Key": cleIdempotenceReglement(empreinte) },
         body: JSON.stringify({ montant: Number(montantReglement) }),
-      }),
+      });
+    },
     onSuccess: () => {
       setCommandeARegler(null);
-      queryClient.invalidateQueries({ queryKey: ["commandes"] });
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      queryClient.invalidateQueries({ queryKey: ["commissions"] });
+      rafraichirCommandes();
     },
-    onError: (e) => setErreurReglement(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => setErreurReglement(e instanceof Error ? e.message : t("commandes.saveError")),
   });
 
   function ouvrirReglement(c: CommandeDTO) {
@@ -158,16 +245,33 @@ export function CommandesPage() {
     e.preventDefault();
     setErreurReglement(null);
     const montant = Number(montantReglement);
-    if (!Number.isInteger(montant) || montant < 1) return setErreurReglement("Montant invalide (Fc entier positif)");
+    if (!Number.isInteger(montant) || montant < 1) return setErreurReglement(t("commandes.errSettle"));
     enregistrerReglement.mutate();
   }
 
-  // --- Dialogue nouveau client --------------------------------------------
+  // --- Dialogue nouveau client (création rapide depuis la commande) -------
+  // La gestion complète (recherche, édition, suppression) vit sur l'écran
+  // dédié /commandes/clients (3.4, sous-module de Commandes) — ici on garde
+  // juste la création rapide, pour ne pas interrompre la saisie d'une commande.
   const [dialogClient, setDialogClient] = useState(false);
   const [nomClient, setNomClient] = useState("");
   const [telClient, setTelClient] = useState("");
   const [qualiteClient, setQualiteClient] = useState("");
+  const [zoneClient, setZoneClient] = useState("");
   const [erreurClient, setErreurClient] = useState<string | null>(null);
+
+  // La zone de dépôt (3.3 d) n'a de sens que pour la Qualité Dépositaire.
+  const qualiteClientEstDepositaire =
+    typesData?.typeClients.find((tc) => tc.id === qualiteClient)?.nom === "Dépositaire";
+
+  function ouvrirNouveauClient() {
+    setNomClient("");
+    setTelClient("");
+    setQualiteClient("");
+    setZoneClient("");
+    setErreurClient(null);
+    setDialogClient(true);
+  }
 
   const creerClient = useMutation({
     mutationFn: () =>
@@ -177,6 +281,7 @@ export function CommandesPage() {
           nom: nomClient.trim(),
           telephone: telClient.trim() || undefined,
           typeClientId: qualiteClient,
+          zoneDepositaireId: qualiteClientEstDepositaire && zoneClient ? zoneClient : undefined,
         }),
       }),
     onSuccess: (r) => {
@@ -184,14 +289,14 @@ export function CommandesPage() {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       setClientId(r.client.id); // pré-sélectionne le client créé dans le formulaire de commande
     },
-    onError: (e) => setErreurClient(e instanceof Error ? e.message : "Création impossible"),
+    onError: (e) => setErreurClient(e instanceof Error ? e.message : t("commandes.clientCreateError")),
   });
 
   function soumettreClient(e: FormEvent) {
     e.preventDefault();
     setErreurClient(null);
-    if (!nomClient.trim()) return setErreurClient("Le nom est requis");
-    if (!qualiteClient) return setErreurClient("Choisissez une qualité");
+    if (!nomClient.trim()) return setErreurClient(t("commandes.errNameRequired"));
+    if (!qualiteClient) return setErreurClient(t("commandes.errChooseQuality"));
     creerClient.mutate();
   }
 
@@ -199,39 +304,112 @@ export function CommandesPage() {
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Commandes clients</h1>
-          <p className="mt-1 text-muted-foreground">
-            Prix, avances et dettes calculés automatiquement selon la qualité du client.
-          </p>
+          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">{t("commandes.title")}</h1>
+          <p className="mt-1 text-muted-foreground">{t("commandes.subtitle")}</p>
         </div>
-        {editable && (
-          <Button variant="cta" onClick={ouvrirDialogCommande}>
-            <Plus className="h-4 w-4" />
-            Nouvelle commande
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/commandes/clients">
+              <Users className="h-4 w-4" />
+              {t("commandes.manageClients")}
+            </Link>
           </Button>
-        )}
+          <Button variant="outline" asChild>
+            <Link to="/commandes/acceptations">
+              <ClipboardCheck className="h-4 w-4" />
+              {t("commandes.confirmAcceptances")}
+            </Link>
+          </Button>
+          {editable && (
+            <Button variant="cta" onClick={ouvrirDialogCommande}>
+              <Plus className="h-4 w-4" />
+              {t("commandes.newOrder")}
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Dettes non payées (3.4) — bandeau visible tant que la dette dure */}
+      {alertesDette.length > 0 && (
+        <div
+          role="status"
+          className="rounded-lg border-2 border-rouge-alerte bg-rouge-alerte/10 px-4 py-3"
+        >
+          <p className="flex items-center gap-2 font-semibold text-rouge-alerte">
+            <TriangleAlert className="h-4 w-4" />
+            {t("commandes.unpaidDebtTitle", { count: alertesDette.length })}
+          </p>
+          <ul className="mt-1.5 space-y-0.5 text-sm">
+            {alertesDette.map((a) => (
+              <li key={a.commandeId} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium text-marine dark:text-creme">n°{a.numero}</span>
+                <span>{a.clientNom}</span>
+                <span className="font-semibold text-rouge-alerte">{formatFc(a.dette)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t("commandes.unpaidDebtSince", { count: a.joursDepuis })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Demandes du site vitrine (V2) — file d'attente à traiter en priorité */}
+      <DemandesCommandePubliquesCard editable={editable} />
+
+      {/* Tableau de bord journalier (section 3.4) */}
+      {resumeJour && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Layers className="h-5 w-5 text-or" />
+              {t("commandes.todayTitle")}
+            </CardTitle>
+            <CardDescription>{t("commandes.todayDesc", { date: resumeJour.date })}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+              {[
+                { cle: "todayOrders", valeur: String(resumeJour.nombreCommandes) },
+                { cle: "todayBacs", valeur: String(resumeJour.totalBacs) },
+                { cle: "todayToCollect", valeur: formatFc(resumeJour.totalAPercevoir) },
+                { cle: "todayReceived", valeur: formatFc(resumeJour.totalRecu) },
+                {
+                  cle: "todaySettled",
+                  valeur: `${resumeJour.nbSoldees} / ${resumeJour.nbAvecDette}`,
+                },
+                { cle: "todayDebts", valeur: formatFc(resumeJour.totalDettes) },
+              ].map(({ cle, valeur }) => (
+                <div key={cle}>
+                  <dt className="text-xs text-muted-foreground">{t(`commandes.${cle}`)}</dt>
+                  <dd className="mt-0.5 text-lg font-semibold text-marine dark:text-creme">{valeur}</dd>
+                </div>
+              ))}
+            </dl>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filtres : Qualité, dates, Tout afficher */}
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 pt-6">
           <div className="w-44 space-y-1.5">
-            <Label htmlFor="filtre-qualite">Qualité</Label>
+            <Label htmlFor="filtre-qualite">{t("commandes.filterQuality")}</Label>
             <NativeSelect
               id="filtre-qualite"
               value={filtres.typeClientId}
               onChange={(e) => setFiltres({ ...filtres, typeClientId: e.target.value })}
             >
-              <option value="">Toutes</option>
-              {typesData?.typeClients.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.nom}
+              <option value="">{t("commandes.filterAll")}</option>
+              {typesData?.typeClients.map((tc) => (
+                <option key={tc.id} value={tc.id}>
+                  {tc.nom}
                 </option>
               ))}
             </NativeSelect>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="filtre-du">Du</Label>
+            <Label htmlFor="filtre-du">{t("common.from")}</Label>
             <Input
               id="filtre-du"
               type="date"
@@ -240,7 +418,7 @@ export function CommandesPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="filtre-au">Au</Label>
+            <Label htmlFor="filtre-au">{t("common.to")}</Label>
             <Input
               id="filtre-au"
               type="date"
@@ -250,44 +428,40 @@ export function CommandesPage() {
           </div>
           <Button variant="outline" onClick={() => setFiltres(FILTRES_VIDES)}>
             <RotateCcw className="h-4 w-4" />
-            Tout afficher
+            {t("common.showAll")}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Commandes</CardTitle>
-          <CardDescription>
-            {editable
-              ? "Enregistrement réservé au Chargé des commandes — montants en Fc."
-              : "Consultation en lecture seule — montants en Fc."}
-          </CardDescription>
+          <CardTitle>{t("commandes.cardTitle")}</CardTitle>
+          <CardDescription>{editable ? t("commandes.descWrite") : t("commandes.descRead")}</CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading && <p className="py-8 text-center text-muted-foreground">Chargement…</p>}
+          {isLoading && <p className="py-8 text-center text-muted-foreground">{t("common.loading")}</p>}
           {error && (
             <p className="py-8 text-center font-medium text-terracotta">
-              {error instanceof Error ? error.message : "Erreur de chargement"}
+              {error instanceof Error ? error.message : t("commandes.loadError")}
             </p>
           )}
           {data && (
-            <Table>
+            <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
                   <TableHead>N°</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Qualité</TableHead>
-                  <TableHead className="text-right">Bacs</TableHead>
-                  <TableHead className="text-right">Brut</TableHead>
-                  <TableHead className="text-right">Avance utilisée</TableHead>
-                  <TableHead className="text-right">À percevoir</TableHead>
-                  <TableHead className="text-right">Reçu</TableHead>
-                  <TableHead className="text-right">Dette</TableHead>
-                  <TableHead className="text-right">Avance générée</TableHead>
-                  <TableHead className="text-right">Nouvelle avance</TableHead>
-                  {editable && <TableHead className="w-20 text-right">Actions</TableHead>}
+                  <TableHead>{t("common.date")}</TableHead>
+                  <TableHead>{t("commandes.colClient")}</TableHead>
+                  <TableHead>{t("commandes.colQuality")}</TableHead>
+                  <TableHead className="text-right">{t("commandes.colBacs")}</TableHead>
+                  <TableHead className="text-right">{t("commandes.colGross")}</TableHead>
+                  <TableHead className="text-right">{t("commandes.colAdvanceUsed")}</TableHead>
+                  <TableHead className="text-right">{t("commandes.colToCollect")}</TableHead>
+                  <TableHead className="text-right">{t("commandes.colReceived")}</TableHead>
+                  <TableHead className="text-right">{t("commandes.colDebt")}</TableHead>
+                  <TableHead className="text-right">{t("commandes.colAdvanceGen")}</TableHead>
+                  <TableHead className="text-right">{t("commandes.colNewAdvance")}</TableHead>
+                  {editable && <TableHead className="w-20 text-right">{t("common.actions")}</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -320,6 +494,11 @@ export function CommandesPage() {
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
+                      {c.montantDeclareEnAttente > 0 && (
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {t("commandes.pendingConfirmation", { montant: formatFc(c.montantDeclareEnAttente) })}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       {c.avanceGeneree > 0 ? (
@@ -339,7 +518,7 @@ export function CommandesPage() {
                             className="gap-1 border-terracotta/40 text-terracotta hover:bg-terracotta/10 hover:text-terracotta"
                           >
                             <HandCoins className="h-3.5 w-3.5" />
-                            Régler
+                            {t("commandes.settle")}
                           </Button>
                         )}
                       </TableCell>
@@ -349,12 +528,72 @@ export function CommandesPage() {
                 {data.commandes.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={editable ? 13 : 12} className="py-8 text-center text-muted-foreground">
-                      Aucune commande pour ces critères.
+                      {t("commandes.emptyCriteria")}
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+          )}
+
+          {/* Mobile : cartes — 12-13 colonnes est le tableau le plus dense de
+              l'app, aucun scroll horizontal contenu ne le rendrait lisible. */}
+          {data && (
+            <div className="space-y-2 md:hidden">
+              {data.commandes.map((c) => (
+                <CarteLigne key={c.id}>
+                  <CarteLigneTitre>
+                    <span>
+                      n°{c.numero} — {c.client.nom}
+                    </span>
+                    <Badge variant="secondary">{c.qualite}</Badge>
+                  </CarteLigneTitre>
+                  <CarteLigneChamp label={t("common.date")} value={formatDate(c.dateCreation)} />
+                  <CarteLigneChamp label={t("commandes.colBacs")} value={c.quantiteBacs} />
+                  <CarteLigneChamp label={t("commandes.colGross")} value={formatFc(c.montantBrut)} />
+                  {c.avanceUtilisee > 0 && (
+                    <CarteLigneChamp
+                      label={t("commandes.colAdvanceUsed")}
+                      value={<span className="font-medium text-terracotta">− {formatFc(c.avanceUtilisee)}</span>}
+                    />
+                  )}
+                  <CarteLigneChamp
+                    label={t("commandes.colToCollect")}
+                    value={<span className="font-semibold text-marine dark:text-or">{formatFc(c.montantAPercevoir)}</span>}
+                  />
+                  <CarteLigneChamp label={t("commandes.colReceived")} value={formatFc(c.montantRecu)} />
+                  {c.dette > 0 && (
+                    <CarteLigneChamp label={t("commandes.colDebt")} value={<Badge variant="destructive">{formatFc(c.dette)}</Badge>} />
+                  )}
+                  {c.montantDeclareEnAttente > 0 && (
+                    <CarteLigneChamp
+                      label={t("commandes.colPending")}
+                      value={<span className="text-xs text-muted-foreground">{formatFc(c.montantDeclareEnAttente)}</span>}
+                    />
+                  )}
+                  {c.avanceGeneree > 0 && (
+                    <CarteLigneChamp label={t("commandes.colAdvanceGen")} value={<Badge variant="gold">+ {formatFc(c.avanceGeneree)}</Badge>} />
+                  )}
+                  <CarteLigneChamp label={t("commandes.colNewAdvance")} value={<span className="font-medium">{formatFc(c.nouvelleAvance)}</span>} />
+                  {editable && c.dette > 0 && (
+                    <CarteLigneActions>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => ouvrirReglement(c)}
+                        className="gap-1 border-terracotta/40 text-terracotta hover:bg-terracotta/10 hover:text-terracotta"
+                      >
+                        <HandCoins className="h-3.5 w-3.5" />
+                        {t("commandes.settle")}
+                      </Button>
+                    </CarteLigneActions>
+                  )}
+                </CarteLigne>
+              ))}
+              {data.commandes.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">{t("commandes.emptyCriteria")}</p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -363,67 +602,67 @@ export function CommandesPage() {
       <Dialog open={dialogCommande} onOpenChange={setDialogCommande}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nouvelle commande</DialogTitle>
-            <DialogDescription>
-              Le montant à percevoir, la dette et les avances sont calculés automatiquement.
-            </DialogDescription>
+            <DialogTitle>{t("commandes.newOrder")}</DialogTitle>
+            <DialogDescription>{t("commandes.newOrderDesc")}</DialogDescription>
           </DialogHeader>
           <form onSubmit={soumettreCommande} className="space-y-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="commande-client">Client</Label>
+                <Label htmlFor="commande-client">{t("commandes.client")}</Label>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => {
-                    setNomClient("");
-                    setTelClient("");
-                    setQualiteClient("");
-                    setErreurClient(null);
-                    setDialogClient(true);
-                  }}
+                  onClick={ouvrirNouveauClient}
                   className="h-7 gap-1 px-2 text-xs"
                 >
                   <UserPlus className="h-3.5 w-3.5" />
-                  Nouveau client
+                  {t("commandes.newClient")}
                 </Button>
               </div>
               <NativeSelect id="commande-client" value={clientId} onChange={(e) => setClientId(e.target.value)}>
-                <option value="">— Choisir un client —</option>
+                <option value="">{t("commandes.chooseClient")}</option>
                 {clientsData?.clients.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.nom} · {c.typeClient.nom}
-                    {c.avanceDisponible > 0 ? ` · avance ${formatFc(c.avanceDisponible)}` : ""}
+                    {c.avanceDisponible > 0 ? t("commandes.optionAdvance", { montant: formatFc(c.avanceDisponible) }) : ""}
                   </option>
                 ))}
               </NativeSelect>
               {clientChoisi && (
                 <p className="text-xs text-muted-foreground">
-                  {clientChoisi.typeClient.nom} — {formatFc(clientChoisi.typeClient.prixParBac)}/bac
-                  {clientChoisi.avanceDisponible > 0 && (
-                    <> · avance disponible <span className="font-medium text-terracotta">{formatFc(clientChoisi.avanceDisponible)}</span> (déduite automatiquement)</>
-                  )}
+                  {t("commandes.clientHintPrice", {
+                    qualite: clientChoisi.typeClient.nom,
+                    prix: formatFc(clientChoisi.typeClient.prixParBac),
+                  })}
+                  {clientChoisi.avanceDisponible > 0 &&
+                    t("commandes.clientHintAdvance", { montant: formatFc(clientChoisi.avanceDisponible) })}
                 </p>
               )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="commande-bacs">Nombre de bacs reçus</Label>
+                <Label htmlFor="commande-bacs">{t("commandes.bacsReceived")}</Label>
                 <Input
                   id="commande-bacs"
                   type="number"
                   min={1}
                   step={1}
                   value={bacs}
-                  onChange={(e) => setBacs(e.target.value)}
+                  onChange={(e) => {
+                    setBacs(e.target.value);
+                    setBacsPreRemplis(false);
+                  }}
                   placeholder="3"
                   required
                 />
+                {bacsPreRemplis && (
+                  <p className="text-xs text-terracotta">{t("commandes.bacsPreRemplisHint")}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="commande-recu">Montant reçu (Fc)</Label>
+                <Label htmlFor="commande-recu">{t("commandes.amountReceived")}</Label>
                 <Input
                   id="commande-recu"
                   type="number"
@@ -439,33 +678,33 @@ export function CommandesPage() {
             {apercu && (
               <div className="rounded-lg border border-or/40 bg-or/5 p-3 text-sm">
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Montant brut ({bacs} × {formatFc(clientChoisi!.typeClient.prixParBac)})</span>
+                  <span>{t("commandes.previewGross", { bacs, prix: formatFc(clientChoisi!.typeClient.prixParBac) })}</span>
                   <span>{formatFc(apercu.montantBrut)}</span>
                 </div>
                 {apercu.avanceUtilisee > 0 && (
                   <div className="flex justify-between text-terracotta">
-                    <span>Avance utilisée</span>
+                    <span>{t("commandes.previewAdvanceUsed")}</span>
                     <span>− {formatFc(apercu.avanceUtilisee)}</span>
                   </div>
                 )}
                 <div className="mt-1 flex justify-between border-t pt-1 font-semibold">
-                  <span>Montant à percevoir</span>
+                  <span>{t("commandes.previewToCollect")}</span>
                   <span>{formatFc(apercu.montantAPercevoir)}</span>
                 </div>
                 {apercu.dette > 0 && (
                   <div className="flex justify-between font-medium text-terracotta">
-                    <span>Dette</span>
+                    <span>{t("commandes.previewDebt")}</span>
                     <span>{formatFc(apercu.dette)}</span>
                   </div>
                 )}
                 {apercu.avanceGeneree > 0 && (
                   <div className="flex justify-between font-medium text-or">
-                    <span>Avance générée</span>
+                    <span>{t("commandes.previewAdvanceGen")}</span>
                     <span>+ {formatFc(apercu.avanceGeneree)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Nouvelle avance du client</span>
+                  <span>{t("commandes.previewNewAdvance")}</span>
                   <span>{formatFc(apercu.nouvelleAvance)}</span>
                 </div>
               </div>
@@ -479,13 +718,72 @@ export function CommandesPage() {
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogCommande(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={creerCommande.isPending}>
-                Enregistrer la commande
+                {t("commandes.saveOrder")}
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Doublon détecté : Modifier ou Remplacer — toujours sur LA MÊME commande */}
+      <Dialog open={!!conflit} onOpenChange={(o) => !o && setConflit(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TriangleAlert className="h-5 w-5 text-terracotta dark:text-or" />
+              {t("commandes.duplicateTitle")}
+            </DialogTitle>
+            <DialogDescription>
+              {conflit &&
+                t("commandes.duplicateDesc", {
+                  client: conflit.commandeExistante.client.nom,
+                  numero: conflit.commandeExistante.numero,
+                })}
+            </DialogDescription>
+          </DialogHeader>
+
+          {conflit && (
+            <div className="space-y-3">
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                <p className="font-medium">{t("commandes.duplicateExisting")}</p>
+                <p className="text-muted-foreground">
+                  {t("commandes.duplicateLine", {
+                    bacs: conflit.commandeExistante.quantiteBacs,
+                    recu: formatFc(conflit.commandeExistante.montantRecu),
+                  })}
+                </p>
+              </div>
+
+              {(["MODIFIER", "REMPLACER"] as StrategieDoublon[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={creerCommande.isPending}
+                  onClick={() => creerCommande.mutate(s)}
+                  className="w-full rounded-lg border border-input px-3 py-2.5 text-left transition-colors hover:border-or hover:bg-or/10 disabled:opacity-50"
+                >
+                  <p className="font-semibold text-marine dark:text-creme">{t(`commandes.strategy.${s}`)}</p>
+                  <p className="text-xs text-muted-foreground">{t(`commandes.strategyHelp.${s}`)}</p>
+                  <p className="mt-1 text-sm font-medium text-terracotta dark:text-or">
+                    {t("commandes.duplicateResult", {
+                      numero: conflit.commandeExistante.numero,
+                      bacs: conflit.apercu[s].quantiteBacs,
+                      recu: formatFc(conflit.apercu[s].montantRecu),
+                    })}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConflit(null)}>
+              {t("common.cancel")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -494,21 +792,24 @@ export function CommandesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Régler la commande n°{commandeARegler?.numero} — {commandeARegler?.client.nom}
+              {t("commandes.settleTitle", { numero: commandeARegler?.numero, client: commandeARegler?.client.nom })}
             </DialogTitle>
-            <DialogDescription>
-              Le montant s'ajoute au montant reçu ; dette et avance sont recalculées automatiquement.
-            </DialogDescription>
+            <DialogDescription>{t("commandes.settleDesc")}</DialogDescription>
           </DialogHeader>
           {commandeARegler && (
             <form onSubmit={soumettreReglement} className="space-y-4">
               <div className="flex items-center justify-between rounded-lg bg-terracotta/10 px-3 py-2 text-sm">
-                <span className="font-medium text-terracotta">Dette actuelle</span>
+                <span className="font-medium text-terracotta">{t("commandes.currentDebt")}</span>
                 <span className="font-bold text-terracotta">{formatFc(commandeARegler.dette)}</span>
               </div>
 
+              <p className="flex items-start gap-2 rounded-md border border-or/50 bg-or/10 px-3 py-2 text-xs text-marine dark:text-creme">
+                <HandCoins className="mt-0.5 h-3.5 w-3.5 shrink-0 text-terracotta dark:text-or" />
+                {t("commandes.settleDeclareHint")}
+              </p>
+
               <div className="space-y-2">
-                <Label htmlFor="reglement-montant">Montant du règlement (Fc)</Label>
+                <Label htmlFor="reglement-montant">{t("commandes.settleAmount")}</Label>
                 <Input
                   id="reglement-montant"
                   type="number"
@@ -516,36 +817,29 @@ export function CommandesPage() {
                   step={1}
                   value={montantReglement}
                   onChange={(e) => setMontantReglement(e.target.value)}
-                  placeholder={String(commandeARegler.dette)}
+                  placeholder={String(detteRestanteADeclarer)}
                   autoFocus
                   required
                 />
+                {detteRestanteADeclarer !== commandeARegler.dette && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("commandes.remainingToDeclare", { montant: formatFc(detteRestanteADeclarer) })}
+                  </p>
+                )}
               </div>
-
-              {apercuReglement && (
-                <div className="rounded-lg border border-or/40 bg-or/5 p-3 text-sm">
-                  <div className="flex justify-between">
-                    <span>Nouvelle dette</span>
-                    <span className={apercuReglement.dette > 0 ? "font-medium text-terracotta" : "font-medium"}>
-                      {apercuReglement.dette > 0 ? formatFc(apercuReglement.dette) : "0 Fc — soldée"}
-                    </span>
-                  </div>
-                  {apercuReglement.avanceGeneree > 0 && (
-                    <div className="flex justify-between font-medium text-or">
-                      <span>Avance générée pour le client</span>
-                      <span>+ {formatFc(apercuReglement.avanceGeneree)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {commandeARegler.reglements.length > 0 && (
                 <div className="space-y-1 text-xs text-muted-foreground">
-                  <p className="font-medium text-foreground">Règlements précédents</p>
+                  <p className="font-medium text-foreground">{t("commandes.previousSettlements")}</p>
                   {commandeARegler.reglements.map((r) => (
-                    <p key={r.id}>
-                      {formatDate(r.date)} — {formatFc(r.montant)}
-                      {r.enregistrePar ? ` (par ${r.enregistrePar.nom})` : ""}
+                    <p key={r.id} className="flex items-center gap-1.5">
+                      <span>
+                        {formatDate(r.date)} — {formatFc(r.montant)}
+                        {r.enregistrePar ? ` ${t("commandes.settledBy", { nom: r.enregistrePar.nom })}` : ""}
+                      </span>
+                      <Badge variant={r.statut === "CONFIRME" ? "gold" : "secondary"} className="shrink-0">
+                        {t(r.statut === "CONFIRME" ? "commandes.reglementConfirme" : "commandes.reglementDeclare")}
+                      </Badge>
                     </p>
                   ))}
                 </div>
@@ -559,10 +853,10 @@ export function CommandesPage() {
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setCommandeARegler(null)}>
-                  Annuler
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" variant="cta" disabled={enregistrerReglement.isPending}>
-                  Enregistrer le règlement
+                  {t("commandes.saveSettlement")}
                 </Button>
               </DialogFooter>
             </form>
@@ -570,39 +864,53 @@ export function CommandesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialogue nouveau client */}
+      {/* Dialogue nouveau client (création rapide) */}
       <Dialog open={dialogClient} onOpenChange={setDialogClient}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nouveau client</DialogTitle>
-            <DialogDescription>La qualité détermine le prix par bac et la commission.</DialogDescription>
+            <DialogTitle>{t("commandes.newClientTitle")}</DialogTitle>
+            <DialogDescription>{t("commandes.newClientDesc")}</DialogDescription>
           </DialogHeader>
           <form onSubmit={soumettreClient} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="client-nom">Nom</Label>
+              <Label htmlFor="client-nom">{t("common.name")}</Label>
               <Input id="client-nom" value={nomClient} onChange={(e) => setNomClient(e.target.value)} required />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="client-tel">Téléphone (optionnel)</Label>
+                <Label htmlFor="client-tel">{t("commandes.phoneOptional")}</Label>
                 <Input id="client-tel" value={telClient} onChange={(e) => setTelClient(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="client-qualite">Qualité</Label>
+                <Label htmlFor="client-qualite">{t("commandes.colQuality")}</Label>
                 <NativeSelect
                   id="client-qualite"
                   value={qualiteClient}
                   onChange={(e) => setQualiteClient(e.target.value)}
                 >
-                  <option value="">— Choisir —</option>
-                  {typesData?.typeClients.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.nom} ({formatFc(t.prixParBac)}/bac)
+                  <option value="">{t("commandes.chooseQuality")}</option>
+                  {typesData?.typeClients.map((tc) => (
+                    <option key={tc.id} value={tc.id}>
+                      {tc.nom} ({formatFc(tc.prixParBac)}/bac)
                     </option>
                   ))}
                 </NativeSelect>
               </div>
             </div>
+
+            {qualiteClientEstDepositaire && (
+              <div className="space-y-2">
+                <Label htmlFor="client-zone">{t("commandes.depositZoneOptional")}</Label>
+                <NativeSelect id="client-zone" value={zoneClient} onChange={(e) => setZoneClient(e.target.value)}>
+                  <option value="">{t("commandes.noDepositZone")}</option>
+                  {zonesData?.zones.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.nom}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+            )}
 
             {erreurClient && (
               <p role="alert" className="rounded-md bg-terracotta/10 px-3 py-2 text-sm font-medium text-terracotta">
@@ -612,10 +920,10 @@ export function CommandesPage() {
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogClient(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={creerClient.isPending}>
-                Créer le client
+                {t("commandes.createClient")}
               </Button>
             </DialogFooter>
           </form>
