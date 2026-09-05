@@ -161,13 +161,19 @@ export function DemandesCommandePubliquesCard({ editable }: { editable: boolean 
                     <span>{d.client.nom}</span>
                     <Badge variant="secondary">{d.client.typeClient}</Badge>
                   </CarteLigneTitre>
-                  <CarteLigneChamp label={t("demandesPubliques.colBacs")} value={d.quantiteBacs} />
-                  {d.dateSouhaitee && (
-                    <CarteLigneChamp
-                      label={t("demandesPubliques.colWantedDate")}
-                      value={formaterDateFr(d.dateSouhaitee.slice(0, 10))}
-                    />
-                  )}
+                  <CarteLigneChamp label={t("demandesPubliques.colBacs")} value={d.totalBacs} />
+                  <CarteLigneChamp
+                    label={t("demandesPubliques.colDetail")}
+                    value={
+                      <span className="italic">
+                        {d.lignes.map((l) => `${l.quantite} ${l.produitNom}`).join(", ")}
+                      </span>
+                    }
+                  />
+                  <CarteLigneChamp
+                    label={t("demandesPubliques.colWantedDate")}
+                    value={formaterDateFr(d.dateSouhaitee)}
+                  />
                   {d.note && (
                     <CarteLigneChamp
                       label={t("demandesPubliques.colNote")}
@@ -223,7 +229,15 @@ export function DemandesCommandePubliquesCard({ editable }: { editable: boolean 
                           {t(`demandesPubliques.status.${d.statut}`)}
                         </Badge>
                       </CarteLigneTitre>
-                      <CarteLigneChamp label={t("demandesPubliques.colBacs")} value={d.quantiteBacs} />
+                      <CarteLigneChamp label={t("demandesPubliques.colBacs")} value={d.totalBacs} />
+                      <CarteLigneChamp
+                        label={t("demandesPubliques.colDetail")}
+                        value={
+                          <span className="italic">
+                            {d.lignes.map((l) => `${l.quantite} ${l.produitNom}`).join(", ")}
+                          </span>
+                        }
+                      />
                       {d.statut === "REJETEE" && d.motifRejet && (
                         <CarteLigneChamp
                           label={t("demandesPubliques.colRejectReason")}

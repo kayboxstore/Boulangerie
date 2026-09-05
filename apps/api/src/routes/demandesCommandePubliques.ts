@@ -3,26 +3,20 @@ import {
   demandePubliqueIdentifierSchema,
   demandePubliqueCreateSchema,
   demandePubliqueRejeterSchema,
-  formatFc,
   type DemandeCommandePubliqueDTO,
+  type SchemaCommandeLigneClientInput,
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
-import { executerAvecReessaiP2034, ErreurEcritureCaisseReessayable } from "../services/caisseAtomique.js";
-import { executerCreationOuMiseAJourCommande, ErreurClientInconnu } from "./commandes.js";
-import { ajouterEnteteRejeu, executerEcritureIdempotente, ErreurIdempotence } from "../lib/idempotence.js";
+import {
+  appliquerSchemaCommandeJour,
+  chargerSchemaCommandeJour,
+  ErreurPlanningConcurrent,
+  estConflitPlanning,
+} from "./production.js";
+import { ErreurCycleLivraison } from "../services/cyclesLivraison.js";
 import { ErreurAction } from "../lib/erreurAction.js";
-
-// Dérivé directement de la fonction plutôt que redéclaré à la main : évite
-// toute divergence si son type de retour évolue un jour dans commandes.ts.
-type ResultatConfirmation = Awaited<ReturnType<typeof executerCreationOuMiseAJourCommande>>;
-
-interface CorpsConfirmationDemande {
-  erreur?: string;
-  conflit?: boolean;
-  commandeId?: string;
-}
 
 export const demandesCommandePubliquesPubliqueRouter = Router();
 export const demandesCommandePubliquesRouter = Router();
@@ -32,27 +26,24 @@ export const demandesCommandePubliquesRouter = Router();
 // ne suffit pas : il ne fait QUE lire req.utilisateur, jamais le définir.
 demandesCommandePubliquesRouter.use(requireAuth);
 
-const INCLUDE_CLIENT = { client: { include: { typeClient: true } } } as const;
+const INCLUDE_DEMANDE = {
+  client: { include: { typeClient: true } },
+  lignes: { include: { produit: true } },
+} as const;
 
-function versDTO(d: {
-  id: string;
-  client: { id: string; nom: string; typeClient: { nom: string } };
-  quantiteBacs: number;
-  dateSouhaitee: Date | null;
-  note: string | null;
-  statut: "EN_ATTENTE" | "CONFIRMEE" | "REJETEE";
-  commandeCreeeId: string | null;
-  motifRejet: string | null;
-  createdAt: Date;
-}): DemandeCommandePubliqueDTO {
+type DemandeAvecRelations = Awaited<
+  ReturnType<typeof prisma.demandeCommandePublique.findFirstOrThrow<{ include: typeof INCLUDE_DEMANDE }>>
+>;
+
+function versDTO(d: DemandeAvecRelations): DemandeCommandePubliqueDTO {
   return {
     id: d.id,
     client: { id: d.client.id, nom: d.client.nom, typeClient: d.client.typeClient.nom },
-    quantiteBacs: d.quantiteBacs,
-    dateSouhaitee: d.dateSouhaitee ? d.dateSouhaitee.toISOString() : null,
+    lignes: d.lignes.map((l) => ({ produitId: l.produitId, produitNom: l.produit.nom, quantite: l.quantite })),
+    totalBacs: d.lignes.reduce((s, l) => s + l.quantite, 0),
+    dateSouhaitee: d.dateSouhaitee.toISOString().slice(0, 10),
     note: d.note,
     statut: d.statut,
-    commandeCreeeId: d.commandeCreeeId,
     motifRejet: d.motifRejet,
     createdAt: d.createdAt.toISOString(),
   };
@@ -99,6 +90,9 @@ demandesCommandePubliquesPubliqueRouter.post("/identifier", async (req, res, nex
  * dans un clientId envoyé par le formulaire public sans le prouver à nouveau
  * par le même téléphone) — sinon rien n'empêcherait un visiteur de deviner
  * un clientId et de soumettre une demande au nom d'un autre Dépositaire.
+ * Ce n'est PAS une commande : c'est une PRÉVISION pour la date souhaitée,
+ * jamais rien de facturable tant qu'un Chargé des commandes ne l'a pas
+ * confirmée (voir /:id/confirmer plus bas).
  */
 demandesCommandePubliquesPubliqueRouter.post("/", async (req, res, next) => {
   try {
@@ -106,7 +100,7 @@ demandesCommandePubliquesPubliqueRouter.post("/", async (req, res, next) => {
     if (!parsed.success) {
       return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
     }
-    const { telephone, quantiteBacs, dateSouhaitee, note } = parsed.data;
+    const { telephone, dateSouhaitee, lignes, note } = parsed.data;
     const client = await prisma.client.findFirst({
       where: { telephone, typeClient: { nom: { in: ["Dépositaire", "Maman"] } } },
       include: { typeClient: true },
@@ -115,22 +109,32 @@ demandesCommandePubliquesPubliqueRouter.post("/", async (req, res, next) => {
       return res.status(404).json({ erreur: "Aucun compte Dépositaire/Maman ne correspond à ce numéro." });
     }
 
+    const produitIds = [...new Set(lignes.map((l) => l.produitId))];
+    const produitsConnus = await prisma.produit.count({ where: { id: { in: produitIds }, actif: true } });
+    if (produitsConnus !== produitIds.length) {
+      return res.status(400).json({ erreur: "Un des produits demandés est inconnu ou n'est plus proposé." });
+    }
+    if (produitIds.length !== lignes.length) {
+      return res.status(400).json({ erreur: "Un même produit apparaît deux fois dans la demande." });
+    }
+
     const demande = await prisma.demandeCommandePublique.create({
       data: {
         clientId: client.id,
-        quantiteBacs,
-        dateSouhaitee: dateSouhaitee ? new Date(dateSouhaitee) : null,
+        dateSouhaitee: new Date(dateSouhaitee),
         note,
+        lignes: { create: lignes.map((l) => ({ produitId: l.produitId, quantite: l.quantite })) },
       },
-      include: INCLUDE_CLIENT,
+      include: INCLUDE_DEMANDE,
     });
 
+    const totalBacs = lignes.reduce((s, l) => s + l.quantite, 0);
     busEvenements.emettreEvenement({
       type: "DEMANDE_COMMANDE_PUBLIQUE",
       module: "COMMANDES",
       emetteurId: null,
       evenementRef: demande.id,
-      message: `Nouvelle demande de commande (site vitrine) — ${client.nom} (${client.typeClient.nom}) : ${quantiteBacs} bac(s) souhaité(s).`,
+      message: `Nouvelle demande de commande (site vitrine) — ${client.nom} (${client.typeClient.nom}) : ${totalBacs} bac(s) pour le ${dateSouhaitee}.`,
       donnees: { demandeId: demande.id },
     });
 
@@ -150,7 +154,7 @@ demandesCommandePubliquesRouter.get("/", requirePermission("COMMANDES", "LECTURE
     const statut = typeof req.query.statut === "string" ? req.query.statut : undefined;
     const demandes = await prisma.demandeCommandePublique.findMany({
       where: statut ? { statut: statut as "EN_ATTENTE" | "CONFIRMEE" | "REJETEE" } : undefined,
-      include: INCLUDE_CLIENT,
+      include: INCLUDE_DEMANDE,
       orderBy: { createdAt: "desc" },
     });
     return res.json({ demandes: demandes.map(versDTO) });
@@ -160,12 +164,25 @@ demandesCommandePubliquesRouter.get("/", requirePermission("COMMANDES", "LECTURE
 });
 
 /**
- * Confirme une demande : délègue à executerCreationOuMiseAJourCommande, le
- * MÊME cœur transactionnel que la création normale (POST /api/commandes) —
- * pas une réimplémentation. Un doublon (le client a déjà une commande
- * aujourd'hui) renvoie le même conflit 409 que le flux manuel, avec le même
- * choix Modifier/Remplacer à faire depuis l'écran de traitement de la
- * demande.
+ * Confirme une demande : l'ajoute au Schéma de commande de la date
+ * souhaitée, en réutilisant appliquerSchemaCommandeJour (production.ts) — le
+ * MÊME cœur transactionnel que la saisie manuelle des prévisions, jamais une
+ * réimplémentation. PAS une CommandeClient : cette demande devient une
+ * PRÉVISION, la vraie commande facturable ne naîtra qu'à la livraison (cycle
+ * existant, étape "Montant facturable").
+ *
+ * Fusion, pas remplacement : si ce client a déjà des lignes pour cette date
+ * (une commande manuelle saisie par l'équipe, ou une AUTRE demande publique
+ * déjà confirmée pour le même jour), les quantités s'ADDITIONNENT par
+ * produit plutôt que d'écraser l'existant — plusieurs demandes du même
+ * client pour une même date de livraison sont considérées cumulatives, pas
+ * substitutives. Si ce n'est pas le comportement voulu, à ajuster.
+ *
+ * Verrouillage optimiste contre le double-clic : la demande est BASCULÉE
+ * en CONFIRMEE avant la fusion (via updateMany ... WHERE statut=EN_ATTENTE,
+ * count doit valoir 1) puis repassée en EN_ATTENTE si la fusion échoue — sans
+ * ça, deux clics concurrents pourraient tous les deux lire EN_ATTENTE et
+ * additionner les mêmes bacs deux fois dans le Planning.
  */
 demandesCommandePubliquesRouter.post(
   "/:id/confirmer",
@@ -174,71 +191,74 @@ demandesCommandePubliquesRouter.post(
     try {
       const demande = await prisma.demandeCommandePublique.findUnique({
         where: { id: req.params.id },
-        include: INCLUDE_CLIENT,
+        include: INCLUDE_DEMANDE,
       });
       if (!demande) return res.status(404).json({ erreur: "Demande introuvable" });
       if (demande.statut !== "EN_ATTENTE") {
-        return res.status(409).json({ erreur: `Cette demande est déjà ${demande.statut === "CONFIRMEE" ? "confirmée" : "rejetée"}.` });
+        return res
+          .status(409)
+          .json({ erreur: `Cette demande est déjà ${demande.statut === "CONFIRMEE" ? "confirmée" : "rejetée"}.` });
       }
 
-      const strategie = req.body?.strategie as "MODIFIER" | "REMPLACER" | undefined;
+      const reclamee = await prisma.demandeCommandePublique.updateMany({
+        where: { id: demande.id, statut: "EN_ATTENTE" },
+        data: { statut: "CONFIRMEE", traiteParId: req.utilisateur!.id, traiteLe: new Date() },
+      });
+      if (reclamee.count !== 1) {
+        return res.status(409).json({ erreur: "Cette demande vient d'être traitée par quelqu'un d'autre." });
+      }
 
-      const execution = await executerAvecReessaiP2034(() =>
-        executerEcritureIdempotente<ResultatConfirmation, CorpsConfirmationDemande>(
-          req,
-          `POST:/api/demandes-commande-publiques/${demande.id}/confirmer`,
-          { demandeId: demande.id, strategie },
-          (tx) =>
-            executerCreationOuMiseAJourCommande(
-              tx,
-              { clientId: demande.clientId, quantiteBacs: demande.quantiteBacs, montantRecu: 0, strategie },
-              req.utilisateur!.id,
-            ),
-          (resultat) => {
-            if (resultat.type === "conflit") {
-              return {
-                statutHttp: 409,
-                corps: {
-                  erreur: `${demande.client.nom} a déjà une commande aujourd'hui. Choisissez Modifier ou Remplacer.`,
-                  conflit: true,
-                },
-              };
-            }
-            if (resultat.type === "reglementsPresents" || resultat.type === "cycleImmuable") {
-              return { statutHttp: 409, corps: { erreur: "Cette commande ne peut pas être modifiée automatiquement." } };
-            }
-            return { statutHttp: 200, corps: { commandeId: resultat.commande.id } };
+      const dateISO = demande.dateSouhaitee.toISOString().slice(0, 10);
+      try {
+        const schemaExistant = await chargerSchemaCommandeJour(dateISO);
+        const autresClients: SchemaCommandeLigneClientInput[] = schemaExistant.clients
+          .filter((c) => c.clientId !== demande.clientId)
+          .map((c) => ({
+            clientId: c.clientId,
+            lignes: c.lignes.map((l) => ({ produitId: l.produitId, quantite: l.quantite })),
+          }));
+        const ligneExistanteCeClient = schemaExistant.clients.find((c) => c.clientId === demande.clientId);
+        const quantitesFusionnees = new Map<string, number>(
+          ligneExistanteCeClient?.lignes.map((l) => [l.produitId, l.quantite]) ?? [],
+        );
+        for (const l of demande.lignes) {
+          quantitesFusionnees.set(l.produitId, (quantitesFusionnees.get(l.produitId) ?? 0) + l.quantite);
+        }
+
+        const clientsAvecFusion: SchemaCommandeLigneClientInput[] = [
+          ...autresClients,
+          {
+            clientId: demande.clientId,
+            lignes: [...quantitesFusionnees.entries()].map(([produitId, quantite]) => ({ produitId, quantite })),
           },
-        ),
-      );
+        ];
 
-      ajouterEnteteRejeu(res, execution.rejoue);
-      if (!execution.rejoue && execution.corps.commandeId) {
+        const resultat = await appliquerSchemaCommandeJour(dateISO, clientsAvecFusion, req.utilisateur!.id);
+        if ("erreur" in resultat) {
+          throw new ErreurAction(resultat.statutHttp, resultat.erreur);
+        }
+
+        return res.json({ demande: versDTO({ ...demande, statut: "CONFIRMEE" }) });
+      } catch (erreurFusion) {
+        // La demande a été réclamée (CONFIRMEE) mais la fusion a échoué :
+        // on la rend au pool EN_ATTENTE pour qu'un nouvel essai reste
+        // possible, plutôt que de la laisser bloquée "confirmée" sans que
+        // rien n'ait réellement été appliqué.
         await prisma.demandeCommandePublique.updateMany({
-          where: { id: demande.id },
-          data: { statut: "CONFIRMEE", commandeCreeeId: execution.corps.commandeId, traiteParId: req.utilisateur!.id, traiteLe: new Date() },
+          where: { id: demande.id, statut: "CONFIRMEE" },
+          data: { statut: "EN_ATTENTE", traiteParId: null, traiteLe: null },
         });
+        throw erreurFusion;
       }
-      return res.status(execution.corps.conflit ? 409 : 200).json(execution.corps);
     } catch (e) {
-      if (e instanceof ErreurClientInconnu) {
-        return res.status(404).json({ erreur: "Client introuvable" });
+      if (e instanceof ErreurCycleLivraison) {
+        return res.status(e.statutHttp).json({ code: e.code, erreur: e.message });
       }
-      // Mêmes types d'erreur que POST /api/commandes (commandes.ts) — normal,
-      // executerCreationOuMiseAJourCommande est le MÊME cœur transactionnel,
-      // partagé, pas une réimplémentation. Bug réel trouvé via les logs
-      // Render (une vraie demande confirmée un jour sans Caisse ouverte a
-      // renvoyé "Erreur interne du serveur" au lieu du vrai message métier) :
-      // ce bloc catch n'avait repris QUE ErreurClientInconnu, oubliant que
-      // la fonction partagée peut aussi lever ErreurAction (ex. "Aucune
-      // session de caisse n'est ouverte"), ErreurIdempotence, et
-      // ErreurEcritureCaisseReessayable — les trois tombaient auparavant
-      // dans next(e), donc un 500 générique côté client.
-      if (e instanceof ErreurIdempotence) {
-        return res.status(e.statutHttp).json({ erreur: e.message, code: e.code });
-      }
-      if (e instanceof ErreurEcritureCaisseReessayable) {
-        return res.status(503).json({ erreur: e.message });
+      if (e instanceof ErreurPlanningConcurrent || estConflitPlanning(e)) {
+        return res.status(409).json({
+          code: "PREVISION_VERROUILLEE",
+          erreur: "La prévision de ce jour a été modifiée simultanément. Réessayez.",
+        });
       }
       if (e instanceof ErreurAction) {
         return res.status(e.status).json({ erreur: e.message });
@@ -260,12 +280,20 @@ demandesCommandePubliquesRouter.post(
       const demande = await prisma.demandeCommandePublique.findUnique({ where: { id: req.params.id } });
       if (!demande) return res.status(404).json({ erreur: "Demande introuvable" });
       if (demande.statut !== "EN_ATTENTE") {
-        return res.status(409).json({ erreur: `Cette demande est déjà ${demande.statut === "CONFIRMEE" ? "confirmée" : "rejetée"}.` });
+        return res
+          .status(409)
+          .json({ erreur: `Cette demande est déjà ${demande.statut === "CONFIRMEE" ? "confirmée" : "rejetée"}.` });
       }
-      const maj = await prisma.demandeCommandePublique.update({
-        where: { id: demande.id },
+      const reclamee = await prisma.demandeCommandePublique.updateMany({
+        where: { id: demande.id, statut: "EN_ATTENTE" },
         data: { statut: "REJETEE", motifRejet: parsed.data.motif, traiteParId: req.utilisateur!.id, traiteLe: new Date() },
-        include: INCLUDE_CLIENT,
+      });
+      if (reclamee.count !== 1) {
+        return res.status(409).json({ erreur: "Cette demande vient d'être traitée par quelqu'un d'autre." });
+      }
+      const maj = await prisma.demandeCommandePublique.findUniqueOrThrow({
+        where: { id: demande.id },
+        include: INCLUDE_DEMANDE,
       });
       return res.json({ demande: versDTO(maj) });
     } catch (e) {

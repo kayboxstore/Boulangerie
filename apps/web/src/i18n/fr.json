@@ -543,6 +543,7 @@
     "empty": "Aucune demande en attente.",
     "loadError": "Impossible de charger les demandes.",
     "colBacs": "Bacs souhaités",
+    "colDetail": "Détail",
     "colWantedDate": "Date souhaitée",
     "colNote": "Note",
     "colRejectReason": "Motif du rejet",

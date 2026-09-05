@@ -543,6 +543,7 @@
     "empty": "No pending requests.",
     "loadError": "Could not load requests.",
     "colBacs": "Requested crates",
+    "colDetail": "Detail",
     "colWantedDate": "Requested date",
     "colNote": "Note",
     "colRejectReason": "Rejection reason",

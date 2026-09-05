@@ -367,8 +367,6 @@ model CommandeClient {
   alerteDetteEnvoyeeLe DateTime?
   reglements           PaiementCommande[]
 
-  demandeOrigine       DemandeCommandePublique?
-
   @@unique([clientId, dateOperationnelle])
   @@index([clientId])
   @@index([dateCreation])
@@ -382,25 +380,49 @@ model CommandeClient {
 // ce qu'il souhaite, et un Chargé des commandes confirme (crée une vraie
 // CommandeClient à partir d'ici) ou rejette. Conservée après traitement,
 // jamais supprimée — trace de la demande d'origine même une fois confirmée.
+// Demande de commande soumise depuis le site vitrine public (nouveau canal,
+// section 3.4) — JAMAIS une commande facturable. Ce que le client demande ici
+// est une PRÉVISION pour une date de livraison future : à la confirmation,
+// ça alimente le Schéma de commande du jour demandé (voir SchemaCommande),
+// exactement le même mécanisme que lorsque la Production saisit les
+// prévisions de tous les clients pour une journée. Ce n'est qu'après la
+// livraison réelle de ce jour-là que le cycle produit une vraie
+// CommandeClient facturable (voir CycleLivraison, étape "Montant
+// facturable") — jamais directement depuis cette demande.
 model DemandeCommandePublique {
-  id              String                @id @default(cuid())
-  clientId        String
-  client          Client                @relation(fields: [clientId], references: [id])
-  quantiteBacs    Int
-  dateSouhaitee   DateTime?
-  note            String?
-  statut          StatutDemandePublique @default(EN_ATTENTE)
-  // Renseigné uniquement au passage à CONFIRMEE — jamais modifiable après.
-  commandeCreeeId String?               @unique
-  commandeCreee   CommandeClient?       @relation(fields: [commandeCreeeId], references: [id])
-  traiteParId     String?
-  traiteLe        DateTime?
+  id            String                        @id @default(cuid())
+  clientId      String
+  client        Client                        @relation(fields: [clientId], references: [id])
+  lignes        DemandeCommandePubliqueLigne[]
+  // Requise (contrairement à la première version) : une Prévision n'existe
+  // que pour une date précise, pas "un jour au choix de la Production".
+  dateSouhaitee DateTime                       @db.Date
+  note          String?
+  statut        StatutDemandePublique          @default(EN_ATTENTE)
+  traiteParId   String?
+  traiteLe      DateTime?
   // Renseigné uniquement au passage à REJETEE.
-  motifRejet      String?
-  createdAt       DateTime              @default(now())
+  motifRejet    String?
+  createdAt     DateTime                       @default(now())
 
   @@index([clientId])
   @@index([statut])
+}
+
+// Détail par produit d'une demande publique — mêmes produits que le Schéma
+// de commande et la Production (Carré 1.500 Fc, Baguette 500 Fc…), pas de
+// catalogue parallèle. Une ligne par produit demandé, jamais un total agrégé
+// seul : c'est ce détail qui devient les lignes du Schéma de commande à la
+// confirmation.
+model DemandeCommandePubliqueLigne {
+  id        String                  @id @default(cuid())
+  demandeId String
+  demande   DemandeCommandePublique @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+  produitId String
+  produit   Produit                 @relation(fields: [produitId], references: [id])
+  quantite  Int
+
+  @@unique([demandeId, produitId])
 }
 
 // Un règlement naît DECLARE (section 3.1/3.4, Lot 6 — P0-07) : l'argent que le
@@ -454,6 +476,7 @@ model Produit {
   lignesSchema    SchemaCommandeLigne[]
   lignesLivraison BonLivraisonLigne[]
   lignesCycle     CycleLivraisonLigne[]
+  lignesDemandesPubliques DemandeCommandePubliqueLigne[]
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 

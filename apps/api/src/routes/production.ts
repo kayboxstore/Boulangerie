@@ -24,6 +24,7 @@ import {
   type ProductionDTO,
   type SchemaCommandeClientDTO,
   type SchemaCommandeJourDTO,
+  type SchemaCommandeLigneClientInput,
 } from "@lomoto/shared";
 import { prisma, type TxClient } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
@@ -54,7 +55,7 @@ const ecriturePrevision = (req: Request, res: Response, next: NextFunction) => {
 const dec = (d: Prisma.Decimal | null) => (d === null ? null : d.toNumber());
 const jour = (d: Date) => d.toISOString().slice(0, 10);
 
-class ErreurPlanningConcurrent extends Error {}
+export class ErreurPlanningConcurrent extends Error {}
 
 class ErreurBonLivraison extends Error {
   constructor(
@@ -66,7 +67,7 @@ class ErreurBonLivraison extends Error {
   }
 }
 
-function estConflitPlanning(e: unknown): boolean {
+export function estConflitPlanning(e: unknown): boolean {
   if (!(e instanceof Prisma.PrismaClientKnownRequestError)) return false;
   return (
     e.code === "P2002" ||
@@ -249,7 +250,7 @@ productionRouter.delete("/planning/:id", ecriture, async (req, res, next) => {
 // main (voir /planning ci-dessus).
 
 /** Un seul chemin de lecture pour le GET et pour la réponse du PUT (source unique de vérité). */
-async function chargerSchemaCommandeJour(date: string): Promise<SchemaCommandeJourDTO> {
+export async function chargerSchemaCommandeJour(date: string): Promise<SchemaCommandeJourDTO> {
   const dateObj = new Date(date);
 
   const [produitsCatalogue, clients, schemasExistants] = await Promise.all([
@@ -314,40 +315,54 @@ productionRouter.get("/schema-commande", lecture, async (req, res, next) => {
   }
 });
 
-productionRouter.put("/schema-commande", ecriturePrevision, async (req, res, next) => {
-  try {
-    const parsed = schemaCommandeJourSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+/**
+ * Applique un Schéma de commande complet pour une date (validation, sync des
+ * Prévisions/CycleLivraison, reconstruction du Planning de production,
+ * émission de l'événement) — extrait de la route PUT "/schema-commande"
+ * ci-dessous pour être réutilisable ailleurs (confirmation d'une
+ * DemandeCommandePublique, voir routes/demandesCommandePubliques.ts) sans
+ * dupliquer cette logique délicate. Extraction MÉCANIQUE, aucun changement de
+ * comportement par rapport à ce qui existait inline avant.
+ *
+ * Attention à l'appelant : `clients` remplace la TOTALITÉ du Schéma de cette
+ * date, pas seulement les clients listés — un appelant qui veut AJOUTER un
+ * client à un jour existant doit d'abord charger chargerSchemaCommandeJour(date)
+ * et fusionner son client dans la liste complète avant d'appeler cette
+ * fonction, jamais appeler avec un seul client en pensant que les autres
+ * seront préservés.
+ */
+export async function appliquerSchemaCommandeJour(
+  date: string,
+  clients: SchemaCommandeLigneClientInput[],
+  utilisateurId: string,
+): Promise<{ schema: SchemaCommandeJourDTO } | { erreur: string; statutHttp: number }> {
+  const clientIds = clients.map((c) => c.clientId);
+  if (new Set(clientIds).size !== clientIds.length) {
+    return { erreur: "Un client apparaît deux fois dans le schéma", statutHttp: 400 };
+  }
+  const produitIds = [...new Set(clients.flatMap((c) => c.lignes.map((l) => l.produitId)))];
+  if (clientIds.length > 0) {
+    const clientsConnus = await prisma.client.count({ where: { id: { in: clientIds } } });
+    if (clientsConnus !== clientIds.length) {
+      return { erreur: "Client inconnu dans le schéma", statutHttp: 400 };
     }
-    const { date, clients } = parsed.data;
+  }
+  if (produitIds.length > 0) {
+    const produitsConnus = await prisma.produit.count({ where: { id: { in: produitIds } } });
+    if (produitsConnus !== produitIds.length) {
+      return { erreur: "Produit inconnu dans le schéma", statutHttp: 400 };
+    }
+  }
 
-    const clientIds = clients.map((c) => c.clientId);
-    if (new Set(clientIds).size !== clientIds.length) {
-      return res.status(400).json({ erreur: "Un client apparaît deux fois dans le schéma" });
-    }
-    const produitIds = [...new Set(clients.flatMap((c) => c.lignes.map((l) => l.produitId)))];
-    if (clientIds.length > 0) {
-      const clientsConnus = await prisma.client.count({ where: { id: { in: clientIds } } });
-      if (clientsConnus !== clientIds.length) {
-        return res.status(400).json({ erreur: "Client inconnu dans le schéma" });
-      }
-    }
-    if (produitIds.length > 0) {
-      const produitsConnus = await prisma.produit.count({ where: { id: { in: produitIds } } });
-      if (produitsConnus !== produitIds.length) {
-        return res.status(400).json({ erreur: "Produit inconnu dans le schéma" });
-      }
-    }
+  const dateObj = new Date(date);
 
-    const dateObj = new Date(date);
-
-    await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(
+    async (tx) => {
       // C4 conserve l'identifiant de chaque cycle : les prévisions encore
       // neuves sont mises à jour en place, tandis qu'une étape aval verrouille
       // la suppression et la modification. Le Planning reste dans cette même
       // transaction, donc aucun des deux côtés ne peut diverger.
-      await synchroniserPrevisionsCycles(tx, dateObj, clients, req.utilisateur!.id);
+      await synchroniserPrevisionsCycles(tx, dateObj, clients, utilisateurId);
 
       // Alimentation automatique du Planning de production : le nombre de
       // bacs et le détail par produit deviennent ceux du Schéma. Un Planning
@@ -408,23 +423,38 @@ productionRouter.put("/schema-commande", ecriturePrevision, async (req, res, nex
           data: {
             datePrevue: dateObj,
             nombreBacsCommandes,
-            creeParId: req.utilisateur!.id,
+            creeParId: utilisateurId,
             lignes: { create: lignesPlanning },
           },
         });
       }
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
 
-    const schema = await chargerSchemaCommandeJour(date);
-    busEvenements.emettreEvenement({
-      type: "PREVISION_TRANSMISE",
-      module: "PRODUCTION",
-      emetteurId: req.utilisateur!.id,
-      evenementRef: date,
-      message: `Prévision transmise pour le ${date} — ${schema.totalGeneral} bac(s)`,
-      donnees: { date, nombreClients: schema.clients.length, totalGeneral: schema.totalGeneral },
-    });
-    res.json(schema);
+  const schema = await chargerSchemaCommandeJour(date);
+  busEvenements.emettreEvenement({
+    type: "PREVISION_TRANSMISE",
+    module: "PRODUCTION",
+    emetteurId: utilisateurId,
+    evenementRef: date,
+    message: `Prévision transmise pour le ${date} — ${schema.totalGeneral} bac(s)`,
+    donnees: { date, nombreClients: schema.clients.length, totalGeneral: schema.totalGeneral },
+  });
+  return { schema };
+}
+
+productionRouter.put("/schema-commande", ecriturePrevision, async (req, res, next) => {
+  try {
+    const parsed = schemaCommandeJourSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const resultat = await appliquerSchemaCommandeJour(parsed.data.date, parsed.data.clients, req.utilisateur!.id);
+    if ("erreur" in resultat) {
+      return res.status(resultat.statutHttp).json({ erreur: resultat.erreur });
+    }
+    res.json(resultat.schema);
   } catch (e) {
     if (e instanceof ErreurCycleLivraison) {
       return res.status(e.statutHttp).json({

@@ -317,10 +317,21 @@ export const demandePubliqueIdentifierSchema = z.object({
 });
 export type DemandePubliqueIdentifierInput = z.infer<typeof demandePubliqueIdentifierSchema>;
 
+// Une ligne par produit demandé — jamais un total agrégé seul : ce détail
+// devient les lignes du Schéma de commande à la confirmation (voir
+// executerCreationOuMiseAJourCommande dans commandes.ts, PAS réutilisée ici,
+// et son équivalent côté Prévisions dans demandesCommandePubliques.ts).
+export const demandePubliqueLigneSchema = z.object({
+  produitId: z.string().min(1, "Produit requis"),
+  quantite: z.number().finite().int("Quantité entière").min(1, "Au moins 1 bac"),
+});
+
 export const demandePubliqueCreateSchema = z.object({
   telephone: z.string().trim().min(3, "Numéro de téléphone requis"),
-  quantiteBacs: z.number().finite("Le nombre doit être fini").int("Nombre de bacs entier").min(1, "Au moins 1 bac"),
-  dateSouhaitee: dateISOSchema.optional(),
+  // Requise (pas optionnelle) : une Prévision n'existe que pour une date
+  // précise, jamais "un jour au choix de la Production".
+  dateSouhaitee: dateISOSchema,
+  lignes: z.array(demandePubliqueLigneSchema).min(1, "Au moins un produit requis"),
   note: z.string().trim().max(500, "500 caractères maximum").optional(),
 });
 export type DemandePubliqueCreateInput = z.infer<typeof demandePubliqueCreateSchema>;
@@ -336,11 +347,11 @@ export type StatutDemandePublique = (typeof STATUTS_DEMANDE_PUBLIQUE)[number];
 export interface DemandeCommandePubliqueDTO {
   id: string;
   client: { id: string; nom: string; typeClient: string };
-  quantiteBacs: number;
-  dateSouhaitee: string | null;
+  lignes: { produitId: string; produitNom: string; quantite: number }[];
+  totalBacs: number;
+  dateSouhaitee: string;
   note: string | null;
   statut: StatutDemandePublique;
-  commandeCreeeId: string | null;
   motifRejet: string | null;
   createdAt: string;
 }
