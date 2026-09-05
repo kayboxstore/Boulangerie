@@ -9,9 +9,10 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { busEvenements } from "../lib/events.js";
-import { executerAvecReessaiP2034 } from "../services/caisseAtomique.js";
+import { executerAvecReessaiP2034, ErreurEcritureCaisseReessayable } from "../services/caisseAtomique.js";
 import { executerCreationOuMiseAJourCommande, ErreurClientInconnu } from "./commandes.js";
-import { ajouterEnteteRejeu, executerEcritureIdempotente } from "../lib/idempotence.js";
+import { ajouterEnteteRejeu, executerEcritureIdempotente, ErreurIdempotence } from "../lib/idempotence.js";
+import { ErreurAction } from "../lib/erreurAction.js";
 
 // Dérivé directement de la fonction plutôt que redéclaré à la main : évite
 // toute divergence si son type de retour évolue un jour dans commandes.ts.
@@ -222,6 +223,25 @@ demandesCommandePubliquesRouter.post(
     } catch (e) {
       if (e instanceof ErreurClientInconnu) {
         return res.status(404).json({ erreur: "Client introuvable" });
+      }
+      // Mêmes types d'erreur que POST /api/commandes (commandes.ts) — normal,
+      // executerCreationOuMiseAJourCommande est le MÊME cœur transactionnel,
+      // partagé, pas une réimplémentation. Bug réel trouvé via les logs
+      // Render (une vraie demande confirmée un jour sans Caisse ouverte a
+      // renvoyé "Erreur interne du serveur" au lieu du vrai message métier) :
+      // ce bloc catch n'avait repris QUE ErreurClientInconnu, oubliant que
+      // la fonction partagée peut aussi lever ErreurAction (ex. "Aucune
+      // session de caisse n'est ouverte"), ErreurIdempotence, et
+      // ErreurEcritureCaisseReessayable — les trois tombaient auparavant
+      // dans next(e), donc un 500 générique côté client.
+      if (e instanceof ErreurIdempotence) {
+        return res.status(e.statutHttp).json({ erreur: e.message, code: e.code });
+      }
+      if (e instanceof ErreurEcritureCaisseReessayable) {
+        return res.status(503).json({ erreur: e.message });
+      }
+      if (e instanceof ErreurAction) {
+        return res.status(e.status).json({ erreur: e.message });
       }
       next(e);
     }

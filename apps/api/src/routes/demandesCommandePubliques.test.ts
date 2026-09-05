@@ -71,6 +71,7 @@ import {
   demandesCommandePubliquesPubliqueRouter,
   demandesCommandePubliquesRouter,
 } from "./demandesCommandePubliques.js";
+import { ErreurAction } from "../lib/erreurAction.js";
 
 function appPublic() {
   const app = express();
@@ -240,6 +241,26 @@ describe("POST /:id/confirmer", () => {
 
     expect(res.status).toBe(409);
     expect(res.body.conflit).toBe(true);
+    expect(mocks.demandeUpdateMany).not.toHaveBeenCalled();
+  });
+
+  // Non-régression d'un vrai bug de production (trouvé via les logs Render) :
+  // une demande confirmée un jour sans Caisse ouverte renvoyait "Erreur
+  // interne du serveur" (500 générique) au lieu du vrai message métier "Aucune
+  // session de caisse n'est ouverte..." — executerCreationOuMiseAJourCommande
+  // peut lever ErreurAction (et ErreurIdempotence, ErreurEcritureCaisseReessayable),
+  // pas seulement ErreurClientInconnu ; le bloc catch d'origine n'en reprenait
+  // qu'un des quatre.
+  it("surface le vrai message métier (ErreurAction) plutôt qu'un 500 générique — ex. Caisse non ouverte", async () => {
+    mocks.demandeFindUnique.mockResolvedValue(DEMANDE_EN_ATTENTE);
+    executerEcritureIdempotenteMock = async () => {
+      throw new ErreurAction(409, "Aucune session de caisse n'est ouverte pour le 2026-09-05 — ouvrez d'abord la caisse pour continuer.");
+    };
+
+    const res = await request(appInterne()).post("/d-1/confirmer").send({});
+
+    expect(res.status).toBe(409);
+    expect(res.body.erreur).toContain("Aucune session de caisse n'est ouverte");
     expect(mocks.demandeUpdateMany).not.toHaveBeenCalled();
   });
 });
