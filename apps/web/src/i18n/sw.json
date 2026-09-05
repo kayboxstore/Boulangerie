@@ -1199,7 +1199,35 @@
     "expenseTooltip": "Matumizi",
     "caTooltip": "Salio la siku",
     "reportTitle": "Ripoti ya usimamizi",
-    "kpiPayroll": "Jumla ya mishahara"
+    "kpiPayroll": "Jumla ya mishahara",
+    "margin": {
+      "title": "Faida kwa kila bidhaa",
+      "desc": "Kiasi kilichowasilishwa na mapato yaliyokadiriwa kwa kila bidhaa.",
+      "period7": "Siku 7",
+      "period30": "Siku 30",
+      "warning": "Si faida halisi: hakuna gharama ya malighafi inayopatikana kwa utaratibu (viungo vinatumika kwa pamoja tangu mabadiliko ya Uzalishaji). Mapato yanayoonyeshwa ni MAKADIRIO kwa bei ya sasa ya katalogi, si kiasi kilicholipwa halisi — malipo hufanyika kwa jumla ya kreti za mteja, si kwa bidhaa.",
+      "empty": "Hakuna uwasilishaji uliorekodiwa katika kipindi hiki.",
+      "caEstimeTooltip": "Mapato yaliyokadiriwa",
+      "totalCa": "Jumla iliyokadiriwa: {{montant}}"
+    },
+    "analytics": {
+      "title": "Dashibodi ya uchambuzi wa kina (v2)",
+      "desc": "Mwelekeo halisi wa kihistoria na makadirio rahisi, kwa kuangalia tu.",
+      "granularity": {
+        "jour": "Siku",
+        "semaine": "Wiki",
+        "mois": "Mwezi"
+      },
+      "caTitle": "Mapato kwa muda",
+      "bacsTitle": "Kreti zilizoagizwa kwa muda",
+      "volumeTitle": "Kiasi kilichowasilishwa kwa bidhaa kwa muda",
+      "projectionWarning": "Makadirio: ni makadirio rahisi ya kitakwimu (wastani unaosonga, ulinganisho na siku ile ile wiki iliyopita) — si mfano wa utabiri.",
+      "movingAverageCa": "Wastani wa siku 7 — mapato",
+      "movingAverageBacs": "Wastani wa siku 7 — kreti",
+      "comparisonCa": "Mapato ya jana",
+      "comparisonBacs": "Kreti za jana",
+      "vsLastWeek": "dhidi ya {{montant}} siku ile ile wiki iliyopita"
+    }
   },
   "langue": {
     "FR": "Français",

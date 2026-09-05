@@ -1198,7 +1198,35 @@
     "expenseTooltip": "Dépense",
     "caTooltip": "Solde du jour",
     "reportTitle": "Rapport de gestion",
-    "kpiPayroll": "Masse salariale"
+    "kpiPayroll": "Masse salariale",
+    "margin": {
+      "title": "Marge par produit",
+      "desc": "Volume livré et chiffre d'affaires estimé par produit.",
+      "period7": "7 jours",
+      "period30": "30 jours",
+      "warning": "Pas une vraie marge : aucun coût par matière première systématique n'est disponible (ingrédients consommés globalement depuis la refonte Production). Le CA affiché est une ESTIMATION au prix catalogue actuel, pas un montant réellement facturé — la facturation se fait par bac total du client, jamais par produit.",
+      "empty": "Aucune livraison enregistrée sur la période.",
+      "caEstimeTooltip": "CA estimé",
+      "totalCa": "Total estimé : {{montant}}"
+    },
+    "analytics": {
+      "title": "Tableau de bord analytique (v2)",
+      "desc": "Tendances historiques réelles et projection simple, en lecture seule.",
+      "granularity": {
+        "jour": "Jour",
+        "semaine": "Semaine",
+        "mois": "Mois"
+      },
+      "caTitle": "Chiffre d'affaires dans le temps",
+      "bacsTitle": "Bacs commandés dans le temps",
+      "volumeTitle": "Volume livré par produit dans le temps",
+      "projectionWarning": "Projection : une simple estimation statistique (moyenne mobile, comparaison au même jour la semaine précédente) — pas un modèle prédictif.",
+      "movingAverageCa": "Moyenne mobile CA (7j)",
+      "movingAverageBacs": "Moyenne mobile bacs (7j)",
+      "comparisonCa": "CA d'hier",
+      "comparisonBacs": "Bacs d'hier",
+      "vsLastWeek": "vs {{montant}} même jour la semaine dernière"
+    }
   },
   "langue": {
     "FR": "Français",

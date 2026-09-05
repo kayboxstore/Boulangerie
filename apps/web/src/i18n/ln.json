@@ -1199,7 +1199,35 @@
     "expenseTooltip": "Depanse",
     "caTooltip": "Oyo etikali mokolo",
     "reportTitle": "Lapolo ya bokambi",
-    "kpiPayroll": "Lifuta ya basali nyonso"
+    "kpiPayroll": "Lifuta ya basali nyonso",
+    "margin": {
+      "title": "Litomba na produit moko na moko",
+      "desc": "Bozito oyo etindami mpe CA ekanami na produit moko na moko.",
+      "period7": "Mikolo 7",
+      "period30": "Mikolo 30",
+      "warning": "Ezali litomba ya solo te : talo ya biloko ya kolambisa ezali koyebana te na ndenge ya mbala nyonso (biloko ekolyaka esika moko banda kobongisama ya Bosali). CA oyo emonisami ezali bobenga (estimation) na talo ya catalogue ya lelo, motuya ya solo te — bafutaka na motango ya ba-bac nyonso, moke te na produit moko na moko.",
+      "empty": "Ata livraison moko esalemi te na eleko oyo.",
+      "caEstimeTooltip": "CA ekanami",
+      "totalCa": "Total ekanami : {{montant}}"
+    },
+    "analytics": {
+      "title": "Bososoli ya mozindo (v2)",
+      "desc": "Bilembo ya kala ya solo mpe bobenga ya pete, mpo na kotala kaka.",
+      "granularity": {
+        "jour": "Mokolo",
+        "semaine": "Poso",
+        "mois": "Sanza"
+      },
+      "caTitle": "CA na boumeli ya ntango",
+      "bacsTitle": "Ba-bac esengemaki na boumeli ya ntango",
+      "volumeTitle": "Bozito ya produit oyo etindami na boumeli ya ntango",
+      "projectionWarning": "Bobenga : ezali kaka bobenga ya mituya (moyenne mobile, bokokanisi na mokolo moko wana ya poso eleki) — ezali modèle ya kosakola te.",
+      "movingAverageCa": "Moyenne ya mikolo 7 — CA",
+      "movingAverageBacs": "Moyenne ya mikolo 7 — ba-bac",
+      "comparisonCa": "CA ya lobi",
+      "comparisonBacs": "Ba-bac ya lobi",
+      "vsLastWeek": "na esika ya {{montant}} mokolo moko wana ya poso eleki"
+    }
   },
   "langue": {
     "FR": "Français",

@@ -51,6 +51,8 @@ import { Label } from "@/components/ui/label";
 import { dateISOKinshasa } from "@/lib/dateKinshasa";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { IndicateurConnexion } from "@/components/IndicateurConnexion";
+import { MargeParProduitCard } from "@/components/dashboard/MargeParProduitCard";
+import { AnalytiqueAvanceSection } from "@/components/dashboard/AnalytiqueAvanceSection";
 import { cn } from "@/lib/utils";
 
 // Couleurs de marque (section 3.8) utilisées par les graphiques Recharts.
@@ -602,7 +604,15 @@ export function DashboardPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Marge par produit (3.8, resté en suspens) — PAS une vraie marge,
+            voir l'avertissement dans le widget lui-même. */}
+        {litRapports && <MargeParProduitCard />}
       </div>
+
+      {/* Tableau de bord analytique v2 — tendances historiques + projection
+          simple, en lecture seule (3.8). */}
+      {litRapports && <AnalytiqueAvanceSection />}
 
       {/* Feed temps réel */}
       <Card>

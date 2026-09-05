@@ -1198,7 +1198,35 @@
     "expenseTooltip": "Expense",
     "caTooltip": "Balance of the day",
     "reportTitle": "Management report",
-    "kpiPayroll": "Payroll mass"
+    "kpiPayroll": "Payroll mass",
+    "margin": {
+      "title": "Margin by product",
+      "desc": "Volume delivered and estimated revenue by product.",
+      "period7": "7 days",
+      "period30": "30 days",
+      "warning": "Not a real margin: no systematic raw-material cost is available (ingredients have been consumed globally since the Production overhaul). The revenue shown is an ESTIMATE at the current catalogue price, not an amount actually billed — billing is done per the client's total crates, never per product.",
+      "empty": "No deliveries recorded for this period.",
+      "caEstimeTooltip": "Estimated revenue",
+      "totalCa": "Estimated total: {{montant}}"
+    },
+    "analytics": {
+      "title": "Advanced analytics dashboard (v2)",
+      "desc": "Real historical trends and a simple projection, read-only.",
+      "granularity": {
+        "jour": "Day",
+        "semaine": "Week",
+        "mois": "Month"
+      },
+      "caTitle": "Revenue over time",
+      "bacsTitle": "Crates ordered over time",
+      "volumeTitle": "Volume delivered by product over time",
+      "projectionWarning": "Projection: a simple statistical estimate (moving average, comparison to the same day last week) — not a predictive model.",
+      "movingAverageCa": "7-day moving average — revenue",
+      "movingAverageBacs": "7-day moving average — crates",
+      "comparisonCa": "Yesterday's revenue",
+      "comparisonBacs": "Yesterday's crates",
+      "vsLastWeek": "vs {{montant}} same day last week"
+    }
   },
   "langue": {
     "FR": "Français",

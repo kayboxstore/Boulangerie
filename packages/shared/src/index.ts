@@ -1805,6 +1805,69 @@ export interface ResumeClotureDTO {
   alertesStock: { nom: string; unite: string; quantiteStock: number; seuilAlerte: number }[];
 }
 
+// --- Tableau de bord — widget « Marge par produit » (3.8, resté en suspens) -
+// Une vraie marge n'est PAS calculable aujourd'hui : pas de coût par matière
+// première systématique, et depuis la refonte 3.3 les ingrédients sont
+// consommés globalement (plus de nomenclature par produit). Ce DTO expose
+// volume livré + CA ESTIMÉ — jamais une vraie marge, jamais un montant
+// réellement facturé : la facturation se fait par bac total du client
+// (CommandeClient.montantBrut), jamais par produit. Le CA ici est une
+// estimation au prix catalogue COURANT (Produit.prixVente), pas un prix
+// figé historique — deux commandes du même volume à des dates différentes
+// peuvent donc donner un caEstime différent si le prix a changé entre-temps.
+// À afficher avec cette limitation explicite côté interface (et dans l'export
+// s'il y en a un), jamais présenté comme une marge.
+export interface MargeParProduitDTO {
+  jours: 7 | 30;
+  produits: { produitId: string; nom: string; quantiteLivree: number; caEstime: number }[];
+}
+
+// --- Tableau de bord — Tendances & projection (v2) --------------------------
+// Lecture seule. « Tendances » = vraies séries historiques (CA/bacs facturés
+// depuis CommandeClient, volume livré par produit depuis BonLivraisonLigne).
+// « Projection » = une simple heuristique statistique (moyenne mobile,
+// comparaison au même jour la semaine précédente) — jamais un modèle
+// prédictif, à présenter comme tel dans l'interface.
+
+export type GranulariteTendance = "jour" | "semaine" | "mois";
+
+export interface PointSerieTemporelle {
+  /** Début de la période (AAAA-MM-JJ) : le jour, le lundi de la semaine, ou le 1er du mois selon la granularité. */
+  periode: string;
+  total: number;
+}
+
+export interface PointVolumeProduitTemporel {
+  periode: string;
+  /** Un point par produit ayant eu du volume cette période — les produits à 0 sont omis, à combler côté front comme serieCA. */
+  produits: { produitId: string; quantite: number }[];
+}
+
+export interface TendancesDashboardDTO {
+  granularite: GranulariteTendance;
+  /** Catalogue actif au moment de la requête — légende stable pour le graphique volume par produit. */
+  produitsCatalogue: { id: string; nom: string }[];
+  ca: PointSerieTemporelle[];
+  bacs: PointSerieTemporelle[];
+  volumeParProduit: PointVolumeProduitTemporel[];
+}
+
+export interface ComparaisonJourDTO {
+  jourReference: string;
+  valeurReference: number;
+  jourComparaison: string;
+  valeurComparaison: number;
+  /** Variation en pourcentage (1 décimale) ; null si valeurComparaison = 0 (division évitée). */
+  variationPourcent: number | null;
+}
+
+export interface ProjectionDashboardDTO {
+  moyenneMobile7JoursCa: number;
+  moyenneMobile7JoursBacs: number;
+  comparaisonCa: ComparaisonJourDTO;
+  comparaisonBacs: ComparaisonJourDTO;
+}
+
 // ---------------------------------------------------------------------------
 // À propos (section 3.12) & Rapports personnels (section 3.13)
 // ---------------------------------------------------------------------------

@@ -2,6 +2,9 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import { dateISOSchema } from "@lomoto/shared";
 import type {
+  GranulariteTendance,
+  MargeParProduitDTO,
+  ProjectionDashboardDTO,
   RapportCaisseDTO,
   RapportCommandesDTO,
   RapportCommissionsDTO,
@@ -11,6 +14,7 @@ import type {
   RapportTravailleursDTO,
   ResumeClotureDTO,
   StatutCommandeFournisseur,
+  TendancesDashboardDTO,
 } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
@@ -343,6 +347,188 @@ rapportsRouter.get("/cloture-quotidienne", requirePermission("RAPPORTS", "LECTUR
       nbCommandesJour,
       dettesEnCours: await dettesEnCours(),
       alertesStock: (await alertesStock()).map(({ id: _id, ...reste }) => reste),
+    };
+    res.json(dto);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Widget « Marge par produit » (3.8, resté en suspens depuis l'audit) ----
+// PAS une vraie marge (voir MargeParProduitDTO) : volume livré (BonLivraisonLigne,
+// la seule source avec le triplet date réelle × produit × quantité — CommandeClient
+// ne track qu'un total de bacs, jamais un détail par produit) × Produit.prixVente
+// COURANT pour un CA estimé. La limitation est portée par le frontend (aucun
+// texte pré-rendu ici, comme tous les autres DTO de ce fichier).
+
+rapportsRouter.get("/marge-produit", requirePermission("RAPPORTS", "LECTURE"), async (req, res, next) => {
+  try {
+    const joursParam = Number.parseInt(String(req.query.jours ?? "30"), 10);
+    const jours: 7 | 30 = joursParam === 7 ? 7 : 30;
+    const depuis = ilYAJours(jours - 1);
+
+    const lignes = await prisma.bonLivraisonLigne.groupBy({
+      by: ["produitId"],
+      where: { bonLivraison: { date: { gte: depuis } } },
+      _sum: { quantite: true },
+    });
+    const produits = await prisma.produit.findMany({ where: { id: { in: lignes.map((l) => l.produitId) } } });
+    const parId = new Map(produits.map((p) => [p.id, p]));
+
+    const dto: MargeParProduitDTO = {
+      jours,
+      produits: lignes
+        .map((l) => {
+          const p = parId.get(l.produitId);
+          const quantiteLivree = l._sum.quantite ?? 0;
+          return p ? { produitId: p.id, nom: p.nom, quantiteLivree, caEstime: quantiteLivree * p.prixVente } : null;
+        })
+        .filter((p): p is NonNullable<typeof p> => p !== null)
+        .sort((a, b) => b.caEstime - a.caEstime),
+    };
+    res.json(dto);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Tableau de bord analytique v2 : tendances historiques ------------------
+// CA/bacs : groupés sur CommandeClient.dateCreation, même champ que les
+// widgets Caisse/Commandes ci-dessus (jamais dateOperationnelle, nulle pour
+// l'historique pré-C4). Volume par produit : groupé sur BonLivraison.date
+// (date de livraison réelle), même source que /marge-produit.
+//
+// La granularité choisit LEQUEL des 3 littéraux SQL fixes ('day'/'week'/
+// 'month') est inséré dans date_trunc via Prisma.raw — jamais la valeur brute
+// de req.query, qui est d'abord validée contre une liste blanche de 3 valeurs
+// exactes (sinon repli silencieux sur "jour", un mauvais paramètre d'URL ne
+// doit pas casser tout le widget).
+
+const TRONCATURE_SQL: Record<GranulariteTendance, string> = { jour: "day", semaine: "week", mois: "month" };
+
+function granulariteDepuisRequete(valeur: unknown): GranulariteTendance {
+  return valeur === "semaine" || valeur === "mois" ? valeur : "jour";
+}
+
+function debutFenetreTendance(granularite: GranulariteTendance): Date {
+  const d = debutJour();
+  if (granularite === "jour") d.setDate(d.getDate() - 29); // 30 derniers jours
+  else if (granularite === "semaine") d.setDate(d.getDate() - 7 * 11); // 12 dernières semaines
+  else d.setMonth(d.getMonth() - 11); // 12 derniers mois
+  return d;
+}
+
+rapportsRouter.get("/tendances", requirePermission("RAPPORTS", "LECTURE"), async (req, res, next) => {
+  try {
+    const granularite = granulariteDepuisRequete(req.query.granularite);
+    const trunc = TRONCATURE_SQL[granularite];
+    const depuis = debutFenetreTendance(granularite);
+
+    const lignesCommandes = await prisma.$queryRaw<{ periode: Date; ca: bigint; bacs: bigint }[]>`
+      SELECT date_trunc(${Prisma.raw(`'${trunc}'`)}, "dateCreation") AS periode,
+             SUM("montantBrut")::bigint AS ca,
+             SUM("quantiteBacs")::bigint AS bacs
+      FROM "CommandeClient"
+      WHERE "dateCreation" >= ${depuis}
+      GROUP BY periode ORDER BY periode`;
+
+    const lignesVolume = await prisma.$queryRaw<{ periode: Date; produitId: string; quantite: bigint }[]>`
+      SELECT date_trunc(${Prisma.raw(`'${trunc}'`)}, b."date") AS periode,
+             l."produitId" AS "produitId",
+             SUM(l."quantite")::bigint AS quantite
+      FROM "BonLivraisonLigne" l
+      JOIN "BonLivraison" b ON b.id = l."bonLivraisonId"
+      WHERE b."date" >= ${depuis}
+      GROUP BY periode, l."produitId" ORDER BY periode`;
+
+    const parPeriode = new Map<string, { produitId: string; quantite: number }[]>();
+    for (const l of lignesVolume) {
+      const cle = l.periode.toISOString().slice(0, 10);
+      const liste = parPeriode.get(cle) ?? [];
+      liste.push({ produitId: l.produitId, quantite: Number(l.quantite) });
+      parPeriode.set(cle, liste);
+    }
+
+    const produitsCatalogue = await prisma.produit.findMany({
+      where: { actif: true },
+      select: { id: true, nom: true },
+      orderBy: { nom: "asc" },
+    });
+
+    const dto: TendancesDashboardDTO = {
+      granularite,
+      produitsCatalogue,
+      ca: lignesCommandes.map((l) => ({ periode: l.periode.toISOString().slice(0, 10), total: Number(l.ca) })),
+      bacs: lignesCommandes.map((l) => ({ periode: l.periode.toISOString().slice(0, 10), total: Number(l.bacs) })),
+      volumeParProduit: [...parPeriode.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([periode, produits]) => ({ periode, produits })),
+    };
+    res.json(dto);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Tableau de bord analytique v2 : projection simple ----------------------
+// Simple heuristique statistique (moyenne mobile + comparaison au même jour la
+// semaine précédente) — JAMAIS un modèle prédictif. Le frontend doit le dire
+// explicitement (aucun texte pré-rendu ici, comme le reste de ce fichier).
+
+function bornesJourAvant(joursAvant: number): [Date, Date] {
+  const debut = debutJour();
+  debut.setDate(debut.getDate() - joursAvant);
+  const fin = new Date(debut);
+  fin.setDate(fin.getDate() + 1);
+  return [debut, fin];
+}
+
+async function totalJourAvant(joursAvant: number): Promise<{ date: string; ca: number; bacs: number }> {
+  const [debut, fin] = bornesJourAvant(joursAvant);
+  const agg = await prisma.commandeClient.aggregate({
+    where: { dateCreation: { gte: debut, lt: fin } },
+    _sum: { montantBrut: true, quantiteBacs: true },
+  });
+  return { date: debut.toISOString().slice(0, 10), ca: agg._sum.montantBrut ?? 0, bacs: agg._sum.quantiteBacs ?? 0 };
+}
+
+function variationPourcent(actuel: number, precedent: number): number | null {
+  if (precedent === 0) return null;
+  return Math.round(((actuel - precedent) / precedent) * 1000) / 10;
+}
+
+rapportsRouter.get("/projection", requirePermission("RAPPORTS", "LECTURE"), async (_req, res, next) => {
+  try {
+    // Moyenne mobile : total des 7 derniers jours complets (hier inclus,
+    // aujourd'hui exclu — encore en cours) divisé par 7.
+    const agg7Jours = await prisma.commandeClient.aggregate({
+      where: { dateCreation: { gte: ilYAJours(7), lt: debutJour() } },
+      _sum: { montantBrut: true, quantiteBacs: true },
+    });
+
+    // Comparaison : le dernier jour ENTIÈREMENT écoulé (hier, joursAvant=1),
+    // jamais aujourd'hui (encore en cours, comparaison biaisée), contre le
+    // même jour de la semaine précédente (joursAvant=8).
+    const hier = await totalJourAvant(1);
+    const ilYA8Jours = await totalJourAvant(8);
+
+    const dto: ProjectionDashboardDTO = {
+      moyenneMobile7JoursCa: Math.round((agg7Jours._sum.montantBrut ?? 0) / 7),
+      moyenneMobile7JoursBacs: Math.round((agg7Jours._sum.quantiteBacs ?? 0) / 7),
+      comparaisonCa: {
+        jourReference: hier.date,
+        valeurReference: hier.ca,
+        jourComparaison: ilYA8Jours.date,
+        valeurComparaison: ilYA8Jours.ca,
+        variationPourcent: variationPourcent(hier.ca, ilYA8Jours.ca),
+      },
+      comparaisonBacs: {
+        jourReference: hier.date,
+        valeurReference: hier.bacs,
+        jourComparaison: ilYA8Jours.date,
+        valeurComparaison: ilYA8Jours.bacs,
+        variationPourcent: variationPourcent(hier.bacs, ilYA8Jours.bacs),
+      },
     };
     res.json(dto);
   } catch (e) {
