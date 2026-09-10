@@ -10,7 +10,10 @@ const mocks = vi.hoisted(() => ({
   demandeFindMany: vi.fn(),
   demandeFindUnique: vi.fn(),
   demandeFindUniqueOrThrow: vi.fn(),
+  demandeUpdate: vi.fn(),
   demandeUpdateMany: vi.fn(),
+  ligneDeleteMany: vi.fn(),
+  ligneCreateMany: vi.fn(),
   emettreEvenement: vi.fn(),
   chargerSchemaCommandeJour: vi.fn(),
   appliquerSchemaCommandeJour: vi.fn(),
@@ -25,7 +28,12 @@ vi.mock("../lib/prisma.js", () => ({
       findMany: mocks.demandeFindMany,
       findUnique: mocks.demandeFindUnique,
       findUniqueOrThrow: mocks.demandeFindUniqueOrThrow,
+      update: mocks.demandeUpdate,
       updateMany: mocks.demandeUpdateMany,
+    },
+    demandeCommandePubliqueLigne: {
+      deleteMany: mocks.ligneDeleteMany,
+      createMany: mocks.ligneCreateMany,
     },
   },
 }));
@@ -90,6 +98,7 @@ function demandeComplete(overrides: Partial<Record<string, unknown>> = {}) {
     note: null,
     statut: "EN_ATTENTE",
     motifRejet: null,
+    motifAnnulation: null,
     createdAt: new Date("2026-09-05T00:00:00Z"),
     lignes: [
       { produitId: PRODUIT_BAGUETTE_500.id, quantite: 10, produit: PRODUIT_BAGUETTE_500 },
@@ -334,5 +343,166 @@ describe("POST /:id/rejeter", () => {
     mocks.demandeUpdateMany.mockResolvedValue({ count: 0 });
     const res = await request(appInterne()).post("/d-1/rejeter").send({ motif: "Peu importe" });
     expect(res.status).toBe(409);
+  });
+});
+
+describe("POST /:id/annuler", () => {
+  it("retire les lignes de la demande du Schéma du jour et passe la demande à ANNULEE", async () => {
+    mocks.demandeFindUnique.mockResolvedValue(demandeComplete({ statut: "CONFIRMEE" }));
+    mocks.demandeUpdateMany.mockResolvedValue({ count: 1 });
+    mocks.chargerSchemaCommandeJour.mockResolvedValue({
+      date: "2026-09-07",
+      // Ce client a 10 Baguette500 (exactement ce que la demande avait ajouté)
+      // + 3 Carré1500 en plus, venus d'ailleurs (une autre demande, une saisie
+      // manuelle) — l'annulation ne doit retirer QUE la part de CETTE demande.
+      clients: [{ clientId: "c-1", lignes: [{ produitId: "p-baguette-500", quantite: 10 }, { produitId: "p-carre-1500", quantite: 8 }] }],
+      totauxParProduit: [],
+      totalGeneral: 18,
+    });
+    mocks.appliquerSchemaCommandeJour.mockResolvedValue({ schema: {} });
+
+    const res = await request(appInterne()).post("/d-1/annuler").send({ motif: "Client a annulé par téléphone" });
+
+    expect(res.status).toBe(200);
+    const [, clientsAppeles] = mocks.appliquerSchemaCommandeJour.mock.calls[0];
+    const ligneClient = clientsAppeles.find((c: { clientId: string }) => c.clientId === "c-1");
+    // 10 Baguette500 - 10 (annulés) = 0 → ligne retirée entièrement.
+    // 8 Carré1500 - 5 (annulés) = 3 → reste.
+    expect(ligneClient.lignes).toEqual([{ produitId: "p-carre-1500", quantite: 3 }]);
+    expect(mocks.demandeUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "d-1", statut: "CONFIRMEE" },
+        data: expect.objectContaining({ statut: "ANNULEE", motifAnnulation: "Client a annulé par téléphone" }),
+      }),
+    );
+  });
+
+  it("supprime entièrement le client du jour si plus aucune ligne ne reste après annulation", async () => {
+    mocks.demandeFindUnique.mockResolvedValue(demandeComplete({ statut: "CONFIRMEE" }));
+    mocks.demandeUpdateMany.mockResolvedValue({ count: 1 });
+    mocks.chargerSchemaCommandeJour.mockResolvedValue({
+      date: "2026-09-07",
+      clients: [{ clientId: "c-1", lignes: [{ produitId: "p-baguette-500", quantite: 10 }, { produitId: "p-carre-1500", quantite: 5 }] }],
+      totauxParProduit: [],
+      totalGeneral: 15,
+    });
+    mocks.appliquerSchemaCommandeJour.mockResolvedValue({ schema: {} });
+
+    await request(appInterne()).post("/d-1/annuler").send({ motif: "Erreur de saisie" });
+
+    const [, clientsAppeles] = mocks.appliquerSchemaCommandeJour.mock.calls[0];
+    expect(clientsAppeles.find((c: { clientId: string }) => c.clientId === "c-1")).toBeUndefined();
+  });
+
+  it("409 si la demande n'est pas CONFIRMEE (rien à annuler)", async () => {
+    mocks.demandeFindUnique.mockResolvedValue(demandeComplete({ statut: "EN_ATTENTE" }));
+    const res = await request(appInterne()).post("/d-1/annuler").send({ motif: "Peu importe" });
+    expect(res.status).toBe(409);
+    expect(mocks.demandeUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("remet la demande en CONFIRMEE si la défusion échoue", async () => {
+    mocks.demandeFindUnique.mockResolvedValue(demandeComplete({ statut: "CONFIRMEE" }));
+    mocks.demandeUpdateMany.mockResolvedValue({ count: 1 });
+    mocks.chargerSchemaCommandeJour.mockResolvedValue({ date: "2026-09-07", clients: [], totauxParProduit: [], totalGeneral: 0 });
+    mocks.appliquerSchemaCommandeJour.mockResolvedValue({ erreur: "Conflit", statutHttp: 409 });
+
+    const res = await request(appInterne()).post("/d-1/annuler").send({ motif: "Test" });
+
+    expect(res.status).toBe(409);
+    expect(mocks.demandeUpdateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({ where: { id: "d-1", statut: "ANNULEE" }, data: expect.objectContaining({ statut: "CONFIRMEE" }) }),
+    );
+  });
+
+  it("400 si le motif est vide", async () => {
+    mocks.demandeFindUnique.mockResolvedValue(demandeComplete({ statut: "CONFIRMEE" }));
+    const res = await request(appInterne()).post("/d-1/annuler").send({ motif: "" });
+    expect(res.status).toBe(400);
+    expect(mocks.demandeUpdateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("PUT /:id (modifier)", () => {
+  const NOUVELLES_LIGNES = { dateSouhaitee: "2026-09-07", lignes: [{ produitId: "p-baguette-500", quantite: 20 }] };
+
+  it("sur EN_ATTENTE : simple mise à jour, aucun appel au Schéma", async () => {
+    mocks.demandeFindUnique.mockResolvedValue(demandeComplete({ statut: "EN_ATTENTE" }));
+    mocks.produitCount.mockResolvedValue(1);
+    mocks.demandeFindUniqueOrThrow.mockResolvedValue(demandeComplete({ statut: "EN_ATTENTE" }));
+
+    const res = await request(appInterne()).put("/d-1").send(NOUVELLES_LIGNES);
+
+    expect(res.status).toBe(200);
+    expect(mocks.chargerSchemaCommandeJour).not.toHaveBeenCalled();
+    expect(mocks.ligneDeleteMany).toHaveBeenCalledWith({ where: { demandeId: "d-1" } });
+    expect(mocks.ligneCreateMany).toHaveBeenCalled();
+  });
+
+  it("sur CONFIRMEE, même date : applique la DIFFÉRENCE (nouvelles - anciennes), pas les nouvelles quantités brutes", async () => {
+    mocks.demandeFindUnique.mockResolvedValue(demandeComplete({ statut: "CONFIRMEE" })); // avait 10 Baguette500 + 5 Carré1500
+    mocks.produitCount.mockResolvedValue(1);
+    mocks.chargerSchemaCommandeJour.mockResolvedValue({
+      date: "2026-09-07",
+      // Le jour contient déjà la contribution de cette demande (10+5) — la
+      // modification doit aboutir à 20 Baguette500 (nouvelle valeur) et 0
+      // Carré1500 (retiré, absent des nouvelles lignes), jamais 10+20=30.
+      clients: [{ clientId: "c-1", lignes: [{ produitId: "p-baguette-500", quantite: 10 }, { produitId: "p-carre-1500", quantite: 5 }] }],
+      totauxParProduit: [],
+      totalGeneral: 15,
+    });
+    mocks.appliquerSchemaCommandeJour.mockResolvedValue({ schema: {} });
+    mocks.demandeFindUniqueOrThrow.mockResolvedValue(demandeComplete({ statut: "CONFIRMEE" }));
+
+    const res = await request(appInterne()).put("/d-1").send(NOUVELLES_LIGNES);
+
+    expect(res.status).toBe(200);
+    const [dateAppelee, clientsAppeles] = mocks.appliquerSchemaCommandeJour.mock.calls[0];
+    expect(dateAppelee).toBe("2026-09-07");
+    const ligneClient = clientsAppeles.find((c: { clientId: string }) => c.clientId === "c-1");
+    expect(ligneClient.lignes).toEqual([{ produitId: "p-baguette-500", quantite: 20 }]);
+  });
+
+  it("sur CONFIRMEE, changement de date : retire de l'ancien jour, ajoute au nouveau", async () => {
+    mocks.demandeFindUnique.mockResolvedValue(demandeComplete({ statut: "CONFIRMEE" }));
+    mocks.produitCount.mockResolvedValue(1);
+    mocks.chargerSchemaCommandeJour
+      .mockResolvedValueOnce({
+        date: "2026-09-07",
+        clients: [{ clientId: "c-1", lignes: [{ produitId: "p-baguette-500", quantite: 10 }, { produitId: "p-carre-1500", quantite: 5 }] }],
+        totauxParProduit: [],
+        totalGeneral: 15,
+      })
+      .mockResolvedValueOnce({ date: "2026-09-09", clients: [], totauxParProduit: [], totalGeneral: 0 });
+    mocks.appliquerSchemaCommandeJour.mockResolvedValue({ schema: {} });
+    mocks.demandeFindUniqueOrThrow.mockResolvedValue(demandeComplete({ statut: "CONFIRMEE" }));
+
+    const res = await request(appInterne())
+      .put("/d-1")
+      .send({ dateSouhaitee: "2026-09-09", lignes: [{ produitId: "p-baguette-500", quantite: 20 }] });
+
+    expect(res.status).toBe(200);
+    expect(mocks.appliquerSchemaCommandeJour).toHaveBeenCalledTimes(2);
+    const [premiereDateAppelee, premiersClients] = mocks.appliquerSchemaCommandeJour.mock.calls[0];
+    expect(premiereDateAppelee).toBe("2026-09-07");
+    // L'ancien jour ne doit plus contenir ce client (tout retiré).
+    expect(premiersClients.find((c: { clientId: string }) => c.clientId === "c-1")).toBeUndefined();
+    const [secondeDateAppelee, secondsClients] = mocks.appliquerSchemaCommandeJour.mock.calls[1];
+    expect(secondeDateAppelee).toBe("2026-09-09");
+    expect(secondsClients).toContainEqual({ clientId: "c-1", lignes: [{ produitId: "p-baguette-500", quantite: 20 }] });
+  });
+
+  it("409 sur une demande REJETEE ou ANNULEE — plus modifiable", async () => {
+    mocks.demandeFindUnique.mockResolvedValue(demandeComplete({ statut: "REJETEE" }));
+    const res = await request(appInterne()).put("/d-1").send(NOUVELLES_LIGNES);
+    expect(res.status).toBe(409);
+    expect(mocks.ligneDeleteMany).not.toHaveBeenCalled();
+  });
+
+  it("400 si un produit est inconnu", async () => {
+    mocks.demandeFindUnique.mockResolvedValue(demandeComplete({ statut: "EN_ATTENTE" }));
+    mocks.produitCount.mockResolvedValue(0);
+    const res = await request(appInterne()).put("/d-1").send(NOUVELLES_LIGNES);
+    expect(res.status).toBe(400);
   });
 });

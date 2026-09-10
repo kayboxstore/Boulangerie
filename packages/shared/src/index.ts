@@ -341,7 +341,7 @@ export const demandePubliqueRejeterSchema = z.object({
 });
 export type DemandePubliqueRejeterInput = z.infer<typeof demandePubliqueRejeterSchema>;
 
-export const STATUTS_DEMANDE_PUBLIQUE = ["EN_ATTENTE", "CONFIRMEE", "REJETEE"] as const;
+export const STATUTS_DEMANDE_PUBLIQUE = ["EN_ATTENTE", "CONFIRMEE", "REJETEE", "ANNULEE"] as const;
 export type StatutDemandePublique = (typeof STATUTS_DEMANDE_PUBLIQUE)[number];
 
 export interface DemandeCommandePubliqueDTO {
@@ -353,8 +353,67 @@ export interface DemandeCommandePubliqueDTO {
   note: string | null;
   statut: StatutDemandePublique;
   motifRejet: string | null;
+  motifAnnulation: string | null;
   createdAt: string;
 }
+
+// Modifier une demande — mêmes lignes qu'à la création, mais jamais le
+// téléphone (le client est déjà connu, fixé à la création). Utilisable sur
+// une demande EN_ATTENTE (simple mise à jour) ou déjà CONFIRMEE (répercute
+// la différence sur le Schéma de commande déjà fusionné — voir
+// demandesCommandePubliques.ts).
+export const demandePubliqueModifierSchema = z.object({
+  dateSouhaitee: dateISOSchema,
+  lignes: z.array(demandePubliqueLigneSchema).min(1, "Au moins un produit requis"),
+  note: z.string().trim().max(500, "500 caractères maximum").optional(),
+});
+export type DemandePubliqueModifierInput = z.infer<typeof demandePubliqueModifierSchema>;
+
+// Annuler une demande déjà CONFIRMEE (retire ses lignes du Schéma de
+// commande) — distinct de Rejeter (demande encore EN_ATTENTE, jamais
+// fusionnée nulle part). Motif requis dans les deux cas : annuler une
+// Prévision déjà intégrée au planning mérite une raison, comme un rejet.
+export const demandePubliqueAnnulerSchema = z.object({
+  motif: z.string().trim().min(1, "Le motif est requis").max(500, "500 caractères maximum"),
+});
+export type DemandePubliqueAnnulerInput = z.infer<typeof demandePubliqueAnnulerSchema>;
+
+// Inscription publique pour devenir Dépositaire (site vitrine). Le visiteur
+// ne connaît pas le découpage interne en zones — zoneDepositaireId est
+// choisi par le Chargé des commandes à la confirmation, jamais par le
+// visiteur (voir demandeInscriptionDepositaireConfirmerSchema plus bas).
+export const demandeInscriptionDepositaireCreateSchema = z.object({
+  nom: z.string().trim().min(1, "Le nom est requis").max(200, "200 caractères maximum"),
+  telephone: z.string().trim().min(3, "Numéro de téléphone requis"),
+  adresse: z.string().trim().min(1, "L'adresse est requise").max(500, "500 caractères maximum"),
+});
+export type DemandeInscriptionDepositaireCreateInput = z.infer<typeof demandeInscriptionDepositaireCreateSchema>;
+
+export const demandeInscriptionDepositaireConfirmerSchema = z.object({
+  zoneDepositaireId: z.string().min(1, "La zone est requise"),
+});
+export type DemandeInscriptionDepositaireConfirmerInput = z.infer<
+  typeof demandeInscriptionDepositaireConfirmerSchema
+>;
+
+export const demandeInscriptionDepositaireRejeterSchema = z.object({
+  motif: z.string().trim().min(1, "Le motif est requis").max(500, "500 caractères maximum"),
+});
+export type DemandeInscriptionDepositaireRejeterInput = z.infer<
+  typeof demandeInscriptionDepositaireRejeterSchema
+>;
+
+export interface DemandeInscriptionDepositaireDTO {
+  id: string;
+  nom: string;
+  telephone: string;
+  adresse: string;
+  statut: StatutDemandePublique;
+  clientCreeId: string | null;
+  motifRejet: string | null;
+  createdAt: string;
+}
+
 export type CommandeCreateInput = z.infer<typeof commandeCreateSchema>;
 
 export interface CalculCommande {
