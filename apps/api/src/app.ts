@@ -20,6 +20,10 @@ import {
   demandesCommandePubliquesPubliqueRouter,
   demandesCommandePubliquesRouter,
 } from "./routes/demandesCommandePubliques.js";
+import {
+  demandesInscriptionDepositairePubliqueRouter,
+  demandesInscriptionDepositaireRouter,
+} from "./routes/demandesInscriptionDepositaire.js";
 import { commissionsRouter } from "./routes/commissions.js";
 import { caisseRouter } from "./routes/caisse.js";
 import { stocksRouter } from "./routes/stocks.js";
@@ -100,6 +104,17 @@ export function createApp() {
     }),
     demandesCommandePubliquesPubliqueRouter,
   );
+  app.use(
+    "/api/public/inscription-depositaire",
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 10,
+      standardHeaders: "draft-8",
+      legacyHeaders: false,
+      handler: reponseLimitee,
+    }),
+    demandesInscriptionDepositairePubliqueRouter,
+  );
 
   app.use(cors({ origin: verifierOrigine, credentials: true }));
   // 5 Mo plutôt que le défaut 100 Ko : l'Assistant (3.19) stocke les captures
@@ -179,6 +194,7 @@ export function createApp() {
   app.use("/api/zones-depositaires", zonesDepositaireRouter);
   // /api/public/* : CORS dédié, plus permissif que le reste de l'API — ces
   app.use("/api/demandes-commande-publiques", demandesCommandePubliquesRouter);
+  app.use("/api/demandes-inscription-depositaire", demandesInscriptionDepositaireRouter);
   app.use("/api/commandes", commandesRouter);
   app.use("/api/commissions", commissionsRouter);
   app.use("/api/caisse", caisseRouter);

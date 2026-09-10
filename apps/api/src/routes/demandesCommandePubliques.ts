@@ -3,6 +3,8 @@ import {
   demandePubliqueIdentifierSchema,
   demandePubliqueCreateSchema,
   demandePubliqueRejeterSchema,
+  demandePubliqueModifierSchema,
+  demandePubliqueAnnulerSchema,
   NOMS_PRODUITS_SCHEMA_COMMANDE,
   type DemandeCommandePubliqueDTO,
   type SchemaCommandeLigneClientInput,
@@ -46,8 +48,50 @@ function versDTO(d: DemandeAvecRelations): DemandeCommandePubliqueDTO {
     note: d.note,
     statut: d.statut,
     motifRejet: d.motifRejet,
+    motifAnnulation: d.motifAnnulation,
     createdAt: d.createdAt.toISOString(),
   };
+}
+
+/**
+ * Applique un delta (positif = ajoute, négatif = retire) aux quantités d'UN
+ * client dans la liste complète des clients d'un jour — partagé par
+ * confirmer (delta positif), annuler (delta négatif) et modifier (delta =
+ * nouvelles - anciennes quantités). Une quantité qui tomberait à 0 ou moins
+ * retire la ligne plutôt que de stocker un négatif ou un zéro ; si plus
+ * aucune ligne ne reste pour ce client, il disparaît entièrement du jour
+ * (cohérent avec "ce client n'a plus rien prévu ce jour-là").
+ */
+function appliquerDeltaSurClients(
+  clientsExistants: SchemaCommandeLigneClientInput[],
+  clientId: string,
+  deltasParProduit: Map<string, number>,
+): SchemaCommandeLigneClientInput[] {
+  const autres = clientsExistants.filter((c) => c.clientId !== clientId);
+  const existant = clientsExistants.find((c) => c.clientId === clientId);
+  const quantites = new Map<string, number>(existant?.lignes.map((l) => [l.produitId, l.quantite]) ?? []);
+  for (const [produitId, delta] of deltasParProduit) {
+    const nouvelle = (quantites.get(produitId) ?? 0) + delta;
+    if (nouvelle > 0) quantites.set(produitId, nouvelle);
+    else quantites.delete(produitId);
+  }
+  const lignesFinal = [...quantites.entries()].map(([produitId, quantite]) => ({ produitId, quantite }));
+  return lignesFinal.length > 0 ? [...autres, { clientId, lignes: lignesFinal }] : autres;
+}
+
+/** Charge le Schéma d'un jour sous la forme attendue par appliquerSchemaCommandeJour. */
+async function chargerClientsJour(dateISO: string): Promise<SchemaCommandeLigneClientInput[]> {
+  const schema = await chargerSchemaCommandeJour(dateISO);
+  return schema.clients.map((c) => ({
+    clientId: c.clientId,
+    lignes: c.lignes.map((l) => ({ produitId: l.produitId, quantite: l.quantite })),
+  }));
+}
+
+function versDeltas(lignes: { produitId: string; quantite: number }[], signe: 1 | -1): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const l of lignes) m.set(l.produitId, (m.get(l.produitId) ?? 0) + signe * l.quantite);
+  return m;
 }
 
 // ---------------------------------------------------------------------------
@@ -176,7 +220,7 @@ demandesCommandePubliquesRouter.get("/", requirePermission("COMMANDES", "LECTURE
   try {
     const statut = typeof req.query.statut === "string" ? req.query.statut : undefined;
     const demandes = await prisma.demandeCommandePublique.findMany({
-      where: statut ? { statut: statut as "EN_ATTENTE" | "CONFIRMEE" | "REJETEE" } : undefined,
+      where: statut ? { statut: statut as "EN_ATTENTE" | "CONFIRMEE" | "REJETEE" | "ANNULEE" } : undefined,
       include: INCLUDE_DEMANDE,
       orderBy: { createdAt: "desc" },
     });
@@ -185,6 +229,22 @@ demandesCommandePubliquesRouter.get("/", requirePermission("COMMANDES", "LECTURE
     next(e);
   }
 });
+
+function gererErreurSchema(e: unknown, res: import("express").Response, next: import("express").NextFunction) {
+  if (e instanceof ErreurCycleLivraison) {
+    return res.status(e.statutHttp).json({ code: e.code, erreur: e.message });
+  }
+  if (e instanceof ErreurPlanningConcurrent || estConflitPlanning(e)) {
+    return res.status(409).json({
+      code: "PREVISION_VERROUILLEE",
+      erreur: "La prévision de ce jour a été modifiée simultanément. Réessayez.",
+    });
+  }
+  if (e instanceof ErreurAction) {
+    return res.status(e.status).json({ erreur: e.message });
+  }
+  next(e);
+}
 
 /**
  * Confirme une demande : l'ajoute au Schéma de commande de la date
@@ -197,15 +257,11 @@ demandesCommandePubliquesRouter.get("/", requirePermission("COMMANDES", "LECTURE
  * Fusion, pas remplacement : si ce client a déjà des lignes pour cette date
  * (une commande manuelle saisie par l'équipe, ou une AUTRE demande publique
  * déjà confirmée pour le même jour), les quantités s'ADDITIONNENT par
- * produit plutôt que d'écraser l'existant — plusieurs demandes du même
- * client pour une même date de livraison sont considérées cumulatives, pas
- * substitutives. Si ce n'est pas le comportement voulu, à ajuster.
+ * produit plutôt que d'écraser l'existant.
  *
  * Verrouillage optimiste contre le double-clic : la demande est BASCULÉE
  * en CONFIRMEE avant la fusion (via updateMany ... WHERE statut=EN_ATTENTE,
- * count doit valoir 1) puis repassée en EN_ATTENTE si la fusion échoue — sans
- * ça, deux clics concurrents pourraient tous les deux lire EN_ATTENTE et
- * additionner les mêmes bacs deux fois dans le Planning.
+ * count doit valoir 1) puis repassée en EN_ATTENTE si la fusion échoue.
  */
 demandesCommandePubliquesRouter.post(
   "/:id/confirmer",
@@ -218,9 +274,7 @@ demandesCommandePubliquesRouter.post(
       });
       if (!demande) return res.status(404).json({ erreur: "Demande introuvable" });
       if (demande.statut !== "EN_ATTENTE") {
-        return res
-          .status(409)
-          .json({ erreur: `Cette demande est déjà ${demande.statut === "CONFIRMEE" ? "confirmée" : "rejetée"}.` });
+        return res.status(409).json({ erreur: `Cette demande n'est plus en attente (statut : ${demande.statut}).` });
       }
 
       const reclamee = await prisma.demandeCommandePublique.updateMany({
@@ -233,40 +287,15 @@ demandesCommandePubliquesRouter.post(
 
       const dateISO = demande.dateSouhaitee.toISOString().slice(0, 10);
       try {
-        const schemaExistant = await chargerSchemaCommandeJour(dateISO);
-        const autresClients: SchemaCommandeLigneClientInput[] = schemaExistant.clients
-          .filter((c) => c.clientId !== demande.clientId)
-          .map((c) => ({
-            clientId: c.clientId,
-            lignes: c.lignes.map((l) => ({ produitId: l.produitId, quantite: l.quantite })),
-          }));
-        const ligneExistanteCeClient = schemaExistant.clients.find((c) => c.clientId === demande.clientId);
-        const quantitesFusionnees = new Map<string, number>(
-          ligneExistanteCeClient?.lignes.map((l) => [l.produitId, l.quantite]) ?? [],
-        );
-        for (const l of demande.lignes) {
-          quantitesFusionnees.set(l.produitId, (quantitesFusionnees.get(l.produitId) ?? 0) + l.quantite);
-        }
-
-        const clientsAvecFusion: SchemaCommandeLigneClientInput[] = [
-          ...autresClients,
-          {
-            clientId: demande.clientId,
-            lignes: [...quantitesFusionnees.entries()].map(([produitId, quantite]) => ({ produitId, quantite })),
-          },
-        ];
-
-        const resultat = await appliquerSchemaCommandeJour(dateISO, clientsAvecFusion, req.utilisateur!.id);
-        if ("erreur" in resultat) {
-          throw new ErreurAction(resultat.statutHttp, resultat.erreur);
-        }
-
+        const clientsJour = await chargerClientsJour(dateISO);
+        const fusionnes = appliquerDeltaSurClients(clientsJour, demande.clientId, versDeltas(demande.lignes, 1));
+        const resultat = await appliquerSchemaCommandeJour(dateISO, fusionnes, req.utilisateur!.id);
+        if ("erreur" in resultat) throw new ErreurAction(resultat.statutHttp, resultat.erreur);
         return res.json({ demande: versDTO({ ...demande, statut: "CONFIRMEE" }) });
       } catch (erreurFusion) {
-        // La demande a été réclamée (CONFIRMEE) mais la fusion a échoué :
-        // on la rend au pool EN_ATTENTE pour qu'un nouvel essai reste
-        // possible, plutôt que de la laisser bloquée "confirmée" sans que
-        // rien n'ait réellement été appliqué.
+        // La demande a été réclamée (CONFIRMEE) mais la fusion a échoué : on
+        // la rend au pool EN_ATTENTE plutôt que de la laisser "confirmée"
+        // sans que rien n'ait réellement été appliqué.
         await prisma.demandeCommandePublique.updateMany({
           where: { id: demande.id, statut: "CONFIRMEE" },
           data: { statut: "EN_ATTENTE", traiteParId: null, traiteLe: null },
@@ -274,19 +303,7 @@ demandesCommandePubliquesRouter.post(
         throw erreurFusion;
       }
     } catch (e) {
-      if (e instanceof ErreurCycleLivraison) {
-        return res.status(e.statutHttp).json({ code: e.code, erreur: e.message });
-      }
-      if (e instanceof ErreurPlanningConcurrent || estConflitPlanning(e)) {
-        return res.status(409).json({
-          code: "PREVISION_VERROUILLEE",
-          erreur: "La prévision de ce jour a été modifiée simultanément. Réessayez.",
-        });
-      }
-      if (e instanceof ErreurAction) {
-        return res.status(e.status).json({ erreur: e.message });
-      }
-      next(e);
+      gererErreurSchema(e, res, next);
     }
   },
 );
@@ -303,9 +320,7 @@ demandesCommandePubliquesRouter.post(
       const demande = await prisma.demandeCommandePublique.findUnique({ where: { id: req.params.id } });
       if (!demande) return res.status(404).json({ erreur: "Demande introuvable" });
       if (demande.statut !== "EN_ATTENTE") {
-        return res
-          .status(409)
-          .json({ erreur: `Cette demande est déjà ${demande.statut === "CONFIRMEE" ? "confirmée" : "rejetée"}.` });
+        return res.status(409).json({ erreur: `Cette demande n'est plus en attente (statut : ${demande.statut}).` });
       }
       const reclamee = await prisma.demandeCommandePublique.updateMany({
         where: { id: demande.id, statut: "EN_ATTENTE" },
@@ -321,6 +336,176 @@ demandesCommandePubliquesRouter.post(
       return res.json({ demande: versDTO(maj) });
     } catch (e) {
       next(e);
+    }
+  },
+);
+
+/**
+ * Annule une demande déjà CONFIRMEE : retire ses lignes du Schéma de
+ * commande de sa date (delta négatif, via appliquerDeltaSurClients), motif
+ * requis. Distincte de Rejeter (EN_ATTENTE uniquement, jamais fusionnée nulle
+ * part — rien à défusionner). Même verrouillage optimiste que confirmer :
+ * réclamée (ANNULEE) avant la défusion, rendue à CONFIRMEE si ça échoue.
+ */
+demandesCommandePubliquesRouter.post(
+  "/:id/annuler",
+  requirePermission("COMMANDES", "ECRITURE"),
+  async (req, res, next) => {
+    try {
+      const parsed = demandePubliqueAnnulerSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+      }
+      const demande = await prisma.demandeCommandePublique.findUnique({
+        where: { id: req.params.id },
+        include: INCLUDE_DEMANDE,
+      });
+      if (!demande) return res.status(404).json({ erreur: "Demande introuvable" });
+      if (demande.statut !== "CONFIRMEE") {
+        return res
+          .status(409)
+          .json({ erreur: `Seule une demande confirmée peut être annulée (statut actuel : ${demande.statut}).` });
+      }
+
+      const reclamee = await prisma.demandeCommandePublique.updateMany({
+        where: { id: demande.id, statut: "CONFIRMEE" },
+        data: { statut: "ANNULEE", motifAnnulation: parsed.data.motif, traiteParId: req.utilisateur!.id, traiteLe: new Date() },
+      });
+      if (reclamee.count !== 1) {
+        return res.status(409).json({ erreur: "Cette demande vient d'être modifiée par quelqu'un d'autre." });
+      }
+
+      const dateISO = demande.dateSouhaitee.toISOString().slice(0, 10);
+      try {
+        const clientsJour = await chargerClientsJour(dateISO);
+        const defusionnes = appliquerDeltaSurClients(clientsJour, demande.clientId, versDeltas(demande.lignes, -1));
+        const resultat = await appliquerSchemaCommandeJour(dateISO, defusionnes, req.utilisateur!.id);
+        if ("erreur" in resultat) throw new ErreurAction(resultat.statutHttp, resultat.erreur);
+        return res.json({ demande: versDTO({ ...demande, statut: "ANNULEE", motifAnnulation: parsed.data.motif }) });
+      } catch (erreurDefusion) {
+        await prisma.demandeCommandePublique.updateMany({
+          where: { id: demande.id, statut: "ANNULEE" },
+          data: { statut: "CONFIRMEE", motifAnnulation: null },
+        });
+        throw erreurDefusion;
+      }
+    } catch (e) {
+      gererErreurSchema(e, res, next);
+    }
+  },
+);
+
+/**
+ * Modifie une demande — les nouvelles lignes/date/note remplacent les
+ * anciennes. Sur une demande EN_ATTENTE : simple mise à jour, rien d'autre
+ * (pas encore fusionnée nulle part). Sur une demande CONFIRMEE : répercute
+ * la DIFFÉRENCE sur le Schéma de commande déjà fusionné — jamais un
+ * remplacement brutal qui écraserait ce que d'autres clients ont ce
+ * jour-là. Si la date change, deux jours sont touchés (retrait de l'ancien,
+ * ajout au nouveau) : chaque jour est sa propre transaction
+ * (appliquerSchemaCommandeJour), donc pas une seule opération atomique — en
+ * cas d'échec sur le second jour, un retour en arrière du premier est
+ * tenté (best effort), jamais garanti à 100% en cas de panne au pire
+ * moment. Cas rare (changer la date ET que ça échoue exactement entre les
+ * deux), accepté comme limite connue plutôt que sur-conçu pour ce risque
+ * résiduel.
+ */
+demandesCommandePubliquesRouter.put(
+  "/:id",
+  requirePermission("COMMANDES", "ECRITURE"),
+  async (req, res, next) => {
+    try {
+      const parsed = demandePubliqueModifierSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+      }
+      const demande = await prisma.demandeCommandePublique.findUnique({
+        where: { id: req.params.id },
+        include: INCLUDE_DEMANDE,
+      });
+      if (!demande) return res.status(404).json({ erreur: "Demande introuvable" });
+      if (demande.statut === "REJETEE" || demande.statut === "ANNULEE") {
+        return res.status(409).json({ erreur: `Une demande ${demande.statut === "REJETEE" ? "rejetée" : "annulée"} ne peut plus être modifiée.` });
+      }
+
+      const { dateSouhaitee, lignes, note } = parsed.data;
+      const produitIds = [...new Set(lignes.map((l) => l.produitId))];
+      const produitsConnus = await prisma.produit.count({ where: { id: { in: produitIds }, actif: true } });
+      if (produitsConnus !== produitIds.length) {
+        return res.status(400).json({ erreur: "Un des produits demandés est inconnu ou n'est plus proposé." });
+      }
+      if (produitIds.length !== lignes.length) {
+        return res.status(400).json({ erreur: "Un même produit apparaît deux fois dans la demande." });
+      }
+
+      const appliquerNouvellesLignes = async () => {
+        await prisma.demandeCommandePubliqueLigne.deleteMany({ where: { demandeId: demande.id } });
+        await prisma.demandeCommandePubliqueLigne.createMany({
+          data: lignes.map((l) => ({ demandeId: demande.id, produitId: l.produitId, quantite: l.quantite })),
+        });
+        await prisma.demandeCommandePublique.update({
+          where: { id: demande.id },
+          data: { dateSouhaitee: new Date(dateSouhaitee), note },
+        });
+      };
+
+      if (demande.statut === "EN_ATTENTE") {
+        await appliquerNouvellesLignes();
+        const maj = await prisma.demandeCommandePublique.findUniqueOrThrow({ where: { id: demande.id }, include: INCLUDE_DEMANDE });
+        return res.json({ demande: versDTO(maj) });
+      }
+
+      // CONFIRMEE : répercuter la différence sur le(s) Schéma(s) concerné(s).
+      const ancienDateISO = demande.dateSouhaitee.toISOString().slice(0, 10);
+      const nouveauDateISO = dateSouhaitee;
+      const ancienLignes = demande.lignes.map((l) => ({ produitId: l.produitId, quantite: l.quantite }));
+
+      if (ancienDateISO === nouveauDateISO) {
+        const deltas = versDeltas(lignes, 1);
+        for (const [produitId, qte] of versDeltas(ancienLignes, -1)) {
+          deltas.set(produitId, (deltas.get(produitId) ?? 0) + qte);
+        }
+        const clientsJour = await chargerClientsJour(ancienDateISO);
+        const ajustes = appliquerDeltaSurClients(clientsJour, demande.clientId, deltas);
+        const resultat = await appliquerSchemaCommandeJour(ancienDateISO, ajustes, req.utilisateur!.id);
+        if ("erreur" in resultat) return res.status(resultat.statutHttp).json({ erreur: resultat.erreur });
+        await appliquerNouvellesLignes();
+        const maj = await prisma.demandeCommandePublique.findUniqueOrThrow({ where: { id: demande.id }, include: INCLUDE_DEMANDE });
+        return res.json({ demande: versDTO(maj) });
+      }
+
+      // La date change : retire de l'ancien jour, ajoute au nouveau.
+      const clientsAncienJour = await chargerClientsJour(ancienDateISO);
+      const sansAncien = appliquerDeltaSurClients(clientsAncienJour, demande.clientId, versDeltas(ancienLignes, -1));
+      const retraitResultat = await appliquerSchemaCommandeJour(ancienDateISO, sansAncien, req.utilisateur!.id);
+      if ("erreur" in retraitResultat) {
+        return res.status(retraitResultat.statutHttp).json({ erreur: retraitResultat.erreur });
+      }
+      try {
+        const clientsNouveauJour = await chargerClientsJour(nouveauDateISO);
+        const avecNouveau = appliquerDeltaSurClients(clientsNouveauJour, demande.clientId, versDeltas(lignes, 1));
+        const ajoutResultat = await appliquerSchemaCommandeJour(nouveauDateISO, avecNouveau, req.utilisateur!.id);
+        if ("erreur" in ajoutResultat) throw new ErreurAction(ajoutResultat.statutHttp, ajoutResultat.erreur);
+      } catch (erreurAjout) {
+        // Best effort : remet l'ancien jour comme avant, puisque le nouveau
+        // jour n'a pas pu recevoir la demande — voir doc de tête sur la
+        // limite de non-atomicité entre les deux jours.
+        try {
+          const clientsAncienJourRetente = await chargerClientsJour(ancienDateISO);
+          const avecAncienRestaure = appliquerDeltaSurClients(clientsAncienJourRetente, demande.clientId, versDeltas(ancienLignes, 1));
+          await appliquerSchemaCommandeJour(ancienDateISO, avecAncienRestaure, req.utilisateur!.id);
+        } catch {
+          // Le retour en arrière lui-même a échoué — situation à traiter
+          // manuellement, mais on ne masque pas l'erreur d'origine pour ça.
+        }
+        throw erreurAjout;
+      }
+
+      await appliquerNouvellesLignes();
+      const maj = await prisma.demandeCommandePublique.findUniqueOrThrow({ where: { id: demande.id }, include: INCLUDE_DEMANDE });
+      return res.json({ demande: versDTO(maj) });
+    } catch (e) {
+      gererErreurSchema(e, res, next);
     }
   },
 );
