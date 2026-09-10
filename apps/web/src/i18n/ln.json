@@ -563,6 +563,37 @@
     "motifRequired": "Ntina esɛngami",
     "rejectSubmit": "Koboya bosɛngi"
   },
+  "inscriptionsDepositaire": {
+    "title": "Bosɛngi ya kokoma Dépositaire",
+    "subtitle": "Bosɛngi ya kokoma Dépositaire oyo batindi na site ya bato nyonso, ezali kozela kondimama.",
+    "empty": "Bosɛngi moko te ezali kozela.",
+    "loadError": "Ekoki kozua bosɛngi te.",
+    "colPhone": "Telefone",
+    "colAddress": "Adrese",
+    "colSubmittedAt": "Etindami mokolo",
+    "colRejectReason": "Ntina ya koboya",
+    "confirm": "Kondima",
+    "reject": "Koboya",
+    "history": "Istware ({{count}})",
+    "status": {
+      "CONFIRMEE": "Endimami",
+      "REJETEE": "Eboyami"
+    },
+    "confirmError": "Ekoki kondima te",
+    "rejectError": "Ekoki koboya te",
+    "confirmTitle": "Kondima bosɛngi ya {{nom}}",
+    "confirmDesc": "Kondima ekokela Client (lolenge Dépositaire). Poná zone na ye ya kotika biloko — mopesi bosɛngi ayebi yango te.",
+    "zoneLabel": "Zone ya kotika biloko",
+    "zonePlaceholder": "Poná zone…",
+    "zoneHelpEmpty": "Zone moko te ekomami — kela moko liboso ya kondima.",
+    "zoneRequired": "Zone esɛngami",
+    "confirmSubmit": "Kondima mpe kela client",
+    "rejectTitle": "Koboya bosɛngi ya {{nom}}",
+    "rejectDesc": "Ntina ekotikala kaka na kati — ekokende epai ya mopesi bosɛngi te.",
+    "motifLabel": "Ntina ya koboya",
+    "motifRequired": "Ntina esɛngami",
+    "rejectSubmit": "Koboya bosɛngi"
+  },
   "zonesDepot": {
     "title": "Bazone ya kotika biloko",
     "subtitle": "Bosangisi ya bisika mpo na ba-Dépositaire, esalelami na Fiche ya komande.",

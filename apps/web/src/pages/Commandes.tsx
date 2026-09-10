@@ -22,6 +22,7 @@ import { api, ApiError } from "@/lib/api";
 import { useCleIdempotence } from "@/lib/idempotence";
 import { useAuth } from "@/lib/auth";
 import { DemandesCommandePubliquesCard } from "@/components/DemandesCommandePubliquesCard";
+import { InscriptionsDepositaireCard } from "@/components/InscriptionsDepositaireCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -356,6 +357,9 @@ export function CommandesPage() {
 
       {/* Demandes du site vitrine (V2) — file d'attente à traiter en priorité */}
       <DemandesCommandePubliquesCard editable={editable} />
+
+      {/* Inscriptions « Devenir Dépositaire » (site vitrine) — même esprit que ci-dessus */}
+      <InscriptionsDepositaireCard editable={editable} />
 
       {/* Tableau de bord journalier (section 3.4) */}
       {resumeJour && (

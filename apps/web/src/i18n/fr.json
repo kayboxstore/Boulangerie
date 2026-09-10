@@ -562,6 +562,37 @@
     "motifRequired": "Le motif est requis",
     "rejectSubmit": "Rejeter la demande"
   },
+  "inscriptionsDepositaire": {
+    "title": "Inscriptions Dépositaire",
+    "subtitle": "Demandes pour devenir Dépositaire soumises depuis le site public, en attente de confirmation.",
+    "empty": "Aucune inscription en attente.",
+    "loadError": "Impossible de charger les inscriptions.",
+    "colPhone": "Téléphone",
+    "colAddress": "Adresse",
+    "colSubmittedAt": "Soumise le",
+    "colRejectReason": "Motif du rejet",
+    "confirm": "Confirmer",
+    "reject": "Rejeter",
+    "history": "Historique ({{count}})",
+    "status": {
+      "CONFIRMEE": "Confirmée",
+      "REJETEE": "Rejetée"
+    },
+    "confirmError": "Confirmation impossible",
+    "rejectError": "Rejet impossible",
+    "confirmTitle": "Confirmer l'inscription de {{nom}}",
+    "confirmDesc": "La confirmation crée le Client (type Dépositaire). Choisissez sa zone de dépôt — le visiteur ne la connaît pas.",
+    "zoneLabel": "Zone de dépôt",
+    "zonePlaceholder": "Choisir une zone…",
+    "zoneHelpEmpty": "Aucune zone définie — créez-en une avant de confirmer.",
+    "zoneRequired": "La zone est requise",
+    "confirmSubmit": "Confirmer et créer le client",
+    "rejectTitle": "Rejeter l'inscription de {{nom}}",
+    "rejectDesc": "Le motif est communiqué en interne (historique) — pas au visiteur.",
+    "motifLabel": "Motif du rejet",
+    "motifRequired": "Le motif est requis",
+    "rejectSubmit": "Rejeter l'inscription"
+  },
   "zonesDepot": {
     "title": "Zones de dépôt",
     "subtitle": "Regroupement géographique des Dépositaires, utilisé dans le Schéma de commande.",

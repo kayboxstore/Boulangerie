@@ -563,6 +563,37 @@
     "motifRequired": "Sababu inahitajika",
     "rejectSubmit": "Kataa ombi"
   },
+  "inscriptionsDepositaire": {
+    "title": "Maombi ya kuwa Msambazaji",
+    "subtitle": "Maombi ya kuwa Msambazaji yaliyotumwa kutoka tovuti ya umma, yanayosubiri uthibitisho.",
+    "empty": "Hakuna ombi linalosubiri.",
+    "loadError": "Haiwezekani kupakia maombi.",
+    "colPhone": "Simu",
+    "colAddress": "Anwani",
+    "colSubmittedAt": "Limetumwa tarehe",
+    "colRejectReason": "Sababu ya kukataa",
+    "confirm": "Thibitisha",
+    "reject": "Kataa",
+    "history": "Historia ({{count}})",
+    "status": {
+      "CONFIRMEE": "Imethibitishwa",
+      "REJETEE": "Imekataliwa"
+    },
+    "confirmError": "Imeshindwa kuthibitisha",
+    "rejectError": "Imeshindwa kukataa",
+    "confirmTitle": "Thibitisha ombi la {{nom}}",
+    "confirmDesc": "Kuthibitisha kutaunda Mteja (aina Msambazaji). Chagua eneo lake la kuachia bidhaa — mwombaji hajui eneo hilo.",
+    "zoneLabel": "Eneo la kuachia bidhaa",
+    "zonePlaceholder": "Chagua eneo…",
+    "zoneHelpEmpty": "Hakuna eneo lililowekwa — tengeneza moja kabla ya kuthibitisha.",
+    "zoneRequired": "Eneo linahitajika",
+    "confirmSubmit": "Thibitisha na uunde mteja",
+    "rejectTitle": "Kataa ombi la {{nom}}",
+    "rejectDesc": "Sababu inabaki ndani (historia) — haitumwi kwa mwombaji.",
+    "motifLabel": "Sababu ya kukataa",
+    "motifRequired": "Sababu inahitajika",
+    "rejectSubmit": "Kataa ombi"
+  },
   "zonesDepot": {
     "title": "Maeneo ya kuachia bidhaa",
     "subtitle": "Ugawaji wa kijiografia wa Wawakilishi (Dépositaires), unaotumika kwenye Fomu ya agizo.",

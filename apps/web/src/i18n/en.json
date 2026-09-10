@@ -562,6 +562,37 @@
     "motifRequired": "A reason is required",
     "rejectSubmit": "Reject request"
   },
+  "inscriptionsDepositaire": {
+    "title": "Depositor sign-ups",
+    "subtitle": "Requests to become a Depositor submitted from the public site, awaiting confirmation.",
+    "empty": "No pending sign-ups.",
+    "loadError": "Could not load sign-ups.",
+    "colPhone": "Phone",
+    "colAddress": "Address",
+    "colSubmittedAt": "Submitted on",
+    "colRejectReason": "Rejection reason",
+    "confirm": "Confirm",
+    "reject": "Reject",
+    "history": "History ({{count}})",
+    "status": {
+      "CONFIRMEE": "Confirmed",
+      "REJETEE": "Rejected"
+    },
+    "confirmError": "Could not confirm",
+    "rejectError": "Could not reject",
+    "confirmTitle": "Confirm {{nom}}'s sign-up",
+    "confirmDesc": "Confirming creates the Client (Depositor type). Choose their drop-off zone — the visitor doesn't know it.",
+    "zoneLabel": "Drop-off zone",
+    "zonePlaceholder": "Choose a zone…",
+    "zoneHelpEmpty": "No zone defined yet — create one before confirming.",
+    "zoneRequired": "A zone is required",
+    "confirmSubmit": "Confirm and create client",
+    "rejectTitle": "Reject {{nom}}'s sign-up",
+    "rejectDesc": "The reason is kept internal (history) — not shared with the visitor.",
+    "motifLabel": "Rejection reason",
+    "motifRequired": "A reason is required",
+    "rejectSubmit": "Reject sign-up"
+  },
   "zonesDepot": {
     "title": "Delivery zones",
     "subtitle": "Geographic grouping of Dépositaires, used in the Order sheet.",
