@@ -1328,6 +1328,21 @@ model ParametreBoutique {
   updatedAt DateTime @updatedAt
 }
 
+// Cache du dernier résultat connu du service central de licences
+// (kayboxstore/licences-activation, dépôt et déploiement séparés) — JAMAIS la
+// source de vérité : elle vit exclusivement côté service central. Une seule
+// ligne (id figé à 1). Volontairement absent de `reinitialiserBase()`
+// (services/reinitialisation.ts) : une réinitialisation locale ne doit
+// jamais pouvoir remettre à zéro l'état de licence d'une instance.
+model EtatLicence {
+  id                   Int       @id @default(1)
+  dernierStatutConnu   String // "ACTIVE" | "ESSAI" | "EXPIREE" | "INCONNU"
+  joursRestants        Int?
+  nomClientLicence     String?
+  dernierContactReussi DateTime?
+  miseAJour            DateTime  @updatedAt
+}
+
 // Secret de bootstrap du premier lancement (P1-A, 28/08/2026) — remplace
 // l'absence de compte comme seule autorisation d'accès à
 // routes/premierLancement.ts. Généré hors dépôt (scripts/generer-secret-

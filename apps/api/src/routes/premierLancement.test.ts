@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   utilisateurCount: vi.fn(),
   travailleurCreate: vi.fn(),
   travailleurFindUnique: vi.fn(),
+  ecrireParametre: vi.fn(),
 }));
 
 vi.mock("../lib/prisma.js", () => ({
@@ -38,6 +39,11 @@ vi.mock("../services/emailPro.js", () => ({
   verifierEmailPro: vi.fn(),
 }));
 
+vi.mock("../lib/parametres.js", () => ({
+  ecrireParametre: mocks.ecrireParametre,
+  lireParametre: vi.fn(),
+}));
+
 import { premierLancementRouter } from "./premierLancement.js";
 
 function appPremierLancement() {
@@ -59,7 +65,7 @@ describe("premierLancementRouter — garde du secret sur les 4 routes", () => {
     ["/travailleur", { nom: "A", poste: "P", dateEmbauche: "2026-01-01" }],
     ["/travailleur/t-1/email-pro", { emailDestination: "a@b.com" }],
     ["/travailleur/t-1/email-pro/verifier", {}],
-    ["/finaliser", { travailleurId: "t-1", motDePasse: "motdepasse123" }],
+    ["/finaliser", { travailleurId: "t-1", motDePasse: "motdepasse123", nomEtablissement: "Boulangerie Test" }],
   ])("401 sur %s sans en-tête secret (secretPremierLancementValide jamais appelé sans header -> false)", async (chemin, corps) => {
     mocks.secretValide.mockResolvedValue(false);
     const res = await request(appPremierLancement()).post(`/api/premier-lancement${chemin}`).send(corps);
@@ -120,20 +126,33 @@ describe("POST /finaliser — traduction des erreurs du service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.secretValide.mockResolvedValue(true);
+    mocks.ecrireParametre.mockResolvedValue(undefined);
   });
 
-  it("succède : 201 ok", async () => {
+  it("succède : 201 ok, et écrit le nom d'établissement (ParametreBoutique)", async () => {
     mocks.finaliserDirect.mockResolvedValue(undefined);
     const res = await request(appPremierLancement())
       .post("/api/premier-lancement/finaliser")
       .set(EN_TETE, "bon-secret")
-      .send({ travailleurId: "t-1", motDePasse: "motdepasse123" });
+      .send({ travailleurId: "t-1", motDePasse: "motdepasse123", nomEtablissement: "Boulangerie Test" });
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ ok: true });
     expect(mocks.finaliserDirect).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ secretFourni: "bon-secret", travailleurId: "t-1", motDePasse: "motdepasse123" }),
     );
+    expect(mocks.ecrireParametre).toHaveBeenCalledWith("boutique_nom", "Boulangerie Test");
+  });
+
+  it("succède même si l'écriture du nom d'établissement échoue (best-effort, non bloquant)", async () => {
+    mocks.finaliserDirect.mockResolvedValue(undefined);
+    mocks.ecrireParametre.mockRejectedValue(new Error("boom"));
+    const res = await request(appPremierLancement())
+      .post("/api/premier-lancement/finaliser")
+      .set(EN_TETE, "bon-secret")
+      .send({ travailleurId: "t-1", motDePasse: "motdepasse123", nomEtablissement: "Boulangerie Test" });
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ ok: true });
   });
 
   it("ErreurAction(401) du service -> 401 avec le message exact", async () => {
@@ -141,7 +160,7 @@ describe("POST /finaliser — traduction des erreurs du service", () => {
     const res = await request(appPremierLancement())
       .post("/api/premier-lancement/finaliser")
       .set(EN_TETE, "secret-rejoue")
-      .send({ travailleurId: "t-1", motDePasse: "motdepasse123" });
+      .send({ travailleurId: "t-1", motDePasse: "motdepasse123", nomEtablissement: "Boulangerie Test" });
     expect(res.status).toBe(401);
     expect(res.body.erreur).toBe("Secret de premier lancement invalide, expiré ou déjà utilisé");
   });
@@ -151,7 +170,7 @@ describe("POST /finaliser — traduction des erreurs du service", () => {
     const res = await request(appPremierLancement())
       .post("/api/premier-lancement/finaliser")
       .set(EN_TETE, "bon-secret")
-      .send({ travailleurId: "t-1", motDePasse: "motdepasse123" });
+      .send({ travailleurId: "t-1", motDePasse: "motdepasse123", nomEtablissement: "Boulangerie Test" });
     expect(res.status).toBe(409);
   });
 
@@ -160,7 +179,7 @@ describe("POST /finaliser — traduction des erreurs du service", () => {
     const res = await request(appPremierLancement())
       .post("/api/premier-lancement/finaliser")
       .set(EN_TETE, "bon-secret")
-      .send({ travailleurId: "t-1", motDePasse: "motdepasse123" });
+      .send({ travailleurId: "t-1", motDePasse: "motdepasse123", nomEtablissement: "Boulangerie Test" });
     expect(res.status).toBe(503);
   });
 
@@ -168,7 +187,16 @@ describe("POST /finaliser — traduction des erreurs du service", () => {
     const res = await request(appPremierLancement())
       .post("/api/premier-lancement/finaliser")
       .set(EN_TETE, "bon-secret")
-      .send({ travailleurId: "t-1", motDePasse: "court" });
+      .send({ travailleurId: "t-1", motDePasse: "court", nomEtablissement: "Boulangerie Test" });
+    expect(res.status).toBe(400);
+    expect(mocks.finaliserDirect).not.toHaveBeenCalled();
+  });
+
+  it("400 si le nom d'établissement est absent, sans même appeler le service", async () => {
+    const res = await request(appPremierLancement())
+      .post("/api/premier-lancement/finaliser")
+      .set(EN_TETE, "bon-secret")
+      .send({ travailleurId: "t-1", motDePasse: "motdepasse123" });
     expect(res.status).toBe(400);
     expect(mocks.finaliserDirect).not.toHaveBeenCalled();
   });
