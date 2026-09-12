@@ -147,31 +147,6 @@ un délai maximal : un processus resté bloqué reçoit d'abord `SIGTERM`, puis
 suspendre indéfiniment l'opération. Cette borne couvre `pg_dump`, la lecture
 du TOC et le parcours intégral par `pg_restore`.
 
-## Licence marque blanche
-
-Chaque instance déployée vérifie périodiquement (au démarrage, puis chaque
-heure) son statut de licence auprès d'un **service central séparé** — dépôt
-et déploiement indépendants : `kayboxstore/licences-activation`. Ce service
-doit être déployé et accessible avant de renseigner les variables ci-dessous ;
-tant qu'elles sont vides, l'app reste utilisable (`GET /api/licence/etat`
-renvoie `{ bloque: true }` — voir « Se connecter » ci-dessous, l'écran
-d'activation remplace l'accès normal) puisqu'aucune vérification n'a jamais
-pu réussir.
-
-| Variable | Rôle |
-|----------|------|
-| `URL_SERVICE_LICENCES` | URL de base du service central (sans `/` final) |
-| `SECRET_SERVICE_LICENCES` | secret partagé, envoyé dans l'en-tête `X-Secret-Service` — jamais exposé au navigateur |
-| `IDENTIFIANT_INSTANCE` | identifiant **fixe** de ce déploiement, indépendant de toute donnée en base — généré une seule fois, jamais recalculé, et **survit à une réinitialisation** (section 3.15) |
-
-L'état de licence (`EtatLicence`, un simple cache du dernier résultat connu)
-n'est **jamais** remis à zéro par « Réinitialiser la base de données » : la
-réinitialisation efface les données transactionnelles et les comptes, jamais
-cette table.
-
-Surcharge facultative (réutilise `BACKUP_TIMEZONE`) : `LICENCE_CRON` (défaut
-`0 * * * *`, toutes les heures).
-
 **Limite assumée et documentée, jamais présentée comme plus qu'elle n'est** :
 même ces deux passes ne sont PAS une preuve complète de restaurabilité —
 elles éliminent les archives tronquées/corrompues détectables sans rien

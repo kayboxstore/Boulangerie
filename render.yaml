@@ -73,21 +73,6 @@ services:
       # aucun autre changement de code (voir routes/assistant.ts).
       - key: ASSISTANT_IA_ACTIF
         value: "false"
-      # Licence marque blanche — service central séparé (dépôt et déploiement
-      # indépendants : kayboxstore/licences-activation). Placeholders tant
-      # que ce service n'est pas déployé (voir
-      # apps/api/src/services/licenceCentrale.ts) : vides, le job périodique
-      # échoue silencieusement (loggé) et l'app affiche l'écran d'activation
-      # jusqu'à ce que ces variables soient renseignées.
-      - key: URL_SERVICE_LICENCES
-        sync: false
-      - key: SECRET_SERVICE_LICENCES
-        sync: false
-      # Identifiant FIXE de ce déploiement, indépendant de toute donnée en
-      # base — survit à une réinitialisation (section 3.15). Généré une
-      # seule fois, jamais recalculé.
-      - key: IDENTIFIANT_INSTANCE
-        sync: false
       # Adresse email professionnelle (section 3.18) — Cloudflare Email
       # Routing. Deux portées DIFFÉRENTES requises sur le jeton : "Email
       # Routing Addresses: Edit" (Compte) pour les adresses de destination,

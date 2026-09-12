@@ -3,13 +3,10 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 import type { Module } from "@lomoto/shared";
 import { useAuth } from "@/lib/auth";
-import { useLicenceEtat } from "@/lib/licence";
 import { Layout } from "@/components/Layout";
 import { ChargementModule } from "@/components/ChargementModule";
 import { EcranDemarrage, splashDejaVu } from "@/components/EcranDemarrage";
 import { ConstellationLomoto } from "@/components/ConstellationLomoto";
-import { EcranLicenceBloquee } from "@/components/EcranLicenceBloquee";
-import { BandeauLicenceAvertissement } from "@/components/BandeauLicenceAvertissement";
 // La page de connexion reste dans le bundle principal : c'est l'écran d'entrée
 // (pré-authentification), la charger en lazy ajouterait un délai au tout premier
 // affichage. Tous les modules métier sont chargés à la demande via React.lazy —
@@ -81,12 +78,6 @@ function RequiertEcriture({ module, children }: { module: Module; children: Reac
 export default function App() {
   const { utilisateur, chargement, premierLancement } = useAuth();
 
-  // Licence marque blanche : `enabled: !!utilisateur` à l'intérieur du hook
-  // (jamais un appel conditionnel ici — l'ordre des hooks doit rester stable
-  // à chaque rendu) évite tout appel avant connexion, puisque GET
-  // /api/licence/etat est authentifiée et échouerait sinon systématiquement.
-  const { data: licenceEtat } = useLicenceEtat(!!utilisateur);
-
   // Écran de démarrage (3.8) : au PREMIER chargement de la session seulement.
   // Il se superpose à l'app, qui se monte et charge ses données derrière — la
   // transition vers la connexion (ou le tableau de bord) est donc immédiate.
@@ -151,23 +142,9 @@ export default function App() {
     );
   }
 
-  // Licence marque blanche (maquette validée "États de licence — Vue 2") :
-  // remplace ENTIÈREMENT l'application authentifiée, même principe que
-  // ChangementMotDePasseObligatoirePage ci-dessus — aucune route métier
-  // accessible tant que l'instance n'a pas retrouvé un contact valide.
-  if (licenceEtat?.bloque) {
-    return (
-      <>
-        {splash}
-        <EcranLicenceBloquee />
-      </>
-    );
-  }
-
   return (
     <>
       {splash}
-      {licenceEtat?.avertissement && <BandeauLicenceAvertissement joursDepuisContact={licenceEtat.joursDepuisContact} />}
       <AppAuthentifiee />
     </>
   );

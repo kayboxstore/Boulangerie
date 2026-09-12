@@ -1516,34 +1516,8 @@ export type PremierLancementTravailleurInput = z.infer<typeof premierLancementTr
 export const premierLancementFinaliserSchema = z.object({
   travailleurId: z.string().min(1, "La fiche Travailleur est requise"),
   motDePasse: z.string().min(8, "Le mot de passe initial doit faire au moins 8 caractères").max(100),
-  // Nouvelle étape 1 (licence + identité) : collecté tôt dans l'assistant,
-  // mais envoyé ici à la finalisation — écrit dans ParametreBoutique
-  // (CLE_BOUTIQUE_NOM) juste après la création du compte, voir
-  // routes/premierLancement.ts.
-  nomEtablissement: z.string().trim().min(1, "Le nom de l'établissement est requis").max(120),
 });
 export type PremierLancementFinaliserInput = z.infer<typeof premierLancementFinaliserSchema>;
-
-// --- Licence marque blanche (service central, dépôt et déploiement séparés :
-// kayboxstore/licences-activation) ---------------------------------------
-export const licenceActiverSchema = z.object({
-  cleLicence: z.string().trim().min(1, "La clé de licence est requise").max(200),
-});
-export type LicenceActiverInput = z.infer<typeof licenceActiverSchema>;
-
-export interface LicenceActiverReponseDTO {
-  statut: "ACTIVE" | "ESSAI" | "EXPIREE";
-  joursRestants?: number;
-  nomClient?: string;
-  erreurActivation?: string;
-}
-
-export interface LicenceEtatDTO {
-  bloque: boolean;
-  avertissement?: boolean;
-  joursRestants?: number;
-  joursDepuisContact?: number;
-}
 
 export const travailleurUpdateSchema = travailleurCreateSchema.partial().extend({
   // null = délier explicitement le compte.
