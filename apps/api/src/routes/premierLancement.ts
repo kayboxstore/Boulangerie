@@ -1,11 +1,14 @@
 import { Router, type Request, type Response } from "express";
 import {
+  CLE_BOUTIQUE_NOM,
   emailProCreerSchema,
   premierLancementFinaliserSchema,
   premierLancementTravailleurSchema,
 } from "@lomoto/shared";
 import { ErreurAction } from "../lib/erreurAction.js";
+import { logger } from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
+import { ecrireParametre } from "../lib/parametres.js";
 import { declencherEmailPro, verifierEmailPro } from "../services/emailPro.js";
 import {
   ErreurFinalisationReessayable,
@@ -143,6 +146,19 @@ premierLancementRouter.post("/finaliser", async (req, res, next) => {
       if (e instanceof ErreurAction) return res.status(e.status).json({ erreur: e.message });
       if (e instanceof ErreurFinalisationReessayable) return res.status(503).json({ erreur: e.message });
       throw e;
+    }
+
+    // Best-effort, hors de la transaction atomique ci-dessus (même doctrine
+    // que l'email pro, déjà une étape séparée) : le nom de l'établissement
+    // n'est pas une garantie de sécurité critique comme la consommation du
+    // secret ou la création du compte — un échec ici ne doit pas annuler un
+    // premier lancement par ailleurs réussi.
+    try {
+      await ecrireParametre(CLE_BOUTIQUE_NOM, parsed.data.nomEtablissement);
+    } catch (e) {
+      // Le compte est créé malgré tout ; le nom pourra être corrigé depuis
+      // Paramètres/À propos une fois connecté.
+      logger.error("Échec de l'écriture du nom d'établissement après premier lancement", { erreur: e });
     }
 
     res.status(201).json({ ok: true });

@@ -44,6 +44,7 @@ import { exportRouter } from "./routes/export.js";
 import { assistantRouter } from "./routes/assistant.js";
 import { premierLancementRouter } from "./routes/premierLancement.js";
 import { aProposRouter } from "./routes/apropos.js";
+import { licenceRouter } from "./routes/licence.js";
 
 export function createApp() {
   const app = express();
@@ -184,6 +185,20 @@ export function createApp() {
       handler: reponseLimitee,
     }),
   );
+  // POST /api/licence/activer est public (voir routes/licence.ts) : ni JWT ni
+  // secret de premier lancement, exactement comme les routes publiques
+  // ci-dessus — même limite pour se prémunir d'un brute-force de clés de
+  // licence via notre API.
+  app.use(
+    "/api/licence/activer",
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 20,
+      standardHeaders: "draft-8",
+      legacyHeaders: false,
+      handler: reponseLimitee,
+    }),
+  );
 
   app.use("/api/auth", authRouter);
   app.use("/api/produits", produitsRouter);
@@ -219,6 +234,7 @@ export function createApp() {
   // la base est encore vide, voir routes/premierLancement.ts.
   app.use("/api/premier-lancement", premierLancementRouter);
   app.use("/api/apropos", aProposRouter);
+  app.use("/api/licence", licenceRouter);
 
   // --- Frontend compilé (production / déploiement) --------------------------
   // En dev, le frontend est servi par Vite (avec proxy vers cette API). En

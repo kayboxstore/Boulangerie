@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import type { TravailleurDTO } from "@lomoto/shared";
+import type { LicenceActiverReponseDTO, TravailleurDTO } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/components/FeedbackProvider";
@@ -36,9 +36,45 @@ export function PremierLancementPage() {
 
   const [travailleur, setTravailleur] = useState<TravailleurDTO | null>(null);
 
-  // --- Secret de bootstrap, requis dès l'étape 1 --------------------------
+  // --- Secret de bootstrap, requis dès l'étape fiche Travailleur ----------
   const [secret, setSecret] = useState("");
   const enTetesSecret = { [EN_TETE_SECRET]: secret };
+
+  // --- Nouvelle étape 1 : licence + identité de l'établissement -----------
+  // POST /api/licence/activer est public (voir routes/licence.ts côté API) :
+  // pas besoin du secret de premier lancement ici, contrairement aux étapes
+  // suivantes. Ne bloque jamais la suite du parcours (voir erreurActivation
+  // ci-dessous) — une instance sans licence valide reste utilisable pendant
+  // sa période d'essai.
+  const [etapeLicenceTerminee, setEtapeLicenceTerminee] = useState(false);
+  const [cleLicence, setCleLicence] = useState("");
+  const [nomEtablissement, setNomEtablissement] = useState("");
+  const [nomEtablissementVerrouille, setNomEtablissementVerrouille] = useState(false);
+  const [messageLicence, setMessageLicence] = useState<{ texte: string; succes: boolean } | null>(null);
+
+  const verifierLicence = useMutation({
+    mutationFn: () =>
+      api<LicenceActiverReponseDTO>("/api/licence/activer", {
+        method: "POST",
+        body: JSON.stringify({ cleLicence: cleLicence.trim() }),
+      }),
+    onSuccess: (r) => {
+      if (r.erreurActivation) {
+        setMessageLicence({ texte: r.erreurActivation, succes: false });
+        return;
+      }
+      setMessageLicence({ texte: t("premierLancement.licenceValide", { nom: r.nomClient ?? "" }), succes: true });
+      if (r.nomClient) {
+        setNomEtablissement(r.nomClient);
+        setNomEtablissementVerrouille(true);
+      }
+    },
+    onError: (e) =>
+      setMessageLicence({
+        texte: e instanceof Error ? e.message : t("premierLancement.licenceErreurGenerique"),
+        succes: false,
+      }),
+  });
 
   // --- Étape 1 : fiche Travailleur --------------------------------------
   const [nom, setNom] = useState("");
@@ -73,7 +109,7 @@ export function PremierLancementPage() {
       if (!travailleur) throw new Error(t("premierLancement.ficheError"));
       return api("/api/premier-lancement/finaliser", {
         method: "POST",
-        body: JSON.stringify({ travailleurId: travailleur.id, motDePasse }),
+        body: JSON.stringify({ travailleurId: travailleur.id, motDePasse, nomEtablissement: nomEtablissement.trim() }),
         headers: enTetesSecret,
       });
     },
@@ -98,7 +134,58 @@ export function PremierLancementPage() {
           <CardDescription>{t("premierLancement.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          {!travailleur ? (
+          {!etapeLicenceTerminee ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setEtapeLicenceTerminee(true);
+              }}
+              className="space-y-3"
+            >
+              <p className="text-sm text-muted-foreground">{t("premierLancement.licenceDesc")}</p>
+              <div className="space-y-1.5">
+                <Label htmlFor="pl-licence">{t("premierLancement.licenceLabel")}</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="pl-licence"
+                    value={cleLicence}
+                    onChange={(e) => setCleLicence(e.target.value)}
+                    placeholder={t("licence.champClePlaceholder")}
+                    autoComplete="off"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => verifierLicence.mutate()}
+                    disabled={!cleLicence.trim() || verifierLicence.isPending}
+                  >
+                    {t("premierLancement.licenceVerifierBouton")}
+                  </Button>
+                </div>
+                {messageLicence && (
+                  <p className={`text-sm ${messageLicence.succes ? "text-succes" : "text-terracotta"}`}>
+                    {messageLicence.texte}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pl-etablissement">{t("premierLancement.etablissementLabel")}</Label>
+                <Input
+                  id="pl-etablissement"
+                  value={nomEtablissement}
+                  onChange={(e) => setNomEtablissement(e.target.value)}
+                  disabled={nomEtablissementVerrouille}
+                  required
+                />
+                {nomEtablissementVerrouille && (
+                  <p className="text-xs text-muted-foreground">{t("premierLancement.etablissementVerrouille")}</p>
+                )}
+              </div>
+              <Button type="submit" variant="cta" className="w-full" disabled={!nomEtablissement.trim()}>
+                {t("premierLancement.licenceContinuerBouton")}
+              </Button>
+            </form>
+          ) : !travailleur ? (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
