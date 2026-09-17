@@ -1,6 +1,8 @@
 import { Router } from "express";
+import { rolePermissionsSchema } from "@lomoto/shared";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { traiterActionCritique } from "../services/actionsCritiques.js";
 
 export const rolesRouter = Router();
 
@@ -22,6 +24,29 @@ rolesRouter.get("/", requireAuth, requirePermission("EQUIPE", "LECTURE"), async 
         permissions: r.permissions.map((p) => ({ module: p.module, niveauAcces: p.niveauAcces })),
       })),
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Modifier les permissions d'un rôle (tâche critique, section 2) — réservé aux
+// Admins (écriture Équipe) ; différé pour un Admin secondaire.
+rolesRouter.put("/:id/permissions", requireAuth, requirePermission("EQUIPE", "ECRITURE"), async (req, res, next) => {
+  try {
+    const parsed = rolePermissionsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ erreur: parsed.error.issues[0]?.message ?? "Données invalides" });
+    }
+    const role = await prisma.role.findUnique({ where: { id: req.params.id } });
+    if (!role) return res.status(404).json({ erreur: "Rôle introuvable" });
+
+    const r = await traiterActionCritique(
+      req,
+      "MODIFIER_PERMISSIONS_ROLE",
+      { roleId: role.id, permissions: parsed.data.permissions },
+      `modifier les permissions du rôle « ${role.nom} »`,
+    );
+    res.status(r.http).json(r.body);
   } catch (e) {
     next(e);
   }

@@ -1,8 +1,16 @@
 # Boulangerie Lomoto — Gestion commerciale
 
-Application web de gestion pour la Boulangerie Lomoto : caisse, stocks, production, commandes clients, fournisseurs et pilotage en temps réel. Spécification complète : [docs/spec.md](docs/spec.md).
+Application web de gestion pour la Boulangerie Lomoto : caisse, stocks, production, commandes clients, fournisseurs et pilotage en temps réel. Spécification complète : [docs/spec-boulangerie.md](docs/spec-boulangerie.md).
 
-**Phase actuelle : 4 — Caisse** (vente au comptoir, pain exonéré de TVA, moyens de paiement espèces/mobile money/carte, clôture journalière, alerte transaction inhabituelle au-dessus du seuil configuré).
+**Phase actuelle : Lots 0 à 7 intégrés**, plus deux corrections de bugs
+terrain (lien matière première ↔ ingrédient de production, discipline de
+clôture de caisse) et le plan d'action issu de l'audit complet du
+19/08/2026 — couvre désormais l'ensemble des modules de la spécification :
+Caisse, Stocks, Production (dont le cycle de livraison C4), Commandes,
+Clients, Fournisseurs, Équipe/Travailleurs, Commissions, Rapports,
+Paramètres, Notifications temps réel, Journal d'audit et Assistant.
+
+La branche d'intégration à jour est `main-a7fm5x`.
 
 ## Structure du monorepo
 
@@ -12,7 +20,7 @@ apps/
   api/       # Backend Node.js + TypeScript + Express
 packages/
   shared/    # Types & schémas Zod partagés front/back
-prisma/      # Schéma de base de données + seed
+prisma/      # Schéma de base de données + bootstrap de production + seed de démonstration
 docs/        # Spécification
 ```
 
@@ -36,29 +44,59 @@ docker run -d --name lomoto-postgres \
 # 3. Variables d'environnement
 cp .env.example .env
 
-# 4. Migration + données initiales (rôles, permissions, comptes de démo, produits)
+# 4. Migration + données de démonstration LOCALES UNIQUEMENT (rôles, permissions,
+#    comptes de démo à mot de passe connu, produits) — refuse de s'exécuter hors
+#    d'un environnement de développement/test avec une base locale (voir
+#    « Comptes de démonstration » ci-dessous et DEPLOIEMENT.md § Correctif P0-01)
 npx prisma migrate dev
-npx prisma db seed
+npm run db:seed:demo
 
 # 5. Lancer API (http://localhost:3001) + Web (http://localhost:5173)
 npm run dev
 ```
 
+## Tests
+
+```bash
+npm ci
+npm audit
+npm test
+npm run build
+```
+
+La suite automatisée couvre les règles partagées, les routes API critiques, l’authentification, les permissions, l’idempotence, les frontières de journée Kinshasa, les composants React/DOM, ainsi que le bootstrap de production (non-destructif et atomique) et la garde du seed de démonstration (correctif P0-01). Dernière validation : **896 tests sur 896** (90 fichiers), plus une vérification d'intégration dédiée contre une vraie base PostgreSQL en CI, audit sans vulnérabilité, migrations PostgreSQL, génération Prisma et compilation API/web réussis.
+
 ## Comptes de démonstration
 
-Mot de passe commun : `Lomoto2026!`
+> ⚠️ **Destinés au développement local.** Ces comptes sont créés par
+> `npm run db:seed:demo`, qui refuse de s'exécuter sauf si `NODE_ENV` vaut
+> exactement `development`/`test` **et** que `DATABASE_URL` pointe vers un
+> hôte local (liste blanche, sans contournement silencieux) — et n'est jamais
+> invoqué par le déploiement (`render.yaml`), voir DEPLOIEMENT.md § « Correctif
+> P0-01 ». Sur une base neuve, le premier compte de production (Administrateur
+> Principal) est créé uniquement via l'Assistant de premier lancement, avec un
+> mot de passe choisi par le véritable responsable. **Ceci décrit le nouveau
+> chemin de déploiement** : un déploiement de production antérieur à ce
+> correctif a pu exécuter l'ancien seed et créer réellement ces comptes —
+> voir DEPLOIEMENT.md § « Se connecter » pour l'assainissement manuel dans ce
+> cas.
+
+Mot de passe commun (dev uniquement) : `Lomoto2026!` — figé volontairement pour la
+commodité de l'équipe en local ; il n'a jamais aucun effet en production (garde
+ci-dessus) et figure déjà en clair dans `prisma/seed-demo.ts`, sur ce même dépôt
+**privé** : sa présence ici n'ouvre donc aucune exposition supplémentaire.
 
 | Rôle | E-mail | Écriture | Lecture seule supplémentaire |
 |---|---|---|---|
-| Directeur Général | dg@lomoto.cd | *(aucune)* | Tous les modules **sauf Paramètres** (aucun accès) |
-| Administrateur (principal) | admin@lomoto.cd | Paramètres, Équipe | — |
-| Caissier(ère) | caisse@lomoto.cd | Caisse | Commandes, Commissions, Production |
-| Chargé des commandes | commandes@lomoto.cd | Commandes | Commissions |
-| Responsable de production | production@lomoto.cd | Production | — |
-| Responsable Stock/Achats et Fournisseurs | achats@lomoto.cd, stock@lomoto.cd | Stocks, Fournisseurs | — |
-| Chargé du personnel | personnel@lomoto.cd | Travailleurs *(module à venir)* | — |
+| Directeur Général | dg@boulangerie-lomoto.com | *(aucune)* | Tous les modules **sauf Paramètres** (aucun accès) |
+| Administrateur (principal) | admin@boulangerie-lomoto.com | Paramètres, Équipe, Travailleurs | — |
+| Administrateur (secondaire) | admin2@boulangerie-lomoto.com | Paramètres, Équipe, Travailleurs | — |
+| Caissier(ère) | caisse@boulangerie-lomoto.com | Caisse | Commandes, Commissions, Production |
+| Chargé des commandes | commandes@boulangerie-lomoto.com | Commandes | Commissions |
+| Responsable de production | production@boulangerie-lomoto.com | Production | — |
+| Responsable Stock/Achats et Fournisseurs | achats@boulangerie-lomoto.com, stock@boulangerie-lomoto.com | Stocks, Fournisseurs | — |
 
-Le rôle Administrateur peut avoir jusqu'à 3 comptes (1 principal + 2 secondaires) — champ `Utilisateur.estAdminPrincipal`, unicité du principal garantie par index partiel ; le workflow d'approbation arrive en Phase 10.
+Le rôle Administrateur peut avoir jusqu'à 3 comptes (1 principal + 2 secondaires) — champ `Utilisateur.estAdminPrincipal`, unicité du principal garantie par index partiel ; le workflow d'approbation des 5 tâches critiques d'un Admin secondaire (section 2) est en place (`/api/approbations`, écran Approbations).
 
 ## Conventions
 
@@ -69,6 +107,6 @@ Le rôle Administrateur peut avoir jusqu'à 3 comptes (1 principal + 2 secondair
 - **Commandes & avances** (section 3.4 de la spec) : à l'enregistrement, `brut = bacs × prix de la Qualité`, l'avance du client est déduite en premier (`montantAPercevoir = brut − avanceUtilisee`), puis `dette = max(0, àPercevoir − reçu)` et `avanceGeneree = max(0, reçu − àPercevoir)` ; le solde d'avance est porté par le **client** et se reporte d'une commande à l'autre. Calcul dans `calculerCommande()` (`@lomoto/shared`), partagé entre l'API (transaction Serializable) et l'aperçu du formulaire. Seul le Chargé des commandes enregistre (matrice stricte) ; Caissière et DG consultent.
 - **Commissions** (section 3.11) : vue dérivée des commandes dont la Qualité a `commissionParBac > 0` (les « Mamans »). `Montant total payé = brut si dette = 0, sinon montant reçu` ; `commission = bacs × 1 650 Fc`. Lecture seule Caissière + DG + Chargé des commandes.
 - **Règlement de dette** : `POST /api/commandes/:id/reglements` (écriture Commandes) — le montant s'ajoute au montant reçu, dette/avance recalculées via `calculerCommande()`, journal dans `PaiementCommande`, notification temps réel `REGLEMENT_COMMANDE`. Un trop-versé devient une avance du client.
-- **Caisse** (section 3.1) : `POST /api/caisse/ventes` (écriture Caisse) — prix et taux de taxe lus en base, jamais depuis le client ; pain exonéré (`tauxTaxe = 0`). `POST /api/caisse/cloture` fige les ventes ouvertes avec totaux par moyen de paiement.
-- **Alerte transaction inhabituelle** (section 3.10) : toute vente ou tout règlement dépassant le seuil (`ParametreBoutique.seuil_alerte_transaction`, 100 000 Fc par défaut, modifiable en base) déclenche une notification `TRANSACTION_INHABITUELLE` **priorité HAUTE**, dédiée au DG, visuellement distincte dans le feed.
-- **Menu** : tous les modules sont listés pour tous les rôles ; ceux hors permission ou pas encore construits apparaissent grisés/non cliquables (règle d'interface, spec section 2).
+- **Caisse — registre journalier** (section 3.1, refonte — plus de vente au comptoir, tout passe par les commandes) : `PUT /api/caisse/taux` (taux du jour), `POST /api/caisse/depenses` (dépense libre) et `PUT /api/caisse/depenses/farine` (dépense farine auto-calculée depuis les sacs utilisés en Production). `GET /api/caisse/registre` calcule Entrées/Dettes payées/Dépenses/Solde côté serveur, jamais depuis le client.
+- **Session de caisse & clôture** (section 3.1 pt 4-5) : une session par date (`POST /api/caisse/sessions`), discipline chronologique (pas de session tant que la précédente reste ouverte). `POST /api/caisse/sessions/:id/cloturer` fige le registre du jour, écart compté/théorique calculé côté serveur. Un règlement déclaré depuis Commandes (`PaiementCommande` statut `declare`) ne réduit la dette qu'après confirmation via une remise contradictoire (`POST /api/caisse/sessions/:id/confirmer-reglements`).
+- **Menu** : tous les modules sont listés pour tous les rôles ; ceux hors permission du rôle connecté apparaissent grisés/non cliquables (règle d'interface, spec section 2).

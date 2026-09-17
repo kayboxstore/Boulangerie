@@ -1,8 +1,14 @@
 import type { Request, Response, NextFunction } from "express";
-import type { Module, NiveauAcces, PermissionDTO, UtilisateurDTO } from "@lomoto/shared";
+import type { Langue, Module, NiveauAcces, PermissionDTO, UtilisateurDTO } from "@lomoto/shared";
+import { CODE_SESSION_REMPLACEE, LANGUES, MESSAGE_SESSION_REMPLACEE, MODULES } from "@lomoto/shared";
 import { aAcces } from "@lomoto/shared";
 import { verifyToken } from "../lib/jwt.js";
 import { prisma } from "../lib/prisma.js";
+import { dateSQLDepuisJourLomoto, jourLomoto } from "../lib/temps.js";
+import { contexteRequete } from "../lib/contexteRequete.js";
+import { logger } from "../lib/logger.js";
+import { estHorsPerimetreAdmin, notifierInterventionAdmin } from "../services/interventionsAdmin.js";
+import { executerTacheDeFondSuivie } from "../lib/barriereEcriture.js";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -13,27 +19,72 @@ declare global {
   }
 }
 
-/** Construit le DTO utilisateur (avec rôle + permissions) renvoyé par l'API. */
+const RANG_NIVEAU: Record<NiveauAcces, number> = { AUCUN: 0, LECTURE: 1, ECRITURE: 2 };
+
+/**
+ * Construit le DTO utilisateur (rôle + permissions) renvoyé par l'API. Les
+ * permissions effectives = matrice du rôle FUSIONNÉE avec les délégations
+ * temporaires actives à la date du jour (section 3.7) : chaque délégation
+ * accorde ECRITURE sur son module. L'évaluation par date se fait ici, à chaque
+ * requête authentifiée, donc l'expiration est automatique (aucune tâche cron).
+ */
 export async function chargerUtilisateur(id: string): Promise<UtilisateurDTO | null> {
   const u = await prisma.utilisateur.findUnique({
     where: { id },
     include: { role: { include: { permissions: true } } },
   });
   if (!u || !u.actif) return null;
+  const languePreferee =
+    u.languePreferee && (LANGUES as readonly string[]).includes(u.languePreferee)
+      ? (u.languePreferee as Langue)
+      : null;
+
+  // Fusion base + délégations : on garde le niveau le plus élevé par module.
+  const niveaux = new Map<Module, NiveauAcces>();
+  for (const p of u.role.permissions) niveaux.set(p.module as Module, p.niveauAcces as NiveauAcces);
+
+  // Admin PRINCIPAL = super utilisateur (section 2) : écriture sur absolument
+  // tous les modules. Les deux niveaux d'Admin partageant un seul rôle, la
+  // distinction ne peut pas vivre dans RolePermission — elle est appliquée ici,
+  // au même endroit et de la même façon que les délégations temporaires.
+  if (u.estAdminPrincipal) {
+    for (const module of MODULES) niveaux.set(module, "ECRITURE");
+  }
+
+  const aujourdhui = dateSQLDepuisJourLomoto(jourLomoto());
+  const delegations = await prisma.delegationRole.findMany({
+    where: { utilisateurId: u.id, dateDebut: { lte: aujourdhui }, dateFin: { gte: aujourdhui } },
+    select: { module: true },
+  });
+  for (const d of delegations) {
+    const module = d.module as Module;
+    const actuel = niveaux.get(module) ?? "AUCUN";
+    if (RANG_NIVEAU["ECRITURE"] > RANG_NIVEAU[actuel]) niveaux.set(module, "ECRITURE");
+  }
+
   return {
     id: u.id,
     nom: u.nom,
     email: u.email,
+    estAdminPrincipal: u.estAdminPrincipal,
+    motDePasseDoitChanger: u.motDePasseDoitChanger,
     role: {
       id: u.role.id,
       nom: u.role.nom,
       roleParentId: u.role.roleParentId,
-      permissions: u.role.permissions.map((p) => ({
-        module: p.module as Module,
-        niveauAcces: p.niveauAcces as NiveauAcces,
-      })),
+      permissions: [...niveaux.entries()].map(([module, niveauAcces]) => ({ module, niveauAcces })),
     },
+    languePreferee,
+    photoUrl: u.photoUrl,
   };
+}
+
+export function cheminAutoriseAvecMotDePasseTemporaire(methode: string, originalUrl: string): boolean {
+  const chemin = originalUrl.split("?")[0];
+  return (
+    (methode === "GET" && chemin === "/api/auth/me") ||
+    (methode === "POST" && chemin === "/api/auth/mot-de-passe")
+  );
 }
 
 /** Exige un JWT valide ; attache l'utilisateur (rôle + permissions) à la requête. */
@@ -44,12 +95,39 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
   try {
     const payload = verifyToken(header.slice("Bearer ".length));
+
+    // Session unique (section 3.7) : vérifie AVANT toute autre chose que le sid
+    // du jeton correspond encore à la session courante de l'utilisateur — une
+    // connexion plus récente ailleurs l'aurait remplacé. Requête légère dédiée
+    // (plutôt que de surcharger chargerUtilisateur, appelé aussi hors HTTP).
+    const session = await prisma.utilisateur.findUnique({
+      where: { id: payload.sub },
+      select: { sessionActuelleId: true, motDePasseDoitChanger: true },
+    });
+    if (!session) {
+      return res.status(401).json({ erreur: "Compte introuvable ou désactivé" });
+    }
+    if (!payload.sid || payload.sid !== session.sessionActuelleId) {
+      return res.status(401).json({ code: CODE_SESSION_REMPLACEE, erreur: MESSAGE_SESSION_REMPLACEE });
+    }
+
+    if (session.motDePasseDoitChanger) {
+      if (!cheminAutoriseAvecMotDePasseTemporaire(req.method, req.originalUrl)) {
+        return res.status(403).json({
+          code: "MOT_DE_PASSE_A_CHANGER",
+          erreur: "Vous devez remplacer votre mot de passe temporaire avant de continuer.",
+        });
+      }
+    }
+
     const utilisateur = await chargerUtilisateur(payload.sub);
     if (!utilisateur) {
       return res.status(401).json({ erreur: "Compte introuvable ou désactivé" });
     }
     req.utilisateur = utilisateur;
-    next();
+    // Ouvre le contexte de requête pour toute la suite du traitement : l'extension
+    // d'audit y lira l'auteur des écritures Prisma (lib/audit.ts).
+    contexteRequete.run({ id: utilisateur.id, nom: utilisateur.nom }, () => next());
   } catch {
     return res.status(401).json({ erreur: "Jeton invalide ou expiré" });
   }
@@ -68,6 +146,43 @@ export function requirePermission(module: Module, niveau: Exclude<NiveauAcces, "
         erreur: `Accès refusé : ${niveau.toLowerCase()} requis sur le module ${module}`,
       });
     }
+
+    // Garde-fou (section 2) : écriture de l'Admin Principal hors de son
+    // périmètre d'origine → le rôle propriétaire du module et le DG sont
+    // notifiés. On attend la fin de la réponse pour n'alerter que sur une
+    // action RÉELLEMENT aboutie (une validation refusée ne notifie personne).
+    //
+    // P0 (correctif Codex round 2, 30/08/2026) : cette écriture démarre APRÈS
+    // `finish` — donc APRÈS que la requête d'origine ait déjà été décomptée
+    // par la barrière (`gardeBarriereEcriture`, montée plus en amont, dont le
+    // propre listener `finish` s'exécute avant celui-ci). Sans
+    // `executerTacheDeFondSuivie` ICI, à l'appel, il existe une fenêtre entre
+    // ce décompte et la ré-incrémentation (bien plus tardive, après les deux
+    // lectures Prisma internes à `notifierInterventionAdmin`) où le compteur
+    // pourrait lire zéro et laisser un drainage se résoudre trop tôt.
+    // Envelopper ICI, à l'appel, ferme cette fenêtre : l'incrémentation
+    // devient synchrone dès le déclenchement de `finish`.
+    const auteur = req.utilisateur;
+    if (
+      auteur?.estAdminPrincipal &&
+      niveau === "ECRITURE" &&
+      req.method !== "GET" &&
+      estHorsPerimetreAdmin(module)
+    ) {
+      res.once("finish", () => {
+        if (res.statusCode >= 400) return;
+        executerTacheDeFondSuivie(() =>
+          notifierInterventionAdmin({
+            module,
+            auteurId: auteur.id,
+            auteurNom: auteur.nom,
+            methode: req.method,
+            chemin: req.originalUrl,
+          }),
+        ).catch((e) => logger.error("Échec de notification d'intervention Admin", { erreur: e }));
+      });
+    }
+
     next();
   };
 }

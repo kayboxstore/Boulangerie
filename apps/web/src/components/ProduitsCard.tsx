@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, Wheat } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { formatFc, type ProduitDTO } from "@lomoto/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -27,8 +28,16 @@ interface FormulaireProduit {
 
 const FORMULAIRE_VIDE: FormulaireProduit = { nom: "", prixVente: "", categorie: "Pain" };
 
-export function ProduitsPage() {
+/**
+ * Catalogue des produits (V2) — rattaché au module Production (visible aux
+ * mêmes rôles que le reste de cette page) : les deux sujets sont ce qu'un
+ * responsable de production manipule ensemble au quotidien. L'édition reste
+ * réservée à Paramètres (`peutEcrire("PARAMETRES")`), inchangé depuis
+ * l'ancienne page dédiée `/produits`.
+ */
+export function ProduitsCard() {
   const { peutEcrire } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const editable = peutEcrire("PARAMETRES");
 
@@ -62,7 +71,7 @@ export function ProduitsPage() {
       setDialogOuvert(false);
       invalider();
     },
-    onError: (e) => setErreurFormulaire(e instanceof Error ? e.message : "Enregistrement impossible"),
+    onError: (e) => setErreurFormulaire(e instanceof Error ? e.message : t("produits.saveError")),
   });
 
   const supprimer = useMutation({
@@ -91,53 +100,45 @@ export function ProduitsPage() {
     e.preventDefault();
     setErreurFormulaire(null);
     const prix = Number(formulaire.prixVente);
-    if (!formulaire.nom.trim()) return setErreurFormulaire("Le nom est requis");
-    if (!Number.isInteger(prix) || prix < 0) return setErreurFormulaire("Prix invalide (montant en Fc entier)");
+    if (!formulaire.nom.trim()) return setErreurFormulaire(t("produits.errNameRequired"));
+    if (!Number.isInteger(prix) || prix < 0) return setErreurFormulaire(t("produits.errPrice"));
     enregistrer.mutate();
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-serif text-3xl font-bold text-marine dark:text-creme">Catalogue produits</h1>
-          <p className="mt-1 text-muted-foreground">
-            Le pain est exonéré de TVA — prix affichés en Franc Congolais (Fc).
-          </p>
-        </div>
-        {editable && (
-          <Button variant="cta" onClick={ouvrirCreation}>
-            <Plus className="h-4 w-4" />
-            Nouveau produit
-          </Button>
-        )}
-      </div>
-
+    <>
       <Card>
-        <CardHeader>
-          <CardTitle>Produits</CardTitle>
-          <CardDescription>
-            {editable
-              ? "Gestion du catalogue (rôle Administrateur)."
-              : "Consultation du catalogue — la modification est réservée à l'Administrateur."}
-          </CardDescription>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Wheat className="h-5 w-5 text-or" />
+              {t("produits.cardTitle")}
+            </CardTitle>
+            <CardDescription>{editable ? t("produits.descManage") : t("produits.descView")}</CardDescription>
+          </div>
+          {editable && (
+            <Button variant="cta" onClick={ouvrirCreation}>
+              <Plus className="h-4 w-4" />
+              {t("produits.newProduct")}
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
-          {isLoading && <p className="py-8 text-center text-muted-foreground">Chargement…</p>}
+          {isLoading && <p className="py-8 text-center text-muted-foreground">{t("common.loading")}</p>}
           {error && (
             <p className="py-8 text-center font-medium text-terracotta">
-              {error instanceof Error ? error.message : "Erreur de chargement"}
+              {error instanceof Error ? error.message : t("produits.loadError")}
             </p>
           )}
           {data && (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nom</TableHead>
-                  <TableHead>Catégorie</TableHead>
-                  <TableHead className="text-right">Prix de vente</TableHead>
-                  <TableHead className="text-right">TVA</TableHead>
-                  {editable && <TableHead className="w-24 text-right">Actions</TableHead>}
+                  <TableHead>{t("common.name")}</TableHead>
+                  <TableHead>{t("produits.colCategory")}</TableHead>
+                  <TableHead className="text-right">{t("produits.colPrice")}</TableHead>
+                  <TableHead className="text-right">{t("produits.colTax")}</TableHead>
+                  {editable && <TableHead className="w-24 text-right">{t("common.actions")}</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -151,7 +152,7 @@ export function ProduitsPage() {
                       {formatFc(p.prixVente)}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
-                      {p.tauxTaxe === 0 ? "Exonéré" : `${p.tauxTaxe} %`}
+                      {p.tauxTaxe === 0 ? t("produits.exonere") : `${p.tauxTaxe} %`}
                     </TableCell>
                     {editable && (
                       <TableCell className="text-right">
@@ -176,7 +177,7 @@ export function ProduitsPage() {
                 {data.produits.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={editable ? 5 : 4} className="py-8 text-center text-muted-foreground">
-                      Aucun produit au catalogue.
+                      {t("produits.empty")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -190,16 +191,14 @@ export function ProduitsPage() {
       <Dialog open={dialogOuvert} onOpenChange={setDialogOuvert}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{produitEnEdition ? "Modifier le produit" : "Nouveau produit"}</DialogTitle>
-            <DialogDescription>
-              Montant en Fc, sans décimales. Le pain reste exonéré de TVA.
-            </DialogDescription>
+            <DialogTitle>{produitEnEdition ? t("produits.editTitle") : t("produits.newProduct")}</DialogTitle>
+            <DialogDescription>{t("produits.dialogDesc")}</DialogDescription>
           </DialogHeader>
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="nom">Nom</Label>
+              <Label htmlFor="produit-nom">{t("common.name")}</Label>
               <Input
-                id="nom"
+                id="produit-nom"
                 value={formulaire.nom}
                 onChange={(e) => setFormulaire({ ...formulaire, nom: e.target.value })}
                 placeholder="Ex. : Baguette"
@@ -208,9 +207,9 @@ export function ProduitsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="prixVente">Prix de vente (Fc)</Label>
+                <Label htmlFor="produit-prixVente">{t("produits.fieldPrice")}</Label>
                 <Input
-                  id="prixVente"
+                  id="produit-prixVente"
                   type="number"
                   min={0}
                   step={1}
@@ -221,9 +220,9 @@ export function ProduitsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="categorie">Catégorie</Label>
+                <Label htmlFor="produit-categorie">{t("produits.fieldCategory")}</Label>
                 <Input
-                  id="categorie"
+                  id="produit-categorie"
                   value={formulaire.categorie}
                   onChange={(e) => setFormulaire({ ...formulaire, categorie: e.target.value })}
                   placeholder="Pain"
@@ -240,10 +239,10 @@ export function ProduitsPage() {
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOuvert(false)}>
-                Annuler
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="cta" disabled={enregistrer.isPending}>
-                {produitEnEdition ? "Enregistrer" : "Créer"}
+                {produitEnEdition ? t("common.save") : t("produits.create")}
               </Button>
             </DialogFooter>
           </form>
@@ -254,23 +253,23 @@ export function ProduitsPage() {
       <Dialog open={!!produitASupprimer} onOpenChange={(o) => !o && setProduitASupprimer(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Supprimer « {produitASupprimer?.nom} » ?</DialogTitle>
-            <DialogDescription>Cette action est définitive.</DialogDescription>
+            <DialogTitle>{t("produits.deleteTitle", { nom: produitASupprimer?.nom })}</DialogTitle>
+            <DialogDescription>{t("produits.deleteDesc")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setProduitASupprimer(null)}>
-              Annuler
+              {t("common.cancel")}
             </Button>
             <Button
               variant="destructive"
               disabled={supprimer.isPending}
               onClick={() => produitASupprimer && supprimer.mutate(produitASupprimer.id)}
             >
-              Supprimer
+              {t("common.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Tailwind v4 fait basculer `dark:` sur `prefers-color-scheme` par défaut. Cette
+   app n'a (encore) aucun bouton pour activer le mode sombre — seule la classe
+   `.dark` (jamais posée par le JS pour l'instant) doit le déclencher. Sans cette
+   ligne, un système en préférence sombre applique les classes `dark:*` (texte)
+   sans que les variables `--background`/`--card` etc. ne changent (elles ne
+   suivent que `.dark`) : texte clair sur fond resté clair, illisible partout. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Palette de marque Boulangerie Lomoto (section 3.8 de la spec)
    Marine #0F1923 · Or #DA9F4E · Crème #FAF8F3 · Terracotta #AD5416 · Beige #CBAF91 */
 
@@ -9,6 +17,17 @@
   --creme: #faf8f3;
   --terracotta: #ad5416;
   --beige: #cbaf91;
+  /* Rouge vif d'alerte — hors palette de marque (volontairement plus criard que
+     le terracotta) : réservé aux valeurs qui doivent sauter aux yeux, comme un
+     solde de caisse négatif (3.1). */
+  --rouge-alerte: #dc2626;
+
+  /* Couleurs d'état (bibliothèque Premium — toast, badges d'état). Le rouge
+     d'erreur reste le terracotta de marque (cohérence avec l'existant) ;
+     seules succès/avertissement/information sont nouvelles ici. */
+  --succes: #2e7d4f;
+  --avertissement: #b45309;
+  --information: #1d4ed8;
 
   --background: #faf8f3;
   --foreground: #0f1923;
@@ -33,6 +52,12 @@
 }
 
 .dark {
+  /* Sur fond marine, un rouge plus clair reste lisible tout en restant vif. */
+  --rouge-alerte: #f87171;
+  /* Idem : tons plus clairs pour rester lisibles/contrastés sur fond marine. */
+  --succes: #4ade80;
+  --avertissement: #fbbf24;
+  --information: #60a5fa;
   --background: #0f1923;
   --foreground: #faf8f3;
   --card: #16222e;
@@ -60,6 +85,10 @@
   --color-creme: var(--creme);
   --color-terracotta: var(--terracotta);
   --color-beige: var(--beige);
+  --color-rouge-alerte: var(--rouge-alerte);
+  --color-succes: var(--succes);
+  --color-avertissement: var(--avertissement);
+  --color-information: var(--information);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -100,5 +129,238 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Écran de démarrage (section 3.8) & page de connexion
+   Animations en CSS pur : l'écran de démarrage est le tout premier rendu de
+   l'application, il ne doit surtout pas tirer une bibliothèque d'animation
+   dans le chunk initial (framer-motion reste chargé à la demande).
+   --------------------------------------------------------------------------- */
+
+@keyframes lomoto-logo-entree {
+  0% { opacity: 0; transform: scale(0.82) translateY(10px); }
+  55% { opacity: 1; transform: scale(1.04) translateY(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes lomoto-halo {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.75; transform: scale(1.12); }
+}
+
+@keyframes lomoto-monte {
+  0% { opacity: 0; transform: translateY(14px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes lomoto-jauge {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+
+@keyframes lomoto-grains {
+  0% { opacity: 0; transform: translateY(0) rotate(0deg); }
+  25% { opacity: 0.5; }
+  100% { opacity: 0; transform: translateY(-38px) rotate(200deg); }
+}
+
+.lomoto-splash { animation: lomoto-monte 0.5s ease-out both; }
+.lomoto-splash-logo { animation: lomoto-logo-entree 1.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.lomoto-splash-halo { animation: lomoto-halo 3.2s ease-in-out infinite; }
+.lomoto-splash-titre { animation: lomoto-monte 0.9s ease-out 0.9s both; }
+.lomoto-splash-tagline { animation: lomoto-monte 0.9s ease-out 1.5s both; }
+.lomoto-splash-credit { animation: lomoto-monte 0.9s ease-out 2.2s both; }
+/* La jauge dure exactement le temps d'affichage de l'écran. */
+.lomoto-splash-jauge { transform-origin: left; animation: lomoto-jauge var(--duree-splash, 7s) linear both; }
+.lomoto-grain { animation: lomoto-grains 3.4s ease-in-out infinite; }
+
+/* Fondu de sortie, déclenché juste avant le démontage. */
+.lomoto-splash-sortie { opacity: 0; transition: opacity 600ms ease-in; }
+
+/* Respect des préférences système : on garde l'écran (il porte l'identité de
+   marque) mais sans mouvement — apparition simple. */
+@media (prefers-reduced-motion: reduce) {
+  .lomoto-splash,
+  .lomoto-splash-logo,
+  .lomoto-splash-halo,
+  .lomoto-splash-titre,
+  .lomoto-splash-tagline,
+  .lomoto-splash-credit,
+  .lomoto-grain {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Enveloppe Premium des écrans d'authentification (F2, AuthShell.tsx) —
+   réutilise les keyframes `lomoto-monte`/`lomoto-halo` définies ci-dessus
+   pour la scène de connexion, plutôt que d'en dupliquer une variante. La
+   classe n'est déjà appliquée par le composant que si `prefers-reduced-
+   motion` ne demande pas de réduction (voir `usePrefersReducedMotion`) ;
+   ce bloc média est une seconde barrière, cohérente avec `.lomoto-splash-*`
+   ci-dessus, pour le cas où le composant n'aurait pas encore pu lire la
+   préférence système. Ces animations ne sont qu'une entrée décorative au
+   montage : le formulaire lui-même reste toujours pleinement opaque et
+   utilisable, avec ou sans cette classe (voir la note d'en-tête d'AuthShell).
+   --------------------------------------------------------------------------- */
+
+.lomoto-authshell-formulaire { animation: lomoto-monte 0.6s ease-out both; }
+.lomoto-authshell-scene { animation: lomoto-monte 0.7s ease-out 0.15s both; }
+.lomoto-authshell-halo { animation: lomoto-halo 3.2s ease-in-out infinite; }
+
+/* Léger balancement du cordon de la lampe (LampeFicelle.tsx), au repos —
+   purement décoratif, jamais appliqué quand `reduireMouvement` est vrai
+   (le composant retire déjà la classe dans ce cas ; ce bloc média reste une
+   seconde barrière, comme pour les classes `.lomoto-authshell-*` ci-dessus). */
+@keyframes lomoto-cordon-balance {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50% { transform: rotate(1.5deg); }
+}
+.lomoto-cordon { transform-origin: top; animation: lomoto-cordon-balance 2.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lomoto-authshell-formulaire,
+  .lomoto-authshell-scene,
+  .lomoto-authshell-halo,
+  .lomoto-cordon {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Constellation Lomoto (F3, ConstellationLomoto.tsx) — célébration
+   d'anniversaire après authentification. Purement décorative : le contenu
+   (noms, bouton de fermeture) reste identique et pleinement utilisable avec
+   ou sans ces classes. Comme pour `.lomoto-authshell-*` ci-dessus, le
+   composant n'applique déjà pas ces classes si `prefers-reduced-motion`
+   demande une réduction (voir `usePrefersReducedMotion`) ; ce bloc média
+   reste une seconde barrière pour le cas où la préférence n'aurait pas
+   encore pu être lue.
+   --------------------------------------------------------------------------- */
+
+@keyframes lomoto-constellation-etoiles {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
+}
+
+.lomoto-constellation-content { animation: lomoto-monte 0.5s ease-out both; }
+.lomoto-constellation-etoiles {
+  background-image: radial-gradient(circle, #DA9F4E 1px, transparent 1.5px);
+  background-size: 28px 28px;
+  animation: lomoto-constellation-etoiles 3.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lomoto-constellation-content {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .lomoto-constellation-etoiles { animation: none; opacity: 0.5; }
+}
+
+/* ---------------------------------------------------------------------------
+   Toast Premium (FeedbackProvider.tsx, audit UX-17) — barre de durée. Animée
+   en CSS pur comme le reste des animations de cette feuille de style ;
+   `prefers-reduced-motion` est géré directement au niveau du composant via
+   la classe utilitaire Tailwind `motion-reduce:hidden`.
+   --------------------------------------------------------------------------- */
+
+@keyframes lomoto-toast-barre {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+/* ---------------------------------------------------------------------------
+   Impression (section 3.13) — sert aussi à « Enregistrer en PDF » depuis le
+   navigateur. On masque la navigation et les actions, on pose le logo en
+   filigrane et le crédit développeur en pied de page.
+   --------------------------------------------------------------------------- */
+
+.lomoto-print-only { display: none; }
+
+@media print {
+  /* Marge basse plus large : elle limite les rencontres entre le contenu et le
+     pied de page fixe (voir .lomoto-print-credit). */
+  @page { margin: 14mm 14mm 22mm; }
+
+  /* Navigation, en-têtes et boutons n'ont aucun sens sur papier. */
+  aside,
+  header,
+  nav,
+  .no-print { display: none !important; }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f1923 !important;
+    /* Sans cela, les navigateurs suppriment fonds et couleurs à l'impression —
+       le filigrane et les en-têtes de tableau disparaîtraient. */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Filigrane : logo centré, répété sur chaque page imprimée. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    /* Variante 320 px : à 7 % d'opacité et 55 % de la page, elle rend comme le
+       logo de l'interface (480 px) sans alourdir l'aperçu ni le PDF enregistré. */
+    background-image: url("/logo-lomoto-pdf.png");
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: 55%;
+    opacity: 0.07;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  main {
+    padding: 0 !important;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Cartes et tableaux : à plat, sans ombre, sans coupure au milieu. */
+  main [class*="rounded-xl"],
+  main [class*="rounded-lg"],
+  main [class*="shadow"] {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+  table { break-inside: auto; }
+  tr,
+  li { break-inside: avoid; }
+
+  /* Les graphiques passent mal en impression : on les remplace par leurs
+     tableaux, déjà présents dans le document exporté. */
+  .recharts-wrapper { display: none !important; }
+
+  .lomoto-print-only { display: block !important; }
+
+  /* Pied de page répété sur chaque feuille. `position: fixed` est la seule
+     stratégie qui fonctionne ici : mesuré sur Chromium, un décalage négatif
+     (pour loger le crédit dans la marge de @page) le fait disparaître de la
+     PREMIÈRE page — d'où `bottom: 0`, dans la zone imprimable. Le fond opaque
+     garantit qu'il reste lisible si le contenu descend jusqu'en bas. */
+  .lomoto-print-credit {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 2mm 0 1mm;
+    background: #ffffff;
+    border-top: 1px solid #da9f4e;
+    font-size: 8pt;
+    color: #6b6254;
+    text-align: center;
+    z-index: 2;
   }
 }
