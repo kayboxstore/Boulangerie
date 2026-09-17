@@ -6,7 +6,7 @@
  */
 import express from "express";
 import request from "supertest";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ErreurServiceLicences } from "../services/licenceCentrale.js";
 
 vi.mock("../middleware/auth.js", () => ({
@@ -101,6 +101,49 @@ describe("GET /api/licence/etat — authentifiée", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ bloque: true });
     expect(mocks.calculerEtatLicencePourFrontend).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("GET /api/licence/etat — LIEN_ACHAT_LICENCE (lien de l'écran de blocage)", () => {
+  const original = process.env.LIEN_ACHAT_LICENCE;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.etatLicenceFindUnique.mockResolvedValue(null);
+    mocks.calculerEtatLicencePourFrontend.mockReturnValue({ bloque: true });
+  });
+
+  afterEach(() => {
+    if (original === undefined) delete process.env.LIEN_ACHAT_LICENCE;
+    else process.env.LIEN_ACHAT_LICENCE = original;
+  });
+
+  it("variable définie : lienAchat ajouté au DTO renvoyé", async () => {
+    process.env.LIEN_ACHAT_LICENCE = "https://exemple.com/acheter";
+
+    const res = await request(appLicence()).get("/api/licence/etat");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ bloque: true, lienAchat: "https://exemple.com/acheter" });
+  });
+
+  it("variable absente : lienAchat absent du DTO (pas de champ vide/null)", async () => {
+    delete process.env.LIEN_ACHAT_LICENCE;
+
+    const res = await request(appLicence()).get("/api/licence/etat");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ bloque: true });
+    expect(res.body.lienAchat).toBeUndefined();
+  });
+
+  it("variable définie mais vide (espaces) : traitée comme absente", async () => {
+    process.env.LIEN_ACHAT_LICENCE = "   ";
+
+    const res = await request(appLicence()).get("/api/licence/etat");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ bloque: true });
   });
 });
 

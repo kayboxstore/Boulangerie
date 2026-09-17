@@ -17,7 +17,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
  * côté API). Saisir une clé de licence valide POST /api/licence/activer et
  * lève le blocage dès que l'état se rafraîchit.
  */
-export function EcranLicenceBloquee() {
+interface Props {
+  /** LIEN_ACHAT_LICENCE (voir GET /api/licence/etat) — absent si non configuré côté serveur. */
+  lienAchat?: string;
+}
+
+export function EcranLicenceBloquee({ lienAchat }: Props) {
   const { t } = useTranslation();
   const invaliderLicenceEtat = useInvaliderLicenceEtat();
   const [cleLicence, setCleLicence] = useState("");
@@ -74,7 +79,18 @@ export function EcranLicenceBloquee() {
               {t("licence.activerBouton")}
             </Button>
           </form>
-          <p className="border-t pt-4 text-center text-sm text-muted-foreground">{t("licence.blocageSupport")}</p>
+          {lienAchat ? (
+            <a
+              href={lienAchat}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block border-t pt-4 text-center text-sm text-muted-foreground"
+            >
+              {t("licence.blocageSupport")}
+            </a>
+          ) : (
+            <p className="border-t pt-4 text-center text-sm text-muted-foreground">{t("licence.blocageSupport")}</p>
+          )}
         </CardContent>
       </Card>
     </div>

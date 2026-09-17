@@ -46,7 +46,13 @@ licenceRouter.post("/activer", async (req, res, next) => {
 
 async function repondreEtatLicence(res: Response) {
   const etat = await prisma.etatLicence.findUnique({ where: { id: 1 } });
-  res.json(calculerEtatLicencePourFrontend(etat));
+  const dto = calculerEtatLicencePourFrontend(etat);
+  // LIEN_ACHAT_LICENCE (optionnelle) : lue ici plutôt que dans la fonction pure
+  // calculerEtatLicencePourFrontend (voir licenceLocale.ts, "calcul PUR — aucun
+  // accès base/réseau"). Absente/vide -> champ omis, l'écran de blocage garde
+  // son texte statique.
+  const lienAchat = process.env.LIEN_ACHAT_LICENCE?.trim();
+  res.json(lienAchat ? { ...dto, lienAchat } : dto);
 }
 
 licenceRouter.get("/etat", requireAuth, async (_req, res, next) => {

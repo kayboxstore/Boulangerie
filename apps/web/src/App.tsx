@@ -159,7 +159,7 @@ export default function App() {
     return (
       <>
         {splash}
-        <EcranLicenceBloquee />
+        <EcranLicenceBloquee lienAchat={licenceEtat?.lienAchat} />
       </>
     );
   }

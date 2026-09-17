@@ -1543,6 +1543,8 @@ export interface LicenceEtatDTO {
   avertissement?: boolean;
   joursRestants?: number;
   joursDepuisContact?: number;
+  /** Lien d'achat de licence (LIEN_ACHAT_LICENCE côté serveur) — absent si non configuré. */
+  lienAchat?: string;
 }
 
 export const travailleurUpdateSchema = travailleurCreateSchema.partial().extend({
