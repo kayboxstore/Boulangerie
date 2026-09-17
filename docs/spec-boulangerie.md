@@ -598,6 +598,108 @@ Caissier(ère) et DG en lecture) :
 
 **Articulation Commandes / Caisse** : **Commandes** calcule en nombre total de bacs, sans détail produit — `montantBrut = bacs × prix unitaire de la Qualité`, via `TypeClient.prixParBac` — et porte la dette ainsi que l’avance du client. **Caisse** ne vend plus de produits à l’unité : elle reprend uniquement les règlements déclarés dans Commandes après leur rattachement à une `RemiseCaisse` et leur confirmation par le Caissier. Une déclaration seule n’affecte donc pas le registre ; sa confirmation transactionnelle constitue l’entrée financière.
 
+**Demandes du site vitrine** *(documenté après coup — fonctionnalité livrée
+sans section dédiée jusqu'ici, carte `DemandesCommandePubliquesCard` intégrée
+à l'écran `/commandes`)*
+
+Un client (Dépositaire, Maman ou VC) peut soumettre une **demande** depuis le
+site vitrine public, sans authentification. Une demande n'est **jamais une
+commande facturable** : c'est une **prévision** pour une date de livraison
+future choisie par le client — exactement le même mécanisme que lorsque la
+Production saisit les prévisions de tous les clients pour une journée (3.3 d).
+Elle n'alimente le **Schéma de commande** du jour demandé qu'à sa
+**confirmation** par le Chargé des commandes, et ne devient une vraie
+`CommandeClient` facturable qu'après la **livraison réelle** de ce jour-là, via
+la conversion du Cycle de livraison (3.3 f, action « Confirmer l'acceptation »)
+— **jamais directement depuis la demande**.
+
+**Modèle de données** :
+
+| Modèle | Champs | Notes |
+|---|---|---|
+| `DemandeCommandePublique` | `id`, `clientId`, `dateSouhaitee`, `note?`, `statut`, `traiteParId?`, `traiteLe?`, `motifRejet?`, `motifAnnulation?`, `createdAt` | `statut` : `EN_ATTENTE` \| `CONFIRMEE` \| `REJETEE` \| `ANNULEE` (`StatutDemandePublique`) |
+| `DemandeCommandePubliqueLigne` | `id`, `demandeId`, `produitId`, `quantite` | une ligne par produit, `@@unique([demandeId, produitId])` — pas de doublon produit dans une même demande |
+
+**Surface publique** — `/api/public/demandes-commande`, **sans authentification**,
+limitée à **10 requêtes / 15 min par IP** (`express-rate-limit`, même garde que
+l'inscription Dépositaire) :
+- `POST /identifier` : identifie le client par **téléphone** — ne renvoie que
+  `clientId`/`nom`/`typeClient` (aucune donnée financière), 404 générique si le
+  téléphone est inconnu.
+- `GET /produits` : catalogue des produits actifs éligibles à la commande —
+  seulement `id`/`nom`/`prixVente`, jamais de coût ni de marge.
+- `POST /` : crée la demande. Le serveur **revérifie toujours le téléphone
+  soumis pour retrouver le client lui-même** — le `clientId` envoyé par le
+  client n'est jamais fait confiance, pour empêcher de deviner l'identifiant
+  d'un autre Dépositaire. `dateSouhaitee` est obligatoire ; les produits sont
+  validés (existants, actifs, sans doublon de ligne) avant création. Émet un
+  événement système `DEMANDE_COMMANDE_PUBLIQUE` (`emetteurId: null`).
+
+**Surface interne** — `/api/demandes-commande-publiques`, authentifiée,
+permission module **Commandes** (même périmètre que le reste de cette
+section) :
+- `GET /` : liste (lecture).
+- `POST /:id/confirmer` (écriture) : **réclame** la demande par verrou
+  optimiste (`updateMany` sur `EN_ATTENTE → CONFIRMEE`, `count ≠ 1` ⇒ 409 —
+  protection double-clic/traitement concurrent), puis **fusionne** ses lignes
+  dans le Schéma de commande du jour demandé, en **additionnant** aux
+  quantités déjà présentes pour ce client ce jour-là (même mécanisme que la
+  saisie manuelle du Schéma, 3.3 d). Si la fusion échoue, la demande est
+  remise en `EN_ATTENTE` plutôt que de rester `CONFIRMEE` sans effet réel, et
+  le vrai message métier de l'échec est renvoyé (ex. planification verrouillée
+  → 409) plutôt qu'un 500 générique.
+- `POST /:id/rejeter` (écriture) : motif obligatoire, uniquement depuis
+  `EN_ATTENTE`, même verrou optimiste (409 si déjà traitée entre-temps).
+- `POST /:id/annuler` (écriture) : uniquement depuis `CONFIRMEE`, motif
+  obligatoire ; retire du Schéma du jour **exactement la part apportée par
+  cette demande** (soustraction, jamais un retrait total de la ligne client),
+  et supprime le client du jour si plus aucune quantité ne reste. Remet en
+  `CONFIRMEE` si le retrait échoue.
+- `PUT /:id` (écriture, modifier) : sur `EN_ATTENTE`, simple mise à jour des
+  lignes/date, aucun appel au Schéma (rien n'y a encore été fusionné). Sur
+  `CONFIRMEE` à date inchangée, applique la **différence** (nouvelles
+  quantités − anciennes) au Schéma du jour, jamais les nouvelles quantités
+  brutes. Sur `CONFIRMEE` avec changement de date, retire l'ancienne
+  contribution du jour d'origine et l'ajoute au nouveau jour. Refusée (409)
+  sur une demande `REJETEE`/`ANNULEE` — plus modifiable.
+
+**Comportement de doublon (comportement réel du code, distinct du reste de
+cette section)** : à ce jour, **aucune détection de doublon** n'existe pour ce
+flux — ni à la création publique, ni à la confirmation. Deux demandes
+soumises par le même client pour la même date sont créées comme **deux
+enregistrements indépendants** ; les confirmer l'une après l'autre
+**additionne simplement leurs lignes respectives** dans le Schéma du jour
+(même mécanisme d'addition que ci-dessus), sans aucun conflit ni dialogue
+« Modifier / Remplacer ». Ce mécanisme **existe bel et bien** dans
+l'application (voir « Détection de doublon » plus haut dans cette section),
+mais **seulement pour la création manuelle d'une commande** — il n'est ni
+importé ni appelé par la carte `DemandesCommandePubliquesCard`, et aucun test
+de `demandesCommandePubliques.test.ts` ne couvre un scénario de conflit sur ce
+flux. *(Fusion silencieuse et additive assumée pour l'instant — si le métier
+veut un jour la même protection anti-doublon que pour la saisie manuelle,
+c'est un chantier à part, non construit aujourd'hui.)*
+
+**Permissions & interface** : identiques au reste de Commandes — le **Chargé
+des commandes** (et l'Admin Principal) confirme/rejette/annule/modifie
+(écriture Commandes) ; le **DG**, le **Caissier(ère)** et l'**Admin
+secondaire** consultent la file en lecture seule (prop `editable` sur la
+carte, qui masque tous les boutons d'action côté frontend quand l'utilisateur
+n'a que la lecture). La carte affiche les demandes `EN_ATTENTE` et
+`CONFIRMEE` ensemble dans la liste principale, et les demandes
+`REJETEE`/`ANNULEE` dans un historique replié.
+
+**État de la fonctionnalité** *(à vérifier avant de considérer le flux
+bout en bout comme opérationnel)* : côté `Boulangerie`, cette fonctionnalité
+est entièrement câblée et testée (29/29 tests sur
+`demandesCommandePubliques.test.ts`, surfaces publique et interne, modèle
+Prisma, carte frontend). L'existence et l'état du **site vitrine public**
+censé réellement appeler `/api/public/demandes-commande` ne sont **pas
+confirmés dans ce dépôt** — `Boulangerie` expose l'API et l'écran de
+traitement interne, mais ne contient pas ce site vitrine lui-même. À vérifier
+séparément (dépôt du site vitrine, p. ex. `boulangerie-lomoto-site` ou
+équivalent) avant de considérer le parcours complet — soumission publique →
+traitement interne — comme opérationnel bout en bout en production.
+
 ### 3.5 Clients & fidélité
 Fiche client, historique d'achats. **Programme de fidélité : conçu mais NON activé** (décision métier) — ni l'interface ni la logique de points/récompenses ne sont construites pour l'instant. Le champ `pointsFidélité` reste en base (placeholder), sans mécanisme associé.
 
@@ -1023,6 +1125,18 @@ Le périmètre v1 est complet, mais Claude Code construira plus efficacement dan
 - Une délégation temporaire de rôle (3.7) peut-elle chevaucher plusieurs modules à la fois, ou un seul module par délégation ?
 - Le Journal d'audit (3.17) doit-il aussi inclure les tentatives d'accès refusées (403), utile pour la sécurité, ou seulement les actions réussies ? **Résolu : uniquement les actions réussies** (modifications et suppressions effectivement appliquées) — les tentatives refusées (403) ne sont pas journalisées.
 - Les "commandes spéciales" (gâteaux personnalisés, événements — fin de la section 3.4) n'ont pas encore de statut/dateRetrait en base (omis volontairement en Phase 3, qui couvrait les commandes en bacs). À quel moment les construire ? **Résolu : retirées du périmètre** (décision métier) — le module Commandes ne couvre que les commandes en bacs.
+- Demandes du site vitrine (3.4) : le site vitrine public censé appeler
+  `/api/public/demandes-commande` existe-t-il, et est-il réellement câblé sur
+  cette API ? *(non confirmé dans ce dépôt — l'API et l'écran de traitement
+  interne sont livrés et testés côté `Boulangerie`, mais le site vitrine
+  lui-même est hors de ce dépôt ; à vérifier séparément avant de considérer le
+  parcours bout en bout comme opérationnel)*
+- Demandes du site vitrine (3.4) : l'absence de détection de doublon
+  (une même date, un même client, deux demandes distinctes qui s'additionnent
+  silencieusement à la confirmation) est-elle acceptable telle quelle, ou le
+  métier veut-il un jour la même protection « Modifier / Remplacer » que pour
+  la création manuelle d'une commande ? *(métier — comportement actuel
+  documenté comme réel, jamais construit comme protection)*
 
 ## 12. Prochaines étapes
 
