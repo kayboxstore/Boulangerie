@@ -100,8 +100,6 @@ etatSystemeRouter.get("/", async (_req, res, next) => {
     const etat: EtatSystemeDTO = {
       nomApplication: NOM_APP,
       version: VERSION_APP,
-      // Pas de système de licence avant la version White label (section 3.15).
-      licence: { configuree: false },
       baseDeDonnees: { connectee, latenceMs, hote, port, base },
       utilisateursActifs,
       sauvegardes: {

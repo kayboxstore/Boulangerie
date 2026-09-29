@@ -1516,36 +1516,13 @@ export type PremierLancementTravailleurInput = z.infer<typeof premierLancementTr
 export const premierLancementFinaliserSchema = z.object({
   travailleurId: z.string().min(1, "La fiche Travailleur est requise"),
   motDePasse: z.string().min(8, "Le mot de passe initial doit faire au moins 8 caractères").max(100),
-  // Nouvelle étape 1 (licence + identité) : collecté tôt dans l'assistant,
+  // Étape 1 (identité de l'établissement) : collecté tôt dans l'assistant,
   // mais envoyé ici à la finalisation — écrit dans ParametreBoutique
   // (CLE_BOUTIQUE_NOM) juste après la création du compte, voir
   // routes/premierLancement.ts.
   nomEtablissement: z.string().trim().min(1, "Le nom de l'établissement est requis").max(120),
 });
 export type PremierLancementFinaliserInput = z.infer<typeof premierLancementFinaliserSchema>;
-
-// --- Licence marque blanche (service central, dépôt et déploiement séparés :
-// kayboxstore/licences-activation) ---------------------------------------
-export const licenceActiverSchema = z.object({
-  cleLicence: z.string().trim().min(1, "La clé de licence est requise").max(200),
-});
-export type LicenceActiverInput = z.infer<typeof licenceActiverSchema>;
-
-export interface LicenceActiverReponseDTO {
-  statut: "ACTIVE" | "ESSAI" | "EXPIREE";
-  joursRestants?: number;
-  nomClient?: string;
-  erreurActivation?: string;
-}
-
-export interface LicenceEtatDTO {
-  bloque: boolean;
-  avertissement?: boolean;
-  joursRestants?: number;
-  joursDepuisContact?: number;
-  /** Lien d'achat de licence (LIEN_ACHAT_LICENCE côté serveur) — absent si non configuré. */
-  lienAchat?: string;
-}
 
 export const travailleurUpdateSchema = travailleurCreateSchema.partial().extend({
   // null = délier explicitement le compte.
@@ -2260,12 +2237,6 @@ export interface SauvegardeDTO {
 export interface EtatSystemeDTO {
   nomApplication: string;
   version: string;
-  /**
-   * Licence : aucun système de licence n'existe encore (section 3.15) — il
-   * viendra avec la version White label. Le champ dit « non configuré » plutôt
-   * que d'afficher une licence factice.
-   */
-  licence: { configuree: false };
   /**
    * Base de données : hôte, port et nom SEULEMENT. Jamais l'utilisateur, jamais
    * le mot de passe, jamais l'URL complète (section 3.15).

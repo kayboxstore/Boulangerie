@@ -8,7 +8,6 @@ import {
   Database,
   Download,
   HardDriveDownload,
-  KeyRound,
   Loader2,
   RefreshCw,
   Server,
@@ -191,12 +190,6 @@ export function EtatSystemePage() {
           <p className="mt-0.5 text-sm text-muted-foreground">
             {t("etatSysteme.version")} : v{etat?.version}
           </p>
-        </CarteInfo>
-
-        {/* Licence : pas de système de licence avant la version White label. */}
-        <CarteInfo icone={KeyRound} libelle={t("etatSysteme.licence")}>
-          <Badge variant="secondary">{t("etatSysteme.licenceNotConfigured")}</Badge>
-          <p className="mt-2 text-xs text-muted-foreground">{t("etatSysteme.licenceHelp")}</p>
         </CarteInfo>
 
         {/* Base de données : connexion testée en direct (SELECT 1), hôte et nom
